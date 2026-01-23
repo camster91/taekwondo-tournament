@@ -10,6 +10,7 @@ import {
   Check,
   ArrowRight,
   Wand2,
+  Calendar,
 } from 'lucide-react';
 
 interface Tournament {
@@ -168,6 +169,14 @@ export default function TournamentDetail() {
           </p>
         </div>
         <div className="flex gap-3">
+          <Link to={`/tournaments/${id}/settings`} className="btn btn-secondary">
+            <Settings className="h-4 w-4 mr-2" />
+            Settings
+          </Link>
+          <Link to={`/tournaments/${id}/schedule`} className="btn btn-secondary">
+            <Calendar className="h-4 w-4 mr-2" />
+            Schedule
+          </Link>
           <Link to={`/tournaments/${id}/divisions`} className="btn btn-primary">
             <LayoutGrid className="h-4 w-4 mr-2" />
             Manage Divisions

@@ -11,7 +11,9 @@ import Dashboard from './pages/Dashboard';
 import Competitors from './pages/Competitors';
 import Tournaments from './pages/Tournaments';
 import TournamentDetail from './pages/TournamentDetail';
+import TournamentSettings from './pages/TournamentSettings';
 import Divisions from './pages/Divisions';
+import Schedule from './pages/Schedule';
 import BracketEditor from './pages/BracketEditor';
 
 const navigation = [
@@ -83,7 +85,9 @@ export default function App() {
             <Route path="/competitors" element={<Competitors />} />
             <Route path="/tournaments" element={<Tournaments />} />
             <Route path="/tournaments/:id" element={<TournamentDetail />} />
+            <Route path="/tournaments/:id/settings" element={<TournamentSettings />} />
             <Route path="/tournaments/:id/divisions" element={<Divisions />} />
+            <Route path="/tournaments/:id/schedule" element={<Schedule />} />
             <Route path="/tournaments/:tournamentId/divisions/:divisionId/bracket" element={<BracketEditor />} />
           </Routes>
         </main>
