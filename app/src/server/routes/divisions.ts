@@ -1,0 +1,330 @@
+import { Router, Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
+import { autoCategorize, type CategorizationConfig } from '../services/categorization-engine.js';
+
+const router = Router();
+
+// Helper to safely get string param
+const getParam = (param: string | string[] | undefined): string => {
+  if (Array.isArray(param)) return param[0];
+  return param || '';
+};
+
+// Get divisions for a tournament
+router.get('/tournament/:tournamentId', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+
+  const divisions = await prisma.division.findMany({
+    where: { tournamentId: getParam(req.params.tournamentId) },
+    include: {
+      _count: {
+        select: { assignments: true },
+      },
+      bracket: true,
+    },
+    orderBy: [
+      { beltLevel: 'asc' },
+      { gender: 'asc' },
+      { eventType: 'asc' },
+      { ageMin: 'asc' },
+      { displayOrder: 'asc' },
+    ],
+  });
+
+  res.json(divisions);
+});
+
+// Get single division with competitors
+router.get('/:id', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+
+  const division = await prisma.division.findUnique({
+    where: { id: getParam(req.params.id) },
+    include: {
+      assignments: {
+        include: {
+          registration: {
+            include: {
+              competitor: true,
+            },
+          },
+        },
+        orderBy: { seedPosition: 'asc' },
+      },
+      bracket: {
+        include: {
+          matches: {
+            orderBy: [{ roundNumber: 'asc' }, { matchNumber: 'asc' }],
+          },
+        },
+      },
+    },
+  });
+
+  if (!division) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+
+  res.json(division);
+});
+
+// Auto-generate divisions for tournament
+router.post('/tournament/:tournamentId/auto-generate', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { config } = req.body;
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: getParam(req.params.tournamentId) },
+  });
+
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  // Get all registrations with competitor data
+  const registrations = await prisma.registration.findMany({
+    where: { tournamentId: getParam(req.params.tournamentId) },
+    include: { competitor: true },
+  });
+
+  if (registrations.length === 0) {
+    return res.status(400).json({ error: 'No registrations found for this tournament' });
+  }
+
+  // Run auto-categorization
+  const categorizationConfig: CategorizationConfig = {
+    divisionThreshold: config?.divisionThreshold ?? 8,
+    ...config,
+  };
+
+  const result = await autoCategorize(prisma, getParam(req.params.tournamentId), registrations, categorizationConfig);
+
+  res.json(result);
+});
+
+// Create manual division
+router.post('/', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const {
+    tournamentId,
+    name,
+    beltLevel,
+    gender,
+    eventType,
+    ageMin,
+    ageMax,
+    beltColors,
+    danMin,
+    danMax,
+    weightClass,
+    divisionNumber,
+    isSpecialNeeds,
+  } = req.body;
+
+  const division = await prisma.division.create({
+    data: {
+      tournamentId,
+      name,
+      beltLevel,
+      gender,
+      eventType,
+      ageMin,
+      ageMax,
+      beltColors: beltColors ? JSON.stringify(beltColors) : null,
+      danMin,
+      danMax,
+      weightClass,
+      divisionNumber: divisionNumber ?? 1,
+      isSpecialNeeds: isSpecialNeeds ?? false,
+    },
+  });
+
+  res.status(201).json(division);
+});
+
+// Update division
+router.put('/:id', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const {
+    name,
+    ageMin,
+    ageMax,
+    beltColors,
+    danMin,
+    danMax,
+    weightClass,
+    divisionNumber,
+    isSpecialNeeds,
+    displayOrder,
+  } = req.body;
+
+  const division = await prisma.division.update({
+    where: { id: getParam(req.params.id) },
+    data: {
+      name,
+      ageMin,
+      ageMax,
+      beltColors: beltColors ? JSON.stringify(beltColors) : undefined,
+      danMin,
+      danMax,
+      weightClass,
+      divisionNumber,
+      isSpecialNeeds,
+      displayOrder,
+    },
+  });
+
+  res.json(division);
+});
+
+// Delete division
+router.delete('/:id', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+
+  await prisma.division.delete({
+    where: { id: getParam(req.params.id) },
+  });
+
+  res.status(204).send();
+});
+
+// Clear all divisions for a tournament
+router.delete('/tournament/:tournamentId/all', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+
+  await prisma.division.deleteMany({
+    where: { tournamentId: getParam(req.params.tournamentId) },
+  });
+
+  res.status(204).send();
+});
+
+// Assign competitor to division
+router.post('/:id/assign', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { registrationId, seedPosition, manualOverride } = req.body;
+
+  const assignment = await prisma.divisionAssignment.create({
+    data: {
+      divisionId: getParam(req.params.id),
+      registrationId,
+      seedPosition,
+      manualOverride: manualOverride ?? true,
+    },
+    include: {
+      registration: {
+        include: { competitor: true },
+      },
+    },
+  });
+
+  res.status(201).json(assignment);
+});
+
+// Remove competitor from division
+router.delete('/:id/assign/:assignmentId', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+
+  await prisma.divisionAssignment.delete({
+    where: { id: getParam(req.params.assignmentId) },
+  });
+
+  res.status(204).send();
+});
+
+// Move competitor between divisions
+router.post('/:id/move', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { assignmentId, toDivisionId } = req.body;
+
+  const assignment = await prisma.divisionAssignment.update({
+    where: { id: assignmentId },
+    data: {
+      divisionId: toDivisionId,
+      manualOverride: true,
+    },
+    include: {
+      registration: {
+        include: { competitor: true },
+      },
+    },
+  });
+
+  res.json(assignment);
+});
+
+// Split division
+router.post('/:id/split', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { splitCount = 2 } = req.body;
+
+  const division = await prisma.division.findUnique({
+    where: { id: getParam(req.params.id) },
+    include: {
+      assignments: {
+        include: {
+          registration: { include: { competitor: true } },
+        },
+      },
+    },
+  });
+
+  if (!division) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+
+  const assignments = division.assignments;
+  const perDivision = Math.ceil(assignments.length / splitCount);
+
+  // Create new divisions and reassign
+  const newDivisions = [];
+
+  for (let i = 0; i < splitCount; i++) {
+    const isFirst = i === 0;
+    const newDivision = isFirst
+      ? division
+      : await prisma.division.create({
+          data: {
+            tournamentId: division.tournamentId,
+            name: `${division.name.replace(/ DIV\d+$/, '')} DIV${i + 1}`,
+            beltLevel: division.beltLevel,
+            gender: division.gender,
+            eventType: division.eventType,
+            ageMin: division.ageMin,
+            ageMax: division.ageMax,
+            beltColors: division.beltColors,
+            danMin: division.danMin,
+            danMax: division.danMax,
+            weightClass: division.weightClass,
+            divisionNumber: i + 1,
+            isSpecialNeeds: division.isSpecialNeeds,
+          },
+        });
+
+    // Update first division name if needed
+    if (isFirst && !division.name.includes('DIV')) {
+      await prisma.division.update({
+        where: { id: division.id },
+        data: { name: `${division.name} DIV1`, divisionNumber: 1 },
+      });
+    }
+
+    const divisionAssignments = assignments.slice(i * perDivision, (i + 1) * perDivision);
+
+    // Move assignments to new division
+    if (!isFirst) {
+      for (const assignment of divisionAssignments) {
+        await prisma.divisionAssignment.update({
+          where: { id: assignment.id },
+          data: { divisionId: newDivision.id },
+        });
+      }
+    }
+
+    newDivisions.push(newDivision);
+  }
+
+  res.json(newDivisions);
+});
+
+export default router;
