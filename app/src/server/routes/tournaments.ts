@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { calculateAge } from '../../shared/constants/age-groups.js';
+import { generateSchedule } from '../services/schedule-generator.js';
 
 const router = Router();
 
@@ -238,6 +239,31 @@ router.delete('/:id/registrations/:regId', async (req: Request, res: Response) =
   });
 
   res.status(204).send();
+});
+
+// Generate tournament schedule
+router.post('/:id/schedule', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const config = req.body.config || {};
+
+  try {
+    const schedule = await generateSchedule(prisma, req.params.id, config);
+    res.json(schedule);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Get tournament schedule (same as generate but GET method for simple fetch)
+router.get('/:id/schedule', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+
+  try {
+    const schedule = await generateSchedule(prisma, req.params.id);
+    res.json(schedule);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
 export default router;
