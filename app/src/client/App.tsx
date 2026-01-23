@@ -30,6 +30,7 @@ import PublicScoreboard from './pages/PublicScoreboard';
 import Results from './pages/Results';
 import UserManagement from './pages/UserManagement';
 import Profile from './pages/Profile';
+import DirectorDashboard from './pages/DirectorDashboard';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -213,6 +214,7 @@ function AppRoutes() {
           <Route path="/tournaments/:id/divisions" element={<Divisions />} />
           <Route path="/tournaments/:id/schedule" element={<Schedule />} />
           <Route path="/tournaments/:id/results" element={<Results />} />
+          <Route path="/tournaments/:id/director" element={<DirectorDashboard />} />
           <Route
             path="/tournaments/:tournamentId/divisions/:divisionId/bracket"
             element={<BracketEditor />}

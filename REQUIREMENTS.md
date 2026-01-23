@@ -17,6 +17,7 @@ This document outlines the features, improvements, and enhancements needed for t
 | PDF Export | ✅ Done | Single, batch, results PDFs |
 | Match Advancement | ✅ Done | Full double-elimination logic |
 | Public Registration | ✅ Done | Self-service at /register |
+| Director Dashboard | ✅ Done | Real-time tournament control center |
 
 ---
 
@@ -136,29 +137,44 @@ Visual interface for managing tournament schedule and ring assignments.
 
 ---
 
-### 4. Tournament Dashboard
+### 4. Tournament Director Dashboard ✅
 
-**Status:** Basic Implementation Exists
+**Status:** Implemented
 
 **Description:**
-Real-time overview of tournament progress for directors.
+Real-time overview of tournament progress for directors at `/tournaments/:id/director`.
 
-**Enhancements Needed:**
+**Features:**
 
 **Progress Tracking:**
-- [ ] Divisions completed vs total
-- [ ] Matches completed vs total
-- [ ] Estimated time remaining
-- [ ] Current ring status (active/idle)
+- [x] Divisions completed vs total (with progress bar)
+- [x] Matches completed vs total (with progress bar)
+- [x] Estimated time remaining (~5 min/match)
+- [x] Current ring status (active/idle/completed)
+- [x] Active match count
 
 **Alerts:**
-- [ ] Divisions running behind schedule
-- [ ] Rings with long gaps
-- [ ] Competitors missing from division
+- [x] Divisions with no brackets generated
+- [x] Idle rings with pending matches
+- [x] Long-running matches (>10 minutes)
+
+**Ring Status Panel:**
+- [x] Visual ring cards with status indicators
+- [x] Current match details per ring
+- [x] Upcoming match count per ring
+
+**Division Progress:**
+- [x] Progress bar per division
+- [x] Match completion status
+- [x] Link to bracket editor
+- [x] Estimated time remaining per division
 
 **Quick Actions:**
-- [ ] Jump to any division bracket
-- [ ] View/print any bracket PDF
+- [x] Jump to any division bracket
+- [x] Link to Manage Divisions
+- [x] Link to View Schedule
+- [x] Link to Scorekeeper
+- [x] Link to Public Display
 - [ ] Send announcements
 
 ---

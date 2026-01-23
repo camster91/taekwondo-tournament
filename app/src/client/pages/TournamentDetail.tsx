@@ -16,6 +16,7 @@ import {
   FileDown,
   Monitor,
   Medal,
+  LayoutDashboard,
 } from 'lucide-react';
 
 interface Tournament {
@@ -191,7 +192,23 @@ export default function TournamentDetail() {
       </div>
 
       {/* Tournament Day Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+        <Link
+          to={`/tournaments/${id}/director`}
+          className="card hover:shadow-lg transition-shadow border-2 border-primary-200"
+        >
+          <div className="card-body flex items-center">
+            <div className="bg-primary-600 p-3 rounded-lg">
+              <LayoutDashboard className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4 flex-1">
+              <p className="font-semibold text-gray-900">Director Dashboard</p>
+              <p className="text-sm text-gray-500">Tournament control center</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-gray-400" />
+          </div>
+        </Link>
+
         <Link
           to={`/checkin/${id}`}
           className="card hover:shadow-lg transition-shadow"
