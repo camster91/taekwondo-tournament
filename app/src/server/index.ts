@@ -10,6 +10,7 @@ import tournamentsRouter from './routes/tournaments.js';
 import divisionsRouter from './routes/divisions.js';
 import bracketsRouter from './routes/brackets.js';
 import authRouter from './routes/auth.js';
+import publicRouter from './routes/public.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,6 +29,7 @@ app.locals.prisma = prisma;
 
 // API Routes
 app.use('/api/auth', authRouter);
+app.use('/api/public', publicRouter);
 app.use('/api/competitors', competitorsRouter);
 app.use('/api/tournaments', tournamentsRouter);
 app.use('/api/divisions', divisionsRouter);
