@@ -163,9 +163,9 @@ Real-time overview of tournament progress for directors.
 
 ---
 
-### 5. Login/Auth Frontend
+### 5. Login/Auth Frontend ✅
 
-**Status:** Backend Done, Frontend Not Implemented
+**Status:** Implemented
 
 **Description:**
 Complete the authentication flow with frontend pages.
@@ -173,19 +173,20 @@ Complete the authentication flow with frontend pages.
 **Requirements:**
 
 **Pages Needed:**
-- [ ] Login page (`/login`)
-- [ ] Register page (`/register-account` - admin creates accounts)
-- [ ] Password change page
+- [x] Login page (`/login`)
+- [x] User Management page (`/admin/users` - admin creates/manages accounts)
+- [ ] Password change page (backend exists)
 - [ ] User profile page
 
 **Protected Routes:**
-- [ ] Redirect unauthenticated users to login
-- [ ] Store token in localStorage
+- [x] Store token in localStorage
+- [x] AuthContext for state management
+- [ ] Redirect unauthenticated users to login (ready, disabled for now)
 - [ ] Auto-logout on token expiry
 - [ ] "Remember me" option
 
 **Role-Based UI:**
-- [ ] Admin: Full sidebar, user management
+- [x] Admin: Full sidebar, user management link
 - [ ] Director: Tournament management only
 - [ ] Scorekeeper: Ring view only
 - [ ] Viewer: Read-only brackets
@@ -194,9 +195,9 @@ Complete the authentication flow with frontend pages.
 
 ## High Priority - User Experience
 
-### 6. Improved Division Management
+### 6. Improved Division Management ✅
 
-**Status:** Basic Implementation Exists
+**Status:** Implemented
 
 **Description:**
 Better tools for managing auto-generated divisions.
@@ -204,22 +205,23 @@ Better tools for managing auto-generated divisions.
 **Enhancements:**
 
 **Division Review:**
-- [ ] Preview divisions before creating
-- [ ] See competitor counts per division
-- [ ] Warnings for small (<3) or large (>8) divisions
-- [ ] Suggested merge/split actions
+- [x] Preview divisions before creating (modal with full breakdown)
+- [x] See competitor counts per division
+- [x] Warnings for small (<3) or large (>8) divisions
+- [x] Color-coded badges for division sizes
+- [x] Stats summary (total, with brackets, small, large)
 
 **Manual Adjustments:**
 - [ ] Move competitor between divisions (drag-drop)
 - [ ] Merge two divisions
-- [ ] Split one division
+- [x] Split one division (for large divisions)
 - [ ] Create custom division
 - [ ] Lock division (prevent auto-changes)
 
 **Bulk Actions:**
-- [ ] Re-run auto-categorization
-- [ ] Clear all divisions
-- [ ] Generate all brackets at once
+- [x] Re-run auto-categorization
+- [x] Clear all divisions
+- [x] Generate all brackets at once
 
 ---
 
