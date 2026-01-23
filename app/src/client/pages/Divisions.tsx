@@ -10,7 +10,10 @@ import {
   Trash2,
   PlayCircle,
   ArrowLeft,
+  Scissors,
+  Download,
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 
 interface Division {
   id: string;
@@ -41,6 +44,7 @@ export default function Divisions() {
     gender: '',
     eventType: '',
   });
+  const [exportingAll, setExportingAll] = useState(false);
 
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['tournament', id],
@@ -109,6 +113,32 @@ export default function Divisions() {
     },
   });
 
+  const deleteDivisionMutation = useMutation({
+    mutationFn: async (divisionId: string) => {
+      await fetch(`/api/divisions/${divisionId}`, {
+        method: 'DELETE',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+    },
+  });
+
+  const splitDivisionMutation = useMutation({
+    mutationFn: async (divisionId: string) => {
+      const res = await fetch(`/api/divisions/${divisionId}/split`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ splitCount: 2 }),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+    },
+  });
+
   const filteredDivisions = divisions?.filter((d) => {
     if (filter.beltLevel && d.beltLevel !== filter.beltLevel) return false;
     if (filter.gender && d.gender !== filter.gender) return false;
@@ -128,6 +158,100 @@ export default function Divisions() {
     },
     {} as Record<string, Division[]>
   );
+
+  // Export all brackets as PDFs
+  const exportAllPDFs = async () => {
+    if (!divisions || divisions.length === 0) return;
+
+    setExportingAll(true);
+
+    try {
+      const divisionsWithBrackets = divisions.filter((d) => d.bracket);
+
+      if (divisionsWithBrackets.length === 0) {
+        alert('No brackets to export. Generate brackets first.');
+        setExportingAll(false);
+        return;
+      }
+
+      // Create a combined PDF with all brackets
+      const doc = new jsPDF('landscape', 'pt', 'letter');
+      let isFirstPage = true;
+
+      for (const division of divisionsWithBrackets) {
+        // Fetch division details with bracket
+        const res = await fetch(`/api/divisions/${division.id}`);
+        const divisionData = await res.json();
+
+        if (!divisionData.bracket) continue;
+
+        if (!isFirstPage) {
+          doc.addPage();
+        }
+        isFirstPage = false;
+
+        const pageWidth = doc.internal.pageSize.getWidth();
+
+        // Title
+        doc.setFontSize(14);
+        doc.text(division.name, pageWidth / 2, 40, { align: 'center' });
+
+        doc.setFontSize(10);
+        doc.text(`${tournament?.name || 'Tournament'}`, pageWidth / 2, 55, {
+          align: 'center',
+        });
+
+        // Draw simplified bracket info
+        doc.setFontSize(9);
+        let y = 80;
+
+        const winnersMatches = divisionData.bracket.matches.filter(
+          (m: any) => m.bracketType === 'winners'
+        );
+
+        doc.text('Winners Bracket:', 50, y);
+        y += 15;
+
+        for (const match of winnersMatches.slice(0, 7)) {
+          const name1 = match.competitor1
+            ? `${match.competitor1.competitor.firstName} ${match.competitor1.competitor.lastName}`
+            : 'BYE';
+          const name2 = match.competitor2
+            ? `${match.competitor2.competitor.firstName} ${match.competitor2.competitor.lastName}`
+            : 'BYE';
+
+          doc.text(`  M${match.matchNumber}: ${name1} vs ${name2}`, 50, y);
+          y += 12;
+        }
+
+        // Competitor list
+        y = 80;
+        doc.text('Competitors:', 400, y);
+        y += 15;
+
+        divisionData.assignments.forEach((a: any, i: number) => {
+          if (y > 500) return;
+          doc.text(
+            `${i + 1}. ${a.registration.competitor.firstName} ${a.registration.competitor.lastName}`,
+            400,
+            y
+          );
+          y += 12;
+        });
+      }
+
+      // Save the combined PDF
+      const fileName = `${tournament?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Tournament'}_All_Brackets.pdf`;
+      doc.save(fileName);
+
+      alert(`Exported ${divisionsWithBrackets.length} brackets to ${fileName}`);
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Error exporting PDFs. Please try again.');
+    }
+
+    setExportingAll(false);
+  };
 
   return (
     <div>
@@ -165,19 +289,27 @@ export default function Divisions() {
             <Wand2 className="h-4 w-4 mr-2" />
             {autoGenerateMutation.isPending
               ? 'Generating...'
-              : 'Auto-Generate Divisions'}
+              : 'Auto-Generate'}
           </button>
           <button
             onClick={() => generateAllBracketsMutation.mutate()}
             disabled={
               generateAllBracketsMutation.isPending || !divisions?.length
             }
-            className="btn btn-primary"
+            className="btn btn-secondary"
           >
             <PlayCircle className="h-4 w-4 mr-2" />
             {generateAllBracketsMutation.isPending
               ? 'Generating...'
-              : 'Generate All Brackets'}
+              : 'Generate Brackets'}
+          </button>
+          <button
+            onClick={exportAllPDFs}
+            disabled={exportingAll || !divisions?.some((d) => d.bracket)}
+            className="btn btn-primary"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            {exportingAll ? 'Exporting...' : 'Export All PDFs'}
           </button>
         </div>
       </div>
@@ -254,11 +386,13 @@ export default function Divisions() {
         <div className="space-y-6">
           {Object.entries(groupedDivisions || {}).map(([category, divs]) => (
             <div key={category} className="card">
-              <div className="card-header">
-                <h3 className="font-semibold text-gray-900">{category}</h3>
-                <span className="text-sm text-gray-500">
-                  {divs.length} division{divs.length !== 1 ? 's' : ''}
-                </span>
+              <div className="card-header flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900">{category}</h3>
+                  <span className="text-sm text-gray-500">
+                    {divs.length} division{divs.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
               </div>
               <div className="divide-y divide-gray-200">
                 {divs.map((div) => (
@@ -276,7 +410,7 @@ export default function Divisions() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                       <div className="flex items-center text-sm text-gray-500">
                         <Users className="h-4 w-4 mr-1" />
                         {div._count.assignments}
@@ -288,6 +422,30 @@ export default function Divisions() {
                       >
                         {div.bracket ? 'Bracket Ready' : 'No Bracket'}
                       </span>
+                      {div._count.assignments > 8 && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Split "${div.name}" into 2 divisions?`)) {
+                              splitDivisionMutation.mutate(div.id);
+                            }
+                          }}
+                          className="text-gray-400 hover:text-primary-600"
+                          title="Split Division"
+                        >
+                          <Scissors className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete "${div.name}"?`)) {
+                            deleteDivisionMutation.mutate(div.id);
+                          }
+                        }}
+                        className="text-gray-400 hover:text-red-600"
+                        title="Delete Division"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                       <Link
                         to={`/tournaments/${id}/divisions/${div.id}/bracket`}
                         className="text-primary-600 hover:text-primary-700 flex items-center"
