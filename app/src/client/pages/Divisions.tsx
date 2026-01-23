@@ -12,6 +12,10 @@ import {
   ArrowLeft,
   Scissors,
   Download,
+  AlertTriangle,
+  Eye,
+  Check,
+  X,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
@@ -36,6 +40,24 @@ interface Tournament {
   name: string;
 }
 
+interface PreviewDivision {
+  name: string;
+  beltLevel: string;
+  gender: string;
+  eventType: string;
+  ageMin: number;
+  ageMax: number;
+  weightClass: string | null;
+  competitorCount: number;
+  competitors: { name: string; school: string }[];
+}
+
+interface PreviewResult {
+  divisions: PreviewDivision[];
+  totalCompetitors: number;
+  warnings: string[];
+}
+
 export default function Divisions() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -45,6 +67,9 @@ export default function Divisions() {
     eventType: '',
   });
   const [exportingAll, setExportingAll] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState<PreviewResult | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['tournament', id],
@@ -139,12 +164,45 @@ export default function Divisions() {
     },
   });
 
+  // Preview divisions before generating
+  const fetchPreview = async () => {
+    setPreviewLoading(true);
+    try {
+      const res = await fetch(`/api/divisions/tournament/${id}/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: { divisionThreshold: 8 } }),
+      });
+      const data = await res.json();
+      setPreviewData(data);
+      setShowPreview(true);
+    } catch (error) {
+      console.error('Preview error:', error);
+      alert('Failed to generate preview');
+    }
+    setPreviewLoading(false);
+  };
+
+  const confirmGenerate = () => {
+    setShowPreview(false);
+    autoGenerateMutation.mutate();
+  };
+
   const filteredDivisions = divisions?.filter((d) => {
     if (filter.beltLevel && d.beltLevel !== filter.beltLevel) return false;
     if (filter.gender && d.gender !== filter.gender) return false;
     if (filter.eventType && d.eventType !== filter.eventType) return false;
     return true;
   });
+
+  // Calculate stats
+  const stats = {
+    total: divisions?.length || 0,
+    withBrackets: divisions?.filter((d) => d.bracket).length || 0,
+    smallDivisions: divisions?.filter((d) => d._count.assignments < 3 && d._count.assignments > 0).length || 0,
+    largeDivisions: divisions?.filter((d) => d._count.assignments > 8).length || 0,
+    emptyDivisions: divisions?.filter((d) => d._count.assignments === 0).length || 0,
+  };
 
   // Group divisions by category
   const groupedDivisions = filteredDivisions?.reduce(
@@ -273,6 +331,14 @@ export default function Divisions() {
         </div>
         <div className="flex gap-3">
           <button
+            onClick={fetchPreview}
+            disabled={previewLoading || autoGenerateMutation.isPending}
+            className="btn btn-secondary"
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            {previewLoading ? 'Loading...' : 'Preview Divisions'}
+          </button>
+          <button
             onClick={() => {
               if (
                 divisions?.length &&
@@ -379,6 +445,59 @@ export default function Divisions() {
         </div>
       </div>
 
+      {/* Warnings */}
+      {(stats.smallDivisions > 0 || stats.largeDivisions > 0 || stats.emptyDivisions > 0) && (
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-start">
+            <AlertTriangle className="h-5 w-5 text-yellow-600 mr-3 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-yellow-800">Division Warnings</h3>
+              <ul className="mt-1 text-sm text-yellow-700 list-disc list-inside">
+                {stats.emptyDivisions > 0 && (
+                  <li>{stats.emptyDivisions} division(s) with no competitors</li>
+                )}
+                {stats.smallDivisions > 0 && (
+                  <li>{stats.smallDivisions} division(s) with fewer than 3 competitors (consider merging)</li>
+                )}
+                {stats.largeDivisions > 0 && (
+                  <li>{stats.largeDivisions} division(s) with more than 8 competitors (consider splitting)</li>
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Summary */}
+      {divisions && divisions.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          <div className="bg-white rounded-lg shadow p-4 text-center">
+            <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+            <div className="text-xs text-gray-500">Total Divisions</div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4 text-center">
+            <div className="text-2xl font-bold text-green-600">{stats.withBrackets}</div>
+            <div className="text-xs text-gray-500">With Brackets</div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4 text-center">
+            <div className="text-2xl font-bold text-gray-400">{stats.total - stats.withBrackets}</div>
+            <div className="text-xs text-gray-500">Without Brackets</div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4 text-center">
+            <div className={`text-2xl font-bold ${stats.smallDivisions > 0 ? 'text-yellow-600' : 'text-gray-400'}`}>
+              {stats.smallDivisions}
+            </div>
+            <div className="text-xs text-gray-500">Small (&lt;3)</div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4 text-center">
+            <div className={`text-2xl font-bold ${stats.largeDivisions > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+              {stats.largeDivisions}
+            </div>
+            <div className="text-xs text-gray-500">Large (&gt;8)</div>
+          </div>
+        </div>
+      )}
+
       {/* Divisions */}
       {isLoading ? (
         <div className="text-center py-12 text-gray-500">Loading...</div>
@@ -411,10 +530,24 @@ export default function Divisions() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="flex items-center text-sm text-gray-500">
+                      <div className={`flex items-center text-sm ${
+                        div._count.assignments === 0 ? 'text-red-500' :
+                        div._count.assignments < 3 ? 'text-yellow-600' :
+                        div._count.assignments > 8 ? 'text-orange-600' :
+                        'text-gray-500'
+                      }`}>
                         <Users className="h-4 w-4 mr-1" />
                         {div._count.assignments}
                       </div>
+                      {div._count.assignments === 0 && (
+                        <span className="badge bg-red-100 text-red-800">Empty</span>
+                      )}
+                      {div._count.assignments > 0 && div._count.assignments < 3 && (
+                        <span className="badge bg-yellow-100 text-yellow-800">Small</span>
+                      )}
+                      {div._count.assignments > 8 && (
+                        <span className="badge bg-orange-100 text-orange-800">Large</span>
+                      )}
                       <span
                         className={`badge ${
                           div.bracket ? 'badge-green' : 'badge-gray'
@@ -478,6 +611,136 @@ export default function Divisions() {
               <Wand2 className="h-4 w-4 mr-2" />
               Auto-Generate Divisions
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {showPreview && previewData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Division Preview</h2>
+                <p className="text-sm text-gray-500">
+                  {previewData.divisions.length} divisions • {previewData.totalCompetitors} competitors
+                </p>
+              </div>
+              <button onClick={() => setShowPreview(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Preview Warnings */}
+            {previewData.warnings.length > 0 && (
+              <div className="p-4 bg-yellow-50 border-b border-yellow-200">
+                <div className="flex items-start">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-yellow-800">Warnings:</p>
+                    <ul className="text-sm text-yellow-700 list-disc list-inside">
+                      {previewData.warnings.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Preview Stats */}
+            <div className="p-4 bg-gray-50 border-b grid grid-cols-4 gap-4 text-center">
+              <div>
+                <div className="text-xl font-bold text-gray-900">{previewData.divisions.length}</div>
+                <div className="text-xs text-gray-500">Total Divisions</div>
+              </div>
+              <div>
+                <div className="text-xl font-bold text-green-600">
+                  {previewData.divisions.filter(d => d.competitorCount >= 3 && d.competitorCount <= 8).length}
+                </div>
+                <div className="text-xs text-gray-500">Optimal Size (3-8)</div>
+              </div>
+              <div>
+                <div className="text-xl font-bold text-yellow-600">
+                  {previewData.divisions.filter(d => d.competitorCount > 0 && d.competitorCount < 3).length}
+                </div>
+                <div className="text-xs text-gray-500">Small (&lt;3)</div>
+              </div>
+              <div>
+                <div className="text-xl font-bold text-orange-600">
+                  {previewData.divisions.filter(d => d.competitorCount > 8).length}
+                </div>
+                <div className="text-xs text-gray-500">Large (&gt;8)</div>
+              </div>
+            </div>
+
+            {/* Division List */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-3">
+                {previewData.divisions.map((div, index) => (
+                  <div
+                    key={index}
+                    className={`p-4 rounded-lg border ${
+                      div.competitorCount === 0 ? 'border-red-200 bg-red-50' :
+                      div.competitorCount < 3 ? 'border-yellow-200 bg-yellow-50' :
+                      div.competitorCount > 8 ? 'border-orange-200 bg-orange-50' :
+                      'border-gray-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium text-gray-900">{div.name}</h4>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-medium ${
+                          div.competitorCount === 0 ? 'text-red-600' :
+                          div.competitorCount < 3 ? 'text-yellow-600' :
+                          div.competitorCount > 8 ? 'text-orange-600' :
+                          'text-green-600'
+                        }`}>
+                          {div.competitorCount} competitors
+                        </span>
+                        {div.competitorCount === 0 && (
+                          <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">Empty</span>
+                        )}
+                        {div.competitorCount > 0 && div.competitorCount < 3 && (
+                          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Needs merge</span>
+                        )}
+                        {div.competitorCount > 8 && (
+                          <span className="text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded">Will be split</span>
+                        )}
+                      </div>
+                    </div>
+                    {div.competitors.length > 0 && (
+                      <div className="text-sm text-gray-600">
+                        {div.competitors.slice(0, 5).map((c, i) => (
+                          <span key={i}>
+                            {c.name}{c.school && ` (${c.school})`}
+                            {i < Math.min(div.competitors.length - 1, 4) && ', '}
+                          </span>
+                        ))}
+                        {div.competitors.length > 5 && (
+                          <span className="text-gray-400"> +{div.competitors.length - 5} more</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 border-t flex justify-end gap-3">
+              <button onClick={() => setShowPreview(false)} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button
+                onClick={confirmGenerate}
+                disabled={autoGenerateMutation.isPending}
+                className="btn btn-primary"
+              >
+                <Check className="h-4 w-4 mr-2" />
+                {autoGenerateMutation.isPending ? 'Generating...' : 'Confirm & Generate'}
+              </button>
+            </div>
           </div>
         </div>
       )}

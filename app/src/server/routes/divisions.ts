@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
-import { autoCategorize, type CategorizationConfig } from '../services/categorization-engine.js';
+import { autoCategorize, previewCategorization, type CategorizationConfig } from '../services/categorization-engine.js';
 
 const router = Router();
 
@@ -67,6 +67,43 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 
   res.json(division);
+});
+
+// Preview divisions before generating
+router.post('/tournament/:tournamentId/preview', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { config } = req.body;
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: getParam(req.params.tournamentId) },
+  });
+
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  // Get all registrations with competitor data
+  const registrations = await prisma.registration.findMany({
+    where: { tournamentId: getParam(req.params.tournamentId) },
+    include: { competitor: true },
+  });
+
+  if (registrations.length === 0) {
+    return res.json({
+      divisions: [],
+      totalCompetitors: 0,
+      warnings: ['No registrations found for this tournament'],
+    });
+  }
+
+  // Run preview (no database changes)
+  const categorizationConfig: CategorizationConfig = {
+    divisionThreshold: config?.divisionThreshold ?? 8,
+    ...config,
+  };
+
+  const preview = previewCategorization(registrations, categorizationConfig);
+  res.json(preview);
 });
 
 // Auto-generate divisions for tournament

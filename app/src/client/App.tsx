@@ -10,6 +10,7 @@ import {
   LogOut,
   ClipboardCheck,
   Timer,
+  Shield,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
@@ -26,6 +27,7 @@ import Scorekeeper from './pages/Scorekeeper';
 import CheckIn from './pages/CheckIn';
 import PublicScoreboard from './pages/PublicScoreboard';
 import Results from './pages/Results';
+import UserManagement from './pages/UserManagement';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -77,6 +79,27 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+
+          {/* Admin Section */}
+          {user?.role === 'admin' && (
+            <div className="mt-8 pt-4 border-t border-gray-800">
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-2 px-3">
+                Admin
+              </div>
+              <Link
+                to="/admin/users"
+                className={classNames(
+                  location.pathname === '/admin/users'
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-400 hover:bg-gray-800 hover:text-white',
+                  'group flex items-center px-3 py-2 text-sm font-medium rounded-md mb-1'
+                )}
+              >
+                <Shield className="text-gray-400 group-hover:text-white mr-3 h-5 w-5" />
+                User Management
+              </Link>
+            </div>
+          )}
 
           {/* Link to public registration */}
           <div className="mt-8 pt-4 border-t border-gray-800">
@@ -190,6 +213,7 @@ function AppRoutes() {
             path="/tournaments/:tournamentId/divisions/:divisionId/bracket"
             element={<BracketEditor />}
           />
+          <Route path="/admin/users" element={<UserManagement />} />
         </Routes>
       </AdminLayout>
     </ProtectedRoute>
