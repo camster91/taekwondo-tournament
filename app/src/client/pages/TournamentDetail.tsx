@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   Timer,
   FileDown,
+  Monitor,
 } from 'lucide-react';
 
 interface Tournament {
@@ -189,7 +190,7 @@ export default function TournamentDetail() {
       </div>
 
       {/* Tournament Day Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Link
           to={`/checkin/${id}`}
           className="card hover:shadow-lg transition-shadow"
@@ -239,6 +240,23 @@ export default function TournamentDetail() {
             <ArrowRight className="h-5 w-5 text-gray-400" />
           </div>
         </a>
+
+        <Link
+          to={`/display/${id}`}
+          target="_blank"
+          className="card hover:shadow-lg transition-shadow"
+        >
+          <div className="card-body flex items-center">
+            <div className="bg-yellow-500 p-3 rounded-lg">
+              <Monitor className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4 flex-1">
+              <p className="font-semibold text-gray-900">Live Scoreboard</p>
+              <p className="text-sm text-gray-500">Public display for spectators</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-gray-400" />
+          </div>
+        </Link>
       </div>
 
       {/* Stats */}

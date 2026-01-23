@@ -24,6 +24,7 @@ import PublicRegister from './pages/PublicRegister';
 import Login from './pages/Login';
 import Scorekeeper from './pages/Scorekeeper';
 import CheckIn from './pages/CheckIn';
+import PublicScoreboard from './pages/PublicScoreboard';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -157,7 +158,8 @@ function AppRoutes() {
     location.pathname.startsWith('/register') ||
     location.pathname.startsWith('/login') ||
     location.pathname.startsWith('/scorekeeper') ||
-    location.pathname.startsWith('/checkin');
+    location.pathname.startsWith('/checkin') ||
+    location.pathname.startsWith('/display');
 
   if (isPublicPage) {
     return (
@@ -166,6 +168,7 @@ function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/scorekeeper/:tournamentId" element={<Scorekeeper />} />
         <Route path="/checkin/:tournamentId" element={<CheckIn />} />
+        <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
       </Routes>
     );
   }
