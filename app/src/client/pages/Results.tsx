@@ -6,10 +6,10 @@ import {
   Medal,
   Users,
   ChevronLeft,
-  Filter,
   Download,
   Award,
-  TrendingUp,
+  FileSpreadsheet,
+  ChevronDown,
 } from 'lucide-react';
 
 interface Placement {
@@ -56,11 +56,25 @@ interface SchoolStats {
   competitors: number;
 }
 
+// CSV export utility
+function downloadCSV(data: string[][], filename: string) {
+  const csvContent = data
+    .map((row) => row.map((cell) => `"${(cell || '').replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
 export default function Results() {
   const { tournamentId } = useParams();
   const [filterEvent, setFilterEvent] = useState<'all' | 'patterns' | 'sparring'>('all');
   const [selectedSchool, setSelectedSchool] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'schools' | 'divisions'>('schools');
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   // Fetch tournament
   const { data: tournament } = useQuery<Tournament>({
@@ -137,6 +151,95 @@ export default function Results() {
     return `${place}th Place`;
   };
 
+  // Export school standings to CSV
+  const exportSchoolsCSV = () => {
+    const data: string[][] = [
+      ['Rank', 'School', 'Gold', 'Silver', 'Bronze', 'Total'],
+    ];
+
+    schoolStats.forEach((school, index) => {
+      data.push([
+        String(index + 1),
+        school.name,
+        String(school.gold),
+        String(school.silver),
+        String(school.bronze),
+        String(school.gold + school.silver + school.bronze),
+      ]);
+    });
+
+    const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
+    downloadCSV(data, `school_standings${eventSuffix}.csv`);
+    setShowExportMenu(false);
+  };
+
+  // Export all results to CSV
+  const exportResultsCSV = () => {
+    const data: string[][] = [
+      ['Division', 'Event Type', 'Place', 'Competitor', 'School'],
+    ];
+
+    filteredDivisions?.forEach((division) => {
+      division.bracket?.placements
+        ?.sort((a, b) => a.place - b.place)
+        .forEach((placement) => {
+          data.push([
+            division.name,
+            division.eventType,
+            getPlaceName(placement.place),
+            `${placement.registration.competitor.firstName} ${placement.registration.competitor.lastName}`,
+            placement.registration.competitor.schoolDojang || 'Independent',
+          ]);
+        });
+    });
+
+    const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
+    downloadCSV(data, `tournament_results${eventSuffix}.csv`);
+    setShowExportMenu(false);
+  };
+
+  // Export all competitors with placements
+  const exportCompetitorsCSV = () => {
+    const data: string[][] = [
+      ['Competitor', 'School', 'Division', 'Event Type', 'Place'],
+    ];
+
+    const competitorMap = new Map<string, { competitor: any; placements: { division: string; eventType: string; place: number }[] }>();
+
+    filteredDivisions?.forEach((division) => {
+      division.bracket?.placements?.forEach((placement) => {
+        const key = placement.registration.competitor.id;
+        if (!competitorMap.has(key)) {
+          competitorMap.set(key, {
+            competitor: placement.registration.competitor,
+            placements: [],
+          });
+        }
+        competitorMap.get(key)!.placements.push({
+          division: division.name,
+          eventType: division.eventType,
+          place: placement.place,
+        });
+      });
+    });
+
+    competitorMap.forEach(({ competitor, placements }) => {
+      placements.forEach((p) => {
+        data.push([
+          `${competitor.firstName} ${competitor.lastName}`,
+          competitor.schoolDojang || 'Independent',
+          p.division,
+          p.eventType,
+          getPlaceName(p.place),
+        ]);
+      });
+    });
+
+    const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
+    downloadCSV(data, `competitor_results${eventSuffix}.csv`);
+    setShowExportMenu(false);
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -155,15 +258,68 @@ export default function Results() {
                 <p className="text-sm text-gray-500">{tournament?.name}</p>
               </div>
             </div>
-            <a
-              href={`/api/brackets/tournament/${tournamentId}/results/pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-secondary flex items-center"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export PDF
-            </a>
+            <div className="relative">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                className="btn btn-secondary flex items-center"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export
+                <ChevronDown className="h-4 w-4 ml-1" />
+              </button>
+
+              {showExportMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowExportMenu(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-20">
+                    <div className="py-1">
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">
+                        PDF Export
+                      </div>
+                      <a
+                        href={`/api/brackets/tournament/${tournamentId}/results/pdf`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setShowExportMenu(false)}
+                      >
+                        <Download className="h-4 w-4 mr-3 text-red-500" />
+                        Results PDF
+                      </a>
+
+                      <div className="border-t my-1" />
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">
+                        CSV Export
+                      </div>
+                      <button
+                        onClick={exportSchoolsCSV}
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500" />
+                        School Standings
+                      </button>
+                      <button
+                        onClick={exportResultsCSV}
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500" />
+                        All Results by Division
+                      </button>
+                      <button
+                        onClick={exportCompetitorsCSV}
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500" />
+                        All Results by Competitor
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
