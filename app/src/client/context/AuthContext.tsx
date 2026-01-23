@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 
 interface User {
   id: string;
@@ -25,10 +25,62 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const TOKEN_KEY = 'tkd_auth_token';
 const USER_KEY = 'tkd_auth_user';
 
+// Decode JWT to get expiry time (without external library)
+function decodeJwtExpiry(token: string): number | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.exp ? payload.exp * 1000 : null; // Convert to milliseconds
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Set up auto-logout timer based on token expiry
+  const setupLogoutTimer = (authToken: string) => {
+    // Clear any existing timer
+    if (logoutTimerRef.current) {
+      clearTimeout(logoutTimerRef.current);
+      logoutTimerRef.current = null;
+    }
+
+    const expiryTime = decodeJwtExpiry(authToken);
+    if (!expiryTime) return;
+
+    const timeUntilExpiry = expiryTime - Date.now();
+
+    // If token is already expired, logout immediately
+    if (timeUntilExpiry <= 0) {
+      logout();
+      return;
+    }
+
+    // Set timer to logout when token expires (with 10 second buffer)
+    const timerMs = Math.max(timeUntilExpiry - 10000, 1000);
+    logoutTimerRef.current = setTimeout(() => {
+      console.log('Session expired, logging out...');
+      logout();
+      // Show alert to user
+      alert('Your session has expired. Please log in again.');
+    }, timerMs);
+  };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (logoutTimerRef.current) {
+        clearTimeout(logoutTimerRef.current);
+      }
+    };
+  }, []);
 
   // Load auth state from localStorage on mount
   useEffect(() => {
@@ -37,10 +89,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (savedToken && savedUser) {
       try {
+        // Check if token is expired before restoring
+        const expiryTime = decodeJwtExpiry(savedToken);
+        if (expiryTime && expiryTime <= Date.now()) {
+          // Token expired, clear storage
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(USER_KEY);
+          setIsLoading(false);
+          return;
+        }
+
         const parsedUser = JSON.parse(savedUser);
         setToken(savedToken);
         setUser(parsedUser);
-        // Verify token is still valid
+        setupLogoutTimer(savedToken);
+        // Verify token is still valid on server
         verifyToken(savedToken);
       } catch {
         // Invalid saved state, clear it
@@ -92,6 +155,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(TOKEN_KEY, data.token);
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
 
+      // Set up auto-logout timer
+      setupLogoutTimer(data.token);
+
       return { success: true };
     } catch {
       return { success: false, error: 'Network error. Please try again.' };
@@ -99,6 +165,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    // Clear the logout timer
+    if (logoutTimerRef.current) {
+      clearTimeout(logoutTimerRef.current);
+      logoutTimerRef.current = null;
+    }
     setToken(null);
     setUser(null);
     localStorage.removeItem(TOKEN_KEY);

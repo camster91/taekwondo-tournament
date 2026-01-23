@@ -1,19 +1,15 @@
-import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import {
   Trophy,
   Users,
-  Calendar,
-  LayoutGrid,
-  Settings,
   Home,
   UserPlus,
   LogOut,
-  ClipboardCheck,
-  Timer,
   Shield,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import Dashboard from './pages/Dashboard';
 import Competitors from './pages/Competitors';
 import Tournaments from './pages/Tournaments';
@@ -158,26 +154,6 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Protected route wrapper
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
-  const location = useLocation();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-500">Loading...</div>
-      </div>
-    );
-  }
-
-  // For now, allow access without auth (can be enabled later)
-  // if (!isAuthenticated) {
-  //   return <Navigate to="/login" state={{ from: location }} replace />;
-  // }
-
-  return <>{children}</>;
-}
 
 function AppRoutes() {
   const location = useLocation();
@@ -206,21 +182,61 @@ function AppRoutes() {
     <ProtectedRoute>
       <AdminLayout>
         <Routes>
+          {/* General pages - any authenticated user */}
           <Route path="/" element={<Dashboard />} />
           <Route path="/competitors" element={<Competitors />} />
           <Route path="/tournaments" element={<Tournaments />} />
           <Route path="/tournaments/:id" element={<TournamentDetail />} />
-          <Route path="/tournaments/:id/settings" element={<TournamentSettings />} />
-          <Route path="/tournaments/:id/divisions" element={<Divisions />} />
-          <Route path="/tournaments/:id/schedule" element={<Schedule />} />
           <Route path="/tournaments/:id/results" element={<Results />} />
-          <Route path="/tournaments/:id/director" element={<DirectorDashboard />} />
           <Route
             path="/tournaments/:tournamentId/divisions/:divisionId/bracket"
             element={<BracketEditor />}
           />
-          <Route path="/admin/users" element={<UserManagement />} />
           <Route path="/profile" element={<Profile />} />
+
+          {/* Director+ pages - admin or director only */}
+          <Route
+            path="/tournaments/:id/settings"
+            element={
+              <ProtectedRoute requiredRoles={['admin', 'director']}>
+                <TournamentSettings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tournaments/:id/divisions"
+            element={
+              <ProtectedRoute requiredRoles={['admin', 'director']}>
+                <Divisions />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tournaments/:id/schedule"
+            element={
+              <ProtectedRoute requiredRoles={['admin', 'director']}>
+                <Schedule />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tournaments/:id/director"
+            element={
+              <ProtectedRoute requiredRoles={['admin', 'director']}>
+                <DirectorDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Admin only pages */}
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute requiredRoles={['admin']}>
+                <UserManagement />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </AdminLayout>
     </ProtectedRoute>
