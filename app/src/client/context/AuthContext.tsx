@@ -6,6 +6,7 @@ interface User {
   firstName: string;
   lastName: string;
   role: 'admin' | 'director' | 'scorekeeper' | 'viewer';
+  createdAt?: string;
 }
 
 interface AuthContextType {
@@ -16,6 +17,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   hasRole: (roles: string[]) => boolean;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -108,6 +110,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return roles.includes(user.role);
   };
 
+  const refreshUser = async () => {
+    if (token) {
+      await verifyToken(token);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -118,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         hasRole,
+        refreshUser,
       }}
     >
       {children}
