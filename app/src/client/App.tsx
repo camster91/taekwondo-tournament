@@ -13,6 +13,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import Dashboard from './pages/Dashboard';
 import Competitors from './pages/Competitors';
 import Tournaments from './pages/Tournaments';
@@ -28,6 +29,7 @@ import CheckIn from './pages/CheckIn';
 import PublicScoreboard from './pages/PublicScoreboard';
 import Results from './pages/Results';
 import UserManagement from './pages/UserManagement';
+import Profile from './pages/Profile';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -121,10 +123,12 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
           {user ? (
             <div>
-              <div className="text-sm text-white font-medium">
-                {user.firstName} {user.lastName}
-              </div>
-              <div className="text-xs text-gray-400 capitalize">{user.role}</div>
+              <Link to="/profile" className="block hover:opacity-80">
+                <div className="text-sm text-white font-medium">
+                  {user.firstName} {user.lastName}
+                </div>
+                <div className="text-xs text-gray-400 capitalize">{user.role}</div>
+              </Link>
               <button
                 onClick={logout}
                 className="mt-2 flex items-center text-sm text-gray-400 hover:text-white"
@@ -214,6 +218,7 @@ function AppRoutes() {
             element={<BracketEditor />}
           />
           <Route path="/admin/users" element={<UserManagement />} />
+          <Route path="/profile" element={<Profile />} />
         </Routes>
       </AdminLayout>
     </ProtectedRoute>
@@ -223,7 +228,9 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <ToastProvider>
+        <AppRoutes />
+      </ToastProvider>
     </AuthProvider>
   );
 }
