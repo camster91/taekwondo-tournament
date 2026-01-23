@@ -301,7 +301,7 @@ Comprehensive results display and statistics.
 **Exports:**
 - [x] Results PDF (print-ready)
 - [ ] Excel with all data
-- [ ] CSV for data analysis
+- [x] CSV for data analysis (school standings, results by division, results by competitor)
 - [ ] School-specific reports
 
 ---
