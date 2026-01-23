@@ -197,15 +197,16 @@ Complete the authentication flow with frontend pages.
 **Protected Routes:**
 - [x] Store token in localStorage
 - [x] AuthContext for state management
-- [ ] Redirect unauthenticated users to login (ready, disabled for now)
-- [ ] Auto-logout on token expiry
+- [x] Redirect unauthenticated users to login
+- [x] Auto-logout on token expiry
 - [ ] "Remember me" option
 
 **Role-Based UI:**
 - [x] Admin: Full sidebar, user management link
-- [ ] Director: Tournament management only
-- [ ] Scorekeeper: Ring view only
-- [ ] Viewer: Read-only brackets
+- [x] Director: Tournament management (settings, divisions, schedule, dashboard)
+- [x] Scorekeeper: Ring view access
+- [x] Viewer: Read-only brackets
+- [x] ProtectedRoute component with role requirements
 
 ---
 
