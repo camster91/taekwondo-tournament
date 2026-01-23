@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./tournament.db"
+}
+
+// Persistent competitor registry
+model Competitor {
+  id            String   @id @default(uuid())
+  firstName     String
+  lastName      String
+  gender        String   // M or F
+  dateOfBirth   DateTime
+  belt          String   // White, Yellow, Green, Blue, Red, Black
+  beltStripe    String?  // e.g., "Single Green Stripe"
+  danRank       Int?     // 1-6 for Black Belts, null for colored belts
+  heightInches  Float?
+  weightLbs     Float?
+  schoolDojang  String?
+  specialNeeds  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  registrations Registration[]
+
+  @@index([lastName, firstName])
+  @@index([schoolDojang])
+}
+
+// Tournament instances
+model Tournament {
+  id        String   @id @default(uuid())
+  name      String
+  date      DateTime
+  location  String?
+  status    String   @default("draft") // draft, registration, brackets, in_progress, completed
+  settings  String?  // JSON string for tournament-specific settings
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  registrations Registration[]
+  divisions     Division[]
+  weightClasses WeightClass[]
+}
+
+// Competitor-Tournament registration link
+model Registration {
+  id                   String   @id @default(uuid())
+  tournamentId         String
+  competitorId         String
+  patterns             Boolean  @default(false)
+  sparring             Boolean  @default(false)
+  weightAtRegistration Float?   // Weight at time of registration
+  ageAtTournament      Int?     // Calculated age at tournament date
+  createdAt            DateTime @default(now())
+
+  tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  competitor  Competitor           @relation(fields: [competitorId], references: [id])
+  assignments DivisionAssignment[]
+  matches1    Match[]              @relation("Competitor1")
+  matches2    Match[]              @relation("Competitor2")
+  matchWins   Match[]              @relation("Winner")
+
+  @@unique([tournamentId, competitorId])
+  @@index([tournamentId])
+}
+
+// Auto-generated or manually created divisions/categories
+model Division {
+  id             String   @id @default(uuid())
+  tournamentId   String
+  name           String   // e.g., "10-11 CB All Green Belts Males Sparring Heavy"
+  beltLevel      String   // BB or CB
+  gender         String   // M or F
+  eventType      String   // patterns or sparring
+  ageMin         Int
+  ageMax         Int
+  beltColors     String?  // JSON array: ["White", "Yellow"]
+  danMin         Int?
+  danMax         Int?
+  weightClass    String?  // Feather, Light, Middle, Heavy
+  divisionNumber Int      @default(1) // DIV1, DIV2, DIV3
+  isSpecialNeeds Boolean  @default(false)
+  displayOrder   Int?
+  createdAt      DateTime @default(now())
+
+  tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  assignments DivisionAssignment[]
+  bracket     Bracket?
+
+  @@index([tournamentId])
+}
+
+// Competitor-Division assignment
+model DivisionAssignment {
+  id             String   @id @default(uuid())
+  divisionId     String
+  registrationId String
+  seedPosition   Int?     // Bracket seeding
+  manualOverride Boolean  @default(false) // True if manually placed
+  createdAt      DateTime @default(now())
+
+  division     Division     @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@unique([divisionId, registrationId])
+  @@index([divisionId])
+}
+
+// Bracket structure for a division
+model Bracket {
+  id         String   @id @default(uuid())
+  divisionId String   @unique
+  structure  String   // JSON bracket tree structure
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  division Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  matches  Match[]
+}
+
+// Individual matches
+model Match {
+  id            String   @id @default(uuid())
+  bracketId     String
+  roundNumber   Int
+  matchNumber   Int
+  bracketType   String   // winners, losers, finals
+  competitor1Id String?
+  competitor2Id String?
+  winnerId      String?
+  score1        String?
+  score2        String?
+  status        String   @default("pending") // pending, ready, in_progress, completed, bye
+  scheduledTime DateTime?
+  ringNumber    Int?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  bracket     Bracket       @relation(fields: [bracketId], references: [id], onDelete: Cascade)
+  competitor1 Registration? @relation("Competitor1", fields: [competitor1Id], references: [id])
+  competitor2 Registration? @relation("Competitor2", fields: [competitor2Id], references: [id])
+  winner      Registration? @relation("Winner", fields: [winnerId], references: [id])
+
+  @@index([bracketId])
+}
+
+// Configurable weight classes per tournament
+model WeightClass {
+  id           String @id @default(uuid())
+  tournamentId String
+  name         String // Feather, Light, Middle, Heavy
+  gender       String?
+  ageMin       Int?
+  ageMax       Int?
+  weightMinLbs Float?
+  weightMaxLbs Float?
+  displayOrder Int?
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+}
