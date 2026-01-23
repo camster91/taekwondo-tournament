@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import 'express-async-errors';
 import { PrismaClient } from '@prisma/client';
 import competitorsRouter from './routes/competitors.js';
@@ -7,9 +9,13 @@ import tournamentsRouter from './routes/tournaments.js';
 import divisionsRouter from './routes/divisions.js';
 import bracketsRouter from './routes/brackets.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Middleware
 app.use(cors());
@@ -28,6 +34,19 @@ app.use('/api/brackets', bracketsRouter);
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Serve static files in production
+if (isProduction) {
+  const distPath = path.join(__dirname, '../../dist');
+  app.use(express.static(distPath));
+
+  // Handle client-side routing - serve index.html for all non-API routes
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(distPath, 'index.html'));
+    }
+  });
+}
 
 // Error handler
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
