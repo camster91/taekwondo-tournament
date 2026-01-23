@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
@@ -42,11 +42,35 @@ interface ImportMapping {
   specialNeeds?: string;
 }
 
+const BELT_OPTIONS = [
+  'White',
+  'Yellow',
+  'Green',
+  'Blue',
+  'Red',
+  'Black',
+];
+
+const emptyForm = {
+  firstName: '',
+  lastName: '',
+  gender: 'M',
+  dateOfBirth: '',
+  belt: 'White',
+  danRank: '',
+  heightInches: '',
+  weightLbs: '',
+  schoolDojang: '',
+  specialNeeds: '',
+};
+
 export default function Competitors() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
+  const [formData, setFormData] = useState(emptyForm);
   const [importData, setImportData] = useState<any[] | null>(null);
   const [importColumns, setImportColumns] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState<ImportMapping>({
@@ -56,8 +80,28 @@ export default function Competitors() {
     belt: '',
     weight: '',
   });
-  const [editingId, setEditingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Reset form when modal opens/closes or editing changes
+  useEffect(() => {
+    if (editingCompetitor) {
+      setFormData({
+        firstName: editingCompetitor.firstName,
+        lastName: editingCompetitor.lastName,
+        gender: editingCompetitor.gender,
+        dateOfBirth: editingCompetitor.dateOfBirth
+          ? new Date(editingCompetitor.dateOfBirth).toISOString().split('T')[0]
+          : '',
+        belt: editingCompetitor.belt,
+        danRank: editingCompetitor.danRank?.toString() || '',
+        heightInches: editingCompetitor.heightInches?.toString() || '',
+        weightLbs: editingCompetitor.weightLbs?.toString() || '',
+        schoolDojang: editingCompetitor.schoolDojang || '',
+        specialNeeds: editingCompetitor.specialNeeds || '',
+      });
+      setShowFormModal(true);
+    }
+  }, [editingCompetitor]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['competitors', search],
@@ -67,6 +111,46 @@ export default function Competitors() {
       params.set('limit', '100');
       const res = await fetch(`/api/competitors?${params}`);
       return res.json();
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      const res = await fetch('/api/competitors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          danRank: data.danRank ? parseInt(data.danRank) : null,
+          heightInches: data.heightInches ? parseFloat(data.heightInches) : null,
+          weightLbs: data.weightLbs ? parseFloat(data.weightLbs) : null,
+        }),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['competitors'] });
+      closeFormModal();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
+      const res = await fetch(`/api/competitors/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          danRank: data.danRank ? parseInt(data.danRank) : null,
+          heightInches: data.heightInches ? parseFloat(data.heightInches) : null,
+          weightLbs: data.weightLbs ? parseFloat(data.weightLbs) : null,
+        }),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['competitors'] });
+      closeFormModal();
     },
   });
 
@@ -104,6 +188,21 @@ export default function Competitors() {
     },
   });
 
+  const closeFormModal = () => {
+    setShowFormModal(false);
+    setEditingCompetitor(null);
+    setFormData(emptyForm);
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingCompetitor) {
+      updateMutation.mutate({ id: editingCompetitor.id, data: formData });
+    } else {
+      createMutation.mutate(formData);
+    }
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -113,14 +212,12 @@ export default function Competitors() {
       const data = new Uint8Array(event.target?.result as ArrayBuffer);
       const workbook = XLSX.read(data, { type: 'array' });
 
-      // Get first sheet (or "Competitors list" if exists)
       const sheetName =
         workbook.SheetNames.find((n) =>
           n.toLowerCase().includes('competitor')
         ) || workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
 
-      // Convert to JSON
       const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
       if (jsonData.length > 0) {
@@ -128,7 +225,6 @@ export default function Competitors() {
         setImportColumns(columns);
         setImportData(jsonData);
 
-        // Auto-detect column mapping
         const autoMapping: ImportMapping = {
           firstName: '',
           lastName: '',
@@ -144,7 +240,6 @@ export default function Competitors() {
           else if (lower.includes('last') && lower.includes('name'))
             autoMapping.lastName = col;
           else if (lower === 'name' && !autoMapping.firstName) {
-            // Single name column - might need split
             autoMapping.firstName = col;
           } else if (lower.includes('gender') || lower === 'sex')
             autoMapping.gender = col;
@@ -210,7 +305,14 @@ export default function Competitors() {
             onChange={handleFileUpload}
             className="hidden"
           />
-          <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
+          <button
+            onClick={() => {
+              setEditingCompetitor(null);
+              setFormData(emptyForm);
+              setShowFormModal(true);
+            }}
+            className="btn btn-primary"
+          >
             <Plus className="h-4 w-4 mr-2" />
             Add Competitor
           </button>
@@ -281,7 +383,7 @@ export default function Competitors() {
                     <td>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => setEditingId(c.id)}
+                          onClick={() => setEditingCompetitor(c)}
                           className="text-gray-400 hover:text-primary-600"
                         >
                           <Edit className="h-4 w-4" />
@@ -321,6 +423,207 @@ export default function Competitors() {
           </div>
         )}
       </div>
+
+      {/* Add/Edit Competitor Modal */}
+      {showFormModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto m-4">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">
+                {editingCompetitor ? 'Edit Competitor' : 'Add Competitor'}
+              </h2>
+              <button
+                onClick={closeFormModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">
+                    First Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.firstName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, firstName: e.target.value })
+                    }
+                    className="form-input w-full"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">
+                    Last Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.lastName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, lastName: e.target.value })
+                    }
+                    className="form-input w-full"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">
+                    Gender <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.gender}
+                    onChange={(e) =>
+                      setFormData({ ...formData, gender: e.target.value })
+                    }
+                    className="form-input w-full"
+                    required
+                  >
+                    <option value="M">Male</option>
+                    <option value="F">Female</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">
+                    Date of Birth <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.dateOfBirth}
+                    onChange={(e) =>
+                      setFormData({ ...formData, dateOfBirth: e.target.value })
+                    }
+                    className="form-input w-full"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">
+                    Belt <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.belt}
+                    onChange={(e) =>
+                      setFormData({ ...formData, belt: e.target.value })
+                    }
+                    className="form-input w-full"
+                    required
+                  >
+                    {BELT_OPTIONS.map((belt) => (
+                      <option key={belt} value={belt}>
+                        {belt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">Dan Rank (Black Belt only)</label>
+                  <select
+                    value={formData.danRank}
+                    onChange={(e) =>
+                      setFormData({ ...formData, danRank: e.target.value })
+                    }
+                    className="form-input w-full"
+                    disabled={formData.belt !== 'Black'}
+                  >
+                    <option value="">N/A</option>
+                    <option value="1">1st Dan</option>
+                    <option value="2">2nd Dan</option>
+                    <option value="3">3rd Dan</option>
+                    <option value="4">4th Dan</option>
+                    <option value="5">5th Dan</option>
+                    <option value="6">6th Dan</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="form-label">
+                    Weight (lbs) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.weightLbs}
+                    onChange={(e) =>
+                      setFormData({ ...formData, weightLbs: e.target.value })
+                    }
+                    className="form-input w-full"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Height (inches)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={formData.heightInches}
+                    onChange={(e) =>
+                      setFormData({ ...formData, heightInches: e.target.value })
+                    }
+                    className="form-input w-full"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">School/Dojang</label>
+                <input
+                  type="text"
+                  value={formData.schoolDojang}
+                  onChange={(e) =>
+                    setFormData({ ...formData, schoolDojang: e.target.value })
+                  }
+                  className="form-input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="form-label">Special Needs</label>
+                <input
+                  type="text"
+                  value={formData.specialNeeds}
+                  onChange={(e) =>
+                    setFormData({ ...formData, specialNeeds: e.target.value })
+                  }
+                  className="form-input w-full"
+                  placeholder="Leave blank if none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeFormModal}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  className="btn btn-primary"
+                >
+                  {createMutation.isPending || updateMutation.isPending
+                    ? 'Saving...'
+                    : editingCompetitor
+                    ? 'Update'
+                    : 'Add Competitor'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Import Modal */}
       {showImportModal && (
