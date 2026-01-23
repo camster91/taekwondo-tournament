@@ -44,6 +44,7 @@ model Tournament {
   registrations Registration[]
   divisions     Division[]
   weightClasses WeightClass[]
+  userAccess    UserTournamentAccess[]
 }
 
 // Competitor-Tournament registration link
@@ -163,5 +164,37 @@ model WeightClass {
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
+  @@index([tournamentId])
+}
+
+// User authentication
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         String   @default("viewer") // admin, director, scorekeeper, viewer
+  isActive     Boolean  @default(true)
+  lastLogin    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Tournament-specific permissions
+  tournamentAccess UserTournamentAccess[]
+}
+
+// Tournament-specific user access
+model UserTournamentAccess {
+  id           String   @id @default(uuid())
+  userId       String
+  tournamentId String
+  role         String   // director, scorekeeper, viewer
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tournamentId])
   @@index([tournamentId])
 }

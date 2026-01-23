@@ -9,6 +9,7 @@ import competitorsRouter from './routes/competitors.js';
 import tournamentsRouter from './routes/tournaments.js';
 import divisionsRouter from './routes/divisions.js';
 import bracketsRouter from './routes/brackets.js';
+import authRouter from './routes/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,6 +27,7 @@ app.use(express.json({ limit: '50mb' }));
 app.locals.prisma = prisma;
 
 // API Routes
+app.use('/api/auth', authRouter);
 app.use('/api/competitors', competitorsRouter);
 app.use('/api/tournaments', tournamentsRouter);
 app.use('/api/divisions', divisionsRouter);
