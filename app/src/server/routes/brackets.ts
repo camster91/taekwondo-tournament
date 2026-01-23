@@ -4,13 +4,19 @@ import { generateBracket, type BracketStructure } from '../services/bracket-gene
 
 const router = Router();
 
+// Helper to safely get string param
+const getParam = (param: string | string[] | undefined): string => {
+  if (Array.isArray(param)) return param[0];
+  return param || '';
+};
+
 // Generate bracket for division
 router.post('/division/:divisionId/generate', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { seedingStrategy = 'school_spread' } = req.body;
 
   const division = await prisma.division.findUnique({
-    where: { id: req.params.divisionId },
+    where: { id: getParam(req.params.divisionId) },
     include: {
       assignments: {
         include: {
@@ -32,7 +38,7 @@ router.post('/division/:divisionId/generate', async (req: Request, res: Response
     where: { divisionId: division.id },
   });
 
-  const competitors = division.assignments.map((a) => ({
+  const competitors = (division as any).assignments.map((a: any) => ({
     registrationId: a.registrationId,
     name: `${a.registration.competitor.firstName} ${a.registration.competitor.lastName}`,
     school: a.registration.competitor.schoolDojang || '',
@@ -93,7 +99,7 @@ router.get('/division/:divisionId', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const bracket = await prisma.bracket.findUnique({
-    where: { divisionId: req.params.divisionId },
+    where: { divisionId: getParam(req.params.divisionId) },
     include: {
       matches: {
         include: {
@@ -119,7 +125,7 @@ router.put('/match/:matchId', async (req: Request, res: Response) => {
   const { winnerId, score1, score2, status, notes } = req.body;
 
   const match = await prisma.match.update({
-    where: { id: req.params.matchId },
+    where: { id: getParam(req.params.matchId) },
     data: {
       winnerId,
       score1,
@@ -147,7 +153,7 @@ router.post('/match/:matchId/swap', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const match = await prisma.match.findUnique({
-    where: { id: req.params.matchId },
+    where: { id: getParam(req.params.matchId) },
   });
 
   if (!match) {
@@ -155,7 +161,7 @@ router.post('/match/:matchId/swap', async (req: Request, res: Response) => {
   }
 
   const updated = await prisma.match.update({
-    where: { id: req.params.matchId },
+    where: { id: getParam(req.params.matchId) },
     data: {
       competitor1Id: match.competitor2Id,
       competitor2Id: match.competitor1Id,
@@ -174,7 +180,7 @@ router.post('/division/:divisionId/reset', async (req: Request, res: Response) =
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.bracket.deleteMany({
-    where: { divisionId: req.params.divisionId },
+    where: { divisionId: getParam(req.params.divisionId) },
   });
 
   res.status(204).send();
@@ -186,7 +192,7 @@ router.post('/tournament/:tournamentId/generate-all', async (req: Request, res: 
   const { seedingStrategy = 'school_spread' } = req.body;
 
   const divisions = await prisma.division.findMany({
-    where: { tournamentId: req.params.tournamentId },
+    where: { tournamentId: getParam(req.params.tournamentId) },
     include: {
       assignments: {
         include: {
@@ -201,7 +207,7 @@ router.post('/tournament/:tournamentId/generate-all', async (req: Request, res: 
   let generated = 0;
   let skipped = 0;
 
-  for (const division of divisions) {
+  for (const division of divisions as any[]) {
     if (division.assignments.length === 0) {
       skipped++;
       continue;
@@ -212,7 +218,7 @@ router.post('/tournament/:tournamentId/generate-all', async (req: Request, res: 
       where: { divisionId: division.id },
     });
 
-    const competitors = division.assignments.map((a) => ({
+    const competitors = division.assignments.map((a: any) => ({
       registrationId: a.registrationId,
       name: `${a.registration.competitor.firstName} ${a.registration.competitor.lastName}`,
       school: a.registration.competitor.schoolDojang || '',

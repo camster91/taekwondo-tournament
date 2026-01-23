@@ -165,7 +165,7 @@ export default function BracketEditor() {
 
         // Match box
         doc.setDrawColor(200);
-        doc.setFillColor(255);
+        doc.setFillColor(255, 255, 255);
         doc.rect(x, y, matchWidth, matchHeight, 'FD');
 
         // Competitor names
@@ -196,7 +196,7 @@ export default function BracketEditor() {
         const y = losersStartY + idx * (matchHeight + 20);
 
         doc.setDrawColor(200);
-        doc.setFillColor(255);
+        doc.setFillColor(255, 255, 255);
         doc.rect(x, y, matchWidth, matchHeight, 'FD');
 
         doc.setFontSize(9);

@@ -4,12 +4,18 @@ import { autoCategorize, type CategorizationConfig } from '../services/categoriz
 
 const router = Router();
 
+// Helper to safely get string param
+const getParam = (param: string | string[] | undefined): string => {
+  if (Array.isArray(param)) return param[0];
+  return param || '';
+};
+
 // Get divisions for a tournament
 router.get('/tournament/:tournamentId', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const divisions = await prisma.division.findMany({
-    where: { tournamentId: req.params.tournamentId },
+    where: { tournamentId: getParam(req.params.tournamentId) },
     include: {
       _count: {
         select: { assignments: true },
@@ -33,7 +39,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const division = await prisma.division.findUnique({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
     include: {
       assignments: {
         include: {
@@ -68,7 +74,7 @@ router.post('/tournament/:tournamentId/auto-generate', async (req: Request, res:
   const { config } = req.body;
 
   const tournament = await prisma.tournament.findUnique({
-    where: { id: req.params.tournamentId },
+    where: { id: getParam(req.params.tournamentId) },
   });
 
   if (!tournament) {
@@ -77,7 +83,7 @@ router.post('/tournament/:tournamentId/auto-generate', async (req: Request, res:
 
   // Get all registrations with competitor data
   const registrations = await prisma.registration.findMany({
-    where: { tournamentId: req.params.tournamentId },
+    where: { tournamentId: getParam(req.params.tournamentId) },
     include: { competitor: true },
   });
 
@@ -91,7 +97,7 @@ router.post('/tournament/:tournamentId/auto-generate', async (req: Request, res:
     ...config,
   };
 
-  const result = await autoCategorize(prisma, req.params.tournamentId, registrations, categorizationConfig);
+  const result = await autoCategorize(prisma, getParam(req.params.tournamentId), registrations, categorizationConfig);
 
   res.json(result);
 });
@@ -153,7 +159,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   } = req.body;
 
   const division = await prisma.division.update({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
     data: {
       name,
       ageMin,
@@ -176,7 +182,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.division.delete({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
   });
 
   res.status(204).send();
@@ -187,7 +193,7 @@ router.delete('/tournament/:tournamentId/all', async (req: Request, res: Respons
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.division.deleteMany({
-    where: { tournamentId: req.params.tournamentId },
+    where: { tournamentId: getParam(req.params.tournamentId) },
   });
 
   res.status(204).send();
@@ -200,7 +206,7 @@ router.post('/:id/assign', async (req: Request, res: Response) => {
 
   const assignment = await prisma.divisionAssignment.create({
     data: {
-      divisionId: req.params.id,
+      divisionId: getParam(req.params.id),
       registrationId,
       seedPosition,
       manualOverride: manualOverride ?? true,
@@ -220,7 +226,7 @@ router.delete('/:id/assign/:assignmentId', async (req: Request, res: Response) =
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.divisionAssignment.delete({
-    where: { id: req.params.assignmentId },
+    where: { id: getParam(req.params.assignmentId) },
   });
 
   res.status(204).send();
@@ -253,7 +259,7 @@ router.post('/:id/split', async (req: Request, res: Response) => {
   const { splitCount = 2 } = req.body;
 
   const division = await prisma.division.findUnique({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
     include: {
       assignments: {
         include: {

@@ -5,6 +5,12 @@ import { generateSchedule } from '../services/schedule-generator.js';
 
 const router = Router();
 
+// Helper to safely get string param
+const getParam = (param: string | string[] | undefined): string => {
+  if (Array.isArray(param)) return param[0];
+  return param || '';
+};
+
 // Get all tournaments
 router.get('/', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
@@ -29,7 +35,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const tournament = await prisma.tournament.findUnique({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
     include: {
       _count: {
         select: {
@@ -72,7 +78,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   const { name, date, location, status, settings } = req.body;
 
   const tournament = await prisma.tournament.update({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
     data: {
       name,
       date: date ? new Date(date) : undefined,
@@ -90,7 +96,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.tournament.delete({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
   });
 
   res.status(204).send();
@@ -101,7 +107,7 @@ router.get('/:id/registrations', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const registrations = await prisma.registration.findMany({
-    where: { tournamentId: req.params.id },
+    where: { tournamentId: getParam(req.params.id) },
     include: {
       competitor: true,
       assignments: {
@@ -127,7 +133,7 @@ router.post('/:id/registrations', async (req: Request, res: Response) => {
 
   // Get tournament date for age calculation
   const tournament = await prisma.tournament.findUnique({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
   });
 
   if (!tournament) {
@@ -147,7 +153,7 @@ router.post('/:id/registrations', async (req: Request, res: Response) => {
 
   const registration = await prisma.registration.create({
     data: {
-      tournamentId: req.params.id,
+      tournamentId: getParam(req.params.id),
       competitorId,
       patterns: patterns ?? false,
       sparring: sparring ?? false,
@@ -168,7 +174,7 @@ router.post('/:id/registrations/bulk', async (req: Request, res: Response) => {
   const { competitorIds, patterns, sparring } = req.body;
 
   const tournament = await prisma.tournament.findUnique({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
   });
 
   if (!tournament) {
@@ -186,7 +192,7 @@ router.post('/:id/registrations/bulk', async (req: Request, res: Response) => {
       return prisma.registration.upsert({
         where: {
           tournamentId_competitorId: {
-            tournamentId: req.params.id,
+            tournamentId: getParam(req.params.id),
             competitorId: competitor.id,
           },
         },
@@ -196,7 +202,7 @@ router.post('/:id/registrations/bulk', async (req: Request, res: Response) => {
           ageAtTournament,
         },
         create: {
-          tournamentId: req.params.id,
+          tournamentId: getParam(req.params.id),
           competitorId: competitor.id,
           patterns: patterns ?? false,
           sparring: sparring ?? false,
@@ -216,7 +222,7 @@ router.put('/:id/registrations/:regId', async (req: Request, res: Response) => {
   const { patterns, sparring, weightAtRegistration } = req.body;
 
   const registration = await prisma.registration.update({
-    where: { id: req.params.regId },
+    where: { id: getParam(req.params.regId) },
     data: {
       patterns,
       sparring,
@@ -235,7 +241,7 @@ router.delete('/:id/registrations/:regId', async (req: Request, res: Response) =
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.registration.delete({
-    where: { id: req.params.regId },
+    where: { id: getParam(req.params.regId) },
   });
 
   res.status(204).send();
@@ -247,7 +253,7 @@ router.post('/:id/schedule', async (req: Request, res: Response) => {
   const config = req.body.config || {};
 
   try {
-    const schedule = await generateSchedule(prisma, req.params.id, config);
+    const schedule = await generateSchedule(prisma, getParam(req.params.id), config);
     res.json(schedule);
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -259,7 +265,7 @@ router.get('/:id/schedule', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   try {
-    const schedule = await generateSchedule(prisma, req.params.id);
+    const schedule = await generateSchedule(prisma, getParam(req.params.id));
     res.json(schedule);
   } catch (error: any) {
     res.status(400).json({ error: error.message });
