@@ -49,14 +49,17 @@ model Tournament {
 
 // Competitor-Tournament registration link
 model Registration {
-  id                   String   @id @default(uuid())
+  id                   String    @id @default(uuid())
   tournamentId         String
   competitorId         String
-  patterns             Boolean  @default(false)
-  sparring             Boolean  @default(false)
-  weightAtRegistration Float?   // Weight at time of registration
-  ageAtTournament      Int?     // Calculated age at tournament date
-  createdAt            DateTime @default(now())
+  patterns             Boolean   @default(false)
+  sparring             Boolean   @default(false)
+  weightAtRegistration Float?    // Weight at time of registration
+  ageAtTournament      Int?      // Calculated age at tournament date
+  checkedIn            Boolean   @default(false)
+  checkInTime          DateTime?
+  checkInWeight        Float?    // Weight at check-in (for verification)
+  createdAt            DateTime  @default(now())
 
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   competitor  Competitor           @relation(fields: [competitorId], references: [id])
