@@ -346,15 +346,16 @@ Comprehensive results display and statistics.
 
 ---
 
-### 14. Public Scoreboard Display
+### 14. Public Scoreboard Display ✅
 
 **Description:** Large-screen display for spectators.
 
 **Requirements:**
-- [ ] Full-screen mode at /display
-- [ ] Current matches per ring
-- [ ] Auto-cycling through divisions
-- [ ] Recent results ticker
+- [x] Full-screen mode at /display/:tournamentId
+- [x] Current matches in progress display
+- [x] Auto-cycling through divisions (15-second intervals)
+- [x] Recent results ticker
+- [x] Division status overview
 - [ ] QR code for mobile bracket access
 
 ---
