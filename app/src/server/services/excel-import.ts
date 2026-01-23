@@ -99,11 +99,11 @@ export async function importFromExcel(
       const schoolDojang = mapping.school ? String(row[mapping.school] || '').trim() || null : null;
       const specialNeeds = mapping.specialNeeds ? String(row[mapping.specialNeeds] || '').trim() || null : null;
 
-      // Check for existing competitor (by name + DOB + school)
+      // Check for existing competitor (by name + DOB)
       const existing = await prisma.competitor.findFirst({
         where: {
-          firstName: { equals: firstName, mode: 'insensitive' },
-          lastName: { equals: lastName, mode: 'insensitive' },
+          firstName: { equals: firstName },
+          lastName: { equals: lastName },
           dateOfBirth,
         },
       });

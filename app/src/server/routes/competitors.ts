@@ -4,6 +4,12 @@ import { importFromExcel } from '../services/excel-import.js';
 
 const router = Router();
 
+// Helper to safely get string param
+const getParam = (param: string | string[] | undefined): string => {
+  if (Array.isArray(param)) return param[0];
+  return param || '';
+};
+
 // Get all competitors
 router.get('/', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
@@ -43,7 +49,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const competitor = await prisma.competitor.findUnique({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
     include: {
       registrations: {
         include: {
@@ -114,7 +120,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   } = req.body;
 
   const competitor = await prisma.competitor.update({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
     data: {
       firstName,
       lastName,
@@ -137,7 +143,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   await prisma.competitor.delete({
-    where: { id: req.params.id },
+    where: { id: getParam(req.params.id) },
   });
 
   res.status(204).send();
