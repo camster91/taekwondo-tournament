@@ -1,680 +1,460 @@
 # Taekwondo Tournament App - Requirements Document
 
-This document outlines the features, improvements, and enhancements needed for the Tournament Management Application.
+This document outlines the features, improvements, and enhancements needed for the Tournament Management Application to fully replace the Excel-based workflow.
+
+**See also:** [TOURNAMENT_PLAN.md](./TOURNAMENT_PLAN.md) for comprehensive feature specifications.
+
+---
+
+## Implementation Status
+
+### Completed Features ✅
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Testing Framework | ✅ Done | Vitest with 69 unit tests |
+| Authentication Backend | ✅ Done | JWT auth, roles, middleware |
+| PDF Export | ✅ Done | Single, batch, results PDFs |
+| Match Advancement | ✅ Done | Full double-elimination logic |
+| Public Registration | ✅ Done | Self-service at /register |
 
 ---
 
 ## Table of Contents
 
-1. [High Priority](#high-priority)
-   - [Testing Framework](#1-testing-framework)
-   - [Authentication & Authorization](#2-authentication--authorization)
-   - [PDF Export](#3-pdf-export)
-   - [Match Advancement Logic](#4-match-advancement-logic)
-2. [Medium Priority](#medium-priority)
-   - [API Documentation](#5-api-documentation)
-   - [Error Handling & Validation](#6-error-handling--validation)
-   - [Audit Logging](#7-audit-logging)
-   - [Results Export](#8-results-export)
-3. [Nice-to-Have](#nice-to-have)
-   - [Real-time Updates](#9-real-time-updates)
-   - [Notifications System](#10-notifications-system)
-   - [Results Display / Scoreboard](#11-results-display--scoreboard)
-   - [Mobile UI Optimization](#12-mobile-ui-optimization)
+1. [Immediate Priority - Tournament Operations](#immediate-priority---tournament-operations)
+2. [High Priority - User Experience](#high-priority---user-experience)
+3. [Medium Priority - Quality & Polish](#medium-priority---quality--polish)
+4. [Nice-to-Have - Advanced Features](#nice-to-have---advanced-features)
 
 ---
 
-## High Priority
+## Immediate Priority - Tournament Operations
 
-### 1. Testing Framework
+These features are required to run a complete tournament without Excel.
+
+### 1. Scorekeeper Interface
 
 **Status:** Not Implemented
 
 **Description:**
-The application currently has no automated tests. A comprehensive testing strategy is needed to ensure reliability and enable confident refactoring.
+A dedicated interface for scorekeepers to record match results quickly during live tournaments.
 
 **Requirements:**
 
-- [ ] Set up testing framework (Vitest recommended for Vite projects)
-- [ ] Configure test environment with database mocking/seeding
-- [ ] Add test scripts to package.json
+**Ring-Based View:**
+- [ ] Select ring number to see only that ring's matches
+- [ ] Show current match prominently
+- [ ] Show next 2-3 matches in queue
+- [ ] Large touch-friendly buttons (tablet-optimized)
 
-**Unit Tests Required:**
-- [ ] Categorization engine logic
-  - Belt level separation (BB/CB)
-  - Gender separation
-  - Age group assignment
-  - Weight class assignment
-  - Division splitting (>8 competitors)
-  - Small group combining (<3 competitors)
-- [ ] Bracket generator logic
-  - Correct bracket structure for 2, 4, 8 competitors
-  - BYE handling for odd numbers
-  - School-spread seeding algorithm
-  - Double-elimination progression
-- [ ] Schedule generator logic
-  - Time slot calculation
-  - Ring assignment
-  - Conflict detection
-- [ ] Excel import service
-  - Column mapping
-  - Data normalization (belt names, gender)
-  - Duplicate detection
-  - Validation errors
+**Match Entry:**
+- [ ] Display both competitor names and schools
+- [ ] Score entry fields (numeric)
+- [ ] Winner selection (tap to select)
+- [ ] Quick actions: WIN, DQ, FORFEIT, INJURY
+- [ ] Notes field for special circumstances
+- [ ] Confirmation before submission
 
-**Integration Tests Required:**
-- [ ] API endpoint tests for all routes
-  - Competitors CRUD
-  - Tournaments CRUD
-  - Registrations
-  - Divisions auto-generation
-  - Bracket generation
-- [ ] Database operations
-  - Cascade deletes
-  - Relationship integrity
-
-**End-to-End Tests (Optional):**
-- [ ] Full tournament workflow
-  - Create tournament → Import competitors → Register → Generate divisions → Generate brackets → Record results
-
-**Acceptance Criteria:**
-- Minimum 80% code coverage on business logic
-- All API endpoints have at least one happy path and one error case test
-- Tests run in CI pipeline before merge
-
----
-
-### 2. Authentication & Authorization
-
-**Status:** Not Implemented
-
-**Description:**
-Currently, the application has no access control. Anyone can view, create, modify, or delete any data. A proper authentication system is needed for production use.
-
-**Requirements:**
-
-**Authentication:**
-- [ ] User registration with email/password
-- [ ] User login with session or JWT tokens
-- [ ] Password hashing (bcrypt)
-- [ ] Password reset functionality
-- [ ] Session management (logout, expiry)
-
-**Authorization Roles:**
-- [ ] **Admin**: Full access to all features
-  - Manage users
-  - Configure system settings
-  - Access all tournaments
-- [ ] **Tournament Director**: Manage assigned tournaments
-  - Create/edit tournaments
-  - Manage registrations
-  - Generate brackets
-  - Record results
-- [ ] **Scorekeeper**: Limited access during events
-  - View brackets
-  - Record match results only
-- [ ] **Viewer** (Public): Read-only access
-  - View published brackets
-  - View results
-
-**Database Changes:**
-- [ ] Add User model (id, email, passwordHash, role, createdAt)
-- [ ] Add UserTournament relation for tournament-specific access
-- [ ] Add createdBy/updatedBy fields to relevant models
-
-**API Changes:**
-- [ ] Add /api/auth routes (register, login, logout, me, reset-password)
-- [ ] Add authentication middleware
-- [ ] Add authorization middleware (role-based)
-- [ ] Protect all existing routes
-
-**Frontend Changes:**
-- [ ] Login page
-- [ ] Registration page
-- [ ] Protected route wrapper
-- [ ] User menu with logout
-- [ ] Role-based UI visibility
-
-**Acceptance Criteria:**
-- Users cannot access protected routes without authentication
-- Users can only perform actions allowed by their role
-- Passwords are never stored in plain text
-- Sessions expire after configurable period of inactivity
-
----
-
-### 3. PDF Export
-
-**Status:** Partially Implemented (jsPDF imported but not fully integrated)
-
-**Description:**
-The bracket editor has PDF export UI elements, but the actual PDF generation is incomplete. Users need to export brackets in the same format as the existing tournament PDFs.
-
-**Requirements:**
-
-**Single Bracket Export:**
-- [ ] Export individual division bracket to PDF
-- [ ] Match existing PDF format from repository samples
-- [ ] Include:
-  - Division name (age, belt, gender, weight class)
-  - Tournament name and date
-  - Competitor names with school
-  - Bracket structure (8-person double elimination)
-  - Match numbers
-  - Score entry boxes (blank for printing)
-
-**Batch Export:**
-- [ ] Export all brackets for a tournament
-- [ ] Option: Single PDF with all brackets
-- [ ] Option: ZIP file with individual PDFs
-- [ ] Organize by category (BB/CB, Patterns/Sparring)
-
-**Results PDF:**
-- [ ] Export completed bracket with results
-- [ ] Show final placements (1st, 2nd, 3rd)
-- [ ] Include match scores
-
-**Technical Implementation:**
-- [ ] Use jsPDF with proper page sizing (Letter/A4)
-- [ ] Implement bracket drawing with proper spacing
-- [ ] Handle long competitor names (truncation/wrapping)
-- [ ] Add tournament logo placeholder
-
-**Acceptance Criteria:**
-- Exported PDFs match the format of existing tournament brackets
-- PDFs are print-ready at standard paper sizes
-- Batch export completes within reasonable time (<30 seconds for 50 brackets)
-
----
-
-### 4. Match Advancement Logic
-
-**Status:** Simplified implementation exists
-
-**Description:**
-The current bracket system stores match structure but doesn't fully automate winner advancement through the double-elimination bracket. When a match result is recorded, the winner should automatically advance to the next appropriate match.
-
-**Requirements:**
-
-**Winners Bracket Advancement:**
-- [ ] When match result is recorded, identify winner
-- [ ] Automatically place winner in next winners bracket match
-- [ ] Handle BYE advancement (auto-advance to next round)
-
-**Losers Bracket Advancement:**
-- [ ] Move loser to appropriate losers bracket match
-- [ ] Maintain correct losers bracket progression
-- [ ] Handle losers bracket BYEs
-
-**Finals Logic:**
-- [ ] Winners bracket champion enters finals
-- [ ] Losers bracket champion enters finals
-- [ ] If losers bracket winner wins finals, trigger reset match
-- [ ] Determine final placements (1st, 2nd, 3rd, 3rd)
-
-**Edge Cases:**
-- [ ] Handle disqualifications (DQ)
-- [ ] Handle no-shows / forfeits
-- [ ] Handle injuries (medical forfeit)
-- [ ] Allow manual override of advancement
-
-**UI Updates:**
-- [ ] Show advancement path visually
-- [ ] Highlight next pending matches
-- [ ] Display bracket completion percentage
-- [ ] Show final standings when bracket complete
-
-**Acceptance Criteria:**
-- Recording a match result automatically updates the next match
-- Double-elimination rules are correctly followed
-- Finals reset scenario works correctly
-- All edge cases (DQ, forfeit, injury) are handled
-
----
-
-## Medium Priority
-
-### 5. API Documentation
-
-**Status:** Not Implemented
-
-**Description:**
-The API has no formal documentation. Developers and potential integrators need clear documentation of all endpoints, request/response formats, and error codes.
-
-**Requirements:**
-
-**OpenAPI/Swagger Specification:**
-- [ ] Document all API endpoints
-- [ ] Define request body schemas
-- [ ] Define response schemas
-- [ ] Document error responses
-- [ ] Add example requests/responses
-
-**Endpoints to Document:**
-- [ ] /api/competitors (GET, POST, PUT, DELETE, /import, /meta/*)
-- [ ] /api/tournaments (GET, POST, PUT, DELETE, /registrations, /schedule)
-- [ ] /api/divisions (GET, POST, PUT, DELETE, /assign, /split, /auto-generate)
-- [ ] /api/brackets (GET, POST, PUT, /generate, /reset)
-
-**Interactive Documentation:**
-- [ ] Integrate Swagger UI at /api/docs
-- [ ] Allow testing endpoints from documentation
-- [ ] Support authentication in Swagger UI
-
-**Additional Documentation:**
-- [ ] Error code reference
-- [ ] Rate limiting information (if implemented)
-- [ ] Webhook documentation (if implemented)
-
-**Acceptance Criteria:**
-- All endpoints are documented with schemas
-- Swagger UI is accessible at /api/docs
-- Documentation stays in sync with implementation
-
----
-
-### 6. Error Handling & Validation
-
-**Status:** Basic implementation exists
-
-**Description:**
-The application has basic error handling but needs more comprehensive validation and user-friendly error messages.
-
-**Requirements:**
-
-**Input Validation:**
-- [ ] Validate all API request bodies with Zod schemas
-- [ ] Validate query parameters
-- [ ] Validate path parameters (IDs exist)
-- [ ] Return structured validation errors
-
-**Validation Rules:**
-- [ ] Competitor
-  - Name: required, min 2 characters
-  - Gender: required, enum (M/F)
-  - Belt: required, must match known belts
-  - DOB: required, valid date, not in future
-  - Weight/Height: positive numbers if provided
-- [ ] Tournament
-  - Name: required, min 3 characters
-  - Date: required, valid date
-  - Location: optional, max 200 characters
-- [ ] Registration
-  - Competitor must exist
-  - Tournament must exist
-  - At least one event (patterns/sparring) selected
-  - No duplicate registrations
-
-**Error Response Format:**
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Validation failed",
-    "details": [
-      {
-        "field": "email",
-        "message": "Invalid email format"
-      }
-    ]
-  }
-}
+**Flow:**
+```
+Current Match → Enter Scores → Select Winner → Confirm → Auto-advance to Next
 ```
 
-**Error Categories:**
-- [ ] 400 - Validation errors
-- [ ] 401 - Authentication required
-- [ ] 403 - Authorization denied
-- [ ] 404 - Resource not found
-- [ ] 409 - Conflict (duplicate, constraint violation)
-- [ ] 500 - Internal server error (with sanitized message)
-
-**Frontend Error Handling:**
-- [ ] Display validation errors inline on forms
-- [ ] Show toast notifications for API errors
-- [ ] Graceful handling of network errors
-- [ ] Retry logic for transient failures
-
-**Acceptance Criteria:**
-- All API inputs are validated before processing
-- Error responses follow consistent format
-- Frontend displays errors in user-friendly manner
-- No stack traces or sensitive info in production errors
+**UI Requirements:**
+- [ ] Works on 10" tablet
+- [ ] Minimum 44px touch targets
+- [ ] High contrast for outdoor venues
+- [ ] Works offline (queues submissions)
 
 ---
 
-### 7. Audit Logging
+### 2. Tournament Check-In System
 
 **Status:** Not Implemented
 
 **Description:**
-There is no tracking of who made changes and when. For tournament integrity, an audit trail is essential.
+Before tournament starts, competitors must check in. This confirms attendance and allows weight verification for sparring.
 
 **Requirements:**
 
-**Events to Log:**
-- [ ] Competitor changes (create, update, delete)
-- [ ] Tournament changes (create, update, delete)
-- [ ] Registration changes (add, remove, modify)
-- [ ] Division changes (create, delete, reassign competitors)
-- [ ] Bracket changes (generate, reset, modify seeds)
-- [ ] Match results (score entry, modifications)
-- [ ] User actions (login, logout, failed attempts)
+**Check-In Process:**
+- [ ] List all registered competitors
+- [ ] Search by name or school
+- [ ] Mark as "Checked In" with one tap
+- [ ] Optional: Record official weight
+- [ ] Flag no-shows after deadline
 
-**Log Entry Format:**
-```json
-{
-  "id": "uuid",
-  "timestamp": "2025-01-23T10:30:00Z",
-  "userId": "user-uuid",
-  "action": "UPDATE",
-  "resource": "match",
-  "resourceId": "match-uuid",
-  "changes": {
-    "before": { "score1": null, "score2": null },
-    "after": { "score1": 3, "score2": 1 }
-  },
-  "ipAddress": "192.168.1.1",
-  "userAgent": "Mozilla/5.0..."
-}
-```
+**Weight Verification:**
+- [ ] Compare check-in weight to registration weight
+- [ ] Auto-flag if weight differs by >2 lbs
+- [ ] Option to move to different weight class
+- [ ] Option to DQ if over limit
 
-**Database Changes:**
-- [ ] Add AuditLog model
-- [ ] Index by timestamp, userId, resource
-
-**API Endpoints:**
-- [ ] GET /api/audit-logs (admin only)
-- [ ] Filter by date range, user, resource type
-- [ ] Pagination support
-
-**UI:**
-- [ ] Audit log viewer page (admin)
-- [ ] Filter and search functionality
-- [ ] Export audit logs to CSV
-
-**Acceptance Criteria:**
-- All data modifications are logged
-- Logs include before/after values
-- Logs are tamper-proof (append-only)
-- Admins can search and filter logs
+**Reports:**
+- [ ] Checked-in count vs registered
+- [ ] Missing competitors list
+- [ ] Weight discrepancy report
 
 ---
 
-### 8. Results Export
+### 3. Schedule Management UI
 
-**Status:** Not Implemented
+**Status:** Partially Implemented (backend exists)
 
 **Description:**
-After a tournament, directors need to export final results for record-keeping and distribution.
+Visual interface for managing tournament schedule and ring assignments.
 
 **Requirements:**
 
-**Export Formats:**
-- [ ] PDF - Formatted results document
-- [ ] Excel - Spreadsheet with all results
-- [ ] CSV - Simple data export
+**Schedule View:**
+- [ ] Timeline view showing all rings
+- [ ] Divisions as blocks on timeline
+- [ ] Color-coded by event type (patterns/sparring)
+- [ ] Current time indicator
 
-**Results Data:**
-- [ ] Division placements (1st, 2nd, 3rd, 3rd)
-- [ ] Competitor names and schools
-- [ ] Match scores
-- [ ] Medal count by school
+**Schedule Editing:**
+- [ ] Drag divisions to different times
+- [ ] Drag divisions between rings
+- [ ] Adjust start/end times
+- [ ] Add breaks
+- [ ] Handle conflicts (overlap warning)
 
-**PDF Results Report:**
-- [ ] Tournament header (name, date, location)
-- [ ] Results by division
-- [ ] Medal summary table
-- [ ] School standings
+**Auto-Schedule:**
+- [ ] One-click schedule generation
+- [ ] Configurable: start time, end time, breaks
+- [ ] Patterns before sparring option
+- [ ] Balance rings evenly
 
-**Excel Export:**
-- [ ] Sheet 1: Individual results (competitor, division, place, points)
-- [ ] Sheet 2: Division summary
-- [ ] Sheet 3: School medal counts
-- [ ] Sheet 4: Raw match data
+**Export:**
+- [ ] Print-friendly schedule PDF
+- [ ] Per-ring schedule sheets
+- [ ] Master schedule display
+
+---
+
+### 4. Tournament Dashboard
+
+**Status:** Basic Implementation Exists
+
+**Description:**
+Real-time overview of tournament progress for directors.
+
+**Enhancements Needed:**
+
+**Progress Tracking:**
+- [ ] Divisions completed vs total
+- [ ] Matches completed vs total
+- [ ] Estimated time remaining
+- [ ] Current ring status (active/idle)
+
+**Alerts:**
+- [ ] Divisions running behind schedule
+- [ ] Rings with long gaps
+- [ ] Competitors missing from division
+
+**Quick Actions:**
+- [ ] Jump to any division bracket
+- [ ] View/print any bracket PDF
+- [ ] Send announcements
+
+---
+
+### 5. Login/Auth Frontend
+
+**Status:** Backend Done, Frontend Not Implemented
+
+**Description:**
+Complete the authentication flow with frontend pages.
+
+**Requirements:**
+
+**Pages Needed:**
+- [ ] Login page (`/login`)
+- [ ] Register page (`/register-account` - admin creates accounts)
+- [ ] Password change page
+- [ ] User profile page
+
+**Protected Routes:**
+- [ ] Redirect unauthenticated users to login
+- [ ] Store token in localStorage
+- [ ] Auto-logout on token expiry
+- [ ] "Remember me" option
+
+**Role-Based UI:**
+- [ ] Admin: Full sidebar, user management
+- [ ] Director: Tournament management only
+- [ ] Scorekeeper: Ring view only
+- [ ] Viewer: Read-only brackets
+
+---
+
+## High Priority - User Experience
+
+### 6. Improved Division Management
+
+**Status:** Basic Implementation Exists
+
+**Description:**
+Better tools for managing auto-generated divisions.
+
+**Enhancements:**
+
+**Division Review:**
+- [ ] Preview divisions before creating
+- [ ] See competitor counts per division
+- [ ] Warnings for small (<3) or large (>8) divisions
+- [ ] Suggested merge/split actions
+
+**Manual Adjustments:**
+- [ ] Move competitor between divisions (drag-drop)
+- [ ] Merge two divisions
+- [ ] Split one division
+- [ ] Create custom division
+- [ ] Lock division (prevent auto-changes)
+
+**Bulk Actions:**
+- [ ] Re-run auto-categorization
+- [ ] Clear all divisions
+- [ ] Generate all brackets at once
+
+---
+
+### 7. Enhanced Bracket Editor
+
+**Status:** Basic Implementation Exists
+
+**Description:**
+Improve the visual bracket editor for better usability.
+
+**Enhancements:**
+
+**Visual Improvements:**
+- [ ] Clearer winner/loser bracket separation
+- [ ] Match status indicators (pending, ready, complete)
+- [ ] Competitor photos (optional)
+- [ ] School logos/colors (optional)
+
+**Interactions:**
+- [ ] Click match to enter results
+- [ ] Hover to see competitor details
+- [ ] Zoom in/out for large brackets
+- [ ] Print-friendly view
+
+**Match Details Panel:**
+- [ ] Score history (if changed)
+- [ ] Match notes
+- [ ] Time played
+- [ ] Audit trail (who entered result)
+
+---
+
+### 8. Results & Statistics
+
+**Status:** Partially Implemented
+
+**Description:**
+Comprehensive results display and statistics.
+
+**Requirements:**
+
+**Results Display:**
+- [ ] Results by division (1st, 2nd, 3rd)
+- [ ] Results by competitor
+- [ ] Results by school
+
+**Medal Standings:**
+- [ ] School rankings (gold/silver/bronze counts)
+- [ ] Total medals table
+- [ ] Points system (optional: 3/2/1)
 
 **Statistics:**
 - [ ] Total competitors
-- [ ] Competitors per school
-- [ ] Division breakdown
+- [ ] Breakdown by belt level
+- [ ] Breakdown by age group
+- [ ] Breakdown by school
 - [ ] Match statistics
 
-**Acceptance Criteria:**
-- Results can be exported in all three formats
-- PDF is print-ready for distribution
-- Excel contains all data for further analysis
-- Export includes all completed divisions
+**Exports:**
+- [ ] Results PDF (print-ready)
+- [ ] Excel with all data
+- [ ] CSV for data analysis
+- [ ] School-specific reports
 
 ---
 
-## Nice-to-Have
+## Medium Priority - Quality & Polish
 
-### 9. Real-time Updates
+### 9. API Documentation
 
 **Status:** Not Implemented
 
-**Description:**
-Currently, users must refresh the page to see updates. Real-time updates would improve the user experience during live tournaments.
-
 **Requirements:**
-
-**WebSocket Integration:**
-- [ ] Set up WebSocket server (Socket.io or ws)
-- [ ] Client-side WebSocket connection
-- [ ] Automatic reconnection on disconnect
-- [ ] Fallback to polling if WebSockets unavailable
-
-**Real-time Events:**
-- [ ] Match result updates
-- [ ] Bracket progression
-- [ ] Schedule changes
-- [ ] Division modifications
-- [ ] New registrations
-
-**Room-based Subscriptions:**
-- [ ] Subscribe to specific tournament
-- [ ] Subscribe to specific division
-- [ ] Unsubscribe on navigation
-
-**UI Updates:**
-- [ ] Live bracket updates without refresh
-- [ ] Notification badges for changes
-- [ ] "Live" indicator when connected
-- [ ] Visual highlight on updated elements
-
-**Acceptance Criteria:**
-- Changes made by one user appear for others within 2 seconds
-- Connection status is visible to user
-- No data loss on reconnection
-- Works on mobile devices
+- [ ] OpenAPI/Swagger specification
+- [ ] Interactive docs at /api/docs
+- [ ] Request/response examples
+- [ ] Error code reference
 
 ---
 
-### 10. Notifications System
+### 10. Input Validation (Zod)
 
-**Status:** Not Implemented
-
-**Description:**
-Competitors and coaches need to be notified about their matches, schedule changes, and results.
+**Status:** Basic Validation Exists
 
 **Requirements:**
-
-**Notification Channels:**
-- [ ] Email notifications
-- [ ] SMS notifications (optional, requires provider)
-- [ ] In-app notifications
-- [ ] Push notifications (PWA)
-
-**Notification Events:**
-- [ ] Registration confirmation
-- [ ] Division assignment
-- [ ] Upcoming match reminder (configurable time before)
-- [ ] Match result
-- [ ] Schedule change
-- [ ] Tournament announcements
-
-**Email Integration:**
-- [ ] Email service provider integration (SendGrid, AWS SES, etc.)
-- [ ] HTML email templates
-- [ ] Unsubscribe functionality
-- [ ] Bounce handling
-
-**Notification Preferences:**
-- [ ] Per-user notification settings
-- [ ] Channel preferences (email, SMS, push)
-- [ ] Event type preferences
-- [ ] Quiet hours
-
-**Database Changes:**
-- [ ] Add Notification model
-- [ ] Add NotificationPreference model
-- [ ] Add email/phone to Competitor model
-
-**Acceptance Criteria:**
-- Users can configure notification preferences
-- Emails are delivered within 1 minute of event
-- Unsubscribe links work correctly
-- No duplicate notifications
+- [ ] Zod schemas for all API endpoints
+- [ ] Consistent error response format
+- [ ] Frontend form validation matching backend
 
 ---
 
-### 11. Results Display / Scoreboard
+### 11. Audit Logging
 
 **Status:** Not Implemented
 
-**Description:**
-Tournaments need a public-facing display for showing live brackets, current matches, and results to spectators.
+**Requirements:**
+- [ ] Log all data changes
+- [ ] Include user, timestamp, before/after
+- [ ] Admin-viewable audit log page
+- [ ] Export audit log
+
+---
+
+### 12. Error Handling
+
+**Status:** Basic Implementation
 
 **Requirements:**
+- [ ] User-friendly error messages
+- [ ] Toast notifications
+- [ ] Network error retry logic
+- [ ] Offline mode graceful degradation
 
-**Public Display Mode:**
-- [ ] Full-screen scoreboard view
-- [ ] No navigation/controls visible
-- [ ] Auto-cycling through active divisions
-- [ ] Large, readable fonts
+---
 
-**Display Content:**
-- [ ] Current match (competitors, ring, time)
-- [ ] Up next queue
-- [ ] Recent results
-- [ ] Live bracket view
-- [ ] Medal standings
+## Nice-to-Have - Advanced Features
 
-**Configuration:**
-- [ ] Select divisions to display
-- [ ] Cycle timing between views
-- [ ] Color scheme / branding
-- [ ] Show/hide specific elements
+### 13. Real-time Updates (WebSocket)
 
-**Technical:**
-- [ ] Dedicated /display route
-- [ ] Real-time updates (WebSocket)
-- [ ] Works on TV/projector resolution
-- [ ] Keyboard controls for manual override
+**Description:** Live updates without page refresh.
 
-**Multi-Display Support:**
-- [ ] Different content per display
-- [ ] Ring-specific displays
-- [ ] Central results display
+**Requirements:**
+- [ ] WebSocket server (Socket.io)
+- [ ] Live bracket updates
+- [ ] Live scoreboard
+- [ ] Connection status indicator
+
+---
+
+### 14. Public Scoreboard Display
+
+**Description:** Large-screen display for spectators.
+
+**Requirements:**
+- [ ] Full-screen mode at /display
+- [ ] Current matches per ring
+- [ ] Auto-cycling through divisions
+- [ ] Recent results ticker
 - [ ] QR code for mobile bracket access
 
-**Acceptance Criteria:**
-- Display is readable from 20+ feet away
-- Updates automatically without interaction
-- Runs continuously without issues
-- Supports common display resolutions
-
 ---
 
-### 12. Mobile UI Optimization
+### 15. Notifications
 
-**Status:** Not Verified
-
-**Description:**
-The application uses Tailwind CSS but has not been explicitly tested and optimized for mobile devices. Tournament staff often use tablets and phones.
+**Description:** Alert competitors and coaches.
 
 **Requirements:**
+- [ ] Email confirmation on registration
+- [ ] Email reminder before tournament
+- [ ] Match notification (when match is next)
+- [ ] Results notification
 
-**Responsive Design Audit:**
-- [ ] Test all pages on mobile viewport sizes
-- [ ] Identify and fix layout issues
-- [ ] Ensure touch targets are adequate (44x44px minimum)
-- [ ] Test on actual devices (iOS Safari, Android Chrome)
+---
 
-**Mobile-Specific Improvements:**
-- [ ] Collapsible navigation menu
-- [ ] Swipe gestures for bracket navigation
-- [ ] Touch-friendly score entry
-- [ ] Optimized table views (horizontal scroll or card layout)
+### 16. Mobile Optimization
 
-**Pages to Optimize:**
-- [ ] Dashboard
-- [ ] Competitor list (search, filters)
-- [ ] Tournament detail
-- [ ] Division list
-- [ ] Bracket editor (most complex)
-- [ ] Schedule view
+**Description:** Full mobile support.
 
-**Performance:**
-- [ ] Lazy loading for images
-- [ ] Efficient re-renders
-- [ ] Reduced bundle size for mobile
-- [ ] Offline capability (PWA)
-
-**PWA Features:**
-- [ ] Service worker for offline access
-- [ ] App manifest for home screen install
+**Requirements:**
+- [ ] Responsive design audit
+- [ ] Touch-friendly interactions
+- [ ] PWA support (installable)
 - [ ] Offline bracket viewing
-- [ ] Background sync for score updates
-
-**Acceptance Criteria:**
-- All features usable on 375px width screen
-- No horizontal scrolling on main content
-- Touch interactions work smoothly
-- Page load under 3 seconds on 3G
 
 ---
 
-## Implementation Priority
+### 17. Certificate Generation
 
-### Phase 1: Foundation (High Priority)
-1. Testing Framework - Ensures stability for future development
-2. Authentication - Required for production use
-3. Match Advancement - Core functionality completion
-4. PDF Export - High user demand
+**Description:** Auto-generate winner certificates.
 
-### Phase 2: Quality (Medium Priority)
-5. Error Handling - Better user experience
-6. API Documentation - Developer enablement
-7. Audit Logging - Data integrity
-8. Results Export - Post-tournament workflow
-
-### Phase 3: Enhancement (Nice-to-Have)
-9. Real-time Updates - Live tournament experience
-10. Mobile Optimization - Accessibility
-11. Notifications - Communication
-12. Scoreboard Display - Spectator experience
+**Requirements:**
+- [ ] Certificate templates
+- [ ] Auto-fill competitor/placement
+- [ ] PDF export
+- [ ] Batch generation
 
 ---
 
-## Technical Debt Notes
+### 18. Multi-Tournament Support
 
-- Bracket progression logic in `brackets.ts` is marked as "simplified version"
-- No database migrations versioning (using Prisma push)
-- TypeScript strict mode disabled for server build
-- Some type conflicts between Express and Fetch API resolved with workarounds
+**Description:** Tournament series and historical data.
 
----
-
-## Contributing
-
-When implementing any requirement:
-
-1. Create a feature branch from main
-2. Implement with tests (if testing framework exists)
-3. Update this document to mark items complete
-4. Submit PR with description referencing this document
+**Requirements:**
+- [ ] Link tournaments to series
+- [ ] Historical results lookup
+- [ ] Competitor ranking across tournaments
+- [ ] Year-over-year statistics
 
 ---
 
-*Last Updated: January 2025*
+## Implementation Phases
+
+### Phase 1: Tournament Ready (Next)
+Complete these to run a tournament:
+1. Scorekeeper Interface
+2. Login/Auth Frontend
+3. Tournament Dashboard Enhancements
+4. Schedule Management UI
+5. Check-In System
+
+### Phase 2: Professional Polish
+6. Division Management Improvements
+7. Enhanced Bracket Editor
+8. Results & Statistics
+9. Input Validation
+
+### Phase 3: Production Quality
+10. API Documentation
+11. Audit Logging
+12. Error Handling
+13. Mobile Optimization
+
+### Phase 4: Advanced Features
+14. Real-time Updates
+15. Public Scoreboard
+16. Notifications
+17. Certificates
+18. Multi-Tournament
+
+---
+
+## Technical Notes
+
+### Recently Completed
+- Vitest testing framework (69 tests passing)
+- JWT authentication with roles
+- Match advancement service
+- PDF export (jsPDF)
+- Public registration portal
+
+### Database Ready
+- User and UserTournamentAccess models added
+- Schema supports all planned features
+
+### Known Issues
+- TypeScript strict mode disabled for server
+- Large bundle size (needs code splitting)
+
+---
+
+*Last Updated: January 2026*
