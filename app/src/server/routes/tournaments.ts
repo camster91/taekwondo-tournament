@@ -1,4 +1,5 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule } from '../services/schedule-generator.js';
