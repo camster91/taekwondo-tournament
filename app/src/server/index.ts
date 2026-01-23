@@ -1,3 +1,4 @@
+import type { Request, Response, NextFunction } from 'express-serve-static-core';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -49,7 +50,7 @@ if (isProduction) {
 }
 
 // Error handler
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   console.error('Error:', err);
   res.status(500).json({
     error: err.message || 'Internal server error',
