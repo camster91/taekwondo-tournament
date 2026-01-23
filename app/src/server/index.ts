@@ -36,7 +36,7 @@ app.use('/api/divisions', divisionsRouter);
 app.use('/api/brackets', bracketsRouter);
 
 // Health check
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
@@ -46,7 +46,7 @@ if (isProduction) {
   app.use(express.static(distPath));
 
   // Handle client-side routing - serve index.html for all non-API routes
-  app.get('*', (req, res) => {
+  app.get('*', (req: Request, res: Response) => {
     if (!req.path.startsWith('/api')) {
       res.sendFile(path.join(distPath, 'index.html'));
     }
