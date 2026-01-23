@@ -49,3 +49,80 @@ Example: `10-11 CB-All Blue Belts Males Sparring Heavy.pdf`
 - All bracket data is stored as PDFs
 - The master Excel file (.xlsm) contains the comprehensive championship list
 - ZIP files contain compressed bracket collections
+
+---
+
+## Tournament Management App
+
+The `app/` directory contains a full-stack web application for managing tournaments.
+
+### Running the App
+
+```bash
+cd app
+npm install
+npm run db:push     # Initialize database
+npm run dev         # Start dev server (http://localhost:5173)
+```
+
+### Tech Stack
+
+- **Frontend**: React + TypeScript + Tailwind CSS
+- **Backend**: Node.js + Express + Prisma
+- **Database**: SQLite
+
+### Features
+
+1. **Competitor Management**
+   - Import from Excel files
+   - CRUD operations with search/filter
+   - Persistent registry across tournaments
+
+2. **Tournament Configuration**
+   - Create tournaments with date/location
+   - Register competitors (Patterns/Sparring)
+   - Configure age groups and weight classes
+
+3. **Auto-Categorization Engine**
+   - Rules-based division generation
+   - BB/CB separation, gender separation
+   - Age groups, weight classes for sparring
+   - Automatic division splits (>8 competitors)
+
+4. **Bracket Generation**
+   - 8-person double-elimination brackets
+   - School-spread seeding (avoids same-school first round)
+   - Visual bracket editor
+
+5. **PDF Export**
+   - Export brackets matching current format
+   - Batch export all divisions
+
+### API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/competitors` | List competitors |
+| `POST /api/competitors/import` | Import from Excel |
+| `GET /api/tournaments` | List tournaments |
+| `POST /api/tournaments/:id/registrations/bulk` | Bulk register |
+| `POST /api/divisions/tournament/:id/auto-generate` | Auto-categorize |
+| `POST /api/brackets/division/:id/generate` | Generate bracket |
+
+### Project Structure
+
+```
+app/
+├── prisma/schema.prisma          # Database schema
+├── src/
+│   ├── server/
+│   │   ├── routes/               # API endpoints
+│   │   └── services/
+│   │       ├── categorization-engine.ts
+│   │       ├── bracket-generator.ts
+│   │       └── excel-import.ts
+│   ├── client/
+│   │   ├── pages/                # React pages
+│   │   └── components/           # UI components
+│   └── shared/constants/         # Belt, age, weight configs
+```
