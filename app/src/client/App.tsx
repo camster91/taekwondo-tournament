@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   Trophy,
   Users,
@@ -7,7 +7,11 @@ import {
   Settings,
   Home,
   UserPlus,
+  LogOut,
+  ClipboardCheck,
+  Timer,
 } from 'lucide-react';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './pages/Dashboard';
 import Competitors from './pages/Competitors';
 import Tournaments from './pages/Tournaments';
@@ -17,6 +21,9 @@ import Divisions from './pages/Divisions';
 import Schedule from './pages/Schedule';
 import BracketEditor from './pages/BracketEditor';
 import PublicRegister from './pages/PublicRegister';
+import Login from './pages/Login';
+import Scorekeeper from './pages/Scorekeeper';
+import CheckIn from './pages/CheckIn';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -31,6 +38,7 @@ function classNames(...classes: string[]) {
 // Layout with sidebar for admin pages
 function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -84,14 +92,31 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
 
-        {/* Quick Stats */}
+        {/* User Info */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">
-            Quick Info
-          </div>
-          <div className="space-y-1 text-sm text-gray-400">
-            <div>Newton's Championship 2025</div>
-          </div>
+          {user ? (
+            <div>
+              <div className="text-sm text-white font-medium">
+                {user.firstName} {user.lastName}
+              </div>
+              <div className="text-xs text-gray-400 capitalize">{user.role}</div>
+              <button
+                onClick={logout}
+                className="mt-2 flex items-center text-sm text-gray-400 hover:text-white"
+              >
+                <LogOut className="h-4 w-4 mr-1" />
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <Link
+              to="/login"
+              className="flex items-center text-sm text-gray-400 hover:text-white"
+            >
+              <LogOut className="h-4 w-4 mr-1" />
+              Sign in
+            </Link>
+          )}
         </div>
       </div>
 
@@ -103,32 +128,73 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
+// Protected route wrapper
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 
-  // Check if we're on a public page (no sidebar)
-  const isPublicPage = location.pathname.startsWith('/register');
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  // For now, allow access without auth (can be enabled later)
+  // if (!isAuthenticated) {
+  //   return <Navigate to="/login" state={{ from: location }} replace />;
+  // }
+
+  return <>{children}</>;
+}
+
+function AppRoutes() {
+  const location = useLocation();
+
+  // Public pages (no sidebar)
+  const isPublicPage =
+    location.pathname.startsWith('/register') ||
+    location.pathname.startsWith('/login') ||
+    location.pathname.startsWith('/scorekeeper') ||
+    location.pathname.startsWith('/checkin');
 
   if (isPublicPage) {
     return (
       <Routes>
         <Route path="/register" element={<PublicRegister />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/scorekeeper/:tournamentId" element={<Scorekeeper />} />
+        <Route path="/checkin/:tournamentId" element={<CheckIn />} />
       </Routes>
     );
   }
 
   return (
-    <AdminLayout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/competitors" element={<Competitors />} />
-        <Route path="/tournaments" element={<Tournaments />} />
-        <Route path="/tournaments/:id" element={<TournamentDetail />} />
-        <Route path="/tournaments/:id/settings" element={<TournamentSettings />} />
-        <Route path="/tournaments/:id/divisions" element={<Divisions />} />
-        <Route path="/tournaments/:id/schedule" element={<Schedule />} />
-        <Route path="/tournaments/:tournamentId/divisions/:divisionId/bracket" element={<BracketEditor />} />
-      </Routes>
-    </AdminLayout>
+    <ProtectedRoute>
+      <AdminLayout>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/competitors" element={<Competitors />} />
+          <Route path="/tournaments" element={<Tournaments />} />
+          <Route path="/tournaments/:id" element={<TournamentDetail />} />
+          <Route path="/tournaments/:id/settings" element={<TournamentSettings />} />
+          <Route path="/tournaments/:id/divisions" element={<Divisions />} />
+          <Route path="/tournaments/:id/schedule" element={<Schedule />} />
+          <Route
+            path="/tournaments/:tournamentId/divisions/:divisionId/bracket"
+            element={<BracketEditor />}
+          />
+        </Routes>
+      </AdminLayout>
+    </ProtectedRoute>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   );
 }
