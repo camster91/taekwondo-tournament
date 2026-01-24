@@ -322,12 +322,12 @@ Comprehensive results display and statistics.
 
 ### 10. Input Validation (Zod)
 
-**Status:** Basic Validation Exists
+**Status:** ✅ Implemented for Core Routes
 
 **Requirements:**
-- [ ] Zod schemas for all API endpoints
-- [ ] Consistent error response format
-- [ ] Frontend form validation matching backend
+- [x] Zod schemas for tournaments, competitors, and auth endpoints
+- [x] Consistent error response format (400 with details array)
+- [ ] Frontend form validation matching backend (optional enhancement)
 
 ---
 

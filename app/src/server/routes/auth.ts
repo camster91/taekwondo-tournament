@@ -2,28 +2,52 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import { createToken, authenticate, type AuthenticatedRequest } from '../middleware/auth.js';
+import { validateRequest } from '../middleware/validate.js';
 
 const router = Router();
 
+// Validation schemas
+const registerSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  firstName: z.string().min(1, 'First name is required').max(100),
+  lastName: z.string().min(1, 'Last name is required').max(100),
+});
+
+const loginSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+const passwordChangeSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+});
+
+const profileUpdateSchema = z.object({
+  firstName: z.string().min(1, 'First name is required').max(100),
+  lastName: z.string().min(1, 'Last name is required').max(100),
+});
+
+const roleUpdateSchema = z.object({
+  role: z.enum(['admin', 'director', 'scorekeeper', 'viewer']),
+});
+
+const statusUpdateSchema = z.object({
+  isActive: z.boolean(),
+});
+
+const tournamentAccessSchema = z.object({
+  userId: z.string().min(1, 'User ID is required'),
+  role: z.enum(['director', 'scorekeeper', 'viewer']),
+});
+
 // Register new user
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', validateRequest(registerSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { email, password, firstName, lastName } = req.body;
-
-  // Validation
-  if (!email || !password || !firstName || !lastName) {
-    return res.status(400).json({ error: 'All fields are required' });
-  }
-
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters' });
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({ error: 'Invalid email format' });
-  }
 
   try {
     // Check if email already exists
@@ -80,13 +104,9 @@ router.post('/register', async (req: Request, res: Response) => {
 });
 
 // Login
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', validateRequest(loginSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
 
   try {
     const user = await prisma.user.findUnique({
@@ -173,17 +193,9 @@ router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response)
 });
 
 // Change password
-router.put('/password', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+router.put('/password', authenticate, validateRequest(passwordChangeSchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { currentPassword, newPassword } = req.body;
-
-  if (!currentPassword || !newPassword) {
-    return res.status(400).json({ error: 'Current and new password are required' });
-  }
-
-  if (newPassword.length < 8) {
-    return res.status(400).json({ error: 'New password must be at least 8 characters' });
-  }
 
   try {
     const user = await prisma.user.findUnique({
@@ -215,13 +227,9 @@ router.put('/password', authenticate, async (req: AuthenticatedRequest, res: Res
 });
 
 // Update profile
-router.put('/profile', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+router.put('/profile', authenticate, validateRequest(profileUpdateSchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { firstName, lastName } = req.body;
-
-  if (!firstName || !lastName) {
-    return res.status(400).json({ error: 'First name and last name are required' });
-  }
 
   try {
     const user = await prisma.user.update({
