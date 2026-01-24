@@ -3,6 +3,7 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { importFromExcel } from '../services/excel-import.js';
+import { generateImportTemplate, getDefaultColumnMapping } from '../services/excel-template.js';
 import { validateRequest } from '../middleware/validate.js';
 
 const router = Router();
@@ -29,6 +30,20 @@ const getParam = (param: string | string[] | undefined): string => {
   if (Array.isArray(param)) return param[0];
   return param || '';
 };
+
+// Download import template
+router.get('/template', (_req: Request, res: Response) => {
+  const buffer = generateImportTemplate();
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="competitor-import-template.xlsx"');
+  res.send(buffer);
+});
+
+// Get default column mapping for imports
+router.get('/template/mapping', (_req: Request, res: Response) => {
+  res.json(getDefaultColumnMapping());
+});
 
 // Get all competitors
 router.get('/', async (req: Request, res: Response) => {
