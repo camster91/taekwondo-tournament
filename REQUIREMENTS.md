@@ -295,8 +295,8 @@ Comprehensive results display and statistics.
 - [x] Total matches count
 - [x] Schools competing count
 - [x] Total medals count
-- [ ] Breakdown by belt level
-- [ ] Breakdown by age group
+- [x] Breakdown by belt level (Black Belt vs Colored Belt)
+- [x] Breakdown by age group (sortable table)
 
 **Exports:**
 - [x] Results PDF (print-ready)

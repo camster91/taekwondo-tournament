@@ -10,6 +10,7 @@ import {
   Award,
   FileSpreadsheet,
   ChevronDown,
+  BarChart3,
 } from 'lucide-react';
 
 interface Placement {
@@ -73,7 +74,7 @@ export default function Results() {
   const { tournamentId } = useParams();
   const [filterEvent, setFilterEvent] = useState<'all' | 'patterns' | 'sparring'>('all');
   const [selectedSchool, setSelectedSchool] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'schools' | 'divisions'>('schools');
+  const [viewMode, setViewMode] = useState<'schools' | 'divisions' | 'breakdown'>('schools');
   const [showExportMenu, setShowExportMenu] = useState(false);
 
   // Fetch tournament
@@ -126,6 +127,67 @@ export default function Results() {
       if (b.gold !== a.gold) return b.gold - a.gold;
       if (b.silver !== a.silver) return b.silver - a.silver;
       return b.bronze - a.bronze;
+    });
+  })();
+
+  // Parse division name to extract belt level and age group
+  const parseDivisionName = (name: string) => {
+    // Extract age group (e.g., "10-11", "18-35", "4-5")
+    const ageMatch = name.match(/^(\d+-\d+)/);
+    const ageGroup = ageMatch ? ageMatch[1] : 'Unknown';
+
+    // Extract belt level (BB = Black Belt, CB = Colored Belt)
+    const isBB = name.includes(' BB') || name.includes('BB-') || name.includes('Black Belt');
+    const beltLevel = isBB ? 'Black Belt' : 'Colored Belt';
+
+    return { ageGroup, beltLevel };
+  };
+
+  // Calculate breakdown by belt level
+  const beltBreakdown = (() => {
+    const stats: Record<string, { name: string; divisions: number; gold: number; silver: number; bronze: number }> = {
+      'Black Belt': { name: 'Black Belt', divisions: 0, gold: 0, silver: 0, bronze: 0 },
+      'Colored Belt': { name: 'Colored Belt', divisions: 0, gold: 0, silver: 0, bronze: 0 },
+    };
+
+    filteredDivisions?.forEach((division) => {
+      const { beltLevel } = parseDivisionName(division.name);
+      stats[beltLevel].divisions++;
+
+      division.bracket?.placements?.forEach((placement) => {
+        if (placement.place === 1) stats[beltLevel].gold++;
+        else if (placement.place === 2) stats[beltLevel].silver++;
+        else if (placement.place === 3) stats[beltLevel].bronze++;
+      });
+    });
+
+    return Object.values(stats);
+  })();
+
+  // Calculate breakdown by age group
+  const ageBreakdown = (() => {
+    const stats: Record<string, { name: string; divisions: number; gold: number; silver: number; bronze: number }> = {};
+
+    filteredDivisions?.forEach((division) => {
+      const { ageGroup } = parseDivisionName(division.name);
+
+      if (!stats[ageGroup]) {
+        stats[ageGroup] = { name: ageGroup, divisions: 0, gold: 0, silver: 0, bronze: 0 };
+      }
+      stats[ageGroup].divisions++;
+
+      division.bracket?.placements?.forEach((placement) => {
+        if (placement.place === 1) stats[ageGroup].gold++;
+        else if (placement.place === 2) stats[ageGroup].silver++;
+        else if (placement.place === 3) stats[ageGroup].bronze++;
+      });
+    });
+
+    // Sort by age group (numeric)
+    return Object.values(stats).sort((a, b) => {
+      const aNum = parseInt(a.name.split('-')[0]) || 999;
+      const bNum = parseInt(b.name.split('-')[0]) || 999;
+      return aNum - bNum;
     });
   })();
 
@@ -409,6 +471,16 @@ export default function Results() {
           >
             By Division
           </button>
+          <button
+            onClick={() => setViewMode('breakdown')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              viewMode === 'breakdown'
+                ? 'bg-primary-500 text-white'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Breakdown
+          </button>
         </div>
       </div>
 
@@ -536,7 +608,7 @@ export default function Results() {
               </div>
             )}
           </>
-        ) : (
+        ) : viewMode === 'divisions' ? (
           /* Division Results View */
           <div className="space-y-4">
             {filteredDivisions?.length === 0 ? (
@@ -598,6 +670,101 @@ export default function Results() {
                 </div>
               ))
             )}
+          </div>
+        ) : (
+          /* Breakdown View */
+          <div className="space-y-6">
+            {/* Belt Level Breakdown */}
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b flex items-center">
+                <BarChart3 className="h-5 w-5 text-gray-500 mr-2" />
+                <h3 className="font-semibold text-gray-900">By Belt Level</h3>
+              </div>
+              <div className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {beltBreakdown.map((belt) => {
+                    const total = belt.gold + belt.silver + belt.bronze;
+                    return (
+                      <div
+                        key={belt.name}
+                        className={`p-4 rounded-lg border-2 ${
+                          belt.name === 'Black Belt'
+                            ? 'border-gray-800 bg-gray-50'
+                            : 'border-blue-300 bg-blue-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="font-bold text-lg">{belt.name}</span>
+                          <span className="text-sm text-gray-500">{belt.divisions} divisions</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 text-center">
+                          <div>
+                            <div className="text-2xl font-bold text-yellow-600">{belt.gold}</div>
+                            <div className="text-xs text-gray-500">Gold</div>
+                          </div>
+                          <div>
+                            <div className="text-2xl font-bold text-gray-400">{belt.silver}</div>
+                            <div className="text-xs text-gray-500">Silver</div>
+                          </div>
+                          <div>
+                            <div className="text-2xl font-bold text-amber-600">{belt.bronze}</div>
+                            <div className="text-xs text-gray-500">Bronze</div>
+                          </div>
+                          <div>
+                            <div className="text-2xl font-bold text-gray-700">{total}</div>
+                            <div className="text-xs text-gray-500">Total</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Age Group Breakdown */}
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b flex items-center">
+                <Users className="h-5 w-5 text-gray-500 mr-2" />
+                <h3 className="font-semibold text-gray-900">By Age Group</h3>
+              </div>
+              <div className="p-4">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="py-2 text-left text-sm font-medium text-gray-500">Age Group</th>
+                      <th className="py-2 text-center text-sm font-medium text-gray-500">Divisions</th>
+                      <th className="py-2 text-center text-sm font-medium text-yellow-600">Gold</th>
+                      <th className="py-2 text-center text-sm font-medium text-gray-400">Silver</th>
+                      <th className="py-2 text-center text-sm font-medium text-amber-600">Bronze</th>
+                      <th className="py-2 text-center text-sm font-medium text-gray-500">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ageBreakdown.map((age) => (
+                      <tr key={age.name} className="border-b hover:bg-gray-50">
+                        <td className="py-3 font-medium">{age.name} years</td>
+                        <td className="py-3 text-center text-gray-500">{age.divisions}</td>
+                        <td className="py-3 text-center font-bold text-yellow-600">{age.gold}</td>
+                        <td className="py-3 text-center font-bold text-gray-400">{age.silver}</td>
+                        <td className="py-3 text-center font-bold text-amber-600">{age.bronze}</td>
+                        <td className="py-3 text-center font-semibold">{age.gold + age.silver + age.bronze}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-50 font-semibold">
+                      <td className="py-3">Total</td>
+                      <td className="py-3 text-center">{ageBreakdown.reduce((s, a) => s + a.divisions, 0)}</td>
+                      <td className="py-3 text-center text-yellow-600">{ageBreakdown.reduce((s, a) => s + a.gold, 0)}</td>
+                      <td className="py-3 text-center text-gray-400">{ageBreakdown.reduce((s, a) => s + a.silver, 0)}</td>
+                      <td className="py-3 text-center text-amber-600">{ageBreakdown.reduce((s, a) => s + a.bronze, 0)}</td>
+                      <td className="py-3 text-center">{ageBreakdown.reduce((s, a) => s + a.gold + a.silver + a.bronze, 0)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
           </div>
         )}
       </div>
