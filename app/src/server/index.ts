@@ -11,6 +11,7 @@ import divisionsRouter from './routes/divisions.js';
 import bracketsRouter from './routes/brackets.js';
 import authRouter from './routes/auth.js';
 import publicRouter from './routes/public.js';
+import fairnessRouter from './routes/fairness.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +35,7 @@ app.use('/api/competitors', competitorsRouter);
 app.use('/api/tournaments', tournamentsRouter);
 app.use('/api/divisions', divisionsRouter);
 app.use('/api/brackets', bracketsRouter);
+app.use('/api/fairness', fairnessRouter);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {

@@ -1,10 +1,18 @@
-// 8-person double elimination bracket generator
+// 8-person double elimination bracket generator with advanced seeding
 
 export interface CompetitorSeed {
   registrationId: string;
+  competitorId?: string;
   name: string;
   school: string;
   seedPosition?: number | null;
+  // Enhanced fields for advanced seeding
+  skillRating?: number;
+  experienceScore?: number;
+  weight?: number;
+  height?: number;
+  region?: string;
+  recentOpponents?: string[];
 }
 
 export interface MatchData {
@@ -21,13 +29,33 @@ export interface BracketStructure {
   losers: MatchData[];
   finals: MatchData[];
   competitorCount: number;
+  seedingInfo?: {
+    strategy: SeedingStrategy;
+    skillBalance: number;
+    schoolDiversity: number;
+  };
 }
 
-type SeedingStrategy = 'random' | 'school_spread' | 'manual';
+export interface SeedingConfig {
+  strategy: SeedingStrategy;
+  avoidRecentMatchups: boolean;
+  recentMatchupTournaments: number;
+  regionDiversity: boolean;
+  skillBalanceWeight: number; // 0-1
+}
+
+export type SeedingStrategy =
+  | 'random'
+  | 'school_spread'
+  | 'manual'
+  | 'skill_based'      // ATP/WTA style seeding by rating
+  | 'balanced'         // Balance skill across bracket halves
+  | 'fairness_optimized'; // Maximize first-round matchup quality
 
 export function generateBracket(
   competitors: CompetitorSeed[],
-  strategy: SeedingStrategy = 'school_spread'
+  strategy: SeedingStrategy = 'school_spread',
+  config?: Partial<SeedingConfig>
 ): BracketStructure {
   const count = competitors.length;
 
@@ -53,23 +81,68 @@ export function generateBracket(
   }
 
   // Apply seeding strategy
-  const seeded = applySeedingStrategy(competitors, strategy);
+  const seeded = applySeedingStrategy(competitors, strategy, config);
 
   // Pad to power of 2 (max 8 for standard bracket)
   const bracketSize = Math.min(8, nextPowerOf2(count));
   const padded = padWithByes(seeded, bracketSize);
 
+  // Calculate seeding quality metrics
+  const seedingInfo = calculateSeedingMetrics(seeded, strategy);
+
   // Generate bracket structure
+  let bracket: BracketStructure;
   if (bracketSize <= 4) {
-    return generateSmallBracket(padded);
+    bracket = generateSmallBracket(padded);
+  } else {
+    bracket = generate8PersonBracket(padded);
   }
 
-  return generate8PersonBracket(padded);
+  bracket.seedingInfo = seedingInfo;
+  return bracket;
+}
+
+/**
+ * Calculate metrics about the seeding quality
+ */
+function calculateSeedingMetrics(
+  seeded: CompetitorSeed[],
+  strategy: SeedingStrategy
+): BracketStructure['seedingInfo'] {
+  // Calculate skill balance
+  const midpoint = Math.floor(seeded.length / 2);
+  const leftSkill = seeded.slice(0, midpoint).reduce((sum, c) => sum + (c?.skillRating || 0), 0);
+  const rightSkill = seeded.slice(midpoint).reduce((sum, c) => sum + (c?.skillRating || 0), 0);
+  const totalSkill = leftSkill + rightSkill;
+  const skillBalance = totalSkill > 0
+    ? Math.round((1 - Math.abs(leftSkill - rightSkill) / totalSkill) * 100)
+    : 100;
+
+  // Calculate school diversity in first round
+  const pairs = getFirstRoundPairs(seeded.length);
+  let sameSchoolPairs = 0;
+  for (const [pos1, pos2] of pairs) {
+    if (pos1 < seeded.length && pos2 < seeded.length) {
+      if (seeded[pos1]?.school === seeded[pos2]?.school) {
+        sameSchoolPairs++;
+      }
+    }
+  }
+  const schoolDiversity = pairs.length > 0
+    ? Math.round((1 - sameSchoolPairs / pairs.length) * 100)
+    : 100;
+
+  return {
+    strategy,
+    skillBalance,
+    schoolDiversity,
+  };
 }
 
 function applySeedingStrategy(
   competitors: CompetitorSeed[],
-  strategy: SeedingStrategy
+  strategy: SeedingStrategy,
+  config?: Partial<SeedingConfig>
 ): CompetitorSeed[] {
   switch (strategy) {
     case 'manual':
@@ -80,10 +153,216 @@ function applySeedingStrategy(
       // Distribute same-school competitors to minimize first-round matchups
       return distributeBySchool(competitors);
 
+    case 'skill_based':
+      // ATP/WTA style - highest rated at top seed positions
+      return seedBySkill(competitors);
+
+    case 'balanced':
+      // Balance skill across bracket halves
+      return seedForBalance(competitors);
+
+    case 'fairness_optimized':
+      // Maximize first-round matchup fairness
+      return seedForFairness(competitors, config);
+
     case 'random':
     default:
       return shuffle(competitors);
   }
+}
+
+/**
+ * Skill-based seeding (like ATP/WTA rankings)
+ * Top seeds placed to meet only in later rounds
+ */
+function seedBySkill(competitors: CompetitorSeed[]): CompetitorSeed[] {
+  if (competitors.length <= 2) return competitors;
+
+  // Sort by skill rating (highest first)
+  const sorted = [...competitors].sort(
+    (a, b) => (b.skillRating || 0) - (a.skillRating || 0)
+  );
+
+  // Standard 8-person seeding positions:
+  // Seed 1 at position 0, Seed 2 at position 7 (opposite side)
+  // Seeds 3-4 at positions 3,4 (quarter-final opponents for seeds 1,2)
+  // Seeds 5-8 fill remaining positions
+  const seedOrder = [0, 7, 3, 4, 1, 6, 2, 5];
+
+  const result: (CompetitorSeed | null)[] = new Array(Math.min(8, competitors.length)).fill(null);
+
+  for (let i = 0; i < sorted.length && i < seedOrder.length; i++) {
+    const targetPos = seedOrder[i];
+    if (targetPos < result.length) {
+      result[targetPos] = { ...sorted[i], seedPosition: i + 1 };
+    }
+  }
+
+  // Handle competitors beyond standard positions
+  if (sorted.length > 8) {
+    for (let i = 8; i < sorted.length; i++) {
+      result.push({ ...sorted[i], seedPosition: i + 1 });
+    }
+  }
+
+  return result.filter((c): c is CompetitorSeed => c !== null);
+}
+
+/**
+ * Balanced seeding - distribute skill evenly across bracket halves
+ */
+function seedForBalance(competitors: CompetitorSeed[]): CompetitorSeed[] {
+  if (competitors.length <= 2) return competitors;
+
+  // Sort by skill rating
+  const sorted = [...competitors].sort(
+    (a, b) => (b.skillRating || 0) - (a.skillRating || 0)
+  );
+
+  const bracketSize = Math.min(8, competitors.length);
+  const result: (CompetitorSeed | null)[] = new Array(bracketSize).fill(null);
+
+  // Alternate placing in left and right halves to balance skill
+  let leftSum = 0;
+  let rightSum = 0;
+  const midpoint = Math.floor(bracketSize / 2);
+
+  const leftPositions = [0, 3, 1, 2].filter(p => p < bracketSize);  // Left half positions
+  const rightPositions = [7, 4, 6, 5].filter(p => p < bracketSize); // Right half positions
+  let leftIdx = 0;
+  let rightIdx = 0;
+
+  for (const competitor of sorted) {
+    const skill = competitor.skillRating || 0;
+
+    // Place in the half with lower total skill
+    if (leftSum <= rightSum && leftIdx < leftPositions.length) {
+      result[leftPositions[leftIdx]] = competitor;
+      leftSum += skill;
+      leftIdx++;
+    } else if (rightIdx < rightPositions.length) {
+      result[rightPositions[rightIdx]] = competitor;
+      rightSum += skill;
+      rightIdx++;
+    } else if (leftIdx < leftPositions.length) {
+      result[leftPositions[leftIdx]] = competitor;
+      leftSum += skill;
+      leftIdx++;
+    }
+  }
+
+  return result.filter((c): c is CompetitorSeed => c !== null);
+}
+
+/**
+ * Fairness-optimized seeding using simulated annealing
+ * Maximizes first-round matchup quality while maintaining constraints
+ */
+function seedForFairness(
+  competitors: CompetitorSeed[],
+  config?: Partial<SeedingConfig>
+): CompetitorSeed[] {
+  if (competitors.length <= 2) return competitors;
+
+  // Start with skill-based seeding as base
+  let current = seedBySkill(competitors);
+  let currentScore = calculateSeedingScore(current, config);
+
+  // Simulated annealing parameters
+  const maxIterations = 100;
+  let temperature = 1.0;
+  const coolingRate = 0.95;
+
+  for (let i = 0; i < maxIterations; i++) {
+    // Generate neighbor by swapping two random positions
+    const neighbor = [...current];
+    const pos1 = Math.floor(Math.random() * neighbor.length);
+    let pos2 = Math.floor(Math.random() * neighbor.length);
+    while (pos2 === pos1) {
+      pos2 = Math.floor(Math.random() * neighbor.length);
+    }
+    [neighbor[pos1], neighbor[pos2]] = [neighbor[pos2], neighbor[pos1]];
+
+    const neighborScore = calculateSeedingScore(neighbor, config);
+    const delta = neighborScore - currentScore;
+
+    // Accept better solutions, or worse ones with probability based on temperature
+    if (delta > 0 || Math.random() < Math.exp(delta / temperature)) {
+      current = neighbor;
+      currentScore = neighborScore;
+    }
+
+    temperature *= coolingRate;
+  }
+
+  return current;
+}
+
+/**
+ * Calculate seeding quality score for optimization
+ */
+function calculateSeedingScore(
+  seeding: CompetitorSeed[],
+  config?: Partial<SeedingConfig>
+): number {
+  let score = 0;
+  const skillWeight = config?.skillBalanceWeight ?? 0.5;
+
+  // Score first-round matchups (positions 0-7, 1-6, 2-5, 3-4 for 8-person)
+  const firstRoundPairs = getFirstRoundPairs(seeding.length);
+
+  for (const [pos1, pos2] of firstRoundPairs) {
+    if (pos1 >= seeding.length || pos2 >= seeding.length) continue;
+
+    const comp1 = seeding[pos1];
+    const comp2 = seeding[pos2];
+    if (!comp1 || !comp2) continue;
+
+    // Skill match (closer ratings = better)
+    const skillDiff = Math.abs((comp1.skillRating || 0) - (comp2.skillRating || 0));
+    score += (400 - Math.min(skillDiff, 400)) / 4 * skillWeight;
+
+    // School diversity (different schools = better)
+    if (comp1.school !== comp2.school) {
+      score += 25;
+    }
+
+    // Region diversity (if enabled)
+    if (config?.regionDiversity && comp1.region !== comp2.region) {
+      score += 10;
+    }
+
+    // Avoid recent matchups
+    if (config?.avoidRecentMatchups) {
+      const recentOpps1 = comp1.recentOpponents || [];
+      const recentOpps2 = comp2.recentOpponents || [];
+      if (recentOpps1.includes(comp2.competitorId || '') ||
+          recentOpps2.includes(comp1.competitorId || '')) {
+        score -= 50; // Penalty for recent rematch
+      }
+    }
+  }
+
+  // Balance score - skill distribution across halves
+  const midpoint = Math.floor(seeding.length / 2);
+  const leftSkill = seeding.slice(0, midpoint).reduce((sum, c) => sum + (c?.skillRating || 0), 0);
+  const rightSkill = seeding.slice(midpoint).reduce((sum, c) => sum + (c?.skillRating || 0), 0);
+  const totalSkill = leftSkill + rightSkill;
+  if (totalSkill > 0) {
+    const balance = 1 - Math.abs(leftSkill - rightSkill) / totalSkill;
+    score += balance * 50 * (1 - skillWeight);
+  }
+
+  return score;
+}
+
+/**
+ * Get first round matchup position pairs based on bracket size
+ */
+function getFirstRoundPairs(size: number): [number, number][] {
+  if (size <= 2) return [[0, 1]];
+  if (size <= 4) return [[0, 3], [1, 2]];
+  return [[0, 7], [1, 6], [2, 5], [3, 4]];
 }
 
 function distributeBySchool(competitors: CompetitorSeed[]): CompetitorSeed[] {

@@ -2,11 +2,23 @@ import { PrismaClient, Registration, Competitor } from '@prisma/client';
 import { getBeltLevel, getSimpleBeltCategory, isBlackBelt } from '../../shared/constants/belts.js';
 import { getAgeGroup, DEFAULT_AGE_GROUPS, BB_AGE_GROUPS, type AgeGroup } from '../../shared/constants/age-groups.js';
 import { getWeightClass, DEFAULT_WEIGHT_CLASSES } from '../../shared/constants/weight-classes.js';
+import {
+  DIVISION_SIZE_CONFIG,
+  AGE_BOUNDARY_CONFIG,
+  getInitialSkillEstimate,
+} from '../../shared/constants/fairness-config.js';
 
 export interface CategorizationConfig {
   divisionThreshold: number;
   useBlackBeltAgeGroups?: boolean;
   customAgeGroups?: AgeGroup[];
+  // Enhanced options for smart categorization
+  enableSmartSplitting?: boolean;      // Balance skill when splitting divisions
+  enableSmartMerging?: boolean;        // Merge small adjacent divisions
+  enableAgeBoundaryFlex?: boolean;     // Allow age boundary flexibility
+  ageBoundaryTolerance?: number;       // Months tolerance at boundaries
+  preferWeightProximity?: boolean;     // Optimize weight matching in sparring
+  balanceByExperience?: boolean;       // Consider experience in splits
 }
 
 interface RegistrationWithCompetitor extends Registration {
@@ -73,14 +85,25 @@ export function previewCategorization(
   allGroups.push(...sparringGroups);
 
   // Split large divisions
-  const finalGroups: DivisionGroup[] = [];
+  let finalGroups: DivisionGroup[] = [];
   for (const group of allGroups) {
     if (group.registrations.length > config.divisionThreshold) {
-      const splits = splitDivision(group, config.divisionThreshold);
+      const splits = splitDivision(group, config.divisionThreshold, config);
       finalGroups.push(...splits);
-      warnings.push(`"${group.name}" will be split into ${splits.length} divisions (${group.registrations.length} competitors)`);
+      const splitMethod = config.enableSmartSplitting ? 'skill-balanced' : 'standard';
+      warnings.push(`"${group.name}" will be split into ${splits.length} divisions (${group.registrations.length} competitors, ${splitMethod})`);
     } else {
       finalGroups.push(group);
+    }
+  }
+
+  // Merge small divisions if enabled
+  if (config.enableSmartMerging) {
+    const beforeCount = finalGroups.length;
+    finalGroups = smartMergeDivisions(finalGroups, config);
+    const mergedCount = beforeCount - finalGroups.length;
+    if (mergedCount > 0) {
+      warnings.push(`Merged ${mergedCount} small adjacent divisions`);
     }
   }
 
@@ -157,14 +180,19 @@ export async function autoCategorize(
   allGroups.push(...sparringGroups);
 
   // Split large divisions
-  const finalGroups: DivisionGroup[] = [];
+  let finalGroups: DivisionGroup[] = [];
   for (const group of allGroups) {
     if (group.registrations.length > config.divisionThreshold) {
-      const splits = splitDivision(group, config.divisionThreshold);
+      const splits = splitDivision(group, config.divisionThreshold, config);
       finalGroups.push(...splits);
     } else {
       finalGroups.push(group);
     }
+  }
+
+  // Merge small divisions if enabled
+  if (config.enableSmartMerging) {
+    finalGroups = smartMergeDivisions(finalGroups, config);
   }
 
   // Create divisions and assignments
@@ -531,12 +559,21 @@ function formatDan(dan: number): string {
   return `${dan}th`;
 }
 
-function splitDivision(group: DivisionGroup, threshold: number): DivisionGroup[] {
+function splitDivision(
+  group: DivisionGroup,
+  threshold: number,
+  config?: CategorizationConfig
+): DivisionGroup[] {
   const count = group.registrations.length;
   const numDivisions = Math.ceil(count / threshold);
   const perDivision = Math.ceil(count / numDivisions);
 
-  // Sort by school to distribute evenly
+  // Use smart splitting if enabled
+  if (config?.enableSmartSplitting) {
+    return smartSplitDivision(group, numDivisions, perDivision, config);
+  }
+
+  // Default: Sort by school to distribute evenly
   const sorted = [...group.registrations].sort((a, b) =>
     (a.competitor.schoolDojang || '').localeCompare(b.competitor.schoolDojang || '')
   );
@@ -581,6 +618,279 @@ function splitDivision(group: DivisionGroup, threshold: number): DivisionGroup[]
   }
 
   return divisions;
+}
+
+/**
+ * Smart division splitting that balances skill across divisions
+ * while maintaining school diversity
+ */
+function smartSplitDivision(
+  group: DivisionGroup,
+  numDivisions: number,
+  perDivision: number,
+  config: CategorizationConfig
+): DivisionGroup[] {
+  const eventType = group.eventType as 'patterns' | 'sparring';
+
+  // Calculate estimated skill for each competitor
+  const withSkill = group.registrations.map((reg) => ({
+    reg,
+    skill: getInitialSkillEstimate(
+      reg.competitor.belt,
+      reg.competitor.danRank,
+      eventType
+    ),
+    school: reg.competitor.schoolDojang || 'Unknown',
+  }));
+
+  // Sort by skill descending
+  withSkill.sort((a, b) => b.skill - a.skill);
+
+  // Initialize divisions with target sizes
+  const divisions: Array<{
+    registrations: RegistrationWithCompetitor[];
+    totalSkill: number;
+    schools: Set<string>;
+  }> = [];
+
+  for (let i = 0; i < numDivisions; i++) {
+    divisions.push({ registrations: [], totalSkill: 0, schools: new Set() });
+  }
+
+  // Distribute competitors using snake draft pattern
+  // This naturally balances skill: best goes to div 1, second best to div 2, etc.
+  // Then reverse: next goes to div N, then div N-1, etc.
+  let divIndex = 0;
+  let direction = 1;
+
+  for (const { reg, skill, school } of withSkill) {
+    // Find the division with:
+    // 1. Lowest skill sum (to balance)
+    // 2. Fewest same-school competitors (to diversify)
+    // 3. Below target size (to fill evenly)
+
+    let bestDiv = divIndex;
+    let bestScore = -Infinity;
+
+    for (let i = 0; i < numDivisions; i++) {
+      const div = divisions[i];
+      if (div.registrations.length >= perDivision) continue;
+
+      // Score based on:
+      // - Lower current skill = better (want to balance)
+      // - Fewer same school = better
+      // - Prefer snake order
+      const avgSkill = div.registrations.length > 0
+        ? div.totalSkill / div.registrations.length
+        : 0;
+      const sameSchoolCount = div.schools.has(school)
+        ? div.registrations.filter(r => (r.competitor.schoolDojang || 'Unknown') === school).length
+        : 0;
+
+      const skillBalance = 1000 - avgSkill; // Lower avg = higher score
+      const schoolPenalty = sameSchoolCount * 50; // Penalty for same school
+      const orderBonus = i === divIndex ? 10 : 0; // Small bonus for snake order
+
+      const score = skillBalance - schoolPenalty + orderBonus;
+
+      if (score > bestScore && div.registrations.length < perDivision) {
+        bestScore = score;
+        bestDiv = i;
+      }
+    }
+
+    // Add to best division
+    divisions[bestDiv].registrations.push(reg);
+    divisions[bestDiv].totalSkill += skill;
+    divisions[bestDiv].schools.add(school);
+
+    // Move in snake pattern
+    divIndex += direction;
+    if (divIndex >= numDivisions) {
+      divIndex = numDivisions - 1;
+      direction = -1;
+    } else if (divIndex < 0) {
+      divIndex = 0;
+      direction = 1;
+    }
+  }
+
+  // Convert to DivisionGroup format
+  return divisions
+    .filter(d => d.registrations.length > 0)
+    .map((d, i) => ({
+      ...group,
+      key: `${group.key}-DIV${i + 1}`,
+      name: `${group.name} DIV${i + 1}`,
+      registrations: d.registrations,
+    }));
+}
+
+/**
+ * Smart merging of small adjacent divisions
+ */
+function smartMergeDivisions(
+  groups: DivisionGroup[],
+  config: CategorizationConfig
+): DivisionGroup[] {
+  if (!config.enableSmartMerging) return groups;
+
+  const minSize = DIVISION_SIZE_CONFIG.minSize;
+  const merged: DivisionGroup[] = [];
+  const processed = new Set<number>();
+
+  // Sort by belt level, gender, event type, age
+  const sorted = [...groups].sort((a, b) => {
+    if (a.beltLevel !== b.beltLevel) return a.beltLevel.localeCompare(b.beltLevel);
+    if (a.gender !== b.gender) return a.gender.localeCompare(b.gender);
+    if (a.eventType !== b.eventType) return a.eventType.localeCompare(b.eventType);
+    return a.ageMin - b.ageMin;
+  });
+
+  for (let i = 0; i < sorted.length; i++) {
+    if (processed.has(i)) continue;
+
+    const current = sorted[i];
+
+    // If current is too small, try to merge with adjacent
+    if (current.registrations.length < minSize) {
+      // Look for adjacent group to merge with
+      let mergeCandidate: DivisionGroup | null = null;
+      let mergeIndex = -1;
+
+      // Check next group (prefer merging with older age group)
+      if (i + 1 < sorted.length && !processed.has(i + 1)) {
+        const next = sorted[i + 1];
+        if (canMerge(current, next)) {
+          mergeCandidate = next;
+          mergeIndex = i + 1;
+        }
+      }
+
+      // Check previous group if no next candidate
+      if (!mergeCandidate && i > 0 && !processed.has(i - 1)) {
+        const prev = sorted[i - 1];
+        // Only merge with previous if it's also small
+        if (prev.registrations.length < minSize && canMerge(prev, current)) {
+          mergeCandidate = prev;
+          mergeIndex = i - 1;
+        }
+      }
+
+      if (mergeCandidate && mergeIndex >= 0) {
+        // Merge the divisions
+        const mergedGroup = mergeTwoDivisions(current, mergeCandidate);
+        merged.push(mergedGroup);
+        processed.add(i);
+        processed.add(mergeIndex);
+        continue;
+      }
+    }
+
+    // Add as-is if not merged
+    if (!processed.has(i)) {
+      merged.push(current);
+      processed.add(i);
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Check if two divisions can be merged
+ */
+function canMerge(a: DivisionGroup, b: DivisionGroup): boolean {
+  // Must match on these criteria
+  if (a.beltLevel !== b.beltLevel) return false;
+  if (a.gender !== b.gender) return false;
+  if (a.eventType !== b.eventType) return false;
+
+  // Age groups must be adjacent
+  const ageAdjacent = a.ageMax + 1 === b.ageMin || b.ageMax + 1 === a.ageMin;
+  if (!ageAdjacent) return false;
+
+  // Belt colors should be similar or adjacent
+  const beltsOverlap = a.beltColors.some(belt => b.beltColors.includes(belt));
+  const beltOrder = ['White', 'Yellow', 'Green', 'Blue', 'Red'];
+  const aMaxBeltIdx = Math.max(...a.beltColors.map(b => beltOrder.indexOf(b)));
+  const bMinBeltIdx = Math.min(...b.beltColors.map(b => beltOrder.indexOf(b)));
+  const beltsAdjacent = Math.abs(aMaxBeltIdx - bMinBeltIdx) <= 1;
+
+  if (!beltsOverlap && !beltsAdjacent) return false;
+
+  // For sparring, weight classes should match or be adjacent
+  if (a.eventType === 'sparring' && a.weightClass && b.weightClass) {
+    if (a.weightClass !== b.weightClass) return false;
+  }
+
+  // Combined size shouldn't exceed max
+  const combinedSize = a.registrations.length + b.registrations.length;
+  if (combinedSize > DIVISION_SIZE_CONFIG.maxSize) return false;
+
+  return true;
+}
+
+/**
+ * Merge two divisions into one
+ */
+function mergeTwoDivisions(a: DivisionGroup, b: DivisionGroup): DivisionGroup {
+  // Combine registrations
+  const registrations = [...a.registrations, ...b.registrations];
+
+  // Combine belt colors
+  const beltColors = Array.from(new Set([...a.beltColors, ...b.beltColors]));
+
+  // Use wider age range
+  const ageMin = Math.min(a.ageMin, b.ageMin);
+  const ageMax = Math.max(a.ageMax, b.ageMax);
+
+  // Use wider dan range if applicable
+  const danMin = a.danMin !== undefined && b.danMin !== undefined
+    ? Math.min(a.danMin, b.danMin)
+    : a.danMin || b.danMin;
+  const danMax = a.danMax !== undefined && b.danMax !== undefined
+    ? Math.max(a.danMax, b.danMax)
+    : a.danMax || b.danMax;
+
+  // Generate merged name
+  const genderName = a.gender === 'M' ? 'Males' : 'Females';
+  const eventName = a.eventType === 'patterns' ? 'Patterns' : 'Sparring';
+  const ageLabel = `${ageMin}-${ageMax}`;
+
+  let beltPart = '';
+  if (a.beltLevel === 'BB') {
+    beltPart = 'BB';
+    if (danMin !== undefined && danMax !== undefined) {
+      if (danMin === danMax) {
+        beltPart = `BB ${formatDan(danMin)} Dan`;
+      } else {
+        beltPart = `BB ${formatDan(danMin)}-${formatDan(danMax)} Dan`;
+      }
+    }
+  } else {
+    beltPart = `CB-All ${beltColors.join('/')} Belts`;
+  }
+
+  let name = `${ageLabel} ${beltPart} ${genderName} ${eventName}`;
+  if (a.weightClass) {
+    name += ` ${a.weightClass}`;
+  }
+
+  return {
+    key: `${a.key}-merged`,
+    name,
+    beltLevel: a.beltLevel,
+    gender: a.gender,
+    eventType: a.eventType,
+    ageMin,
+    ageMax,
+    beltColors,
+    danMin,
+    danMax,
+    weightClass: a.weightClass,
+    registrations,
+  };
 }
 
 function validateGroup(group: DivisionGroup): { valid: boolean; warnings: string[] } {
