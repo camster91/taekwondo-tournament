@@ -62,9 +62,10 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      {/* Page Header - responsive */}
+      <div className="page-header mb-6 sm:mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="page-title">Dashboard</h1>
           <p className="mt-1 text-sm text-gray-500">
             Welcome to the Taekwondo Tournament Manager
           </p>
@@ -78,21 +79,17 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      {/* Stats - responsive grid */}
+      <div className="stats-grid mb-6 sm:mb-8">
         {stats.map((stat) => (
-          <div key={stat.name} className="card">
-            <div className="card-body">
-              <div className="flex items-center">
-                <div className={`${stat.color} p-3 rounded-lg`}>
-                  <stat.icon className="h-6 w-6 text-white" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">{stat.name}</p>
-                  <p className="text-2xl font-semibold text-gray-900">
-                    {stat.value}
-                  </p>
-                </div>
+          <div key={stat.name} className="stat-card">
+            <div className="flex items-center">
+              <div className={`${stat.color} p-2 sm:p-3 rounded-lg flex-shrink-0`}>
+                <stat.icon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+              </div>
+              <div className="ml-3 sm:ml-4 min-w-0">
+                <p className="stat-label truncate">{stat.name}</p>
+                <p className="stat-value">{stat.value}</p>
               </div>
             </div>
           </div>
@@ -102,12 +99,12 @@ export default function Dashboard() {
       {/* Recent Tournaments */}
       <div className="card">
         <div className="card-header flex items-center justify-between">
-          <h2 className="text-lg font-medium text-gray-900">
+          <h2 className="text-base sm:text-lg font-medium text-gray-900">
             Recent Tournaments
           </h2>
           <Link
             to="/tournaments"
-            className="text-sm text-primary-600 hover:text-primary-700 flex items-center"
+            className="text-sm text-primary-600 hover:text-primary-700 flex items-center touch-target"
           >
             View all
             <ArrowRight className="ml-1 h-4 w-4" />
@@ -115,27 +112,17 @@ export default function Dashboard() {
         </div>
         <div className="card-body p-0">
           {tournaments && tournaments.length > 0 ? (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Tournament</th>
-                  <th>Date</th>
-                  <th>Competitors</th>
-                  <th>Divisions</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+            <>
+              {/* Mobile Card View */}
+              <div className="mobile-cards p-4 space-y-3">
                 {tournaments.slice(0, 5).map((tournament) => (
-                  <tr key={tournament.id}>
-                    <td className="font-medium">{tournament.name}</td>
-                    <td>
-                      {new Date(tournament.date).toLocaleDateString()}
-                    </td>
-                    <td>{tournament._count.registrations}</td>
-                    <td>{tournament._count.divisions}</td>
-                    <td>
+                  <Link
+                    key={tournament.id}
+                    to={`/tournaments/${tournament.id}`}
+                    className="mobile-card block hover:border-primary-300 transition-colors"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="font-semibold text-gray-900">{tournament.name}</div>
                       <span
                         className={`badge ${
                           tournament.status === 'completed'
@@ -147,23 +134,75 @@ export default function Dashboard() {
                       >
                         {tournament.status}
                       </span>
-                    </td>
-                    <td>
-                      <Link
-                        to={`/tournaments/${tournament.id}`}
-                        className="text-primary-600 hover:text-primary-700"
-                      >
-                        View
-                      </Link>
-                    </td>
-                  </tr>
+                    </div>
+                    <div className="text-sm text-gray-500 mb-2">
+                      {new Date(tournament.date).toLocaleDateString()}
+                    </div>
+                    <div className="flex gap-4 text-sm">
+                      <span className="text-gray-600">
+                        <span className="font-medium">{tournament._count.registrations}</span> competitors
+                      </span>
+                      <span className="text-gray-600">
+                        <span className="font-medium">{tournament._count.divisions}</span> divisions
+                      </span>
+                    </div>
+                  </Link>
                 ))}
-              </tbody>
-            </table>
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="desktop-table overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Tournament</th>
+                      <th>Date</th>
+                      <th>Competitors</th>
+                      <th>Divisions</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {tournaments.slice(0, 5).map((tournament) => (
+                      <tr key={tournament.id}>
+                        <td className="font-medium">{tournament.name}</td>
+                        <td>
+                          {new Date(tournament.date).toLocaleDateString()}
+                        </td>
+                        <td>{tournament._count.registrations}</td>
+                        <td>{tournament._count.divisions}</td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              tournament.status === 'completed'
+                                ? 'badge-green'
+                                : tournament.status === 'in_progress'
+                                ? 'badge-yellow'
+                                : 'badge-blue'
+                            }`}
+                          >
+                            {tournament.status}
+                          </span>
+                        </td>
+                        <td>
+                          <Link
+                            to={`/tournaments/${tournament.id}`}
+                            className="text-primary-600 hover:text-primary-700"
+                          >
+                            View
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
-            <div className="text-center py-12 text-gray-500">
-              <Trophy className="mx-auto h-12 w-12 text-gray-400" />
-              <p className="mt-2">No tournaments yet</p>
+            <div className="empty-state">
+              <Trophy className="empty-state-icon" />
+              <p className="empty-state-title">No tournaments yet</p>
               <Link
                 to="/tournaments"
                 className="mt-4 inline-block text-primary-600 hover:text-primary-700"
