@@ -255,9 +255,9 @@ function categorizeBeltLevel(
 ): DivisionGroup[] {
   const groups: DivisionGroup[] = [];
 
-  // Split by gender
-  const males = registrations.filter((r) => r.competitor.gender === 'M');
-  const females = registrations.filter((r) => r.competitor.gender === 'F');
+  // Split by gender (support both 'M'/'F' and 'male'/'female' formats)
+  const males = registrations.filter((r) => r.competitor.gender === 'male' || r.competitor.gender === 'M');
+  const females = registrations.filter((r) => r.competitor.gender === 'female' || r.competitor.gender === 'F');
 
   for (const [gender, genderRegs] of [
     ['M', males],
