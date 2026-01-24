@@ -34,6 +34,101 @@ export interface CategorizationResult {
   warnings: string[];
 }
 
+export interface PreviewDivision {
+  name: string;
+  beltLevel: string;
+  gender: string;
+  eventType: string;
+  ageMin: number;
+  ageMax: number;
+  weightClass: string | null;
+  competitorCount: number;
+  competitors: { name: string; school: string }[];
+}
+
+export interface PreviewResult {
+  divisions: PreviewDivision[];
+  totalCompetitors: number;
+  warnings: string[];
+}
+
+export function previewCategorization(
+  registrations: RegistrationWithCompetitor[],
+  config: CategorizationConfig
+): PreviewResult {
+  const warnings: string[] = [];
+
+  // Separate into patterns and sparring registrations
+  const patternsRegs = registrations.filter((r) => r.patterns);
+  const sparringRegs = registrations.filter((r) => r.sparring);
+
+  const allGroups: DivisionGroup[] = [];
+
+  // Process patterns registrations
+  const patternsGroups = categorizeByEvent(patternsRegs, 'patterns', config);
+  allGroups.push(...patternsGroups);
+
+  // Process sparring registrations (includes weight class)
+  const sparringGroups = categorizeByEvent(sparringRegs, 'sparring', config);
+  allGroups.push(...sparringGroups);
+
+  // Split large divisions
+  const finalGroups: DivisionGroup[] = [];
+  for (const group of allGroups) {
+    if (group.registrations.length > config.divisionThreshold) {
+      const splits = splitDivision(group, config.divisionThreshold);
+      finalGroups.push(...splits);
+      warnings.push(`"${group.name}" will be split into ${splits.length} divisions (${group.registrations.length} competitors)`);
+    } else {
+      finalGroups.push(group);
+    }
+  }
+
+  // Convert to preview format
+  const divisions: PreviewDivision[] = finalGroups
+    .filter((g) => g.registrations.length > 0)
+    .map((group) => {
+      // Validate and collect warnings
+      const validation = validateGroup(group);
+      if (validation.warnings.length > 0) {
+        warnings.push(...validation.warnings.map((w) => `${group.name}: ${w}`));
+      }
+
+      if (group.registrations.length < 3) {
+        warnings.push(`"${group.name}" has only ${group.registrations.length} competitor(s) - consider merging`);
+      }
+
+      return {
+        name: group.name,
+        beltLevel: group.beltLevel,
+        gender: group.gender,
+        eventType: group.eventType,
+        ageMin: group.ageMin,
+        ageMax: group.ageMax,
+        weightClass: group.weightClass || null,
+        competitorCount: group.registrations.length,
+        competitors: group.registrations.map((r) => ({
+          name: `${r.competitor.firstName} ${r.competitor.lastName}`,
+          school: r.competitor.schoolDojang || '',
+        })),
+      };
+    });
+
+  // Count total unique competitors
+  const competitorIds = new Set<string>();
+  for (const group of finalGroups) {
+    for (const reg of group.registrations) {
+      competitorIds.add(reg.competitorId);
+    }
+  }
+
+  return {
+    divisions,
+    totalCompetitors: competitorIds.size,
+    warnings,
+  };
+}
+
 export async function autoCategorize(
   prisma: PrismaClient,
   tournamentId: string,
@@ -160,9 +255,9 @@ function categorizeBeltLevel(
 ): DivisionGroup[] {
   const groups: DivisionGroup[] = [];
 
-  // Split by gender
-  const males = registrations.filter((r) => r.competitor.gender === 'M');
-  const females = registrations.filter((r) => r.competitor.gender === 'F');
+  // Split by gender (support both 'M'/'F' and 'male'/'female' formats)
+  const males = registrations.filter((r) => r.competitor.gender === 'male' || r.competitor.gender === 'M');
+  const females = registrations.filter((r) => r.competitor.gender === 'female' || r.competitor.gender === 'F');
 
   for (const [gender, genderRegs] of [
     ['M', males],
