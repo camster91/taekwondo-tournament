@@ -410,13 +410,15 @@ Comprehensive results display and statistics.
 
 ### 17. Certificate Generation
 
+**Status:** ✅ Implemented
+
 **Description:** Auto-generate winner certificates.
 
 **Requirements:**
-- [ ] Certificate templates
-- [ ] Auto-fill competitor/placement
-- [ ] PDF export
-- [ ] Batch generation
+- [x] Certificate templates (decorative border, medal colors)
+- [x] Auto-fill competitor/placement
+- [x] PDF export (single certificate or batch)
+- [x] Batch generation (all medals or gold-only filter)
 
 ---
 

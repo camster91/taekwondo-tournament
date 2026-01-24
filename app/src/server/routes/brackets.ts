@@ -7,6 +7,8 @@ import {
   generateBracketPDF,
   generateBatchBracketsPDF,
   generateResultsPDF,
+  generateCertificatePDF,
+  generateBatchCertificatesPDF,
   type BracketMatch,
   type DivisionInfo,
   type TournamentInfo,
@@ -578,6 +580,153 @@ router.get('/tournament/:tournamentId/results/pdf', async (req: Request, res: Re
   res.setHeader(
     'Content-Disposition',
     `attachment; filename="${tournament.name.replace(/[^a-z0-9]/gi, '_')}_results.pdf"`
+  );
+  res.send(Buffer.from(pdfBuffer));
+});
+
+// Generate certificate for a single placement
+router.get('/division/:divisionId/certificate/:place', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const place = parseInt(getParam(req.params.place));
+
+  if (isNaN(place) || place < 1 || place > 3) {
+    return res.status(400).json({ error: 'Place must be 1, 2, or 3' });
+  }
+
+  const division = await prisma.division.findUnique({
+    where: { id: getParam(req.params.divisionId) },
+    include: {
+      tournament: true,
+      bracket: true,
+    },
+  });
+
+  if (!division || !division.bracket) {
+    return res.status(404).json({ error: 'Division or bracket not found' });
+  }
+
+  const placements = await getBracketPlacements(prisma, division.bracket.id);
+  const placement = placements.find((p) => p.place === place);
+
+  if (!placement) {
+    return res.status(404).json({ error: `No ${place}${place === 1 ? 'st' : place === 2 ? 'nd' : 'rd'} place winner found` });
+  }
+
+  const registration = await prisma.registration.findUnique({
+    where: { id: placement.competitorId },
+    include: { competitor: true },
+  });
+
+  if (!registration) {
+    return res.status(404).json({ error: 'Competitor not found' });
+  }
+
+  const tournamentInfo: TournamentInfo = {
+    name: division.tournament.name,
+    date: division.tournament.date.toLocaleDateString(),
+    location: division.tournament.location,
+  };
+
+  const pdf = generateCertificatePDF({
+    competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+    place,
+    divisionName: division.name,
+    eventType: division.eventType,
+    tournament: tournamentInfo,
+  });
+
+  const pdfBuffer = pdf.output('arraybuffer');
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="certificate_${registration.competitor.lastName}_${place}.pdf"`
+  );
+  res.send(Buffer.from(pdfBuffer));
+});
+
+// Generate all certificates for tournament
+router.get('/tournament/:tournamentId/certificates', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const placeFilter = req.query.place ? parseInt(req.query.place as string) : null;
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: getParam(req.params.tournamentId) },
+    include: {
+      divisions: {
+        include: {
+          bracket: true,
+        },
+        orderBy: [{ eventType: 'asc' }, { beltLevel: 'asc' }, { gender: 'asc' }, { displayOrder: 'asc' }],
+      },
+    },
+  });
+
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  const tournamentInfo: TournamentInfo = {
+    name: tournament.name,
+    date: tournament.date.toLocaleDateString(),
+    location: tournament.location,
+  };
+
+  const winners: Array<{
+    competitorName: string;
+    place: number;
+    divisionName: string;
+    eventType: string;
+  }> = [];
+
+  for (const division of tournament.divisions as any[]) {
+    if (!division.bracket) continue;
+
+    const placements = await getBracketPlacements(prisma, division.bracket.id);
+
+    for (const placement of placements) {
+      // Only include 1st, 2nd, 3rd place
+      if (placement.place > 3) continue;
+      // Apply place filter if specified
+      if (placeFilter && placement.place !== placeFilter) continue;
+
+      const registration = await prisma.registration.findUnique({
+        where: { id: placement.competitorId },
+        include: { competitor: true },
+      });
+
+      if (registration) {
+        winners.push({
+          competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+          place: placement.place,
+          divisionName: division.name,
+          eventType: division.eventType,
+        });
+      }
+    }
+  }
+
+  if (winners.length === 0) {
+    return res.status(404).json({ error: 'No medal winners found for this tournament' });
+  }
+
+  // Sort by division name, then by place
+  winners.sort((a, b) => {
+    if (a.divisionName !== b.divisionName) {
+      return a.divisionName.localeCompare(b.divisionName);
+    }
+    return a.place - b.place;
+  });
+
+  const pdf = generateBatchCertificatesPDF(tournamentInfo, winners);
+
+  const pdfBuffer = pdf.output('arraybuffer');
+
+  const placeSuffix = placeFilter ? `_${placeFilter}${placeFilter === 1 ? 'st' : placeFilter === 2 ? 'nd' : 'rd'}` : '';
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${tournament.name.replace(/[^a-z0-9]/gi, '_')}_certificates${placeSuffix}.pdf"`
   );
   res.send(Buffer.from(pdfBuffer));
 });

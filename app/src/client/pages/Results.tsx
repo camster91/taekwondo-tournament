@@ -475,6 +475,31 @@ export default function Results() {
                         <FileDown className="h-4 w-4 mr-3 text-blue-500" />
                         Complete Excel Report
                       </button>
+
+                      <div className="border-t my-1" />
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">
+                        Certificates
+                      </div>
+                      <a
+                        href={`/api/brackets/tournament/${tournamentId}/certificates`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setShowExportMenu(false)}
+                      >
+                        <Award className="h-4 w-4 mr-3 text-yellow-500" />
+                        All Certificates (1st-3rd)
+                      </a>
+                      <a
+                        href={`/api/brackets/tournament/${tournamentId}/certificates?place=1`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setShowExportMenu(false)}
+                      >
+                        <Medal className="h-4 w-4 mr-3 text-yellow-500" />
+                        Gold Only (1st Place)
+                      </a>
                     </div>
                   </div>
                 </>
