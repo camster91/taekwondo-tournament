@@ -429,6 +429,289 @@ export function generateResultsPDF(
 /**
  * Generates a batch of bracket PDFs as a combined document
  */
+export interface CertificateData {
+  competitorName: string;
+  place: number;
+  divisionName: string;
+  eventType: string;
+  tournament: TournamentInfo;
+}
+
+/**
+ * Generates a certificate PDF for a medal winner
+ */
+export function generateCertificatePDF(data: CertificateData): jsPDF {
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'pt',
+    format: 'letter',
+  });
+
+  const pageWidth = 792;
+  const pageHeight = 612;
+  const centerX = pageWidth / 2;
+
+  // Decorative border
+  doc.setDrawColor(180, 140, 80); // Gold-ish color
+  doc.setLineWidth(3);
+  doc.rect(30, 30, pageWidth - 60, pageHeight - 60);
+  doc.setLineWidth(1.5);
+  doc.rect(40, 40, pageWidth - 80, pageHeight - 80);
+
+  // Inner decorative corners
+  doc.setDrawColor(180, 140, 80);
+  const cornerSize = 30;
+  // Top-left
+  doc.line(50, 55, 50 + cornerSize, 55);
+  doc.line(55, 50, 55, 50 + cornerSize);
+  // Top-right
+  doc.line(pageWidth - 50 - cornerSize, 55, pageWidth - 50, 55);
+  doc.line(pageWidth - 55, 50, pageWidth - 55, 50 + cornerSize);
+  // Bottom-left
+  doc.line(50, pageHeight - 55, 50 + cornerSize, pageHeight - 55);
+  doc.line(55, pageHeight - 50 - cornerSize, 55, pageHeight - 50);
+  // Bottom-right
+  doc.line(pageWidth - 50 - cornerSize, pageHeight - 55, pageWidth - 50, pageHeight - 55);
+  doc.line(pageWidth - 55, pageHeight - 50 - cornerSize, pageWidth - 55, pageHeight - 50);
+
+  // Certificate header
+  doc.setTextColor(80, 60, 40);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'normal');
+  doc.text('CERTIFICATE OF ACHIEVEMENT', centerX, 90, { align: 'center' });
+
+  // Tournament name
+  doc.setFontSize(24);
+  doc.setFont('helvetica', 'bold');
+  doc.text(data.tournament.name, centerX, 130, { align: 'center' });
+
+  // Date and location
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  let subLine = data.tournament.date;
+  if (data.tournament.location) {
+    subLine += ` • ${data.tournament.location}`;
+  }
+  doc.text(subLine, centerX, 155, { align: 'center' });
+
+  // "This certifies that"
+  doc.setFontSize(14);
+  doc.text('This certifies that', centerX, 200, { align: 'center' });
+
+  // Competitor name (large and prominent)
+  doc.setFontSize(36);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text(data.competitorName, centerX, 250, { align: 'center' });
+
+  // Decorative line under name
+  doc.setDrawColor(180, 140, 80);
+  doc.setLineWidth(1);
+  const nameWidth = doc.getTextWidth(data.competitorName);
+  doc.line(centerX - nameWidth / 2 - 20, 265, centerX + nameWidth / 2 + 20, 265);
+
+  // "has been awarded"
+  doc.setTextColor(80, 60, 40);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'normal');
+  doc.text('has been awarded', centerX, 300, { align: 'center' });
+
+  // Place (with medal color)
+  const placeText = data.place === 1 ? '1ST PLACE' :
+                    data.place === 2 ? '2ND PLACE' :
+                    data.place === 3 ? '3RD PLACE' : `${data.place}TH PLACE`;
+
+  const medalColor = data.place === 1 ? [218, 165, 32] : // Gold
+                     data.place === 2 ? [150, 150, 150] : // Silver
+                     data.place === 3 ? [205, 127, 50] : // Bronze
+                     [100, 100, 100];
+
+  doc.setFontSize(48);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(medalColor[0], medalColor[1], medalColor[2]);
+  doc.text(placeText, centerX, 365, { align: 'center' });
+
+  // Medal symbol
+  const medalSymbol = data.place === 1 ? '★' :
+                      data.place === 2 ? '★' :
+                      data.place === 3 ? '★' : '';
+  if (medalSymbol) {
+    doc.setFontSize(24);
+    const placeWidth = doc.getTextWidth(placeText);
+    doc.text(medalSymbol, centerX - placeWidth / 2 - 30, 365, { align: 'center' });
+    doc.text(medalSymbol, centerX + placeWidth / 2 + 30, 365, { align: 'center' });
+  }
+
+  // Division name
+  doc.setTextColor(80, 60, 40);
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text(data.divisionName, centerX, 420, { align: 'center' });
+
+  // Event type
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.eventType.charAt(0).toUpperCase() + data.eventType.slice(1), centerX, 445, { align: 'center' });
+
+  // Signature lines at bottom
+  const sigY = pageHeight - 100;
+  const sigWidth = 150;
+
+  // Left signature (Director)
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.line(100, sigY, 100 + sigWidth, sigY);
+  doc.setFontSize(10);
+  doc.text('Tournament Director', 100 + sigWidth / 2, sigY + 15, { align: 'center' });
+
+  // Right signature (Date)
+  doc.line(pageWidth - 100 - sigWidth, sigY, pageWidth - 100, sigY);
+  doc.text('Date', pageWidth - 100 - sigWidth / 2, sigY + 15, { align: 'center' });
+
+  // Footer
+  doc.setFontSize(8);
+  doc.setTextColor(150);
+  doc.text('Taekwondo Tournament Management System', centerX, pageHeight - 45, { align: 'center' });
+
+  return doc;
+}
+
+/**
+ * Generates certificates for all medal winners in a tournament
+ */
+export function generateBatchCertificatesPDF(
+  tournament: TournamentInfo,
+  winners: Array<{
+    competitorName: string;
+    place: number;
+    divisionName: string;
+    eventType: string;
+  }>
+): jsPDF {
+  if (winners.length === 0) {
+    const doc = new jsPDF();
+    doc.text('No winners to generate certificates for', 50, 50);
+    return doc;
+  }
+
+  // Generate first certificate
+  let doc = generateCertificatePDF({
+    ...winners[0],
+    tournament,
+  });
+
+  // Add remaining certificates on new pages
+  for (let i = 1; i < winners.length; i++) {
+    doc.addPage('letter', 'landscape');
+
+    const pageWidth = 792;
+    const pageHeight = 612;
+    const centerX = pageWidth / 2;
+    const data = { ...winners[i], tournament };
+
+    // Decorative border
+    doc.setDrawColor(180, 140, 80);
+    doc.setLineWidth(3);
+    doc.rect(30, 30, pageWidth - 60, pageHeight - 60);
+    doc.setLineWidth(1.5);
+    doc.rect(40, 40, pageWidth - 80, pageHeight - 80);
+
+    // Inner decorative corners
+    const cornerSize = 30;
+    doc.line(50, 55, 50 + cornerSize, 55);
+    doc.line(55, 50, 55, 50 + cornerSize);
+    doc.line(pageWidth - 50 - cornerSize, 55, pageWidth - 50, 55);
+    doc.line(pageWidth - 55, 50, pageWidth - 55, 50 + cornerSize);
+    doc.line(50, pageHeight - 55, 50 + cornerSize, pageHeight - 55);
+    doc.line(55, pageHeight - 50 - cornerSize, 55, pageHeight - 50);
+    doc.line(pageWidth - 50 - cornerSize, pageHeight - 55, pageWidth - 50, pageHeight - 55);
+    doc.line(pageWidth - 55, pageHeight - 50 - cornerSize, pageWidth - 55, pageHeight - 50);
+
+    // Certificate content
+    doc.setTextColor(80, 60, 40);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'normal');
+    doc.text('CERTIFICATE OF ACHIEVEMENT', centerX, 90, { align: 'center' });
+
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.text(data.tournament.name, centerX, 130, { align: 'center' });
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    let subLine = data.tournament.date;
+    if (data.tournament.location) {
+      subLine += ` • ${data.tournament.location}`;
+    }
+    doc.text(subLine, centerX, 155, { align: 'center' });
+
+    doc.setFontSize(14);
+    doc.text('This certifies that', centerX, 200, { align: 'center' });
+
+    doc.setFontSize(36);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text(data.competitorName, centerX, 250, { align: 'center' });
+
+    doc.setDrawColor(180, 140, 80);
+    doc.setLineWidth(1);
+    const nameWidth = doc.getTextWidth(data.competitorName);
+    doc.line(centerX - nameWidth / 2 - 20, 265, centerX + nameWidth / 2 + 20, 265);
+
+    doc.setTextColor(80, 60, 40);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'normal');
+    doc.text('has been awarded', centerX, 300, { align: 'center' });
+
+    const placeText = data.place === 1 ? '1ST PLACE' :
+                      data.place === 2 ? '2ND PLACE' :
+                      data.place === 3 ? '3RD PLACE' : `${data.place}TH PLACE`;
+
+    const medalColor = data.place === 1 ? [218, 165, 32] :
+                       data.place === 2 ? [150, 150, 150] :
+                       data.place === 3 ? [205, 127, 50] :
+                       [100, 100, 100];
+
+    doc.setFontSize(48);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(medalColor[0], medalColor[1], medalColor[2]);
+    doc.text(placeText, centerX, 365, { align: 'center' });
+
+    const medalSymbol = data.place <= 3 ? '★' : '';
+    if (medalSymbol) {
+      doc.setFontSize(24);
+      const placeWidth = doc.getTextWidth(placeText);
+      doc.text(medalSymbol, centerX - placeWidth / 2 - 30, 365, { align: 'center' });
+      doc.text(medalSymbol, centerX + placeWidth / 2 + 30, 365, { align: 'center' });
+    }
+
+    doc.setTextColor(80, 60, 40);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(data.divisionName, centerX, 420, { align: 'center' });
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'normal');
+    doc.text(data.eventType.charAt(0).toUpperCase() + data.eventType.slice(1), centerX, 445, { align: 'center' });
+
+    const sigY = pageHeight - 100;
+    const sigWidth = 150;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.line(100, sigY, 100 + sigWidth, sigY);
+    doc.setFontSize(10);
+    doc.text('Tournament Director', 100 + sigWidth / 2, sigY + 15, { align: 'center' });
+    doc.line(pageWidth - 100 - sigWidth, sigY, pageWidth - 100, sigY);
+    doc.text('Date', pageWidth - 100 - sigWidth / 2, sigY + 15, { align: 'center' });
+
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text('Taekwondo Tournament Management System', centerX, pageHeight - 45, { align: 'center' });
+  }
+
+  return doc;
+}
+
 export function generateBatchBracketsPDF(
   tournament: TournamentInfo,
   brackets: Array<{ division: DivisionInfo; matches: BracketMatch[] }>,
