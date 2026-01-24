@@ -281,16 +281,25 @@ export default function Competitors() {
     return 'bg-gray-200';
   };
 
+  const calculateAge = (dateOfBirth: string) => {
+    if (!dateOfBirth) return '-';
+    return Math.floor(
+      (Date.now() - new Date(dateOfBirth).getTime()) /
+        (365.25 * 24 * 60 * 60 * 1000)
+    );
+  };
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      {/* Page Header - responsive */}
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Competitors</h1>
+          <h1 className="page-title">Competitors</h1>
           <p className="mt-1 text-sm text-gray-500">
             Manage your competitor registry
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
           <button
             onClick={() => fileInputRef.current?.click()}
             className="btn btn-secondary"
@@ -335,58 +344,37 @@ export default function Competitors() {
         </div>
       </div>
 
-      {/* Competitors Table */}
+      {/* Competitors List */}
       <div className="card">
         <div className="card-body p-0">
           {isLoading ? (
             <div className="p-8 text-center text-gray-500">Loading...</div>
           ) : data?.competitors?.length > 0 ? (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Gender</th>
-                  <th>Age</th>
-                  <th>Belt</th>
-                  <th>Weight</th>
-                  <th>School</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+            <>
+              {/* Mobile Card View */}
+              <div className="mobile-cards p-4 space-y-3">
                 {data.competitors.map((c: Competitor) => (
-                  <tr key={c.id}>
-                    <td className="font-medium">
-                      {c.firstName} {c.lastName}
-                    </td>
-                    <td>{c.gender}</td>
-                    <td>
-                      {c.dateOfBirth
-                        ? Math.floor(
-                            (Date.now() - new Date(c.dateOfBirth).getTime()) /
-                              (365.25 * 24 * 60 * 60 * 1000)
-                          )
-                        : '-'}
-                    </td>
-                    <td>
-                      <span
-                        className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getBeltColor(
-                          c.belt
-                        )}`}
-                      >
-                        {c.belt}
-                        {c.danRank && ` ${c.danRank}D`}
-                      </span>
-                    </td>
-                    <td>{c.weightLbs ? `${c.weightLbs} lbs` : '-'}</td>
-                    <td>{c.schoolDojang || '-'}</td>
-                    <td>
-                      <div className="flex gap-2">
+                  <div key={c.id} className="mobile-card">
+                    <div className="mobile-card-header">
+                      <div>
+                        <div className="mobile-card-title">
+                          {c.firstName} {c.lastName}
+                        </div>
+                        <span
+                          className={`inline-flex px-2 py-0.5 rounded text-xs font-medium mt-1 ${getBeltColor(
+                            c.belt
+                          )}`}
+                        >
+                          {c.belt}
+                          {c.danRank && ` ${c.danRank}D`}
+                        </span>
+                      </div>
+                      <div className="flex gap-3">
                         <button
                           onClick={() => setEditingCompetitor(c)}
-                          className="text-gray-400 hover:text-primary-600"
+                          className="text-gray-400 hover:text-primary-600 touch-target flex items-center justify-center"
                         >
-                          <Edit className="h-4 w-4" />
+                          <Edit className="h-5 w-5" />
                         </button>
                         <button
                           onClick={() => {
@@ -394,20 +382,98 @@ export default function Competitors() {
                               deleteMutation.mutate(c.id);
                             }
                           }}
-                          className="text-gray-400 hover:text-red-600"
+                          className="text-gray-400 hover:text-red-600 touch-target flex items-center justify-center"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-5 w-5" />
                         </button>
                       </div>
-                    </td>
-                  </tr>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Gender</span>
+                        <span className="mobile-card-value">{c.gender === 'M' ? 'Male' : 'Female'}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Age</span>
+                        <span className="mobile-card-value">{calculateAge(c.dateOfBirth)}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Weight</span>
+                        <span className="mobile-card-value">{c.weightLbs ? `${c.weightLbs} lbs` : '-'}</span>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">School</span>
+                        <span className="mobile-card-value truncate max-w-[120px]">{c.schoolDojang || '-'}</span>
+                      </div>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="desktop-table overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Gender</th>
+                      <th>Age</th>
+                      <th>Belt</th>
+                      <th>Weight</th>
+                      <th className="hide-mobile">School</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {data.competitors.map((c: Competitor) => (
+                      <tr key={c.id}>
+                        <td className="font-medium">
+                          {c.firstName} {c.lastName}
+                        </td>
+                        <td>{c.gender}</td>
+                        <td>{calculateAge(c.dateOfBirth)}</td>
+                        <td>
+                          <span
+                            className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getBeltColor(
+                              c.belt
+                            )}`}
+                          >
+                            {c.belt}
+                            {c.danRank && ` ${c.danRank}D`}
+                          </span>
+                        </td>
+                        <td>{c.weightLbs ? `${c.weightLbs} lbs` : '-'}</td>
+                        <td className="hide-mobile">{c.schoolDojang || '-'}</td>
+                        <td>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setEditingCompetitor(c)}
+                              className="text-gray-400 hover:text-primary-600 p-1"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm('Delete this competitor?')) {
+                                  deleteMutation.mutate(c.id);
+                                }
+                              }}
+                              className="text-gray-400 hover:text-red-600 p-1"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
-            <div className="p-8 text-center text-gray-500">
-              <FileSpreadsheet className="mx-auto h-12 w-12 text-gray-400" />
-              <p className="mt-2">No competitors yet</p>
+            <div className="empty-state">
+              <FileSpreadsheet className="empty-state-icon" />
+              <p className="empty-state-title">No competitors yet</p>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="mt-4 text-primary-600 hover:text-primary-700"
@@ -426,192 +492,195 @@ export default function Competitors() {
 
       {/* Add/Edit Competitor Modal */}
       {showFormModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto m-4">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+        <div className="modal-container flex items-center justify-center p-4">
+          <div className="modal-backdrop" onClick={closeFormModal} />
+          <div className="modal-panel">
+            <div className="modal-header">
               <h2 className="text-lg font-semibold">
                 {editingCompetitor ? 'Edit Competitor' : 'Add Competitor'}
               </h2>
               <button
                 onClick={closeFormModal}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 touch-target flex items-center justify-center"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleFormSubmit}>
+              <div className="modal-body space-y-4">
+                <div className="form-grid">
+                  <div>
+                    <label className="form-label">
+                      First Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.firstName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, firstName: e.target.value })
+                      }
+                      className="form-input w-full"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">
+                      Last Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.lastName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, lastName: e.target.value })
+                      }
+                      className="form-input w-full"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-grid">
+                  <div>
+                    <label className="form-label">
+                      Gender <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.gender}
+                      onChange={(e) =>
+                        setFormData({ ...formData, gender: e.target.value })
+                      }
+                      className="form-input w-full"
+                      required
+                    >
+                      <option value="M">Male</option>
+                      <option value="F">Female</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">
+                      Date of Birth <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.dateOfBirth}
+                      onChange={(e) =>
+                        setFormData({ ...formData, dateOfBirth: e.target.value })
+                      }
+                      className="form-input w-full"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-grid">
+                  <div>
+                    <label className="form-label">
+                      Belt <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.belt}
+                      onChange={(e) =>
+                        setFormData({ ...formData, belt: e.target.value })
+                      }
+                      className="form-input w-full"
+                      required
+                    >
+                      {BELT_OPTIONS.map((belt) => (
+                        <option key={belt} value={belt}>
+                          {belt}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">Dan Rank</label>
+                    <select
+                      value={formData.danRank}
+                      onChange={(e) =>
+                        setFormData({ ...formData, danRank: e.target.value })
+                      }
+                      className="form-input w-full"
+                      disabled={formData.belt !== 'Black'}
+                    >
+                      <option value="">N/A</option>
+                      <option value="1">1st Dan</option>
+                      <option value="2">2nd Dan</option>
+                      <option value="3">3rd Dan</option>
+                      <option value="4">4th Dan</option>
+                      <option value="5">5th Dan</option>
+                      <option value="6">6th Dan</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-grid">
+                  <div>
+                    <label className="form-label">
+                      Weight (lbs) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={formData.weightLbs}
+                      onChange={(e) =>
+                        setFormData({ ...formData, weightLbs: e.target.value })
+                      }
+                      className="form-input w-full"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Height (inches)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={formData.heightInches}
+                      onChange={(e) =>
+                        setFormData({ ...formData, heightInches: e.target.value })
+                      }
+                      className="form-input w-full"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="form-label">
-                    First Name <span className="text-red-500">*</span>
-                  </label>
+                  <label className="form-label">School/Dojang</label>
                   <input
                     type="text"
-                    value={formData.firstName}
+                    value={formData.schoolDojang}
                     onChange={(e) =>
-                      setFormData({ ...formData, firstName: e.target.value })
+                      setFormData({ ...formData, schoolDojang: e.target.value })
                     }
                     className="form-input w-full"
-                    required
                   />
                 </div>
+
                 <div>
-                  <label className="form-label">
-                    Last Name <span className="text-red-500">*</span>
-                  </label>
+                  <label className="form-label">Special Needs</label>
                   <input
                     type="text"
-                    value={formData.lastName}
+                    value={formData.specialNeeds}
                     onChange={(e) =>
-                      setFormData({ ...formData, lastName: e.target.value })
+                      setFormData({ ...formData, specialNeeds: e.target.value })
                     }
                     className="form-input w-full"
-                    required
+                    placeholder="Leave blank if none"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">
-                    Gender <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.gender}
-                    onChange={(e) =>
-                      setFormData({ ...formData, gender: e.target.value })
-                    }
-                    className="form-input w-full"
-                    required
-                  >
-                    <option value="M">Male</option>
-                    <option value="F">Female</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">
-                    Date of Birth <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.dateOfBirth}
-                    onChange={(e) =>
-                      setFormData({ ...formData, dateOfBirth: e.target.value })
-                    }
-                    className="form-input w-full"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">
-                    Belt <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.belt}
-                    onChange={(e) =>
-                      setFormData({ ...formData, belt: e.target.value })
-                    }
-                    className="form-input w-full"
-                    required
-                  >
-                    {BELT_OPTIONS.map((belt) => (
-                      <option key={belt} value={belt}>
-                        {belt}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Dan Rank (Black Belt only)</label>
-                  <select
-                    value={formData.danRank}
-                    onChange={(e) =>
-                      setFormData({ ...formData, danRank: e.target.value })
-                    }
-                    className="form-input w-full"
-                    disabled={formData.belt !== 'Black'}
-                  >
-                    <option value="">N/A</option>
-                    <option value="1">1st Dan</option>
-                    <option value="2">2nd Dan</option>
-                    <option value="3">3rd Dan</option>
-                    <option value="4">4th Dan</option>
-                    <option value="5">5th Dan</option>
-                    <option value="6">6th Dan</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="form-label">
-                    Weight (lbs) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={formData.weightLbs}
-                    onChange={(e) =>
-                      setFormData({ ...formData, weightLbs: e.target.value })
-                    }
-                    className="form-input w-full"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Height (inches)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={formData.heightInches}
-                    onChange={(e) =>
-                      setFormData({ ...formData, heightInches: e.target.value })
-                    }
-                    className="form-input w-full"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="form-label">School/Dojang</label>
-                <input
-                  type="text"
-                  value={formData.schoolDojang}
-                  onChange={(e) =>
-                    setFormData({ ...formData, schoolDojang: e.target.value })
-                  }
-                  className="form-input w-full"
-                />
-              </div>
-
-              <div>
-                <label className="form-label">Special Needs</label>
-                <input
-                  type="text"
-                  value={formData.specialNeeds}
-                  onChange={(e) =>
-                    setFormData({ ...formData, specialNeeds: e.target.value })
-                  }
-                  className="form-input w-full"
-                  placeholder="Leave blank if none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
+              <div className="modal-footer">
                 <button
                   type="button"
                   onClick={closeFormModal}
-                  className="btn btn-secondary"
+                  className="btn btn-secondary w-full sm:w-auto"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createMutation.isPending || updateMutation.isPending}
-                  className="btn btn-primary"
+                  className="btn btn-primary w-full sm:w-auto"
                 >
                   {createMutation.isPending || updateMutation.isPending
                     ? 'Saving...'
@@ -627,23 +696,24 @@ export default function Competitors() {
 
       {/* Import Modal */}
       {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+        <div className="modal-container flex items-center justify-center p-4">
+          <div className="modal-backdrop" onClick={() => setShowImportModal(false)} />
+          <div className="modal-panel max-w-2xl">
+            <div className="modal-header">
               <h2 className="text-lg font-semibold">Import Competitors</h2>
               <button
                 onClick={() => setShowImportModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 touch-target flex items-center justify-center"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-6">
+            <div className="modal-body">
               <p className="text-sm text-gray-600 mb-4">
                 Found {importData?.length} rows. Map the columns below:
               </p>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="form-grid">
                 {[
                   { key: 'firstName', label: 'First Name', required: true },
                   { key: 'lastName', label: 'Last Name', required: true },
@@ -659,7 +729,7 @@ export default function Competitors() {
                   { key: 'sparring', label: 'Sparring (Y/N)' },
                 ].map(({ key, label, required }) => (
                   <div key={key}>
-                    <label className="form-label">
+                    <label className="form-label text-xs sm:text-sm">
                       {label}
                       {required && <span className="text-red-500">*</span>}
                     </label>
@@ -671,9 +741,9 @@ export default function Competitors() {
                           [key]: e.target.value,
                         })
                       }
-                      className="form-input w-full"
+                      className="form-input w-full text-sm"
                     >
-                      <option value="">-- Select column --</option>
+                      <option value="">-- Select --</option>
                       {importColumns.map((col) => (
                         <option key={col} value={col}>
                           {col}
@@ -689,13 +759,13 @@ export default function Competitors() {
                   <h3 className="text-sm font-medium text-gray-700 mb-2">
                     Preview (first 3 rows):
                   </h3>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto scroll-hint -mx-4 px-4 sm:mx-0 sm:px-0">
                     <table className="min-w-full text-xs">
                       <thead>
                         <tr className="bg-gray-50">
-                          {Object.keys(importData[0]).slice(0, 6).map((key) => (
-                            <th key={key} className="px-2 py-1 text-left">
-                              {key}
+                          {Object.keys(importData[0]).slice(0, 4).map((key) => (
+                            <th key={key} className="px-2 py-1 text-left whitespace-nowrap">
+                              {key.length > 12 ? key.substring(0, 12) + '...' : key}
                             </th>
                           ))}
                         </tr>
@@ -703,9 +773,9 @@ export default function Competitors() {
                       <tbody>
                         {importData.slice(0, 3).map((row, i) => (
                           <tr key={i}>
-                            {Object.values(row).slice(0, 6).map((val: any, j) => (
-                              <td key={j} className="px-2 py-1 border-t">
-                                {String(val).substring(0, 20)}
+                            {Object.values(row).slice(0, 4).map((val: any, j) => (
+                              <td key={j} className="px-2 py-1 border-t whitespace-nowrap">
+                                {String(val).substring(0, 15)}
                               </td>
                             ))}
                           </tr>
@@ -716,10 +786,10 @@ export default function Competitors() {
                 </div>
               )}
             </div>
-            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+            <div className="modal-footer">
               <button
                 onClick={() => setShowImportModal(false)}
-                className="btn btn-secondary"
+                className="btn btn-secondary w-full sm:w-auto"
               >
                 Cancel
               </button>
@@ -731,7 +801,7 @@ export default function Competitors() {
                   !columnMapping.gender ||
                   !columnMapping.belt
                 }
-                className="btn btn-primary"
+                className="btn btn-primary w-full sm:w-auto"
               >
                 {importMutation.isPending ? 'Importing...' : 'Import'}
               </button>
