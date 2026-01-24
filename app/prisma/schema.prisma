@@ -24,10 +24,19 @@ model Competitor {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  registrations Registration[]
+  // Experience tracking for fair matching
+  beltPromotionDate DateTime? // When they earned current belt
+  yearsTraining     Float?    // Total years of Taekwondo training
+  region            String?   // Geographic region for regional diversity
+  reachInches       Float?    // Arm reach for sparring matching
+
+  registrations      Registration[]
+  competitorHistory  CompetitorHistory[]
+  ratings            CompetitorRating[]
 
   @@index([lastName, firstName])
   @@index([schoolDojang])
+  @@index([region])
 }
 
 // Tournament instances
@@ -61,6 +70,12 @@ model Registration {
   checkInWeight        Float?    // Weight at check-in (for verification)
   createdAt            DateTime  @default(now())
 
+  // Enhanced attributes for fair matching
+  heightAtRegistration Float?    // Height at registration time
+  reachAtRegistration  Float?    // Reach at registration time
+  experienceScore      Float?    // Calculated from history
+  skillEstimate        Float?    // Estimated skill level
+
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   competitor  Competitor           @relation(fields: [competitorId], references: [id])
   assignments DivisionAssignment[]
@@ -90,6 +105,11 @@ model Division {
   isSpecialNeeds Boolean  @default(false)
   displayOrder   Int?
   createdAt      DateTime @default(now())
+
+  // Fairness metadata
+  bracketDifficulty Float?   // Calculated bracket difficulty score
+  matchupQuality    Float?   // Overall matchup fairness score
+  avgSkillRating    Float?   // Average skill rating of competitors
 
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   assignments DivisionAssignment[]
@@ -200,4 +220,65 @@ model UserTournamentAccess {
 
   @@unique([userId, tournamentId])
   @@index([tournamentId])
+}
+
+// Track competitor performance across tournaments
+model CompetitorHistory {
+  id            String   @id @default(uuid())
+  competitorId  String
+  tournamentId  String
+  divisionId    String
+  divisionName  String   // Stored for historical reference
+  eventType     String   // patterns or sparring
+  placement     Int      // 1, 2, 3, etc.
+  matchesWon    Int      @default(0)
+  matchesLost   Int      @default(0)
+  points        Float    @default(0) // Calculated skill points
+  createdAt     DateTime @default(now())
+
+  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId])
+  @@index([tournamentId])
+  @@index([eventType])
+  @@index([competitorId, eventType])
+}
+
+// Track head-to-head matchup history
+model MatchupHistory {
+  id            String   @id @default(uuid())
+  competitor1Id String   // First competitor (alphabetically by ID)
+  competitor2Id String   // Second competitor
+  tournamentId  String
+  divisionId    String
+  matchId       String
+  winnerId      String?
+  eventType     String   // patterns or sparring
+  roundNumber   Int      // Which round the matchup occurred
+  score         String?  // Score if available
+  createdAt     DateTime @default(now())
+
+  @@unique([competitor1Id, competitor2Id, tournamentId, matchId])
+  @@index([competitor1Id])
+  @@index([competitor2Id])
+  @@index([tournamentId])
+}
+
+// Competitor skill ratings (ELO-style)
+model CompetitorRating {
+  id            String   @id @default(uuid())
+  competitorId  String
+  eventType     String   // patterns or sparring
+  rating        Float    @default(1000) // Initial ELO
+  peakRating    Float    @default(1000)
+  matchesPlayed Int      @default(0)
+  lastMatchDate DateTime?
+  lastUpdated   DateTime @default(now())
+
+  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@unique([competitorId, eventType])
+  @@index([competitorId])
+  @@index([eventType])
+  @@index([rating])
 }
