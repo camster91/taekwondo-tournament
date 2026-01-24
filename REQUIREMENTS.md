@@ -300,7 +300,7 @@ Comprehensive results display and statistics.
 
 **Exports:**
 - [x] Results PDF (print-ready)
-- [ ] Excel with all data
+- [x] Excel with all data (multi-sheet workbook)
 - [x] CSV for data analysis (school standings, results by division, results by competitor)
 - [ ] School-specific reports
 

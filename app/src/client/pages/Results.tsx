@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import * as XLSX from 'xlsx';
 import {
   Trophy,
   Medal,
@@ -11,6 +12,7 @@ import {
   FileSpreadsheet,
   ChevronDown,
   BarChart3,
+  FileDown,
 } from 'lucide-react';
 
 interface Placement {
@@ -302,6 +304,90 @@ export default function Results() {
     setShowExportMenu(false);
   };
 
+  // Export full results to Excel with multiple sheets
+  const exportExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: School Standings
+    const schoolData = [
+      ['Rank', 'School', 'Gold', 'Silver', 'Bronze', 'Total'],
+      ...schoolStats.map((school, index) => [
+        index + 1,
+        school.name,
+        school.gold,
+        school.silver,
+        school.bronze,
+        school.gold + school.silver + school.bronze,
+      ]),
+    ];
+    const schoolSheet = XLSX.utils.aoa_to_sheet(schoolData);
+    schoolSheet['!cols'] = [{ wch: 6 }, { wch: 30 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }];
+    XLSX.utils.book_append_sheet(wb, schoolSheet, 'School Standings');
+
+    // Sheet 2: Results by Division
+    const divisionData = [
+      ['Division', 'Event Type', 'Place', 'Competitor', 'School'],
+    ];
+    filteredDivisions?.forEach((division) => {
+      division.bracket?.placements
+        ?.sort((a, b) => a.place - b.place)
+        .forEach((placement) => {
+          divisionData.push([
+            division.name,
+            division.eventType,
+            getPlaceName(placement.place),
+            `${placement.registration.competitor.firstName} ${placement.registration.competitor.lastName}`,
+            placement.registration.competitor.schoolDojang || 'Independent',
+          ]);
+        });
+    });
+    const divisionSheet = XLSX.utils.aoa_to_sheet(divisionData);
+    divisionSheet['!cols'] = [{ wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 25 }, { wch: 25 }];
+    XLSX.utils.book_append_sheet(wb, divisionSheet, 'By Division');
+
+    // Sheet 3: Belt Level Breakdown
+    const beltData = [
+      ['Belt Level', 'Divisions', 'Gold', 'Silver', 'Bronze', 'Total'],
+      ...beltBreakdown.map((belt) => [
+        belt.name,
+        belt.divisions,
+        belt.gold,
+        belt.silver,
+        belt.bronze,
+        belt.gold + belt.silver + belt.bronze,
+      ]),
+    ];
+    const beltSheet = XLSX.utils.aoa_to_sheet(beltData);
+    XLSX.utils.book_append_sheet(wb, beltSheet, 'By Belt Level');
+
+    // Sheet 4: Age Group Breakdown
+    const ageData = [
+      ['Age Group', 'Divisions', 'Gold', 'Silver', 'Bronze', 'Total'],
+      ...ageBreakdown.map((age) => [
+        `${age.name} years`,
+        age.divisions,
+        age.gold,
+        age.silver,
+        age.bronze,
+        age.gold + age.silver + age.bronze,
+      ]),
+      ['Total',
+        ageBreakdown.reduce((s, a) => s + a.divisions, 0),
+        ageBreakdown.reduce((s, a) => s + a.gold, 0),
+        ageBreakdown.reduce((s, a) => s + a.silver, 0),
+        ageBreakdown.reduce((s, a) => s + a.bronze, 0),
+        ageBreakdown.reduce((s, a) => s + a.gold + a.silver + a.bronze, 0),
+      ],
+    ];
+    const ageSheet = XLSX.utils.aoa_to_sheet(ageData);
+    XLSX.utils.book_append_sheet(wb, ageSheet, 'By Age Group');
+
+    // Download
+    const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
+    XLSX.writeFile(wb, `tournament_results${eventSuffix}.xlsx`);
+    setShowExportMenu(false);
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -376,6 +462,18 @@ export default function Results() {
                       >
                         <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500" />
                         All Results by Competitor
+                      </button>
+
+                      <div className="border-t my-1" />
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">
+                        Excel Export
+                      </div>
+                      <button
+                        onClick={exportExcel}
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        <FileDown className="h-4 w-4 mr-3 text-blue-500" />
+                        Complete Excel Report
                       </button>
                     </div>
                   </div>
