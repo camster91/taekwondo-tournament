@@ -12,6 +12,7 @@ import bracketsRouter from './routes/brackets.js';
 import authRouter from './routes/auth.js';
 import publicRouter from './routes/public.js';
 import fairnessRouter from './routes/fairness.js';
+import { isAppError, toApiError } from './utils/errors.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,11 +56,26 @@ if (isProduction) {
   });
 }
 
-// Error handler
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error('Error:', err);
-  res.status(500).json({
-    error: err.message || 'Internal server error',
+// Error handler with structured error responses
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+  // Log error for debugging
+  console.error('Error:', {
+    message: err.message,
+    stack: isProduction ? undefined : err.stack,
+    path: req.path,
+    method: req.method,
+  });
+
+  // Convert to API error format
+  const apiError = isAppError(err) ? err.toJSON() : toApiError(err);
+
+  // Send structured error response
+  res.status(apiError.statusCode).json({
+    error: apiError.error,
+    code: apiError.code,
+    recoverable: apiError.recoverable,
+    suggestion: apiError.suggestion,
+    details: apiError.details,
   });
 });
 

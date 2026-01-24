@@ -74,9 +74,10 @@ export default function Tournaments() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      {/* Page Header - responsive */}
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Tournaments</h1>
+          <h1 className="page-title">Tournaments</h1>
           <p className="mt-1 text-sm text-gray-500">
             Manage your tournaments
           </p>
@@ -93,15 +94,15 @@ export default function Tournaments() {
       {isLoading ? (
         <div className="text-center py-12 text-gray-500">Loading...</div>
       ) : tournaments && tournaments.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {tournaments.map((tournament) => (
             <div key={tournament.id} className="card hover:shadow-lg transition-shadow">
               <div className="card-body">
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center">
-                    <Trophy className="h-8 w-8 text-primary-500" />
-                    <div className="ml-3">
-                      <h3 className="font-semibold text-gray-900">
+                  <div className="flex items-center min-w-0">
+                    <Trophy className="h-6 w-6 sm:h-8 sm:w-8 text-primary-500 flex-shrink-0" />
+                    <div className="ml-2 sm:ml-3 min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate">
                         {tournament.name}
                       </h3>
                       <span className={`badge ${getStatusColor(tournament.status)}`}>
@@ -111,28 +112,30 @@ export default function Tournaments() {
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-2 text-sm text-gray-600">
+                <div className="mt-3 sm:mt-4 space-y-1.5 sm:space-y-2 text-sm text-gray-600">
                   <div className="flex items-center">
-                    <Calendar className="h-4 w-4 mr-2" />
+                    <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
                     {new Date(tournament.date).toLocaleDateString()}
                   </div>
                   {tournament.location && (
                     <div className="flex items-center">
-                      <span className="mr-2">📍</span>
-                      {tournament.location}
+                      <span className="mr-2 flex-shrink-0">📍</span>
+                      <span className="truncate">{tournament.location}</span>
                     </div>
                   )}
-                  <div className="flex items-center">
-                    <Users className="h-4 w-4 mr-2" />
-                    {tournament._count.registrations} competitors
-                  </div>
-                  <div className="flex items-center">
-                    <LayoutGrid className="h-4 w-4 mr-2" />
-                    {tournament._count.divisions} divisions
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center">
+                      <Users className="h-4 w-4 mr-1 flex-shrink-0" />
+                      <span>{tournament._count.registrations}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <LayoutGrid className="h-4 w-4 mr-1 flex-shrink-0" />
+                      <span>{tournament._count.divisions}</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-gray-200 flex gap-2">
+                <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200 flex flex-col sm:flex-row gap-2">
                   <Link
                     to={`/tournaments/${tournament.id}`}
                     className="btn btn-primary flex-1 text-center"
@@ -156,12 +159,10 @@ export default function Tournaments() {
         </div>
       ) : (
         <div className="card">
-          <div className="card-body text-center py-12">
-            <Trophy className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">
-              No tournaments
-            </h3>
-            <p className="mt-1 text-sm text-gray-500">
+          <div className="empty-state">
+            <Trophy className="empty-state-icon" />
+            <h3 className="empty-state-title">No tournaments</h3>
+            <p className="empty-state-text">
               Get started by creating a new tournament.
             </p>
             <button
@@ -177,13 +178,14 @@ export default function Tournaments() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full m-4">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+        <div className="modal-container flex items-center justify-center p-4">
+          <div className="modal-backdrop" onClick={() => setShowCreateModal(false)} />
+          <div className="modal-panel">
+            <div className="modal-header">
               <h2 className="text-lg font-semibold">Create Tournament</h2>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 touch-target flex items-center justify-center"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -193,57 +195,58 @@ export default function Tournaments() {
                 e.preventDefault();
                 createMutation.mutate(formData);
               }}
-              className="p-6 space-y-4"
             >
-              <div>
-                <label className="form-label">Tournament Name</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  placeholder="e.g., Newton's Championship 2025"
-                  className="form-input w-full"
-                  required
-                />
+              <div className="modal-body space-y-4">
+                <div>
+                  <label className="form-label">Tournament Name</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                    placeholder="e.g., Newton's Championship 2025"
+                    className="form-input w-full"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Date</label>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) =>
+                      setFormData({ ...formData, date: e.target.value })
+                    }
+                    className="form-input w-full"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="form-label">Location (optional)</label>
+                  <input
+                    type="text"
+                    value={formData.location}
+                    onChange={(e) =>
+                      setFormData({ ...formData, location: e.target.value })
+                    }
+                    placeholder="e.g., Newton's Taekwondo Center"
+                    className="form-input w-full"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="form-label">Date</label>
-                <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date: e.target.value })
-                  }
-                  className="form-input w-full"
-                  required
-                />
-              </div>
-              <div>
-                <label className="form-label">Location (optional)</label>
-                <input
-                  type="text"
-                  value={formData.location}
-                  onChange={(e) =>
-                    setFormData({ ...formData, location: e.target.value })
-                  }
-                  placeholder="e.g., Newton's Taekwondo Center"
-                  className="form-input w-full"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
+              <div className="modal-footer">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="btn btn-secondary"
+                  className="btn btn-secondary w-full sm:w-auto"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createMutation.isPending}
-                  className="btn btn-primary"
+                  className="btn btn-primary w-full sm:w-auto"
                 >
                   {createMutation.isPending ? 'Creating...' : 'Create'}
                 </button>

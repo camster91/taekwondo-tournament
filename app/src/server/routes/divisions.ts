@@ -2,6 +2,13 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { autoCategorize, previewCategorization, type CategorizationConfig } from '../services/categorization-engine.js';
+import { Errors } from '../utils/errors.js';
+import {
+  checkDataLoss,
+  validateTournamentState,
+  backupDivisionState,
+  saveBackup,
+} from '../services/backup-recovery.js';
 
 const router = Router();
 
@@ -106,28 +113,59 @@ router.post('/tournament/:tournamentId/preview', async (req: Request, res: Respo
   res.json(preview);
 });
 
+// Check if regenerating divisions would lose data
+router.get('/tournament/:tournamentId/check-data-loss', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = getParam(req.params.tournamentId);
+
+  const dataLoss = await checkDataLoss(prisma, tournamentId, 'regenerate_divisions');
+  res.json(dataLoss);
+});
+
 // Auto-generate divisions for tournament
 router.post('/tournament/:tournamentId/auto-generate', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { config } = req.body;
+  const tournamentId = getParam(req.params.tournamentId);
+  const { config, force = false } = req.body;
 
   const tournament = await prisma.tournament.findUnique({
-    where: { id: getParam(req.params.tournamentId) },
+    where: { id: tournamentId },
   });
 
   if (!tournament) {
-    return res.status(404).json({ error: 'Tournament not found' });
+    throw Errors.tournamentNotFound(tournamentId);
   }
+
+  // Validate state
+  const validation = await validateTournamentState(prisma, tournamentId, 'has_registrations');
+  if (!validation.valid) {
+    throw Errors.noRegistrations(tournament.name);
+  }
+
+  // Check for data loss unless forced
+  if (!force) {
+    const dataLoss = await checkDataLoss(prisma, tournamentId, 'regenerate_divisions');
+    if (dataLoss.wouldLoseData) {
+      return res.status(409).json({
+        error: 'Operation would cause data loss',
+        code: 'DATA_LOSS_WARNING',
+        warning: dataLoss.warning,
+        affectedItems: dataLoss.affectedItems,
+        recoverable: true,
+        suggestion: 'Set "force: true" to proceed anyway, or export data first',
+      });
+    }
+  }
+
+  // Create backup before modifying
+  const backup = await backupDivisionState(prisma, tournamentId);
+  saveBackup(backup);
 
   // Get all registrations with competitor data
   const registrations = await prisma.registration.findMany({
-    where: { tournamentId: getParam(req.params.tournamentId) },
+    where: { tournamentId },
     include: { competitor: true },
   });
-
-  if (registrations.length === 0) {
-    return res.status(400).json({ error: 'No registrations found for this tournament' });
-  }
 
   // Run auto-categorization
   const categorizationConfig: CategorizationConfig = {
@@ -135,9 +173,13 @@ router.post('/tournament/:tournamentId/auto-generate', async (req: Request, res:
     ...config,
   };
 
-  const result = await autoCategorize(prisma, getParam(req.params.tournamentId), registrations, categorizationConfig);
+  const result = await autoCategorize(prisma, tournamentId, registrations, categorizationConfig);
 
-  res.json(result);
+  res.json({
+    ...result,
+    backupAvailable: true,
+    message: `Generated ${result.divisions} divisions with ${result.assignments} assignments`,
+  });
 });
 
 // Create manual division
@@ -218,23 +260,76 @@ router.put('/:id', async (req: Request, res: Response) => {
 // Delete division
 router.delete('/:id', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.id);
+  const force = req.query.force === 'true';
 
-  await prisma.division.delete({
-    where: { id: getParam(req.params.id) },
+  const division = await prisma.division.findUnique({
+    where: { id: divisionId },
+    include: {
+      bracket: {
+        include: {
+          matches: { where: { status: { in: ['completed', 'in_progress'] } } },
+        },
+      },
+    },
   });
 
-  res.status(204).send();
+  if (!division) {
+    throw Errors.divisionNotFound(divisionId);
+  }
+
+  // Check if bracket has results
+  if (!force && division.bracket && division.bracket.matches.length > 0) {
+    return res.status(409).json({
+      error: 'Division has match results',
+      code: 'DIVISION_HAS_RESULTS',
+      warning: `Division "${division.name}" has ${division.bracket.matches.length} completed match(es)`,
+      recoverable: true,
+      suggestion: 'Add ?force=true to delete anyway',
+    });
+  }
+
+  await prisma.division.delete({
+    where: { id: divisionId },
+  });
+
+  res.json({ deleted: true, name: division.name });
 });
 
 // Clear all divisions for a tournament
 router.delete('/tournament/:tournamentId/all', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = getParam(req.params.tournamentId);
+  const force = req.query.force === 'true';
 
-  await prisma.division.deleteMany({
-    where: { tournamentId: getParam(req.params.tournamentId) },
+  // Check for data loss unless forced
+  if (!force) {
+    const dataLoss = await checkDataLoss(prisma, tournamentId, 'delete_divisions');
+    if (dataLoss.wouldLoseData) {
+      return res.status(409).json({
+        error: 'Operation would cause data loss',
+        code: 'DATA_LOSS_WARNING',
+        warning: dataLoss.warning,
+        affectedItems: dataLoss.affectedItems,
+        recoverable: true,
+        suggestion: 'Add ?force=true to proceed anyway',
+      });
+    }
+  }
+
+  // Create backup before deleting
+  const backup = await backupDivisionState(prisma, tournamentId);
+  saveBackup(backup);
+
+  const result = await prisma.division.deleteMany({
+    where: { tournamentId },
   });
 
-  res.status(204).send();
+  res.json({
+    deleted: result.count,
+    backupAvailable: true,
+    message: `Deleted ${result.count} division(s)`,
+  });
 });
 
 // Assign competitor to division
