@@ -302,7 +302,7 @@ Comprehensive results display and statistics.
 - [x] Results PDF (print-ready)
 - [x] Excel with all data (multi-sheet workbook)
 - [x] CSV for data analysis (school standings, results by division, results by competitor)
-- [ ] School-specific reports
+- [x] School-specific reports (PDF with medal summary and placements)
 
 ---
 

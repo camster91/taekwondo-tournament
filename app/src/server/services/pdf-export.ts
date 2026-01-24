@@ -712,6 +712,197 @@ export function generateBatchCertificatesPDF(
   return doc;
 }
 
+export interface SchoolReportData {
+  schoolName: string;
+  tournament: TournamentInfo;
+  placements: Array<{
+    competitorName: string;
+    divisionName: string;
+    eventType: string;
+    place: number;
+  }>;
+  summary: {
+    gold: number;
+    silver: number;
+    bronze: number;
+    total: number;
+  };
+}
+
+/**
+ * Generates a school-specific results PDF
+ */
+export function generateSchoolReportPDF(data: SchoolReportData): jsPDF {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'letter',
+  });
+
+  let currentY = MARGIN;
+
+  // Header with school name
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100);
+  doc.text('SCHOOL RESULTS REPORT', PAGE_WIDTH / 2, currentY, { align: 'center' });
+  currentY += 25;
+
+  doc.setFontSize(24);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0);
+  doc.text(data.schoolName, PAGE_WIDTH / 2, currentY, { align: 'center' });
+  currentY += 30;
+
+  // Tournament info
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.tournament.name, PAGE_WIDTH / 2, currentY, { align: 'center' });
+  currentY += 15;
+
+  doc.setFontSize(10);
+  doc.text(data.tournament.date, PAGE_WIDTH / 2, currentY, { align: 'center' });
+  if (data.tournament.location) {
+    currentY += 12;
+    doc.text(data.tournament.location, PAGE_WIDTH / 2, currentY, { align: 'center' });
+  }
+  currentY += 30;
+
+  // Medal summary box
+  doc.setFillColor(245, 245, 245);
+  doc.roundedRect(MARGIN, currentY, CONTENT_WIDTH, 60, 5, 5, 'F');
+
+  const medalBoxWidth = CONTENT_WIDTH / 4;
+  const medalY = currentY + 20;
+
+  // Gold
+  doc.setFontSize(24);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(218, 165, 32);
+  doc.text(String(data.summary.gold), MARGIN + medalBoxWidth / 2, medalY, { align: 'center' });
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text('Gold', MARGIN + medalBoxWidth / 2, medalY + 18, { align: 'center' });
+
+  // Silver
+  doc.setFontSize(24);
+  doc.setTextColor(150, 150, 150);
+  doc.text(String(data.summary.silver), MARGIN + medalBoxWidth * 1.5, medalY, { align: 'center' });
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text('Silver', MARGIN + medalBoxWidth * 1.5, medalY + 18, { align: 'center' });
+
+  // Bronze
+  doc.setFontSize(24);
+  doc.setTextColor(205, 127, 50);
+  doc.text(String(data.summary.bronze), MARGIN + medalBoxWidth * 2.5, medalY, { align: 'center' });
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text('Bronze', MARGIN + medalBoxWidth * 2.5, medalY + 18, { align: 'center' });
+
+  // Total
+  doc.setFontSize(24);
+  doc.setTextColor(0);
+  doc.text(String(data.summary.total), MARGIN + medalBoxWidth * 3.5, medalY, { align: 'center' });
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text('Total', MARGIN + medalBoxWidth * 3.5, medalY + 18, { align: 'center' });
+
+  currentY += 80;
+
+  // Results table header
+  doc.setFillColor(50, 50, 50);
+  doc.rect(MARGIN, currentY, CONTENT_WIDTH, 25, 'F');
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255);
+  doc.text('Place', MARGIN + 10, currentY + 17);
+  doc.text('Competitor', MARGIN + 70, currentY + 17);
+  doc.text('Division', MARGIN + 230, currentY + 17);
+  doc.text('Event', MARGIN + 450, currentY + 17);
+
+  currentY += 25;
+
+  // Results rows
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(0);
+
+  // Sort by place, then by division
+  const sortedPlacements = [...data.placements].sort((a, b) => {
+    if (a.place !== b.place) return a.place - b.place;
+    return a.divisionName.localeCompare(b.divisionName);
+  });
+
+  for (const p of sortedPlacements) {
+    // Check if we need a new page
+    if (currentY > PAGE_HEIGHT - 60) {
+      doc.addPage();
+      currentY = MARGIN;
+
+      // Repeat header on new page
+      doc.setFillColor(50, 50, 50);
+      doc.rect(MARGIN, currentY, CONTENT_WIDTH, 25, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(255);
+      doc.text('Place', MARGIN + 10, currentY + 17);
+      doc.text('Competitor', MARGIN + 70, currentY + 17);
+      doc.text('Division', MARGIN + 230, currentY + 17);
+      doc.text('Event', MARGIN + 450, currentY + 17);
+      currentY += 25;
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0);
+    }
+
+    // Alternate row colors
+    if (sortedPlacements.indexOf(p) % 2 === 0) {
+      doc.setFillColor(250, 250, 250);
+      doc.rect(MARGIN, currentY, CONTENT_WIDTH, 22, 'F');
+    }
+
+    const placeText = p.place === 1 ? '1st' :
+                      p.place === 2 ? '2nd' :
+                      p.place === 3 ? '3rd' : `${p.place}th`;
+
+    // Place with medal color
+    const medalColor = p.place === 1 ? [218, 165, 32] :
+                       p.place === 2 ? [150, 150, 150] :
+                       p.place === 3 ? [205, 127, 50] :
+                       [100, 100, 100];
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(medalColor[0], medalColor[1], medalColor[2]);
+    doc.text(placeText, MARGIN + 10, currentY + 15);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0);
+    doc.text(p.competitorName, MARGIN + 70, currentY + 15);
+
+    // Truncate long division names
+    const maxDivLen = 35;
+    const divName = p.divisionName.length > maxDivLen
+      ? p.divisionName.substring(0, maxDivLen) + '...'
+      : p.divisionName;
+    doc.text(divName, MARGIN + 230, currentY + 15);
+
+    doc.text(p.eventType.charAt(0).toUpperCase() + p.eventType.slice(1), MARGIN + 450, currentY + 15);
+
+    currentY += 22;
+  }
+
+  // Footer
+  doc.setFontSize(8);
+  doc.setTextColor(150);
+  doc.text(
+    `Generated: ${new Date().toLocaleDateString()}`,
+    PAGE_WIDTH - MARGIN,
+    PAGE_HEIGHT - 20,
+    { align: 'right' }
+  );
+
+  return doc;
+}
+
 export function generateBatchBracketsPDF(
   tournament: TournamentInfo,
   brackets: Array<{ division: DivisionInfo; matches: BracketMatch[] }>,
