@@ -1,10 +1,37 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule } from '../services/schedule-generator.js';
+import { validateRequest } from '../middleware/validate.js';
 
 const router = Router();
+
+// Validation schemas
+const tournamentCreateSchema = z.object({
+  name: z.string().min(1, 'Tournament name is required').max(200),
+  date: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' }),
+  location: z.string().max(300).optional().nullable(),
+  settings: z.record(z.string(), z.unknown()).optional(),
+});
+
+const tournamentUpdateSchema = tournamentCreateSchema.partial().extend({
+  status: z.enum(['draft', 'active', 'completed']).optional(),
+});
+
+const registrationSchema = z.object({
+  competitorId: z.string().min(1, 'Competitor ID is required'),
+  patterns: z.boolean().optional(),
+  sparring: z.boolean().optional(),
+  weightAtRegistration: z.number().positive().optional(),
+});
+
+const bulkRegistrationSchema = z.object({
+  competitorIds: z.array(z.string()).min(1, 'At least one competitor required'),
+  patterns: z.boolean().optional(),
+  sparring: z.boolean().optional(),
+});
 
 // Helper to safely get string param
 const getParam = (param: string | string[] | undefined): string => {
@@ -56,7 +83,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // Create tournament
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', validateRequest(tournamentCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, settings } = req.body;
 
@@ -74,7 +101,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // Update tournament
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, status, settings } = req.body;
 
@@ -128,7 +155,7 @@ router.get('/:id/registrations', async (req: Request, res: Response) => {
 });
 
 // Register competitor to tournament
-router.post('/:id/registrations', async (req: Request, res: Response) => {
+router.post('/:id/registrations', validateRequest(registrationSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { competitorId, patterns, sparring, weightAtRegistration } = req.body;
 
@@ -170,7 +197,7 @@ router.post('/:id/registrations', async (req: Request, res: Response) => {
 });
 
 // Bulk register competitors
-router.post('/:id/registrations/bulk', async (req: Request, res: Response) => {
+router.post('/:id/registrations/bulk', validateRequest(bulkRegistrationSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { competitorIds, patterns, sparring } = req.body;
 
