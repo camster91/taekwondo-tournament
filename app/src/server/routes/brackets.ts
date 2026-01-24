@@ -9,6 +9,7 @@ import {
   generateResultsPDF,
   generateCertificatePDF,
   generateBatchCertificatesPDF,
+  generateSchoolReportPDF,
   type BracketMatch,
   type DivisionInfo,
   type TournamentInfo,
@@ -727,6 +728,107 @@ router.get('/tournament/:tournamentId/certificates', async (req: Request, res: R
   res.setHeader(
     'Content-Disposition',
     `attachment; filename="${tournament.name.replace(/[^a-z0-9]/gi, '_')}_certificates${placeSuffix}.pdf"`
+  );
+  res.send(Buffer.from(pdfBuffer));
+});
+
+// Generate school-specific results report
+router.get('/tournament/:tournamentId/school-report', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const schoolName = req.query.school as string;
+
+  if (!schoolName) {
+    return res.status(400).json({ error: 'School name is required' });
+  }
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: getParam(req.params.tournamentId) },
+    include: {
+      divisions: {
+        include: {
+          bracket: true,
+        },
+        orderBy: [{ eventType: 'asc' }, { beltLevel: 'asc' }, { gender: 'asc' }, { displayOrder: 'asc' }],
+      },
+    },
+  });
+
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  const tournamentInfo: TournamentInfo = {
+    name: tournament.name,
+    date: tournament.date.toLocaleDateString(),
+    location: tournament.location,
+  };
+
+  const placements: Array<{
+    competitorName: string;
+    divisionName: string;
+    eventType: string;
+    place: number;
+  }> = [];
+
+  let gold = 0;
+  let silver = 0;
+  let bronze = 0;
+
+  for (const division of tournament.divisions as any[]) {
+    if (!division.bracket) continue;
+
+    const divPlacements = await getBracketPlacements(prisma, division.bracket.id);
+
+    for (const placement of divPlacements) {
+      // Only include 1st, 2nd, 3rd place
+      if (placement.place > 3) continue;
+
+      const registration = await prisma.registration.findUnique({
+        where: { id: placement.competitorId },
+        include: { competitor: true },
+      });
+
+      if (!registration) continue;
+
+      // Check if this competitor belongs to the requested school
+      const competitorSchool = registration.competitor.schoolDojang || 'Independent';
+      if (competitorSchool !== schoolName) continue;
+
+      placements.push({
+        competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+        divisionName: division.name,
+        eventType: division.eventType,
+        place: placement.place,
+      });
+
+      if (placement.place === 1) gold++;
+      else if (placement.place === 2) silver++;
+      else if (placement.place === 3) bronze++;
+    }
+  }
+
+  if (placements.length === 0) {
+    return res.status(404).json({ error: `No medal placements found for ${schoolName}` });
+  }
+
+  const pdf = generateSchoolReportPDF({
+    schoolName,
+    tournament: tournamentInfo,
+    placements,
+    summary: {
+      gold,
+      silver,
+      bronze,
+      total: gold + silver + bronze,
+    },
+  });
+
+  const pdfBuffer = pdf.output('arraybuffer');
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${schoolName.replace(/[^a-z0-9]/gi, '_')}_results.pdf"`
   );
   res.send(Buffer.from(pdfBuffer));
 });

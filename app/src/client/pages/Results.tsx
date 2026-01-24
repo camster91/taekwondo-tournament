@@ -688,7 +688,18 @@ export default function Results() {
             {/* School Detail */}
             {selectedSchool && (
               <div className="mt-4 bg-white rounded-lg shadow p-4">
-                <h3 className="font-semibold text-lg mb-4">{selectedSchool} - All Placements</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-lg">{selectedSchool} - All Placements</h3>
+                  <a
+                    href={`/api/brackets/tournament/${tournamentId}/school-report?school=${encodeURIComponent(selectedSchool)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-secondary text-sm flex items-center"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Report
+                  </a>
+                </div>
                 <div className="space-y-2">
                   {filteredDivisions?.map((division) =>
                     division.bracket?.placements
