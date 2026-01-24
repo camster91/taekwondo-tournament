@@ -44,18 +44,22 @@ model Tournament {
   registrations Registration[]
   divisions     Division[]
   weightClasses WeightClass[]
+  userAccess    UserTournamentAccess[]
 }
 
 // Competitor-Tournament registration link
 model Registration {
-  id                   String   @id @default(uuid())
+  id                   String    @id @default(uuid())
   tournamentId         String
   competitorId         String
-  patterns             Boolean  @default(false)
-  sparring             Boolean  @default(false)
-  weightAtRegistration Float?   // Weight at time of registration
-  ageAtTournament      Int?     // Calculated age at tournament date
-  createdAt            DateTime @default(now())
+  patterns             Boolean   @default(false)
+  sparring             Boolean   @default(false)
+  weightAtRegistration Float?    // Weight at time of registration
+  ageAtTournament      Int?      // Calculated age at tournament date
+  checkedIn            Boolean   @default(false)
+  checkInTime          DateTime?
+  checkInWeight        Float?    // Weight at check-in (for verification)
+  createdAt            DateTime  @default(now())
 
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   competitor  Competitor           @relation(fields: [competitorId], references: [id])
@@ -163,5 +167,37 @@ model WeightClass {
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
+  @@index([tournamentId])
+}
+
+// User authentication
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         String   @default("viewer") // admin, director, scorekeeper, viewer
+  isActive     Boolean  @default(true)
+  lastLogin    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Tournament-specific permissions
+  tournamentAccess UserTournamentAccess[]
+}
+
+// Tournament-specific user access
+model UserTournamentAccess {
+  id           String   @id @default(uuid())
+  userId       String
+  tournamentId String
+  role         String   // director, scorekeeper, viewer
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tournamentId])
   @@index([tournamentId])
 }

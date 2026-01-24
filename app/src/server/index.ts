@@ -9,6 +9,8 @@ import competitorsRouter from './routes/competitors.js';
 import tournamentsRouter from './routes/tournaments.js';
 import divisionsRouter from './routes/divisions.js';
 import bracketsRouter from './routes/brackets.js';
+import authRouter from './routes/auth.js';
+import publicRouter from './routes/public.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,13 +28,15 @@ app.use(express.json({ limit: '50mb' }));
 app.locals.prisma = prisma;
 
 // API Routes
+app.use('/api/auth', authRouter);
+app.use('/api/public', publicRouter);
 app.use('/api/competitors', competitorsRouter);
 app.use('/api/tournaments', tournamentsRouter);
 app.use('/api/divisions', divisionsRouter);
 app.use('/api/brackets', bracketsRouter);
 
 // Health check
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
@@ -42,7 +46,7 @@ if (isProduction) {
   app.use(express.static(distPath));
 
   // Handle client-side routing - serve index.html for all non-API routes
-  app.get('*', (req, res) => {
+  app.get('*', (req: Request, res: Response) => {
     if (!req.path.startsWith('/api')) {
       res.sendFile(path.join(distPath, 'index.html'));
     }

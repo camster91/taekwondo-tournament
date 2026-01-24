@@ -1,9 +1,28 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
 import { importFromExcel } from '../services/excel-import.js';
+import { validateRequest } from '../middleware/validate.js';
 
 const router = Router();
+
+// Validation schemas
+const competitorCreateSchema = z.object({
+  firstName: z.string().min(1, 'First name is required').max(100),
+  lastName: z.string().min(1, 'Last name is required').max(100),
+  gender: z.enum(['male', 'female']),
+  dateOfBirth: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' }),
+  belt: z.string().min(1, 'Belt is required'),
+  beltStripe: z.number().int().min(0).max(10).optional().nullable(),
+  danRank: z.number().int().min(0).max(10).optional().nullable(),
+  heightInches: z.number().positive().optional().nullable(),
+  weightLbs: z.number().positive().optional().nullable(),
+  schoolDojang: z.string().max(200).optional().nullable(),
+  specialNeeds: z.string().max(500).optional().nullable(),
+});
+
+const competitorUpdateSchema = competitorCreateSchema.partial();
 
 // Helper to safely get string param
 const getParam = (param: string | string[] | undefined): string => {
@@ -68,7 +87,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // Create competitor
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', validateRequest(competitorCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const {
     firstName,
@@ -104,7 +123,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // Update competitor
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', validateRequest(competitorUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const {
     firstName,
