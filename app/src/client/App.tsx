@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import {
   Trophy,
@@ -6,6 +7,8 @@ import {
   UserPlus,
   LogOut,
   Shield,
+  Menu,
+  X,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -42,11 +45,42 @@ function classNames(...classes: string[]) {
 function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Mobile header */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-gray-900 border-b border-gray-800">
+        <div className="flex items-center justify-between h-14 px-4">
+          <div className="flex items-center">
+            <Trophy className="h-6 w-6 text-primary-500" />
+            <span className="ml-2 text-lg font-bold text-white">TKD Manager</span>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-2 text-gray-400 hover:text-white"
+          >
+            {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/50"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 z-50 w-64 bg-gray-900">
+      <div
+        className={classNames(
+          'fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 transform transition-transform duration-200 ease-in-out',
+          'lg:translate-x-0',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
         <div className="flex h-16 items-center justify-center border-b border-gray-800">
           <Trophy className="h-8 w-8 text-primary-500" />
           <span className="ml-2 text-xl font-bold text-white">TKD Manager</span>
@@ -61,6 +95,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.name}
                 to={item.href}
+                onClick={() => setSidebarOpen(false)}
                 className={classNames(
                   isActive
                     ? 'bg-gray-800 text-white'
@@ -87,6 +122,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
               </div>
               <Link
                 to="/admin/users"
+                onClick={() => setSidebarOpen(false)}
                 className={classNames(
                   location.pathname === '/admin/users'
                     ? 'bg-gray-800 text-white'
@@ -147,8 +183,8 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Main content */}
-      <div className="pl-64">
-        <main className="py-6 px-8">{children}</main>
+      <div className="lg:pl-64 pt-14 lg:pt-0">
+        <main className="py-6 px-4 lg:px-8">{children}</main>
       </div>
     </div>
   );

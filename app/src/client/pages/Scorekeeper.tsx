@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -11,6 +11,7 @@ import {
   Clock,
   Users,
   Award,
+  Keyboard,
 } from 'lucide-react';
 
 interface Match {
@@ -57,6 +58,7 @@ export default function Scorekeeper() {
   const [resultType, setResultType] = useState<ResultType>('win');
   const [notes, setNotes] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
 
   // Fetch divisions with brackets
   const { data: divisions, isLoading } = useQuery<Division[]>({
@@ -144,6 +146,92 @@ export default function Scorekeeper() {
     if (!competitor) return '';
     return competitor.competitor.schoolDojang || 'No School';
   };
+
+  // Keyboard shortcuts
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // In confirmation modal
+      if (showConfirm) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleSubmit();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setShowConfirm(false);
+        }
+        return;
+      }
+
+      // Match scoring view shortcuts
+      if (selectedDivision && currentMatch) {
+        switch (e.key) {
+          case '1':
+          case 'ArrowUp':
+            e.preventDefault();
+            if (currentMatch.competitor1) {
+              setSelectedWinner(currentMatch.competitor1.id);
+            }
+            break;
+          case '2':
+          case 'ArrowDown':
+            e.preventDefault();
+            if (currentMatch.competitor2) {
+              setSelectedWinner(currentMatch.competitor2.id);
+            }
+            break;
+          case 'ArrowLeft':
+            e.preventDefault();
+            setCurrentMatchIndex((prev) => Math.max(0, prev - 1));
+            break;
+          case 'ArrowRight':
+            e.preventDefault();
+            setCurrentMatchIndex((prev) => Math.min(readyMatches.length - 1, prev + 1));
+            break;
+          case 'Enter':
+            e.preventDefault();
+            if (selectedWinner) {
+              setShowConfirm(true);
+            }
+            break;
+          case 'Escape':
+            e.preventDefault();
+            setSelectedDivision(null);
+            break;
+          case 'w':
+            e.preventDefault();
+            setResultType('win');
+            break;
+          case 'd':
+            e.preventDefault();
+            setResultType('dq');
+            break;
+          case 'f':
+            e.preventDefault();
+            setResultType('forfeit');
+            break;
+          case 'i':
+            e.preventDefault();
+            setResultType('injury');
+            break;
+          case '?':
+            e.preventDefault();
+            setShowKeyboardHelp((prev) => !prev);
+            break;
+        }
+      }
+    },
+    [showConfirm, selectedDivision, currentMatch, selectedWinner, readyMatches.length]
+  );
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   // Division selector view
   if (!selectedDivision) {
@@ -245,7 +333,13 @@ export default function Scorekeeper() {
               Match {currentMatchIndex + 1} of {readyMatches.length}
             </div>
           </div>
-          <div className="w-16" />
+          <button
+            onClick={() => setShowKeyboardHelp(true)}
+            className="flex items-center text-gray-400 hover:text-white text-sm"
+            title="Keyboard shortcuts (?)"
+          >
+            <Keyboard className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
@@ -447,16 +541,114 @@ export default function Scorekeeper() {
                 onClick={() => setShowConfirm(false)}
                 className="flex-1 py-3 bg-gray-600 hover:bg-gray-500 rounded-lg font-semibold"
               >
-                Cancel
+                Cancel <span className="text-xs text-gray-400">(Esc)</span>
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={recordResult.isPending}
                 className="flex-1 py-3 bg-green-600 hover:bg-green-500 rounded-lg font-semibold"
               >
-                {recordResult.isPending ? 'Saving...' : 'Confirm'}
+                {recordResult.isPending ? 'Saving...' : 'Confirm'}{' '}
+                <span className="text-xs text-green-200">(Enter)</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Keyboard Shortcuts Help Modal */}
+      {showKeyboardHelp && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold flex items-center">
+                <Keyboard className="h-5 w-5 mr-2" />
+                Keyboard Shortcuts
+              </h3>
+              <button
+                onClick={() => setShowKeyboardHelp(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <div className="text-sm text-gray-400 mb-2">Select Winner</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                    <span>Competitor 1</span>
+                    <kbd className="bg-gray-600 px-2 py-1 rounded text-xs">1</kbd>
+                  </div>
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                    <span>Competitor 2</span>
+                    <kbd className="bg-gray-600 px-2 py-1 rounded text-xs">2</kbd>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm text-gray-400 mb-2">Navigation</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                    <span>Previous match</span>
+                    <kbd className="bg-gray-600 px-2 py-1 rounded text-xs">←</kbd>
+                  </div>
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                    <span>Next match</span>
+                    <kbd className="bg-gray-600 px-2 py-1 rounded text-xs">→</kbd>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm text-gray-400 mb-2">Result Type</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                    <span>Win</span>
+                    <kbd className="bg-gray-600 px-2 py-1 rounded text-xs">W</kbd>
+                  </div>
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                    <span>DQ</span>
+                    <kbd className="bg-gray-600 px-2 py-1 rounded text-xs">D</kbd>
+                  </div>
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                    <span>Forfeit</span>
+                    <kbd className="bg-gray-600 px-2 py-1 rounded text-xs">F</kbd>
+                  </div>
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                    <span>Injury</span>
+                    <kbd className="bg-gray-600 px-2 py-1 rounded text-xs">I</kbd>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm text-gray-400 mb-2">Actions</div>
+                <div className="grid grid-cols-1 gap-2">
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                    <span>Submit / Confirm</span>
+                    <kbd className="bg-gray-600 px-2 py-1 rounded text-xs">Enter</kbd>
+                  </div>
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                    <span>Cancel / Back</span>
+                    <kbd className="bg-gray-600 px-2 py-1 rounded text-xs">Esc</kbd>
+                  </div>
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
+                    <span>Show this help</span>
+                    <kbd className="bg-gray-600 px-2 py-1 rounded text-xs">?</kbd>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowKeyboardHelp(false)}
+              className="w-full mt-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-semibold"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
