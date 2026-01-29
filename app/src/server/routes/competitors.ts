@@ -12,7 +12,7 @@ const router = Router();
 const competitorCreateSchema = z.object({
   firstName: z.string().min(1, 'First name is required').max(100),
   lastName: z.string().min(1, 'Last name is required').max(100),
-  gender: z.enum(['male', 'female']),
+  gender: z.enum(['M', 'F']),
   dateOfBirth: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' }),
   belt: z.string().min(1, 'Belt is required'),
   beltStripe: z.number().int().min(0).max(10).optional().nullable(),
@@ -78,6 +78,33 @@ router.get('/', async (req: Request, res: Response) => {
   ]);
 
   res.json({ competitors, total });
+});
+
+// Get unique schools for filtering
+// NOTE: Must be defined BEFORE /:id route to avoid being matched as an ID
+router.get('/meta/schools', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const schools = await prisma.competitor.findMany({
+    select: { schoolDojang: true },
+    distinct: ['schoolDojang'],
+    where: { schoolDojang: { not: null } },
+    orderBy: { schoolDojang: 'asc' },
+  });
+
+  res.json(schools.map((s) => s.schoolDojang).filter(Boolean));
+});
+
+// Get unique belts for filtering
+// NOTE: Must be defined BEFORE /:id route to avoid being matched as an ID
+router.get('/meta/belts', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const belts = await prisma.competitor.findMany({
+    select: { belt: true },
+    distinct: ['belt'],
+    orderBy: { belt: 'asc' },
+  });
+
+  res.json(belts.map((b) => b.belt));
 });
 
 // Get single competitor
@@ -195,31 +222,6 @@ router.post('/import', async (req: Request, res: Response) => {
 
   const result = await importFromExcel(prisma, data, columnMapping);
   res.json(result);
-});
-
-// Get unique schools for filtering
-router.get('/meta/schools', async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const schools = await prisma.competitor.findMany({
-    select: { schoolDojang: true },
-    distinct: ['schoolDojang'],
-    where: { schoolDojang: { not: null } },
-    orderBy: { schoolDojang: 'asc' },
-  });
-
-  res.json(schools.map((s) => s.schoolDojang).filter(Boolean));
-});
-
-// Get unique belts for filtering
-router.get('/meta/belts', async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const belts = await prisma.competitor.findMany({
-    select: { belt: true },
-    distinct: ['belt'],
-    orderBy: { belt: 'asc' },
-  });
-
-  res.json(belts.map((b) => b.belt));
 });
 
 export default router;
