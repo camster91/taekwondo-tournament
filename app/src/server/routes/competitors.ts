@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { importFromExcel } from '../services/excel-import.js';
 import { generateImportTemplate, getDefaultColumnMapping } from '../services/excel-template.js';
 import { validateRequest } from '../middleware/validate.js';
+import { authenticate, optionalAuthenticate } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -12,7 +13,7 @@ const router = Router();
 const competitorCreateSchema = z.object({
   firstName: z.string().min(1, 'First name is required').max(100),
   lastName: z.string().min(1, 'Last name is required').max(100),
-  gender: z.enum(['male', 'female']),
+  gender: z.enum(['M', 'F']),
   dateOfBirth: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' }),
   belt: z.string().min(1, 'Belt is required'),
   beltStripe: z.number().int().min(0).max(10).optional().nullable(),
@@ -80,6 +81,33 @@ router.get('/', async (req: Request, res: Response) => {
   res.json({ competitors, total });
 });
 
+// Get unique schools for filtering
+// NOTE: Must be defined BEFORE /:id route to avoid being matched as an ID
+router.get('/meta/schools', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const schools = await prisma.competitor.findMany({
+    select: { schoolDojang: true },
+    distinct: ['schoolDojang'],
+    where: { schoolDojang: { not: null } },
+    orderBy: { schoolDojang: 'asc' },
+  });
+
+  res.json(schools.map((s) => s.schoolDojang).filter(Boolean));
+});
+
+// Get unique belts for filtering
+// NOTE: Must be defined BEFORE /:id route to avoid being matched as an ID
+router.get('/meta/belts', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const belts = await prisma.competitor.findMany({
+    select: { belt: true },
+    distinct: ['belt'],
+    orderBy: { belt: 'asc' },
+  });
+
+  res.json(belts.map((b) => b.belt));
+});
+
 // Get single competitor
 router.get('/:id', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
@@ -101,8 +129,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   res.json(competitor);
 });
 
-// Create competitor
-router.post('/', validateRequest(competitorCreateSchema), async (req: Request, res: Response) => {
+// Create competitor (requires authentication)
+router.post('/', authenticate, validateRequest(competitorCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const {
     firstName,
@@ -137,8 +165,8 @@ router.post('/', validateRequest(competitorCreateSchema), async (req: Request, r
   res.status(201).json(competitor);
 });
 
-// Update competitor
-router.put('/:id', validateRequest(competitorUpdateSchema), async (req: Request, res: Response) => {
+// Update competitor (requires authentication)
+router.put('/:id', authenticate, validateRequest(competitorUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const {
     firstName,
@@ -174,8 +202,8 @@ router.put('/:id', validateRequest(competitorUpdateSchema), async (req: Request,
   res.json(competitor);
 });
 
-// Delete competitor
-router.delete('/:id', async (req: Request, res: Response) => {
+// Delete competitor (requires authentication)
+router.delete('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   await prisma.competitor.delete({
     where: { id: getParam(req.params.id) },
@@ -184,8 +212,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
   res.status(204).send();
 });
 
-// Import from Excel
-router.post('/import', async (req: Request, res: Response) => {
+// Import from Excel (requires authentication)
+router.post('/import', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { data, columnMapping } = req.body;
 
@@ -195,31 +223,6 @@ router.post('/import', async (req: Request, res: Response) => {
 
   const result = await importFromExcel(prisma, data, columnMapping);
   res.json(result);
-});
-
-// Get unique schools for filtering
-router.get('/meta/schools', async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const schools = await prisma.competitor.findMany({
-    select: { schoolDojang: true },
-    distinct: ['schoolDojang'],
-    where: { schoolDojang: { not: null } },
-    orderBy: { schoolDojang: 'asc' },
-  });
-
-  res.json(schools.map((s) => s.schoolDojang).filter(Boolean));
-});
-
-// Get unique belts for filtering
-router.get('/meta/belts', async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const belts = await prisma.competitor.findMany({
-    select: { belt: true },
-    distinct: ['belt'],
-    orderBy: { belt: 'asc' },
-  });
-
-  res.json(belts.map((b) => b.belt));
 });
 
 export default router;

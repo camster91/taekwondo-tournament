@@ -3,6 +3,7 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validate.js';
+import { authenticate } from '../middleware/auth.js';
 import {
   quickFairnessCheck,
   getDivisionFairnessRecommendations,
@@ -66,8 +67,8 @@ router.get('/division/:divisionId/report', async (req: Request, res: Response) =
 });
 
 // POST /api/fairness/matchup/check
-// Quick check fairness between two specific competitors
-router.post('/matchup/check', validateRequest(matchupCheckSchema), async (req: Request, res: Response) => {
+// Quick check fairness between two specific competitors (requires authentication)
+router.post('/matchup/check', authenticate, validateRequest(matchupCheckSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { registration1Id, registration2Id, eventType, tournamentId, ageMin, ageMax } = req.body;
 

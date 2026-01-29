@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -82,8 +83,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   res.json(tournament);
 });
 
-// Create tournament
-router.post('/', validateRequest(tournamentCreateSchema), async (req: Request, res: Response) => {
+// Create tournament (requires authentication)
+router.post('/', authenticate, validateRequest(tournamentCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, settings } = req.body;
 
@@ -100,8 +101,8 @@ router.post('/', validateRequest(tournamentCreateSchema), async (req: Request, r
   res.status(201).json(tournament);
 });
 
-// Update tournament
-router.put('/:id', validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
+// Update tournament (requires authentication)
+router.put('/:id', authenticate, validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, status, settings } = req.body;
 
@@ -119,8 +120,8 @@ router.put('/:id', validateRequest(tournamentUpdateSchema), async (req: Request,
   res.json(tournament);
 });
 
-// Delete tournament
-router.delete('/:id', async (req: Request, res: Response) => {
+// Delete tournament (requires authentication)
+router.delete('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.tournament.delete({
@@ -154,8 +155,8 @@ router.get('/:id/registrations', async (req: Request, res: Response) => {
   res.json(registrations);
 });
 
-// Register competitor to tournament
-router.post('/:id/registrations', validateRequest(registrationSchema), async (req: Request, res: Response) => {
+// Register competitor to tournament (requires authentication)
+router.post('/:id/registrations', authenticate, validateRequest(registrationSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { competitorId, patterns, sparring, weightAtRegistration } = req.body;
 
@@ -196,8 +197,8 @@ router.post('/:id/registrations', validateRequest(registrationSchema), async (re
   res.status(201).json(registration);
 });
 
-// Bulk register competitors
-router.post('/:id/registrations/bulk', validateRequest(bulkRegistrationSchema), async (req: Request, res: Response) => {
+// Bulk register competitors (requires authentication)
+router.post('/:id/registrations/bulk', authenticate, validateRequest(bulkRegistrationSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { competitorIds, patterns, sparring } = req.body;
 
@@ -244,8 +245,8 @@ router.post('/:id/registrations/bulk', validateRequest(bulkRegistrationSchema), 
   res.json({ registered: registrations.length });
 });
 
-// Update registration
-router.put('/:id/registrations/:regId', async (req: Request, res: Response) => {
+// Update registration (requires authentication)
+router.put('/:id/registrations/:regId', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { patterns, sparring, weightAtRegistration } = req.body;
 
@@ -264,8 +265,8 @@ router.put('/:id/registrations/:regId', async (req: Request, res: Response) => {
   res.json(registration);
 });
 
-// Remove registration
-router.delete('/:id/registrations/:regId', async (req: Request, res: Response) => {
+// Remove registration (requires authentication)
+router.delete('/:id/registrations/:regId', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.registration.delete({
@@ -275,8 +276,8 @@ router.delete('/:id/registrations/:regId', async (req: Request, res: Response) =
   res.status(204).send();
 });
 
-// Generate tournament schedule
-router.post('/:id/schedule', async (req: Request, res: Response) => {
+// Generate tournament schedule (requires authentication)
+router.post('/:id/schedule', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const config = req.body.config || {};
 

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
   Upload,
+  Download,
   Search,
   Edit,
   Trash2,
@@ -270,6 +271,10 @@ export default function Competitors() {
     importMutation.mutate({ data: importData, mapping: columnMapping });
   };
 
+  const handleDownloadTemplate = () => {
+    window.location.href = '/api/competitors/template';
+  };
+
   const getBeltColor = (belt: string) => {
     const lower = belt.toLowerCase();
     if (lower.includes('black')) return 'bg-gray-900 text-white';
@@ -300,6 +305,13 @@ export default function Competitors() {
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+          <button
+            onClick={handleDownloadTemplate}
+            className="btn btn-secondary"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Download Template
+          </button>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="btn btn-secondary"
@@ -709,9 +721,18 @@ export default function Competitors() {
               </button>
             </div>
             <div className="modal-body">
-              <p className="text-sm text-gray-600 mb-4">
-                Found {importData?.length} rows. Map the columns below:
-              </p>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm text-gray-600">
+                  Found {importData?.length} rows. Map the columns below:
+                </p>
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="text-sm text-primary-600 hover:text-primary-700 flex items-center"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Get Template
+                </button>
+              </div>
 
               <div className="form-grid">
                 {[
