@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { importFromExcel } from '../services/excel-import.js';
 import { generateImportTemplate, getDefaultColumnMapping } from '../services/excel-template.js';
 import { validateRequest } from '../middleware/validate.js';
+import { authenticate, optionalAuthenticate } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -128,8 +129,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   res.json(competitor);
 });
 
-// Create competitor
-router.post('/', validateRequest(competitorCreateSchema), async (req: Request, res: Response) => {
+// Create competitor (requires authentication)
+router.post('/', authenticate, validateRequest(competitorCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const {
     firstName,
@@ -164,8 +165,8 @@ router.post('/', validateRequest(competitorCreateSchema), async (req: Request, r
   res.status(201).json(competitor);
 });
 
-// Update competitor
-router.put('/:id', validateRequest(competitorUpdateSchema), async (req: Request, res: Response) => {
+// Update competitor (requires authentication)
+router.put('/:id', authenticate, validateRequest(competitorUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const {
     firstName,
@@ -201,8 +202,8 @@ router.put('/:id', validateRequest(competitorUpdateSchema), async (req: Request,
   res.json(competitor);
 });
 
-// Delete competitor
-router.delete('/:id', async (req: Request, res: Response) => {
+// Delete competitor (requires authentication)
+router.delete('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   await prisma.competitor.delete({
     where: { id: getParam(req.params.id) },
@@ -211,8 +212,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
   res.status(204).send();
 });
 
-// Import from Excel
-router.post('/import', async (req: Request, res: Response) => {
+// Import from Excel (requires authentication)
+router.post('/import', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { data, columnMapping } = req.body;
 

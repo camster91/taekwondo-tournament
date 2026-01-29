@@ -14,6 +14,7 @@ import {
   type DivisionInfo,
   type TournamentInfo,
 } from '../services/pdf-export.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -23,8 +24,8 @@ const getParam = (param: string | string[] | undefined): string => {
   return param || '';
 };
 
-// Generate bracket for division
-router.post('/division/:divisionId/generate', async (req: Request, res: Response) => {
+// Generate bracket for division (requires authentication)
+router.post('/division/:divisionId/generate', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { seedingStrategy = 'school_spread' } = req.body;
 
@@ -135,8 +136,8 @@ router.get('/division/:divisionId', async (req: Request, res: Response) => {
   res.json(bracket);
 });
 
-// Update match result
-router.put('/match/:matchId', async (req: Request, res: Response) => {
+// Update match result (requires authentication)
+router.put('/match/:matchId', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { winnerId, score1, score2, status, notes } = req.body;
 
@@ -203,8 +204,8 @@ router.get('/division/:divisionId/placements', async (req: Request, res: Respons
   res.json(placementsWithDetails);
 });
 
-// Swap competitors in a match
-router.post('/match/:matchId/swap', async (req: Request, res: Response) => {
+// Swap competitors in a match (requires authentication)
+router.post('/match/:matchId/swap', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const match = await prisma.match.findUnique({
@@ -230,8 +231,8 @@ router.post('/match/:matchId/swap', async (req: Request, res: Response) => {
   res.json(updated);
 });
 
-// Reset bracket
-router.post('/division/:divisionId/reset', async (req: Request, res: Response) => {
+// Reset bracket (requires authentication)
+router.post('/division/:divisionId/reset', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.bracket.deleteMany({
@@ -241,8 +242,8 @@ router.post('/division/:divisionId/reset', async (req: Request, res: Response) =
   res.status(204).send();
 });
 
-// Generate brackets for all divisions in tournament
-router.post('/tournament/:tournamentId/generate-all', async (req: Request, res: Response) => {
+// Generate brackets for all divisions in tournament (requires authentication)
+router.post('/tournament/:tournamentId/generate-all', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { seedingStrategy = 'school_spread' } = req.body;
 

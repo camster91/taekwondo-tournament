@@ -9,6 +9,7 @@ import {
   backupDivisionState,
   saveBackup,
 } from '../services/backup-recovery.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -76,8 +77,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   res.json(division);
 });
 
-// Preview divisions before generating
-router.post('/tournament/:tournamentId/preview', async (req: Request, res: Response) => {
+// Preview divisions before generating (requires authentication)
+router.post('/tournament/:tournamentId/preview', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { config } = req.body;
 
@@ -122,8 +123,8 @@ router.get('/tournament/:tournamentId/check-data-loss', async (req: Request, res
   res.json(dataLoss);
 });
 
-// Auto-generate divisions for tournament
-router.post('/tournament/:tournamentId/auto-generate', async (req: Request, res: Response) => {
+// Auto-generate divisions for tournament (requires authentication)
+router.post('/tournament/:tournamentId/auto-generate', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
   const { config, force = false } = req.body;
@@ -182,8 +183,8 @@ router.post('/tournament/:tournamentId/auto-generate', async (req: Request, res:
   });
 });
 
-// Create manual division
-router.post('/', async (req: Request, res: Response) => {
+// Create manual division (requires authentication)
+router.post('/', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const {
     tournamentId,
@@ -222,8 +223,8 @@ router.post('/', async (req: Request, res: Response) => {
   res.status(201).json(division);
 });
 
-// Update division
-router.put('/:id', async (req: Request, res: Response) => {
+// Update division (requires authentication)
+router.put('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const {
     name,
@@ -257,8 +258,8 @@ router.put('/:id', async (req: Request, res: Response) => {
   res.json(division);
 });
 
-// Delete division
-router.delete('/:id', async (req: Request, res: Response) => {
+// Delete division (requires authentication)
+router.delete('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.id);
   const force = req.query.force === 'true';
@@ -296,8 +297,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
   res.json({ deleted: true, name: division.name });
 });
 
-// Clear all divisions for a tournament
-router.delete('/tournament/:tournamentId/all', async (req: Request, res: Response) => {
+// Clear all divisions for a tournament (requires authentication)
+router.delete('/tournament/:tournamentId/all', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
   const force = req.query.force === 'true';
@@ -332,8 +333,8 @@ router.delete('/tournament/:tournamentId/all', async (req: Request, res: Respons
   });
 });
 
-// Assign competitor to division
-router.post('/:id/assign', async (req: Request, res: Response) => {
+// Assign competitor to division (requires authentication)
+router.post('/:id/assign', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { registrationId, seedPosition, manualOverride } = req.body;
 
@@ -354,8 +355,8 @@ router.post('/:id/assign', async (req: Request, res: Response) => {
   res.status(201).json(assignment);
 });
 
-// Remove competitor from division
-router.delete('/:id/assign/:assignmentId', async (req: Request, res: Response) => {
+// Remove competitor from division (requires authentication)
+router.delete('/:id/assign/:assignmentId', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.divisionAssignment.delete({
@@ -365,8 +366,8 @@ router.delete('/:id/assign/:assignmentId', async (req: Request, res: Response) =
   res.status(204).send();
 });
 
-// Move competitor between divisions
-router.post('/:id/move', async (req: Request, res: Response) => {
+// Move competitor between divisions (requires authentication)
+router.post('/:id/move', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { assignmentId, toDivisionId } = req.body;
 
@@ -386,8 +387,8 @@ router.post('/:id/move', async (req: Request, res: Response) => {
   res.json(assignment);
 });
 
-// Split division
-router.post('/:id/split', async (req: Request, res: Response) => {
+// Split division (requires authentication)
+router.post('/:id/split', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { splitCount = 2 } = req.body;
 
