@@ -23,6 +23,7 @@ import Schedule from './pages/Schedule';
 import BracketEditor from './pages/BracketEditor';
 import PublicRegister from './pages/PublicRegister';
 import Login from './pages/Login';
+import StaffRegister from './pages/StaffRegister';
 import Scorekeeper from './pages/Scorekeeper';
 import CheckIn from './pages/CheckIn';
 import PublicScoreboard from './pages/PublicScoreboard';
@@ -198,6 +199,7 @@ function AppRoutes() {
   const isPublicPage =
     location.pathname.startsWith('/register') ||
     location.pathname.startsWith('/login') ||
+    location.pathname.startsWith('/signup') ||
     location.pathname.startsWith('/scorekeeper') ||
     location.pathname.startsWith('/checkin') ||
     location.pathname.startsWith('/display');
@@ -207,6 +209,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/register" element={<PublicRegister />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<StaffRegister />} />
         <Route path="/scorekeeper/:tournamentId" element={<Scorekeeper />} />
         <Route path="/checkin/:tournamentId" element={<CheckIn />} />
         <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
