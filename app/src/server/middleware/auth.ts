@@ -2,9 +2,21 @@ import type { Request, Response, NextFunction } from 'express-serve-static-core'
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 
-// JWT secret - in production, use environment variable
-const JWT_SECRET = process.env.JWT_SECRET || 'tournament-secret-key-change-in-production';
+// JWT secret - REQUIRED in production
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = '7d';
+
+// Validate JWT_SECRET is set in production
+if (process.env.NODE_ENV === 'production' && !JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is required in production');
+  process.exit(1);
+}
+
+// In development, use a default (will show warning)
+const EFFECTIVE_JWT_SECRET = JWT_SECRET || (() => {
+  console.warn('WARNING: Using default JWT secret. Set JWT_SECRET env var for production.');
+  return 'dev-only-secret-do-not-use-in-production';
+})();
 
 export interface JWTPayload {
   userId: string;
@@ -26,7 +38,7 @@ export interface AuthenticatedRequest extends Request {
  * Creates a JWT token for a user
  */
 export function createToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  return jwt.sign(payload, EFFECTIVE_JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
 /**
@@ -34,7 +46,7 @@ export function createToken(payload: JWTPayload): string {
  */
 export function verifyToken(token: string): JWTPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as JWTPayload;
+    return jwt.verify(token, EFFECTIVE_JWT_SECRET) as JWTPayload;
   } catch {
     return null;
   }
@@ -195,4 +207,4 @@ export function requireTournamentAccess(minRole: 'director' | 'scorekeeper' | 'v
   };
 }
 
-export { JWT_SECRET };
+// Note: JWT_SECRET is no longer exported to prevent accidental exposure
