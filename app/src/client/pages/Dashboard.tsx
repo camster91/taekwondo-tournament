@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Trophy, Users, LayoutGrid, Plus, ArrowRight } from 'lucide-react';
+import { Trophy, Users, LayoutGrid, Plus, ArrowRight, School, Calendar, Target } from 'lucide-react';
 
 interface Tournament {
   id: string;
@@ -18,6 +18,29 @@ interface CompetitorsResponse {
   total: number;
 }
 
+interface AnalyticsData {
+  totals: {
+    competitors: number;
+    tournaments: number;
+    matches: number;
+    completedMatches: number;
+    recentRegistrations: number;
+  };
+  beltDistribution: { belt: string; count: number }[];
+  genderDistribution: { gender: string; count: number }[];
+  topSchools: { school: string; count: number }[];
+  ageDistribution: { range: string; count: number }[];
+}
+
+const BELT_COLORS: Record<string, string> = {
+  White: 'bg-gray-100 text-gray-800',
+  Yellow: 'bg-yellow-100 text-yellow-800',
+  Green: 'bg-green-100 text-green-800',
+  Blue: 'bg-blue-100 text-blue-800',
+  Red: 'bg-red-100 text-red-800',
+  Black: 'bg-gray-900 text-white',
+};
+
 export default function Dashboard() {
   const { data: tournaments } = useQuery<Tournament[]>({
     queryKey: ['tournaments'],
@@ -31,6 +54,14 @@ export default function Dashboard() {
     queryKey: ['competitors', 'count'],
     queryFn: async () => {
       const res = await fetch('/api/competitors?limit=1');
+      return res.json();
+    },
+  });
+
+  const { data: analytics } = useQuery<AnalyticsData>({
+    queryKey: ['analytics', 'dashboard'],
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/dashboard');
       return res.json();
     },
   });
@@ -57,6 +88,13 @@ export default function Dashboard() {
       value: tournaments?.reduce((sum, t) => sum + t._count.divisions, 0) || 0,
       icon: LayoutGrid,
       color: 'bg-purple-500',
+    },
+    {
+      name: 'Recent Registrations',
+      value: analytics?.totals.recentRegistrations || 0,
+      icon: Calendar,
+      color: 'bg-orange-500',
+      subtitle: 'Last 30 days',
     },
   ];
 
@@ -95,6 +133,83 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* Analytics Section */}
+      {analytics && (analytics.beltDistribution.length > 0 || analytics.topSchools.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 sm:mb-8">
+          {/* Belt Distribution */}
+          {analytics.beltDistribution.length > 0 && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="text-base font-medium text-gray-900 dark:text-white flex items-center">
+                  <Target className="h-5 w-5 mr-2 text-primary-500" />
+                  Belt Distribution
+                </h3>
+              </div>
+              <div className="card-body">
+                <div className="space-y-3">
+                  {analytics.beltDistribution.map((item) => {
+                    const maxCount = Math.max(...analytics.beltDistribution.map((b) => b.count));
+                    const percentage = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
+                    return (
+                      <div key={item.belt} className="flex items-center gap-3">
+                        <span className={`px-2 py-1 rounded text-xs font-medium w-16 text-center ${BELT_COLORS[item.belt] || 'bg-gray-100'}`}>
+                          {item.belt}
+                        </span>
+                        <div className="flex-1 h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary-500 rounded-full transition-all duration-500"
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-10 text-right">
+                          {item.count}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Top Schools */}
+          {analytics.topSchools.length > 0 && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="text-base font-medium text-gray-900 dark:text-white flex items-center">
+                  <School className="h-5 w-5 mr-2 text-primary-500" />
+                  Top Schools/Dojangs
+                </h3>
+              </div>
+              <div className="card-body">
+                <div className="space-y-2">
+                  {analytics.topSchools.slice(0, 8).map((school, index) => (
+                    <div key={school.school} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                      <div className="flex items-center gap-3">
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                          index === 1 ? 'bg-gray-200 text-gray-700' :
+                          index === 2 ? 'bg-orange-100 text-orange-700' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>
+                          {index + 1}
+                        </span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300 truncate max-w-[180px]">
+                          {school.school}
+                        </span>
+                      </div>
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {school.count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Recent Tournaments */}
       <div className="card">

@@ -11,6 +11,7 @@ import bracketsRouter from './routes/brackets.js';
 import authRouter from './routes/auth.js';
 import publicRouter from './routes/public.js';
 import fairnessRouter from './routes/fairness.js';
+import analyticsRouter from './routes/analytics.js';
 import { isAppError, toApiError } from './utils/errors.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,6 +50,7 @@ app.use('/api/tournaments', tournamentsRouter);
 app.use('/api/divisions', divisionsRouter);
 app.use('/api/brackets', bracketsRouter);
 app.use('/api/fairness', fairnessRouter);
+app.use('/api/analytics', analyticsRouter);
 // Health check
 app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -9,9 +9,12 @@ import {
   Shield,
   Menu,
   X,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Dashboard from './pages/Dashboard';
 import Competitors from './pages/Competitors';
@@ -24,6 +27,8 @@ import BracketEditor from './pages/BracketEditor';
 import PublicRegister from './pages/PublicRegister';
 import Login from './pages/Login';
 import StaffRegister from './pages/StaffRegister';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Scorekeeper from './pages/Scorekeeper';
 import CheckIn from './pages/CheckIn';
 import PublicScoreboard from './pages/PublicScoreboard';
@@ -46,6 +51,7 @@ function classNames(...classes: string[]) {
 function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -153,8 +159,26 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
 
-        {/* User Info */}
+        {/* Theme Toggle & User Info */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800">
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className="w-full mb-3 flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm"
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="h-4 w-4" />
+                Light Mode
+              </>
+            ) : (
+              <>
+                <Moon className="h-4 w-4" />
+                Dark Mode
+              </>
+            )}
+          </button>
+
           {user ? (
             <div>
               <Link to="/profile" className="block hover:opacity-80">
@@ -184,7 +208,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64 pt-14 lg:pt-0">
+      <div className="lg:pl-64 pt-14 lg:pt-0 min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors">
         <main className="py-6 px-4 lg:px-8">{children}</main>
       </div>
     </div>
@@ -200,6 +224,8 @@ function AppRoutes() {
     location.pathname.startsWith('/register') ||
     location.pathname.startsWith('/login') ||
     location.pathname.startsWith('/signup') ||
+    location.pathname.startsWith('/forgot-password') ||
+    location.pathname.startsWith('/reset-password') ||
     location.pathname.startsWith('/scorekeeper') ||
     location.pathname.startsWith('/checkin') ||
     location.pathname.startsWith('/display');
@@ -210,6 +236,8 @@ function AppRoutes() {
         <Route path="/register" element={<PublicRegister />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<StaffRegister />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/scorekeeper/:tournamentId" element={<Scorekeeper />} />
         <Route path="/checkin/:tournamentId" element={<CheckIn />} />
         <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
@@ -284,10 +312,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <AppRoutes />
-      </ToastProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <AppRoutes />
+        </ToastProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
