@@ -85,6 +85,7 @@ model Registration {
 
   @@unique([tournamentId, competitorId])
   @@index([tournamentId])
+  @@index([competitorId])
 }
 
 // Auto-generated or manually created divisions/categories
@@ -132,6 +133,7 @@ model DivisionAssignment {
 
   @@unique([divisionId, registrationId])
   @@index([divisionId])
+  @@index([registrationId])
 }
 
 // Bracket structure for a division
@@ -171,6 +173,8 @@ model Match {
   winner      Registration? @relation("Winner", fields: [winnerId], references: [id])
 
   @@index([bracketId])
+  @@index([status])
+  @@index([winnerId])
 }
 
 // Configurable weight classes per tournament

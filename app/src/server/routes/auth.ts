@@ -3,10 +3,28 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import { createToken, authenticate, type AuthenticatedRequest } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 
 const router = Router();
+
+// Rate limiting for auth routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per window
+  message: { error: 'Too many attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 registrations per hour per IP
+  message: { error: 'Too many accounts created, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Validation schemas
 const registerSchema = z.object({
@@ -45,7 +63,7 @@ const tournamentAccessSchema = z.object({
 });
 
 // Register new user
-router.post('/register', validateRequest(registerSchema), async (req: Request, res: Response) => {
+router.post('/register', registerLimiter, validateRequest(registerSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { email, password, firstName, lastName } = req.body;
 
@@ -104,7 +122,7 @@ router.post('/register', validateRequest(registerSchema), async (req: Request, r
 });
 
 // Login
-router.post('/login', validateRequest(loginSchema), async (req: Request, res: Response) => {
+router.post('/login', authLimiter, validateRequest(loginSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { email, password } = req.body;
 
