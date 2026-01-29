@@ -12,7 +12,9 @@ import {
   Users,
   Award,
   Keyboard,
+  Timer,
 } from 'lucide-react';
+import MatchTimer from '../components/MatchTimer';
 
 interface Match {
   id: string;
@@ -59,6 +61,9 @@ export default function Scorekeeper() {
   const [notes, setNotes] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [showTimer, setShowTimer] = useState(true);
+  const [penalties1, setPenalties1] = useState(0); // Gamjeon for competitor 1
+  const [penalties2, setPenalties2] = useState(0); // Gamjeon for competitor 2
 
   // Fetch divisions with brackets
   const { data: divisions, isLoading } = useQuery<Division[]>({
@@ -118,15 +123,27 @@ export default function Scorekeeper() {
     setSelectedWinner(null);
     setResultType('win');
     setNotes('');
+    setPenalties1(0);
+    setPenalties2(0);
   };
 
   const handleSubmit = () => {
     if (!currentMatch || !selectedWinner) return;
 
-    const noteText =
-      resultType === 'win'
-        ? notes
-        : `${resultType.toUpperCase()}${notes ? `: ${notes}` : ''}`;
+    // Build notes with penalties and result type
+    let noteText = '';
+    if (penalties1 > 0 || penalties2 > 0) {
+      const penaltyNotes = [];
+      if (penalties1 > 0) penaltyNotes.push(`${getCompetitorName(currentMatch.competitor1).split(' ')[0]}: ${penalties1} gamjeon`);
+      if (penalties2 > 0) penaltyNotes.push(`${getCompetitorName(currentMatch.competitor2).split(' ')[0]}: ${penalties2} gamjeon`);
+      noteText = `Penalties: ${penaltyNotes.join(', ')}`;
+    }
+    if (resultType !== 'win') {
+      noteText = noteText ? `${noteText}. ${resultType.toUpperCase()}` : resultType.toUpperCase();
+    }
+    if (notes) {
+      noteText = noteText ? `${noteText}. ${notes}` : notes;
+    }
 
     recordResult.mutate({
       matchId: currentMatch.id,
@@ -221,6 +238,10 @@ export default function Scorekeeper() {
           case '?':
             e.preventDefault();
             setShowKeyboardHelp((prev) => !prev);
+            break;
+          case 't':
+            e.preventDefault();
+            setShowTimer((prev) => !prev);
             break;
         }
       }
@@ -333,15 +354,36 @@ export default function Scorekeeper() {
               Match {currentMatchIndex + 1} of {readyMatches.length}
             </div>
           </div>
-          <button
-            onClick={() => setShowKeyboardHelp(true)}
-            className="flex items-center text-gray-400 hover:text-white text-sm"
-            title="Keyboard shortcuts (?)"
-          >
-            <Keyboard className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowTimer(!showTimer)}
+              className={`flex items-center text-sm px-2 py-1 rounded ${showTimer ? 'bg-green-600' : 'bg-gray-700'}`}
+              title="Toggle timer"
+            >
+              <Timer className="h-4 w-4 mr-1" />
+              Timer
+            </button>
+            <button
+              onClick={() => setShowKeyboardHelp(true)}
+              className="flex items-center text-gray-400 hover:text-white text-sm"
+              title="Keyboard shortcuts (?)"
+            >
+              <Keyboard className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Match Timer */}
+      {showTimer && division?.eventType === 'sparring' && (
+        <div className="p-4 border-b border-gray-800">
+          <MatchTimer
+            defaultRoundTime={120}
+            defaultRounds={2}
+            defaultBreakTime={30}
+          />
+        </div>
+      )}
 
       {!currentMatch ? (
         <div className="p-8 text-center">
@@ -384,64 +426,120 @@ export default function Scorekeeper() {
           {/* Competitor Cards */}
           <div className="p-4 space-y-4">
             {/* Competitor 1 */}
-            <button
-              onClick={() => {
-                if (currentMatch.competitor1) {
-                  setSelectedWinner(currentMatch.competitor1.id);
-                }
-              }}
-              disabled={!currentMatch.competitor1}
-              className={`w-full p-6 rounded-xl text-left transition-all ${
-                selectedWinner === currentMatch.competitor1?.id
-                  ? 'bg-green-600 ring-4 ring-green-400'
-                  : 'bg-gray-800 hover:bg-gray-700'
-              } ${!currentMatch.competitor1 ? 'opacity-50' : ''}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-2xl font-bold">
-                    {getCompetitorName(currentMatch.competitor1)}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  if (currentMatch.competitor1) {
+                    setSelectedWinner(currentMatch.competitor1.id);
+                  }
+                }}
+                disabled={!currentMatch.competitor1}
+                className={`flex-1 p-6 rounded-xl text-left transition-all ${
+                  selectedWinner === currentMatch.competitor1?.id
+                    ? 'bg-green-600 ring-4 ring-green-400'
+                    : 'bg-gray-800 hover:bg-gray-700'
+                } ${!currentMatch.competitor1 ? 'opacity-50' : ''}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-2xl font-bold">
+                      {getCompetitorName(currentMatch.competitor1)}
+                    </div>
+                    <div className="text-gray-400 mt-1">
+                      {getCompetitorSchool(currentMatch.competitor1)}
+                    </div>
+                    {penalties1 > 0 && (
+                      <div className="text-red-400 text-sm mt-1">
+                        {penalties1} Gamjeon ({penalties1} pts to opponent)
+                      </div>
+                    )}
                   </div>
-                  <div className="text-gray-400 mt-1">
-                    {getCompetitorSchool(currentMatch.competitor1)}
-                  </div>
+                  {selectedWinner === currentMatch.competitor1?.id && (
+                    <Award className="h-10 w-10 text-yellow-400" />
+                  )}
                 </div>
-                {selectedWinner === currentMatch.competitor1?.id && (
-                  <Award className="h-10 w-10 text-yellow-400" />
-                )}
+              </button>
+              {/* Penalty Controls for Competitor 1 */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setPenalties1(p => p + 1); }}
+                  className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold"
+                  title="Add Gamjeon"
+                >
+                  +GAM
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setPenalties1(p => Math.max(0, p - 1)); }}
+                  disabled={penalties1 === 0}
+                  className="px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-sm disabled:opacity-50"
+                  title="Remove Gamjeon"
+                >
+                  -GAM
+                </button>
+                <div className="text-center text-xl font-bold text-red-400">
+                  {penalties1}
+                </div>
               </div>
-            </button>
+            </div>
 
             <div className="text-center text-gray-500 font-bold">VS</div>
 
             {/* Competitor 2 */}
-            <button
-              onClick={() => {
-                if (currentMatch.competitor2) {
-                  setSelectedWinner(currentMatch.competitor2.id);
-                }
-              }}
-              disabled={!currentMatch.competitor2}
-              className={`w-full p-6 rounded-xl text-left transition-all ${
-                selectedWinner === currentMatch.competitor2?.id
-                  ? 'bg-green-600 ring-4 ring-green-400'
-                  : 'bg-gray-800 hover:bg-gray-700'
-              } ${!currentMatch.competitor2 ? 'opacity-50' : ''}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-2xl font-bold">
-                    {getCompetitorName(currentMatch.competitor2)}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  if (currentMatch.competitor2) {
+                    setSelectedWinner(currentMatch.competitor2.id);
+                  }
+                }}
+                disabled={!currentMatch.competitor2}
+                className={`flex-1 p-6 rounded-xl text-left transition-all ${
+                  selectedWinner === currentMatch.competitor2?.id
+                    ? 'bg-green-600 ring-4 ring-green-400'
+                    : 'bg-gray-800 hover:bg-gray-700'
+                } ${!currentMatch.competitor2 ? 'opacity-50' : ''}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-2xl font-bold">
+                      {getCompetitorName(currentMatch.competitor2)}
+                    </div>
+                    <div className="text-gray-400 mt-1">
+                      {getCompetitorSchool(currentMatch.competitor2)}
+                    </div>
+                    {penalties2 > 0 && (
+                      <div className="text-red-400 text-sm mt-1">
+                        {penalties2} Gamjeon ({penalties2} pts to opponent)
+                      </div>
+                    )}
                   </div>
-                  <div className="text-gray-400 mt-1">
-                    {getCompetitorSchool(currentMatch.competitor2)}
-                  </div>
+                  {selectedWinner === currentMatch.competitor2?.id && (
+                    <Award className="h-10 w-10 text-yellow-400" />
+                  )}
                 </div>
-                {selectedWinner === currentMatch.competitor2?.id && (
-                  <Award className="h-10 w-10 text-yellow-400" />
-                )}
+              </button>
+              {/* Penalty Controls for Competitor 2 */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setPenalties2(p => p + 1); }}
+                  className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold"
+                  title="Add Gamjeon"
+                >
+                  +GAM
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setPenalties2(p => Math.max(0, p - 1)); }}
+                  disabled={penalties2 === 0}
+                  className="px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-sm disabled:opacity-50"
+                  title="Remove Gamjeon"
+                >
+                  -GAM
+                </button>
+                <div className="text-center text-xl font-bold text-red-400">
+                  {penalties2}
+                </div>
               </div>
-            </button>
+            </div>
           </div>
 
           {/* Score Entry */}

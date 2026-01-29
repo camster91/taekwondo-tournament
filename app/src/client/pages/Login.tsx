@@ -133,8 +133,13 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="mt-6 text-center text-xs text-gray-500">
-            <p>First time? Contact tournament admin for account.</p>
+          <div className="mt-6 text-center space-y-2">
+            <Link to="/forgot-password" className="text-sm text-primary-600 hover:text-primary-500">
+              Forgot your password?
+            </Link>
+            <p className="text-xs text-gray-500">
+              First time? <Link to="/signup" className="text-primary-600 hover:text-primary-500">Create an account</Link>
+            </p>
           </div>
         </div>
       </div>

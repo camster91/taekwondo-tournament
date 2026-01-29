@@ -207,6 +207,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Password reset
+  resetToken       String?
+  resetTokenExpiry DateTime?
+
   // Tournament-specific permissions
   tournamentAccess UserTournamentAccess[]
 }
