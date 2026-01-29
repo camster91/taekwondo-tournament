@@ -66,7 +66,16 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // Serve static files in production
 if (isProduction) {
   const distPath = path.join(__dirname, '../../dist');
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, {
+    setHeaders: (res, filePath) => {
+      // Set correct MIME types for JavaScript modules
+      if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      } else if (filePath.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+      }
+    },
+  }));
 
   // Handle client-side routing - serve index.html for all non-API routes
   app.get('*', (req: Request, res: Response) => {
