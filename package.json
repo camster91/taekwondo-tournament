@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "nodemon --exec \"node --loader ts-node/esm\" src/server/index.ts",
     "dev:client": "vite",
-    "build": "vite build && tsc -p tsconfig.server.json && prisma db push",
+    "build": "prisma db push",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "start": "NODE_ENV=production node server.js",
