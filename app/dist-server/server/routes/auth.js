@@ -459,4 +459,81 @@ router.post('/reset-password', async (req, res) => {
         res.status(500).json({ error: 'Failed to reset password' });
     }
 });
+// Setup first admin account (only works when no admins exist)
+router.post('/setup-admin', async (req, res) => {
+    const prisma = req.app.locals.prisma;
+    const { email, password, firstName, lastName, setupKey } = req.body;
+    // Require setup key from environment or use a default for initial setup
+    const requiredKey = process.env.ADMIN_SETUP_KEY || 'tkd-admin-setup-2024';
+    if (setupKey !== requiredKey) {
+        return res.status(403).json({ error: 'Invalid setup key' });
+    }
+    if (!email || !password || !firstName || !lastName) {
+        return res.status(400).json({ error: 'All fields are required' });
+    }
+    if (password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    try {
+        // Check if any admin already exists
+        const adminCount = await prisma.user.count({
+            where: { role: 'admin' },
+        });
+        if (adminCount > 0) {
+            return res.status(400).json({ error: 'Admin account already exists. Use the normal login.' });
+        }
+        // Check if email already exists
+        const existingUser = await prisma.user.findUnique({
+            where: { email: email.toLowerCase() },
+        });
+        if (existingUser) {
+            // If user exists but is not admin, promote them
+            const user = await prisma.user.update({
+                where: { id: existingUser.id },
+                data: { role: 'admin' },
+                select: {
+                    id: true,
+                    email: true,
+                    firstName: true,
+                    lastName: true,
+                    role: true,
+                },
+            });
+            const token = createToken({
+                userId: user.id,
+                email: user.email,
+                role: user.role,
+            });
+            return res.json({ user, token, message: 'Existing user promoted to admin' });
+        }
+        // Create new admin user
+        const passwordHash = await bcrypt.hash(password, 12);
+        const user = await prisma.user.create({
+            data: {
+                email: email.toLowerCase(),
+                passwordHash,
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
+                role: 'admin',
+            },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                role: true,
+            },
+        });
+        const token = createToken({
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+        });
+        res.status(201).json({ user, token, message: 'Admin account created successfully' });
+    }
+    catch (error) {
+        console.error('Setup admin error:', error);
+        res.status(500).json({ error: 'Failed to create admin account' });
+    }
+});
 export default router;

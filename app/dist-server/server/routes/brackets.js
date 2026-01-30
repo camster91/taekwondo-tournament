@@ -110,6 +110,14 @@ router.get('/division/:divisionId', async (req, res) => {
 router.put('/match/:matchId', authenticate, async (req, res) => {
     const prisma = req.app.locals.prisma;
     const { winnerId, score1, score2, status, notes } = req.body;
+    const user = req.user;
+    // Get current match state for audit log
+    const currentMatch = await prisma.match.findUnique({
+        where: { id: getParam(req.params.matchId) },
+    });
+    if (!currentMatch) {
+        return res.status(404).json({ error: 'Match not found' });
+    }
     const match = await prisma.match.update({
         where: { id: getParam(req.params.matchId) },
         data: {
@@ -124,6 +132,23 @@ router.put('/match/:matchId', authenticate, async (req, res) => {
             competitor2: { include: { competitor: true } },
             winner: { include: { competitor: true } },
             bracket: true,
+        },
+    });
+    // Create audit log entry
+    await prisma.matchAuditLog.create({
+        data: {
+            matchId: match.id,
+            action: status === 'completed' ? 'complete' : 'update',
+            previousState: JSON.stringify(currentMatch),
+            newState: JSON.stringify({
+                winnerId: match.winnerId,
+                score1: match.score1,
+                score2: match.score2,
+                status: match.status,
+                notes: match.notes,
+            }),
+            userId: user?.id,
+            userEmail: user?.email,
         },
     });
     // If winner set, advance to next match
@@ -183,6 +208,59 @@ router.post('/match/:matchId/swap', authenticate, async (req, res) => {
         },
     });
     res.json(updated);
+});
+// Get match audit log
+router.get('/match/:matchId/audit', authenticate, async (req, res) => {
+    const prisma = req.app.locals.prisma;
+    const logs = await prisma.matchAuditLog.findMany({
+        where: { matchId: getParam(req.params.matchId) },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+    });
+    res.json(logs);
+});
+// Undo last match change
+router.post('/match/:matchId/undo', authenticate, async (req, res) => {
+    const prisma = req.app.locals.prisma;
+    const user = req.user;
+    // Get the most recent audit log entry
+    const lastLog = await prisma.matchAuditLog.findFirst({
+        where: { matchId: getParam(req.params.matchId) },
+        orderBy: { createdAt: 'desc' },
+    });
+    if (!lastLog) {
+        return res.status(404).json({ error: 'No changes to undo' });
+    }
+    const previousState = JSON.parse(lastLog.previousState);
+    // Restore previous state
+    const match = await prisma.match.update({
+        where: { id: getParam(req.params.matchId) },
+        data: {
+            winnerId: previousState.winnerId,
+            score1: previousState.score1,
+            score2: previousState.score2,
+            status: previousState.status,
+            notes: previousState.notes,
+        },
+        include: {
+            competitor1: { include: { competitor: true } },
+            competitor2: { include: { competitor: true } },
+            winner: { include: { competitor: true } },
+        },
+    });
+    // Log the undo action
+    await prisma.matchAuditLog.create({
+        data: {
+            matchId: match.id,
+            action: 'undo',
+            previousState: lastLog.newState,
+            newState: lastLog.previousState,
+            userId: user?.id,
+            userEmail: user?.email,
+            reason: `Undo of ${lastLog.action} from ${lastLog.createdAt.toISOString()}`,
+        },
+    });
+    res.json(match);
 });
 // Reset bracket (requires authentication)
 router.post('/division/:divisionId/reset', authenticate, async (req, res) => {
