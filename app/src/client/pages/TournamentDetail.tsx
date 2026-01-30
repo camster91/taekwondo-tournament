@@ -9,7 +9,6 @@ import {
   Trash2,
   Check,
   ArrowRight,
-  Wand2,
   Calendar,
   ClipboardCheck,
   Timer,
@@ -17,7 +16,15 @@ import {
   Monitor,
   Medal,
   LayoutDashboard,
+  Search,
+  X,
+  ChevronLeft,
 } from 'lucide-react';
+import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import EmptyState from '../components/ui/EmptyState';
+import { StatusBadge } from '../components/ui/Badge';
+import { PageLoader } from '../components/ui/Spinner';
 
 interface Tournament {
   id: string;
@@ -58,6 +65,9 @@ export default function TournamentDetail() {
   const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
   const [registerPatterns, setRegisterPatterns] = useState(true);
   const [registerSparring, setRegisterSparring] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [modalSearch, setModalSearch] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Registration | null>(null);
 
   const { data: tournament, isLoading: tournamentLoading } = useQuery<Tournament>({
     queryKey: ['tournament', id],
@@ -156,32 +166,76 @@ export default function TournamentDetail() {
     return 'bg-gray-200';
   };
 
+  const filteredRegistrations = registrations?.filter((r) => {
+    const name = `${r.competitor.firstName} ${r.competitor.lastName}`.toLowerCase();
+    const school = r.competitor.schoolDojang?.toLowerCase() || '';
+    const query = searchQuery.toLowerCase();
+    return name.includes(query) || school.includes(query);
+  });
+
+  const filteredAvailable = availableCompetitors.filter((c: Competitor) => {
+    const name = `${c.firstName} ${c.lastName}`.toLowerCase();
+    const school = c.schoolDojang?.toLowerCase() || '';
+    const query = modalSearch.toLowerCase();
+    return name.includes(query) || school.includes(query);
+  });
+
   if (tournamentLoading) {
-    return <div className="text-center py-12 text-gray-500">Loading...</div>;
+    return <PageLoader />;
   }
 
   if (!tournament) {
-    return <div className="text-center py-12 text-gray-500">Tournament not found</div>;
+    return (
+      <div className="card">
+        <EmptyState
+          icon={Users}
+          title="Tournament not found"
+          description="This tournament may have been deleted."
+          action={{ label: 'Back to Tournaments', onClick: () => window.history.back() }}
+        />
+      </div>
+    );
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      {/* Breadcrumb */}
+      <div className="mb-4">
+        <Link
+          to="/tournaments"
+          className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+        >
+          <ChevronLeft className="h-4 w-4 mr-1" />
+          Back to Tournaments
+        </Link>
+      </div>
+
+      {/* Page Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{tournament.name}</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            {new Date(tournament.date).toLocaleDateString()}
-            {tournament.location && ` • ${tournament.location}`}
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{tournament.name}</h1>
+            <StatusBadge status={tournament.status} />
+          </div>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            {new Date(tournament.date).toLocaleDateString('en-US', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}
+            {tournament.location && <span>• {tournament.location}</span>}
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2">
           <Link to={`/tournaments/${id}/settings`} className="btn btn-secondary">
-            <Settings className="h-4 w-4 mr-2" />
-            Settings
+            <Settings className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Settings</span>
           </Link>
           <Link to={`/tournaments/${id}/schedule`} className="btn btn-secondary">
-            <Calendar className="h-4 w-4 mr-2" />
-            Schedule
+            <Calendar className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Schedule</span>
           </Link>
           <Link to={`/tournaments/${id}/divisions`} className="btn btn-primary">
             <LayoutGrid className="h-4 w-4 mr-2" />
@@ -332,54 +386,85 @@ export default function TournamentDetail() {
 
       {/* Registrations */}
       <div className="card">
-        <div className="card-header flex items-center justify-between">
-          <h2 className="text-lg font-medium">Registered Competitors</h2>
-          <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Competitors
-          </button>
+        <div className="card-header">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+              Registered Competitors
+              {registrations && (
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  ({registrations.length})
+                </span>
+              )}
+            </h2>
+            <div className="flex flex-col sm:flex-row gap-3">
+              {registrations && registrations.length > 0 && (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="form-input pl-9 py-1.5 w-full sm:w-48"
+                  />
+                </div>
+              )}
+              <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Competitors
+              </button>
+            </div>
+          </div>
         </div>
         <div className="card-body p-0">
           {regsLoading ? (
-            <div className="p-8 text-center text-gray-500">Loading...</div>
-          ) : registrations && registrations.length > 0 ? (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Age</th>
-                  <th>Belt</th>
-                  <th>Weight</th>
-                  <th>School</th>
-                  <th>Patterns</th>
-                  <th>Sparring</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {registrations.map((reg) => (
-                  <tr key={reg.id}>
-                    <td className="font-medium">
-                      {reg.competitor.firstName} {reg.competitor.lastName}
-                    </td>
-                    <td>{reg.ageAtTournament || '-'}</td>
-                    <td>
-                      <span
-                        className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getBeltColor(
-                          reg.competitor.belt
-                        )}`}
+            <TableSkeleton rows={5} />
+          ) : filteredRegistrations && filteredRegistrations.length > 0 ? (
+            <>
+              {/* Mobile View */}
+              <div className="mobile-cards p-4 space-y-3">
+                {filteredRegistrations.map((reg) => (
+                  <div key={reg.id} className="mobile-card">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="font-semibold text-gray-900 dark:text-white">
+                          {reg.competitor.firstName} {reg.competitor.lastName}
+                        </div>
+                        <span
+                          className={`inline-flex px-2 py-0.5 rounded text-xs font-medium mt-1 ${getBeltColor(
+                            reg.competitor.belt
+                          )}`}
+                        >
+                          {reg.competitor.belt}
+                          {reg.competitor.danRank && ` ${reg.competitor.danRank}D`}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setDeleteTarget(reg)}
+                        className="text-gray-400 hover:text-red-600 p-2 -mr-2"
                       >
-                        {reg.competitor.belt}
-                        {reg.competitor.danRank && ` ${reg.competitor.danRank}D`}
-                      </span>
-                    </td>
-                    <td>
-                      {reg.competitor.weightLbs
-                        ? `${reg.competitor.weightLbs} lbs`
-                        : '-'}
-                    </td>
-                    <td>{reg.competitor.schoolDojang || '-'}</td>
-                    <td>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="text-sm text-gray-500 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Age</span>
+                        <span className="text-gray-900 dark:text-white">{reg.ageAtTournament || '-'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Weight</span>
+                        <span className="text-gray-900 dark:text-white">
+                          {reg.competitor.weightLbs ? `${reg.competitor.weightLbs} lbs` : '-'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>School</span>
+                        <span className="text-gray-900 dark:text-white truncate ml-4">
+                          {reg.competitor.schoolDojang || '-'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex gap-4 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                       <button
                         onClick={() =>
                           updateRegistrationMutation.mutate({
@@ -388,16 +473,14 @@ export default function TournamentDetail() {
                             sparring: reg.sparring,
                           })
                         }
-                        className={`w-6 h-6 rounded flex items-center justify-center ${
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.patterns
-                            ? 'bg-green-500 text-white'
-                            : 'bg-gray-200 text-gray-400'
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
                         }`}
                       >
-                        {reg.patterns && <Check className="h-4 w-4" />}
+                        {reg.patterns ? '✓ ' : ''}Patterns
                       </button>
-                    </td>
-                    <td>
                       <button
                         onClick={() =>
                           updateRegistrationMutation.mutate({
@@ -406,161 +489,314 @@ export default function TournamentDetail() {
                             sparring: !reg.sparring,
                           })
                         }
-                        className={`w-6 h-6 rounded flex items-center justify-center ${
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.sparring
-                            ? 'bg-green-500 text-white'
-                            : 'bg-gray-200 text-gray-400'
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
                         }`}
                       >
-                        {reg.sparring && <Check className="h-4 w-4" />}
+                        {reg.sparring ? '✓ ' : ''}Sparring
                       </button>
-                    </td>
-                    <td>
-                      <button
-                        onClick={() => {
-                          if (confirm('Remove this registration?')) {
-                            removeRegistrationMutation.mutate(reg.id);
-                          }
-                        }}
-                        className="text-gray-400 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+
+              {/* Desktop Table */}
+              <div className="desktop-table">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Age</th>
+                      <th>Belt</th>
+                      <th>Weight</th>
+                      <th>School</th>
+                      <th className="text-center">Patterns</th>
+                      <th className="text-center">Sparring</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                    {filteredRegistrations.map((reg) => (
+                      <tr key={reg.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td className="font-medium text-gray-900 dark:text-white">
+                          {reg.competitor.firstName} {reg.competitor.lastName}
+                        </td>
+                        <td>{reg.ageAtTournament || '-'}</td>
+                        <td>
+                          <span
+                            className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getBeltColor(
+                              reg.competitor.belt
+                            )}`}
+                          >
+                            {reg.competitor.belt}
+                            {reg.competitor.danRank && ` ${reg.competitor.danRank}D`}
+                          </span>
+                        </td>
+                        <td>
+                          {reg.competitor.weightLbs
+                            ? `${reg.competitor.weightLbs} lbs`
+                            : '-'}
+                        </td>
+                        <td className="max-w-[150px] truncate">{reg.competitor.schoolDojang || '-'}</td>
+                        <td className="text-center">
+                          <button
+                            onClick={() =>
+                              updateRegistrationMutation.mutate({
+                                regId: reg.id,
+                                patterns: !reg.patterns,
+                                sparring: reg.sparring,
+                              })
+                            }
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                              reg.patterns
+                                ? 'bg-green-500 text-white hover:bg-green-600'
+                                : 'bg-gray-200 dark:bg-gray-600 text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-500'
+                            }`}
+                          >
+                            {reg.patterns && <Check className="h-4 w-4" />}
+                          </button>
+                        </td>
+                        <td className="text-center">
+                          <button
+                            onClick={() =>
+                              updateRegistrationMutation.mutate({
+                                regId: reg.id,
+                                patterns: reg.patterns,
+                                sparring: !reg.sparring,
+                              })
+                            }
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                              reg.sparring
+                                ? 'bg-green-500 text-white hover:bg-green-600'
+                                : 'bg-gray-200 dark:bg-gray-600 text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-500'
+                            }`}
+                          >
+                            {reg.sparring && <Check className="h-4 w-4" />}
+                          </button>
+                        </td>
+                        <td>
+                          <button
+                            onClick={() => setDeleteTarget(reg)}
+                            className="text-gray-400 hover:text-red-600 p-1 rounded transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : registrations && registrations.length > 0 ? (
+            <EmptyState
+              icon={Search}
+              title="No matches found"
+              description={`No competitors match "${searchQuery}"`}
+              action={{ label: 'Clear Search', onClick: () => setSearchQuery('') }}
+            />
           ) : (
-            <div className="p-8 text-center text-gray-500">
-              <Users className="mx-auto h-12 w-12 text-gray-400" />
-              <p className="mt-2">No competitors registered yet</p>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="mt-4 text-primary-600 hover:text-primary-700"
-              >
-                Add competitors
-              </button>
-            </div>
+            <EmptyState
+              icon={Users}
+              title="No competitors registered"
+              description="Add competitors to this tournament to get started."
+              action={{ label: 'Add Competitors', onClick: () => setShowAddModal(true) }}
+            />
           )}
         </div>
       </div>
 
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            removeRegistrationMutation.mutate(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        title="Remove Registration"
+        message={`Remove ${deleteTarget?.competitor.firstName} ${deleteTarget?.competitor.lastName} from this tournament?`}
+        confirmText="Remove"
+        isLoading={removeRegistrationMutation.isPending}
+      />
+
       {/* Add Competitors Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden m-4">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-lg font-semibold">Add Competitors</h2>
-              <div className="mt-4 flex gap-4">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={registerPatterns}
-                    onChange={(e) => setRegisterPatterns(e.target.checked)}
-                    className="rounded border-gray-300"
-                  />
-                  <span className="ml-2 text-sm">Patterns</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={registerSparring}
-                    onChange={(e) => setRegisterSparring(e.target.checked)}
-                    className="rounded border-gray-300"
-                  />
-                  <span className="ml-2 text-sm">Sparring</span>
-                </label>
-              </div>
-            </div>
-            <div className="p-6 overflow-y-auto max-h-96">
-              {availableCompetitors.length > 0 ? (
-                <div className="space-y-2">
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-black/50 transition-opacity"
+              onClick={() => {
+                setShowAddModal(false);
+                setSelectedCompetitors([]);
+                setModalSearch('');
+              }}
+            />
+            <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Competitors</h2>
                   <button
-                    onClick={() =>
-                      setSelectedCompetitors(
-                        selectedCompetitors.length === availableCompetitors.length
-                          ? []
-                          : availableCompetitors.map((c: Competitor) => c.id)
-                      )
-                    }
-                    className="text-sm text-primary-600 hover:text-primary-700"
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setSelectedCompetitors([]);
+                      setModalSearch('');
+                    }}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                   >
-                    {selectedCompetitors.length === availableCompetitors.length
-                      ? 'Deselect All'
-                      : 'Select All'}
+                    <X className="h-5 w-5" />
                   </button>
-                  {availableCompetitors.map((c: Competitor) => (
-                    <label
-                      key={c.id}
-                      className="flex items-center p-2 rounded hover:bg-gray-50 cursor-pointer"
-                    >
+                </div>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search competitors..."
+                      value={modalSearch}
+                      onChange={(e) => setModalSearch(e.target.value)}
+                      className="form-input pl-9 w-full"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex gap-4">
+                    <label className="flex items-center cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={selectedCompetitors.includes(c.id)}
-                        onChange={(e) =>
+                        checked={registerPatterns}
+                        onChange={(e) => setRegisterPatterns(e.target.checked)}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Patterns</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={registerSparring}
+                        onChange={(e) => setRegisterSparring(e.target.checked)}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Sparring</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 overflow-y-auto max-h-96 bg-gray-50 dark:bg-gray-900/50">
+                {filteredAvailable.length > 0 ? (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between mb-3">
+                      <button
+                        onClick={() =>
                           setSelectedCompetitors(
-                            e.target.checked
-                              ? [...selectedCompetitors, c.id]
-                              : selectedCompetitors.filter((id) => id !== c.id)
+                            selectedCompetitors.length === filteredAvailable.length
+                              ? []
+                              : filteredAvailable.map((c: Competitor) => c.id)
                           )
                         }
-                        className="rounded border-gray-300"
-                      />
-                      <span className="ml-3 flex-1">
-                        {c.firstName} {c.lastName}
-                      </span>
-                      <span
-                        className={`px-2 py-1 rounded text-xs ${getBeltColor(
-                          c.belt
-                        )}`}
+                        className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
                       >
-                        {c.belt}
-                      </span>
-                      <span className="ml-2 text-sm text-gray-500">
-                        {c.schoolDojang || ''}
-                      </span>
-                    </label>
-                  ))}
+                        {selectedCompetitors.length === filteredAvailable.length
+                          ? 'Deselect All'
+                          : `Select All (${filteredAvailable.length})`}
+                      </button>
+                      {modalSearch && (
+                        <span className="text-xs text-gray-500">
+                          Showing {filteredAvailable.length} of {availableCompetitors.length}
+                        </span>
+                      )}
+                    </div>
+                    {filteredAvailable.map((c: Competitor) => (
+                      <label
+                        key={c.id}
+                        className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${
+                          selectedCompetitors.includes(c.id)
+                            ? 'bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800'
+                            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedCompetitors.includes(c.id)}
+                          onChange={(e) =>
+                            setSelectedCompetitors(
+                              e.target.checked
+                                ? [...selectedCompetitors, c.id]
+                                : selectedCompetitors.filter((id) => id !== c.id)
+                            )
+                          }
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="ml-3 flex-1 font-medium text-gray-900 dark:text-white">
+                          {c.firstName} {c.lastName}
+                        </span>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${getBeltColor(
+                            c.belt
+                          )}`}
+                        >
+                          {c.belt}
+                        </span>
+                        {c.schoolDojang && (
+                          <span className="ml-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:inline truncate max-w-[120px]">
+                            {c.schoolDojang}
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                ) : availableCompetitors.length > 0 ? (
+                  <EmptyState
+                    icon={Search}
+                    title="No matches"
+                    description={`No competitors match "${modalSearch}"`}
+                    action={{ label: 'Clear Search', onClick: () => setModalSearch('') }}
+                  />
+                ) : (
+                  <EmptyState
+                    icon={Users}
+                    title="No available competitors"
+                    description="Import competitors first, or all have been registered."
+                  />
+                )}
+              </div>
+              <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="font-semibold text-gray-900 dark:text-white">{selectedCompetitors.length}</span> competitors selected
+                </span>
+                <div className="flex gap-3 w-full sm:w-auto">
+                  <button
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setSelectedCompetitors([]);
+                      setModalSearch('');
+                    }}
+                    className="btn btn-secondary flex-1 sm:flex-none"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() =>
+                      bulkRegisterMutation.mutate({
+                        competitorIds: selectedCompetitors,
+                        patterns: registerPatterns,
+                        sparring: registerSparring,
+                      })
+                    }
+                    disabled={
+                      bulkRegisterMutation.isPending ||
+                      selectedCompetitors.length === 0
+                    }
+                    className="btn btn-primary flex-1 sm:flex-none"
+                  >
+                    {bulkRegisterMutation.isPending
+                      ? 'Adding...'
+                      : `Add ${selectedCompetitors.length} Competitors`}
+                  </button>
                 </div>
-              ) : (
-                <div className="text-center text-gray-500 py-8">
-                  No available competitors. Import some first!
-                </div>
-              )}
-            </div>
-            <div className="p-6 border-t border-gray-200 flex justify-between">
-              <span className="text-sm text-gray-500">
-                {selectedCompetitors.length} selected
-              </span>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setSelectedCompetitors([]);
-                  }}
-                  className="btn btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() =>
-                    bulkRegisterMutation.mutate({
-                      competitorIds: selectedCompetitors,
-                      patterns: registerPatterns,
-                      sparring: registerSparring,
-                    })
-                  }
-                  disabled={
-                    bulkRegisterMutation.isPending ||
-                    selectedCompetitors.length === 0
-                  }
-                  className="btn btn-primary"
-                >
-                  {bulkRegisterMutation.isPending
-                    ? 'Adding...'
-                    : `Add ${selectedCompetitors.length} Competitors`}
-                </button>
               </div>
             </div>
           </div>
