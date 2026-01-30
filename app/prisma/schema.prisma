@@ -290,3 +290,19 @@ model CompetitorRating {
   @@index([eventType])
   @@index([rating])
 }
+
+// Match audit log for undo functionality
+model MatchAuditLog {
+  id            String   @id @default(uuid())
+  matchId       String
+  action        String   // update, complete, reset
+  previousState String   // JSON of previous match state
+  newState      String   // JSON of new match state
+  userId        String?  // Who made the change
+  userEmail     String?  // Email for reference
+  reason        String?  // Optional reason for change
+  createdAt     DateTime @default(now())
+
+  @@index([matchId])
+  @@index([createdAt])
+}

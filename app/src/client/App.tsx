@@ -208,8 +208,42 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64 pt-14 lg:pt-0 min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors">
+      <div className="lg:pl-64 pt-14 lg:pt-0 pb-16 lg:pb-0 min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors">
         <main className="py-6 px-4 lg:px-8">{children}</main>
+      </div>
+
+      {/* Mobile bottom navigation */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 safe-area-bottom">
+        <nav className="flex justify-around items-center h-16">
+          {navigation.map((item) => {
+            const isActive =
+              item.href === '/'
+                ? location.pathname === '/'
+                : location.pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.name}
+                to={item.href}
+                className={classNames(
+                  'flex flex-col items-center justify-center flex-1 h-full py-2',
+                  isActive
+                    ? 'text-primary-600 dark:text-primary-400'
+                    : 'text-gray-500 dark:text-gray-400'
+                )}
+              >
+                <item.icon className="h-6 w-6" />
+                <span className="text-xs mt-1 font-medium">{item.name}</span>
+              </Link>
+            );
+          })}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="flex flex-col items-center justify-center flex-1 h-full py-2 text-gray-500 dark:text-gray-400"
+          >
+            <Menu className="h-6 w-6" />
+            <span className="text-xs mt-1 font-medium">More</span>
+          </button>
+        </nav>
       </div>
     </div>
   );

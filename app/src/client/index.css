@@ -387,3 +387,47 @@ body {
     padding-top: max(0px, env(safe-area-inset-top));
   }
 }
+
+/* Mobile bottom navigation */
+.bottom-nav {
+  @apply fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700;
+}
+
+.bottom-nav-item {
+  @apply flex flex-col items-center justify-center flex-1 py-2 text-gray-500 dark:text-gray-400 transition-colors;
+}
+
+.bottom-nav-item.active {
+  @apply text-primary-600 dark:text-primary-400;
+}
+
+.bottom-nav-item:active {
+  @apply bg-gray-100 dark:bg-gray-700;
+}
+
+/* Improve tap targets on mobile */
+@media (max-width: 640px) {
+  .tap-target {
+    @apply min-h-[48px] min-w-[48px];
+  }
+
+  /* Larger click areas for links in lists */
+  .mobile-list-item {
+    @apply py-4 px-3 -mx-3 rounded-lg active:bg-gray-100 dark:active:bg-gray-700;
+  }
+
+  /* Full-width buttons on mobile */
+  .mobile-full-btn {
+    @apply w-full;
+  }
+}
+
+/* Swipe indicator for sidebar */
+.swipe-indicator {
+  @apply fixed top-1/2 left-0 w-2 h-16 -translate-y-1/2 bg-gray-300 dark:bg-gray-600 rounded-r-full opacity-50 lg:hidden;
+}
+
+/* Pull to refresh indicator */
+.pull-indicator {
+  @apply fixed top-0 left-1/2 -translate-x-1/2 w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mt-2;
+}
