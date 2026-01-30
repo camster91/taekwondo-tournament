@@ -8,10 +8,15 @@ import {
   Edit,
   Trash2,
   X,
-  Check,
   FileSpreadsheet,
+  Users,
+  Filter,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { TableSkeleton } from '../components/ui/Skeleton';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import EmptyState from '../components/ui/EmptyState';
+import Spinner from '../components/ui/Spinner';
 
 interface Competitor {
   id: string;
@@ -68,9 +73,11 @@ const emptyForm = {
 export default function Competitors() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [beltFilter, setBeltFilter] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Competitor | null>(null);
   const [formData, setFormData] = useState(emptyForm);
   const [importData, setImportData] = useState<any[] | null>(null);
   const [importColumns, setImportColumns] = useState<string[]>([]);
@@ -161,7 +168,14 @@ export default function Competitors() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['competitors'] });
+      setDeleteTarget(null);
     },
+  });
+
+  // Filter competitors by belt
+  const filteredCompetitors = data?.competitors?.filter((c: Competitor) => {
+    if (!beltFilter) return true;
+    return c.belt.toLowerCase() === beltFilter.toLowerCase();
   });
 
   const importMutation = useMutation({
@@ -340,19 +354,50 @@ export default function Competitors() {
         </div>
       </div>
 
-      {/* Search */}
+      {/* Search & Filter */}
       <div className="card mb-6">
         <div className="card-body">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="form-input pl-10 w-full max-w-md"
-            />
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by name or school..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="form-input pl-10 w-full"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-400" />
+              <select
+                value={beltFilter}
+                onChange={(e) => setBeltFilter(e.target.value)}
+                className="form-input py-2"
+              >
+                <option value="">All Belts</option>
+                {BELT_OPTIONS.map((belt) => (
+                  <option key={belt} value={belt}>{belt}</option>
+                ))}
+              </select>
+            </div>
           </div>
+          {(search || beltFilter) && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
+              <span>
+                Showing {filteredCompetitors?.length || 0} results
+              </span>
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setBeltFilter('');
+                }}
+                className="text-primary-600 hover:text-primary-700"
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -360,16 +405,16 @@ export default function Competitors() {
       <div className="card">
         <div className="card-body p-0">
           {isLoading ? (
-            <div className="p-8 text-center text-gray-500">Loading...</div>
-          ) : data?.competitors?.length > 0 ? (
+            <TableSkeleton rows={8} />
+          ) : filteredCompetitors?.length > 0 ? (
             <>
               {/* Mobile Card View */}
               <div className="mobile-cards p-4 space-y-3">
-                {data.competitors.map((c: Competitor) => (
+                {filteredCompetitors.map((c: Competitor) => (
                   <div key={c.id} className="mobile-card">
                     <div className="mobile-card-header">
                       <div>
-                        <div className="mobile-card-title">
+                        <div className="font-semibold text-gray-900 dark:text-white">
                           {c.firstName} {c.lastName}
                         </div>
                         <span
@@ -381,41 +426,37 @@ export default function Competitors() {
                           {c.danRank && ` ${c.danRank}D`}
                         </span>
                       </div>
-                      <div className="flex gap-3">
+                      <div className="flex gap-2">
                         <button
                           onClick={() => setEditingCompetitor(c)}
-                          className="text-gray-400 hover:text-primary-600 touch-target flex items-center justify-center"
+                          className="p-2 text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                         >
                           <Edit className="h-5 w-5" />
                         </button>
                         <button
-                          onClick={() => {
-                            if (confirm('Delete this competitor?')) {
-                              deleteMutation.mutate(c.id);
-                            }
-                          }}
-                          className="text-gray-400 hover:text-red-600 touch-target flex items-center justify-center"
+                          onClick={() => setDeleteTarget(c)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                         >
                           <Trash2 className="h-5 w-5" />
                         </button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">Gender</span>
-                        <span className="mobile-card-value">{c.gender === 'M' ? 'Male' : 'Female'}</span>
+                    <div className="grid grid-cols-2 gap-2 text-sm mt-3">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Gender</span>
+                        <span className="text-gray-900 dark:text-white">{c.gender === 'M' ? 'Male' : 'Female'}</span>
                       </div>
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">Age</span>
-                        <span className="mobile-card-value">{calculateAge(c.dateOfBirth)}</span>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Age</span>
+                        <span className="text-gray-900 dark:text-white">{calculateAge(c.dateOfBirth)}</span>
                       </div>
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">Weight</span>
-                        <span className="mobile-card-value">{c.weightLbs ? `${c.weightLbs} lbs` : '-'}</span>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Weight</span>
+                        <span className="text-gray-900 dark:text-white">{c.weightLbs ? `${c.weightLbs} lbs` : '-'}</span>
                       </div>
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">School</span>
-                        <span className="mobile-card-value truncate max-w-[120px]">{c.schoolDojang || '-'}</span>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">School</span>
+                        <span className="text-gray-900 dark:text-white truncate max-w-[100px]">{c.schoolDojang || '-'}</span>
                       </div>
                     </div>
                   </div>
@@ -433,16 +474,16 @@ export default function Competitors() {
                       <th>Belt</th>
                       <th>Weight</th>
                       <th className="hide-mobile">School</th>
-                      <th></th>
+                      <th className="w-20"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
-                    {data.competitors.map((c: Competitor) => (
-                      <tr key={c.id}>
-                        <td className="font-medium">
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                    {filteredCompetitors.map((c: Competitor) => (
+                      <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <td className="font-medium text-gray-900 dark:text-white">
                           {c.firstName} {c.lastName}
                         </td>
-                        <td>{c.gender}</td>
+                        <td>{c.gender === 'M' ? 'Male' : 'Female'}</td>
                         <td>{calculateAge(c.dateOfBirth)}</td>
                         <td>
                           <span
@@ -455,22 +496,20 @@ export default function Competitors() {
                           </span>
                         </td>
                         <td>{c.weightLbs ? `${c.weightLbs} lbs` : '-'}</td>
-                        <td className="hide-mobile">{c.schoolDojang || '-'}</td>
+                        <td className="hide-mobile max-w-[150px] truncate">{c.schoolDojang || '-'}</td>
                         <td>
-                          <div className="flex gap-2">
+                          <div className="flex gap-1">
                             <button
                               onClick={() => setEditingCompetitor(c)}
-                              className="text-gray-400 hover:text-primary-600 p-1"
+                              className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                              title="Edit"
                             >
                               <Edit className="h-4 w-4" />
                             </button>
                             <button
-                              onClick={() => {
-                                if (confirm('Delete this competitor?')) {
-                                  deleteMutation.mutate(c.id);
-                                }
-                              }}
-                              className="text-gray-400 hover:text-red-600 p-1"
+                              onClick={() => setDeleteTarget(c)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                              title="Delete"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -482,38 +521,55 @@ export default function Competitors() {
                 </table>
               </div>
             </>
+          ) : data?.competitors?.length > 0 ? (
+            <EmptyState
+              icon={Search}
+              title="No matches found"
+              description="Try adjusting your search or filter criteria"
+              action={{ label: 'Clear Filters', onClick: () => { setSearch(''); setBeltFilter(''); } }}
+            />
           ) : (
-            <div className="empty-state">
-              <FileSpreadsheet className="empty-state-icon" />
-              <p className="empty-state-title">No competitors yet</p>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="mt-4 text-primary-600 hover:text-primary-700"
-              >
-                Import from Excel
-              </button>
-            </div>
+            <EmptyState
+              icon={Users}
+              title="No competitors yet"
+              description="Import competitors from an Excel file or add them manually."
+              action={{ label: 'Import from Excel', onClick: () => fileInputRef.current?.click() }}
+              secondaryAction={{ label: 'Add Manually', onClick: () => { setEditingCompetitor(null); setFormData(emptyForm); setShowFormModal(true); } }}
+            />
           )}
         </div>
         {data?.total > 0 && (
-          <div className="px-4 py-3 border-t border-gray-200 text-sm text-gray-500">
-            Showing {data.competitors.length} of {data.total} competitors
+          <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 flex items-center justify-between">
+            <span>
+              Showing {filteredCompetitors?.length || 0} of {data.total} competitors
+            </span>
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title="Delete Competitor"
+        message={`Are you sure you want to delete ${deleteTarget?.firstName} ${deleteTarget?.lastName}? This will also remove them from any tournaments they're registered in.`}
+        confirmText="Delete"
+        isLoading={deleteMutation.isPending}
+      />
 
       {/* Add/Edit Competitor Modal */}
       {showFormModal && (
         <div className="modal-container flex items-center justify-center p-4">
           <div className="modal-backdrop" onClick={closeFormModal} />
-          <div className="modal-panel">
+          <div className="modal-panel max-w-lg">
             <div className="modal-header">
-              <h2 className="text-lg font-semibold">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                 {editingCompetitor ? 'Edit Competitor' : 'Add Competitor'}
               </h2>
               <button
                 onClick={closeFormModal}
-                className="text-gray-400 hover:text-gray-600 touch-target flex items-center justify-center"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -692,13 +748,18 @@ export default function Competitors() {
                 <button
                   type="submit"
                   disabled={createMutation.isPending || updateMutation.isPending}
-                  className="btn btn-primary w-full sm:w-auto"
+                  className="btn btn-primary w-full sm:w-auto flex items-center justify-center"
                 >
-                  {createMutation.isPending || updateMutation.isPending
-                    ? 'Saving...'
-                    : editingCompetitor
-                    ? 'Update'
-                    : 'Add Competitor'}
+                  {(createMutation.isPending || updateMutation.isPending) ? (
+                    <>
+                      <Spinner size="sm" className="mr-2" />
+                      Saving...
+                    </>
+                  ) : editingCompetitor ? (
+                    'Update Competitor'
+                  ) : (
+                    'Add Competitor'
+                  )}
                 </button>
               </div>
             </form>
@@ -712,10 +773,15 @@ export default function Competitors() {
           <div className="modal-backdrop" onClick={() => setShowImportModal(false)} />
           <div className="modal-panel max-w-2xl">
             <div className="modal-header">
-              <h2 className="text-lg font-semibold">Import Competitors</h2>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                  <FileSpreadsheet className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Import Competitors</h2>
+              </div>
               <button
                 onClick={() => setShowImportModal(false)}
-                className="text-gray-400 hover:text-gray-600 touch-target flex items-center justify-center"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -822,9 +888,19 @@ export default function Competitors() {
                   !columnMapping.gender ||
                   !columnMapping.belt
                 }
-                className="btn btn-primary w-full sm:w-auto"
+                className="btn btn-success w-full sm:w-auto flex items-center justify-center"
               >
-                {importMutation.isPending ? 'Importing...' : 'Import'}
+                {importMutation.isPending ? (
+                  <>
+                    <Spinner size="sm" className="mr-2" />
+                    Importing {importData?.length} rows...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import {importData?.length} Competitors
+                  </>
+                )}
               </button>
             </div>
           </div>
