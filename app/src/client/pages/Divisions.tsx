@@ -18,6 +18,10 @@ import {
   X,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { CardSkeleton } from '../components/ui/Skeleton';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import Spinner from '../components/ui/Spinner';
+import EmptyState from '../components/ui/EmptyState';
 
 interface Division {
   id: string;
@@ -70,6 +74,11 @@ export default function Divisions() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Division | null>(null);
+  const [splitTarget, setSplitTarget] = useState<Division | null>(null);
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const [regenerateConfirm, setRegenerateConfirm] = useState(false);
+  const [resultMessage, setResultMessage] = useState<{ title: string; message: string } | null>(null);
 
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['tournament', id],
@@ -99,13 +108,12 @@ export default function Divisions() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
-      alert(
-        `Auto-generation complete!\nDivisions: ${result.divisions}\nAssignments: ${result.assignments}${
-          result.warnings?.length
-            ? `\n\nWarnings:\n${result.warnings.join('\n')}`
-            : ''
-        }`
-      );
+      setResultMessage({
+        title: 'Auto-generation Complete',
+        message: `Created ${result.divisions} divisions with ${result.assignments} assignments.${
+          result.warnings?.length ? `\n\nWarnings:\n${result.warnings.join('\n')}` : ''
+        }`,
+      });
     },
   });
 
@@ -120,9 +128,10 @@ export default function Divisions() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
-      alert(
-        `Generated ${result.generated} brackets (${result.skipped} skipped)`
-      );
+      setResultMessage({
+        title: 'Brackets Generated',
+        message: `Generated ${result.generated} brackets (${result.skipped} skipped)`,
+      });
     },
   });
 
@@ -135,6 +144,7 @@ export default function Divisions() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+      setClearConfirm(false);
     },
   });
 
@@ -147,6 +157,7 @@ export default function Divisions() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+      setDeleteTarget(null);
     },
   });
 
@@ -161,6 +172,11 @@ export default function Divisions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+      setSplitTarget(null);
+      setResultMessage({
+        title: 'Division Split',
+        message: 'Division has been split into 2 parts.',
+      });
     },
   });
 
@@ -313,69 +329,61 @@ export default function Divisions() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      {/* Page Header */}
+      <div className="page-header mb-6">
         <div>
           <Link
             to={`/tournaments/${id}`}
-            className="text-sm text-gray-500 hover:text-gray-700 flex items-center mb-2"
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back to Tournament
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="page-title">
             Divisions - {tournament?.name}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {divisions?.length || 0} divisions total
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={fetchPreview}
             disabled={previewLoading || autoGenerateMutation.isPending}
             className="btn btn-secondary"
           >
-            <Eye className="h-4 w-4 mr-2" />
-            {previewLoading ? 'Loading...' : 'Preview Divisions'}
+            {previewLoading ? <Spinner size="sm" className="mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+            <span className="hidden sm:inline">{previewLoading ? 'Loading...' : 'Preview'}</span>
           </button>
           <button
             onClick={() => {
-              if (
-                divisions?.length &&
-                !confirm(
-                  'This will replace existing divisions. Continue?'
-                )
-              )
-                return;
-              autoGenerateMutation.mutate();
+              if (divisions?.length) {
+                setRegenerateConfirm(true);
+              } else {
+                autoGenerateMutation.mutate();
+              }
             }}
             disabled={autoGenerateMutation.isPending}
             className="btn btn-secondary"
           >
-            <Wand2 className="h-4 w-4 mr-2" />
-            {autoGenerateMutation.isPending
-              ? 'Generating...'
-              : 'Auto-Generate'}
+            {autoGenerateMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <Wand2 className="h-4 w-4 mr-2" />}
+            <span className="hidden sm:inline">{autoGenerateMutation.isPending ? 'Generating...' : 'Auto-Generate'}</span>
           </button>
           <button
             onClick={() => generateAllBracketsMutation.mutate()}
-            disabled={
-              generateAllBracketsMutation.isPending || !divisions?.length
-            }
+            disabled={generateAllBracketsMutation.isPending || !divisions?.length}
             className="btn btn-secondary"
           >
-            <PlayCircle className="h-4 w-4 mr-2" />
-            {generateAllBracketsMutation.isPending
-              ? 'Generating...'
-              : 'Generate Brackets'}
+            {generateAllBracketsMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <PlayCircle className="h-4 w-4 mr-2" />}
+            <span className="hidden sm:inline">{generateAllBracketsMutation.isPending ? 'Generating...' : 'Brackets'}</span>
           </button>
           <button
             onClick={exportAllPDFs}
             disabled={exportingAll || !divisions?.some((d) => d.bracket)}
             className="btn btn-primary"
           >
-            <Download className="h-4 w-4 mr-2" />
-            {exportingAll ? 'Exporting...' : 'Export All PDFs'}
+            {exportingAll ? <Spinner size="sm" className="mr-2" /> : <Download className="h-4 w-4 mr-2" />}
+            <span className="hidden sm:inline">{exportingAll ? 'Exporting...' : 'Export PDFs'}</span>
           </button>
         </div>
       </div>
@@ -383,7 +391,7 @@ export default function Divisions() {
       {/* Filters */}
       <div className="card mb-6">
         <div className="card-body">
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-4 items-end">
             <div>
               <label className="form-label">Belt Level</label>
               <select
@@ -427,14 +435,10 @@ export default function Divisions() {
               </select>
             </div>
             {divisions?.length ? (
-              <div className="ml-auto self-end">
+              <div className="ml-auto">
                 <button
-                  onClick={() => {
-                    if (confirm('Clear all divisions?')) {
-                      clearDivisionsMutation.mutate();
-                    }
-                  }}
-                  className="btn btn-secondary text-red-600"
+                  onClick={() => setClearConfirm(true)}
+                  className="btn btn-secondary text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Clear All
@@ -447,12 +451,12 @@ export default function Divisions() {
 
       {/* Warnings */}
       {(stats.smallDivisions > 0 || stats.largeDivisions > 0 || stats.emptyDivisions > 0) && (
-        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
           <div className="flex items-start">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 mr-3 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
             <div>
-              <h3 className="font-medium text-yellow-800">Division Warnings</h3>
-              <ul className="mt-1 text-sm text-yellow-700 list-disc list-inside">
+              <h3 className="font-medium text-yellow-800 dark:text-yellow-200">Division Warnings</h3>
+              <ul className="mt-1 text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside">
                 {stats.emptyDivisions > 0 && (
                   <li>{stats.emptyDivisions} division(s) with no competitors</li>
                 )}
@@ -471,117 +475,113 @@ export default function Divisions() {
       {/* Stats Summary */}
       {divisions && divisions.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-            <div className="text-xs text-gray-500">Total Divisions</div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Total Divisions</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-4 text-center">
-            <div className="text-2xl font-bold text-green-600">{stats.withBrackets}</div>
-            <div className="text-xs text-gray-500">With Brackets</div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.withBrackets}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">With Brackets</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-4 text-center">
-            <div className="text-2xl font-bold text-gray-400">{stats.total - stats.withBrackets}</div>
-            <div className="text-xs text-gray-500">Without Brackets</div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div className="text-2xl font-bold text-gray-400 dark:text-gray-500">{stats.total - stats.withBrackets}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Without Brackets</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-4 text-center">
-            <div className={`text-2xl font-bold ${stats.smallDivisions > 0 ? 'text-yellow-600' : 'text-gray-400'}`}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div className={`text-2xl font-bold ${stats.smallDivisions > 0 ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-400 dark:text-gray-500'}`}>
               {stats.smallDivisions}
             </div>
-            <div className="text-xs text-gray-500">Small (&lt;3)</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Small (&lt;3)</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-4 text-center">
-            <div className={`text-2xl font-bold ${stats.largeDivisions > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div className={`text-2xl font-bold ${stats.largeDivisions > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400 dark:text-gray-500'}`}>
               {stats.largeDivisions}
             </div>
-            <div className="text-xs text-gray-500">Large (&gt;8)</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Large (&gt;8)</div>
           </div>
         </div>
       )}
 
       {/* Divisions */}
       {isLoading ? (
-        <div className="text-center py-12 text-gray-500">Loading...</div>
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
       ) : divisions && divisions.length > 0 ? (
         <div className="space-y-6">
           {Object.entries(groupedDivisions || {}).map(([category, divs]) => (
             <div key={category} className="card">
               <div className="card-header flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900">{category}</h3>
-                  <span className="text-sm text-gray-500">
+                  <h3 className="font-semibold text-gray-900 dark:text-white">{category}</h3>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
                     {divs.length} division{divs.length !== 1 ? 's' : ''}
                   </span>
                 </div>
               </div>
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {divs.map((div) => (
                   <div
                     key={div.id}
-                    className="p-4 flex items-center justify-between hover:bg-gray-50"
+                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50"
                   >
                     <div className="flex items-center">
-                      <LayoutGrid className="h-5 w-5 text-gray-400 mr-3" />
+                      <LayoutGrid className="h-5 w-5 text-gray-400 dark:text-gray-500 mr-3 flex-shrink-0" />
                       <div>
-                        <p className="font-medium text-gray-900">{div.name}</p>
-                        <p className="text-sm text-gray-500">
+                        <p className="font-medium text-gray-900 dark:text-white">{div.name}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
                           {div.ageMin}-{div.ageMax} years
                           {div.weightClass && ` • ${div.weightClass}`}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
                       <div className={`flex items-center text-sm ${
-                        div._count.assignments === 0 ? 'text-red-500' :
-                        div._count.assignments < 3 ? 'text-yellow-600' :
-                        div._count.assignments > 8 ? 'text-orange-600' :
-                        'text-gray-500'
+                        div._count.assignments === 0 ? 'text-red-500 dark:text-red-400' :
+                        div._count.assignments < 3 ? 'text-yellow-600 dark:text-yellow-400' :
+                        div._count.assignments > 8 ? 'text-orange-600 dark:text-orange-400' :
+                        'text-gray-500 dark:text-gray-400'
                       }`}>
                         <Users className="h-4 w-4 mr-1" />
                         {div._count.assignments}
                       </div>
                       {div._count.assignments === 0 && (
-                        <span className="badge bg-red-100 text-red-800">Empty</span>
+                        <span className="badge bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">Empty</span>
                       )}
                       {div._count.assignments > 0 && div._count.assignments < 3 && (
-                        <span className="badge bg-yellow-100 text-yellow-800">Small</span>
+                        <span className="badge bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">Small</span>
                       )}
                       {div._count.assignments > 8 && (
-                        <span className="badge bg-orange-100 text-orange-800">Large</span>
+                        <span className="badge bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">Large</span>
                       )}
                       <span
                         className={`badge ${
                           div.bracket ? 'badge-green' : 'badge-gray'
                         }`}
                       >
-                        {div.bracket ? 'Bracket Ready' : 'No Bracket'}
+                        {div.bracket ? 'Ready' : 'No Bracket'}
                       </span>
                       {div._count.assignments > 8 && (
                         <button
-                          onClick={() => {
-                            if (confirm(`Split "${div.name}" into 2 divisions?`)) {
-                              splitDivisionMutation.mutate(div.id);
-                            }
-                          }}
-                          className="text-gray-400 hover:text-primary-600"
+                          onClick={() => setSplitTarget(div)}
+                          className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
                           title="Split Division"
                         >
                           <Scissors className="h-4 w-4" />
                         </button>
                       )}
                       <button
-                        onClick={() => {
-                          if (confirm(`Delete "${div.name}"?`)) {
-                            deleteDivisionMutation.mutate(div.id);
-                          }
-                        }}
-                        className="text-gray-400 hover:text-red-600"
+                        onClick={() => setDeleteTarget(div)}
+                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 touch-target"
                         title="Delete Division"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
                       <Link
                         to={`/tournaments/${id}/divisions/${div.id}/bracket`}
-                        className="text-primary-600 hover:text-primary-700 flex items-center"
+                        className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 flex items-center touch-target"
                       >
                         View
                         <ChevronRight className="h-4 w-4 ml-1" />
@@ -595,50 +595,44 @@ export default function Divisions() {
         </div>
       ) : (
         <div className="card">
-          <div className="card-body text-center py-12">
-            <LayoutGrid className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">
-              No divisions yet
-            </h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Auto-generate divisions based on tournament rules.
-            </p>
-            <button
-              onClick={() => autoGenerateMutation.mutate()}
-              disabled={autoGenerateMutation.isPending}
-              className="mt-4 btn btn-primary"
-            >
-              <Wand2 className="h-4 w-4 mr-2" />
-              Auto-Generate Divisions
-            </button>
-          </div>
+          <EmptyState
+            icon={LayoutGrid}
+            title="No divisions yet"
+            description="Auto-generate divisions based on tournament rules."
+            action={{
+              label: 'Auto-Generate Divisions',
+              onClick: () => autoGenerateMutation.mutate(),
+              icon: Wand2,
+            }}
+          />
         </div>
       )}
 
       {/* Preview Modal */}
       {showPreview && previewData && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b flex items-center justify-between">
+        <div className="modal-container flex items-center justify-center p-4">
+          <div className="modal-backdrop" onClick={() => setShowPreview(false)} />
+          <div className="modal-panel max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="modal-header">
               <div>
-                <h2 className="text-lg font-semibold">Division Preview</h2>
-                <p className="text-sm text-gray-500">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Division Preview</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   {previewData.divisions.length} divisions • {previewData.totalCompetitors} competitors
                 </p>
               </div>
-              <button onClick={() => setShowPreview(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowPreview(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 touch-target">
                 <X className="h-6 w-6" />
               </button>
             </div>
 
             {/* Preview Warnings */}
             {previewData.warnings.length > 0 && (
-              <div className="p-4 bg-yellow-50 border-b border-yellow-200">
+              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800">
                 <div className="flex items-start">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2 flex-shrink-0" />
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0" />
                   <div>
-                    <p className="font-medium text-yellow-800">Warnings:</p>
-                    <ul className="text-sm text-yellow-700 list-disc list-inside">
+                    <p className="font-medium text-yellow-800 dark:text-yellow-200">Warnings:</p>
+                    <ul className="text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside">
                       {previewData.warnings.map((w, i) => (
                         <li key={i}>{w}</li>
                       ))}
@@ -649,28 +643,28 @@ export default function Divisions() {
             )}
 
             {/* Preview Stats */}
-            <div className="p-4 bg-gray-50 border-b grid grid-cols-4 gap-4 text-center">
+            <div className="p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
               <div>
-                <div className="text-xl font-bold text-gray-900">{previewData.divisions.length}</div>
-                <div className="text-xs text-gray-500">Total Divisions</div>
+                <div className="text-xl font-bold text-gray-900 dark:text-white">{previewData.divisions.length}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Total Divisions</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-green-600">
+                <div className="text-xl font-bold text-green-600 dark:text-green-400">
                   {previewData.divisions.filter(d => d.competitorCount >= 3 && d.competitorCount <= 8).length}
                 </div>
-                <div className="text-xs text-gray-500">Optimal Size (3-8)</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Optimal Size (3-8)</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-yellow-600">
+                <div className="text-xl font-bold text-yellow-600 dark:text-yellow-400">
                   {previewData.divisions.filter(d => d.competitorCount > 0 && d.competitorCount < 3).length}
                 </div>
-                <div className="text-xs text-gray-500">Small (&lt;3)</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Small (&lt;3)</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-orange-600">
+                <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
                   {previewData.divisions.filter(d => d.competitorCount > 8).length}
                 </div>
-                <div className="text-xs text-gray-500">Large (&gt;8)</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Large (&gt;8)</div>
               </div>
             </div>
 
@@ -681,36 +675,36 @@ export default function Divisions() {
                   <div
                     key={index}
                     className={`p-4 rounded-lg border ${
-                      div.competitorCount === 0 ? 'border-red-200 bg-red-50' :
-                      div.competitorCount < 3 ? 'border-yellow-200 bg-yellow-50' :
-                      div.competitorCount > 8 ? 'border-orange-200 bg-orange-50' :
-                      'border-gray-200 bg-white'
+                      div.competitorCount === 0 ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20' :
+                      div.competitorCount < 3 ? 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20' :
+                      div.competitorCount > 8 ? 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20' :
+                      'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-gray-900">{div.name}</h4>
+                      <h4 className="font-medium text-gray-900 dark:text-white">{div.name}</h4>
                       <div className="flex items-center gap-2">
                         <span className={`text-sm font-medium ${
-                          div.competitorCount === 0 ? 'text-red-600' :
-                          div.competitorCount < 3 ? 'text-yellow-600' :
-                          div.competitorCount > 8 ? 'text-orange-600' :
-                          'text-green-600'
+                          div.competitorCount === 0 ? 'text-red-600 dark:text-red-400' :
+                          div.competitorCount < 3 ? 'text-yellow-600 dark:text-yellow-400' :
+                          div.competitorCount > 8 ? 'text-orange-600 dark:text-orange-400' :
+                          'text-green-600 dark:text-green-400'
                         }`}>
                           {div.competitorCount} competitors
                         </span>
                         {div.competitorCount === 0 && (
-                          <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">Empty</span>
+                          <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 px-2 py-0.5 rounded">Empty</span>
                         )}
                         {div.competitorCount > 0 && div.competitorCount < 3 && (
-                          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Needs merge</span>
+                          <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 px-2 py-0.5 rounded">Needs merge</span>
                         )}
                         {div.competitorCount > 8 && (
-                          <span className="text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded">Will be split</span>
+                          <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 px-2 py-0.5 rounded">Will be split</span>
                         )}
                       </div>
                     </div>
                     {div.competitors.length > 0 && (
-                      <div className="text-sm text-gray-600">
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
                         {div.competitors.slice(0, 5).map((c, i) => (
                           <span key={i}>
                             {c.name}{c.school && ` (${c.school})`}
@@ -718,7 +712,7 @@ export default function Divisions() {
                           </span>
                         ))}
                         {div.competitors.length > 5 && (
-                          <span className="text-gray-400"> +{div.competitors.length - 5} more</span>
+                          <span className="text-gray-400 dark:text-gray-500"> +{div.competitors.length - 5} more</span>
                         )}
                       </div>
                     )}
@@ -728,17 +722,98 @@ export default function Divisions() {
             </div>
 
             {/* Actions */}
-            <div className="p-4 border-t flex justify-end gap-3">
-              <button onClick={() => setShowPreview(false)} className="btn btn-secondary">
+            <div className="modal-footer">
+              <button onClick={() => setShowPreview(false)} className="btn btn-secondary w-full sm:w-auto">
                 Cancel
               </button>
               <button
                 onClick={confirmGenerate}
                 disabled={autoGenerateMutation.isPending}
-                className="btn btn-primary"
+                className="btn btn-primary w-full sm:w-auto flex items-center justify-center"
               >
-                <Check className="h-4 w-4 mr-2" />
-                {autoGenerateMutation.isPending ? 'Generating...' : 'Confirm & Generate'}
+                {autoGenerateMutation.isPending ? (
+                  <>
+                    <Spinner size="sm" className="mr-2" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4 mr-2" />
+                    Confirm & Generate
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Division Confirmation */}
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteDivisionMutation.mutate(deleteTarget.id)}
+        title="Delete Division"
+        message={`Are you sure you want to delete "${deleteTarget?.name}"? This will remove all competitor assignments in this division.`}
+        confirmText="Delete Division"
+        isLoading={deleteDivisionMutation.isPending}
+      />
+
+      {/* Split Division Confirmation */}
+      <ConfirmDialog
+        isOpen={!!splitTarget}
+        onClose={() => setSplitTarget(null)}
+        onConfirm={() => splitTarget && splitDivisionMutation.mutate(splitTarget.id)}
+        title="Split Division"
+        message={`Split "${splitTarget?.name}" into 2 divisions? Competitors will be distributed evenly.`}
+        confirmText="Split Division"
+        variant="warning"
+        isLoading={splitDivisionMutation.isPending}
+      />
+
+      {/* Clear All Confirmation */}
+      <ConfirmDialog
+        isOpen={clearConfirm}
+        onClose={() => setClearConfirm(false)}
+        onConfirm={() => clearDivisionsMutation.mutate()}
+        title="Clear All Divisions"
+        message="Are you sure you want to delete all divisions? This will remove all competitor assignments and brackets. This action cannot be undone."
+        confirmText="Clear All"
+        isLoading={clearDivisionsMutation.isPending}
+      />
+
+      {/* Regenerate Confirmation */}
+      <ConfirmDialog
+        isOpen={regenerateConfirm}
+        onClose={() => setRegenerateConfirm(false)}
+        onConfirm={() => {
+          setRegenerateConfirm(false);
+          autoGenerateMutation.mutate();
+        }}
+        title="Regenerate Divisions"
+        message="This will replace all existing divisions. Any existing brackets will be deleted. Continue?"
+        confirmText="Regenerate"
+        variant="warning"
+        isLoading={autoGenerateMutation.isPending}
+      />
+
+      {/* Result Message Modal */}
+      {resultMessage && (
+        <div className="modal-container flex items-center justify-center p-4">
+          <div className="modal-backdrop" onClick={() => setResultMessage(null)} />
+          <div className="modal-panel max-w-md">
+            <div className="modal-header">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{resultMessage.title}</h2>
+              <button onClick={() => setResultMessage(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{resultMessage.message}</p>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setResultMessage(null)} className="btn btn-primary w-full">
+                OK
               </button>
             </div>
           </div>

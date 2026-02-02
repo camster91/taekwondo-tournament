@@ -14,6 +14,7 @@ import {
   BarChart3,
   FileDown,
 } from 'lucide-react';
+import { CardSkeleton } from '../components/ui/Skeleton';
 
 interface Placement {
   place: number;
@@ -389,21 +390,21 @@ export default function Results() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       {/* Header */}
-      <div className="bg-white shadow">
+      <div className="bg-white dark:bg-gray-800 shadow">
         <div className="px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <Link
                 to={`/tournaments/${tournamentId}`}
-                className="mr-3 text-gray-400 hover:text-gray-600"
+                className="mr-3 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <ChevronLeft className="h-6 w-6" />
               </Link>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Tournament Results</h1>
-                <p className="text-sm text-gray-500">{tournament?.name}</p>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Tournament Results</h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{tournament?.name}</p>
               </div>
             </div>
             <div className="relative">
@@ -412,7 +413,7 @@ export default function Results() {
                 className="btn btn-secondary flex items-center"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Export
+                <span className="hidden sm:inline">Export</span>
                 <ChevronDown className="h-4 w-4 ml-1" />
               </button>
 
@@ -422,82 +423,82 @@ export default function Results() {
                     className="fixed inset-0 z-10"
                     onClick={() => setShowExportMenu(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-20">
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20">
                     <div className="py-1">
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                         PDF Export
                       </div>
                       <a
                         href={`/api/brackets/tournament/${tournamentId}/results/pdf`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                         onClick={() => setShowExportMenu(false)}
                       >
-                        <Download className="h-4 w-4 mr-3 text-red-500" />
+                        <Download className="h-4 w-4 mr-3 text-red-500 dark:text-red-400" />
                         Results PDF
                       </a>
 
-                      <div className="border-t my-1" />
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">
+                      <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                         CSV Export
                       </div>
                       <button
                         onClick={exportSchoolsCSV}
-                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                       >
-                        <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500" />
+                        <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500 dark:text-green-400" />
                         School Standings
                       </button>
                       <button
                         onClick={exportResultsCSV}
-                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                       >
-                        <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500" />
+                        <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500 dark:text-green-400" />
                         All Results by Division
                       </button>
                       <button
                         onClick={exportCompetitorsCSV}
-                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                       >
-                        <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500" />
+                        <FileSpreadsheet className="h-4 w-4 mr-3 text-green-500 dark:text-green-400" />
                         All Results by Competitor
                       </button>
 
-                      <div className="border-t my-1" />
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">
+                      <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                         Excel Export
                       </div>
                       <button
                         onClick={exportExcel}
-                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                       >
-                        <FileDown className="h-4 w-4 mr-3 text-blue-500" />
+                        <FileDown className="h-4 w-4 mr-3 text-blue-500 dark:text-blue-400" />
                         Complete Excel Report
                       </button>
 
-                      <div className="border-t my-1" />
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">
+                      <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
                         Certificates
                       </div>
                       <a
                         href={`/api/brackets/tournament/${tournamentId}/certificates`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                         onClick={() => setShowExportMenu(false)}
                       >
-                        <Award className="h-4 w-4 mr-3 text-yellow-500" />
+                        <Award className="h-4 w-4 mr-3 text-yellow-500 dark:text-yellow-400" />
                         All Certificates (1st-3rd)
                       </a>
                       <a
                         href={`/api/brackets/tournament/${tournamentId}/certificates?place=1`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                         onClick={() => setShowExportMenu(false)}
                       >
-                        <Medal className="h-4 w-4 mr-3 text-yellow-500" />
+                        <Medal className="h-4 w-4 mr-3 text-yellow-500 dark:text-yellow-400" />
                         Gold Only (1st Place)
                       </a>
                     </div>
@@ -511,51 +512,51 @@ export default function Results() {
 
       {/* Stats Overview */}
       <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
           <div className="flex items-center">
-            <div className="bg-purple-100 p-2 rounded-lg">
-              <Trophy className="h-5 w-5 text-purple-600" />
+            <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-lg">
+              <Trophy className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             </div>
             <div className="ml-3">
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
                 {overallStats.completedDivisions}
               </div>
-              <div className="text-xs text-gray-500">Divisions Complete</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Divisions Complete</div>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
           <div className="flex items-center">
-            <div className="bg-blue-100 p-2 rounded-lg">
-              <Award className="h-5 w-5 text-blue-600" />
+            <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg">
+              <Award className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="ml-3">
-              <div className="text-2xl font-bold text-gray-900">{overallStats.totalMatches}</div>
-              <div className="text-xs text-gray-500">Total Matches</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">{overallStats.totalMatches}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Total Matches</div>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
           <div className="flex items-center">
-            <div className="bg-green-100 p-2 rounded-lg">
-              <Users className="h-5 w-5 text-green-600" />
+            <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-lg">
+              <Users className="h-5 w-5 text-green-600 dark:text-green-400" />
             </div>
             <div className="ml-3">
-              <div className="text-2xl font-bold text-gray-900">{overallStats.schools}</div>
-              <div className="text-xs text-gray-500">Schools Competing</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">{overallStats.schools}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Schools Competing</div>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
           <div className="flex items-center">
-            <div className="bg-yellow-100 p-2 rounded-lg">
-              <Medal className="h-5 w-5 text-yellow-600" />
+            <div className="bg-yellow-100 dark:bg-yellow-900/30 p-2 rounded-lg">
+              <Medal className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
             </div>
             <div className="ml-3">
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
                 {schoolStats.reduce((sum, s) => sum + s.gold + s.silver + s.bronze, 0)}
               </div>
-              <div className="text-xs text-gray-500">Total Medals</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Total Medals</div>
             </div>
           </div>
         </div>
@@ -566,20 +567,20 @@ export default function Results() {
         <select
           value={filterEvent}
           onChange={(e) => setFilterEvent(e.target.value as any)}
-          className="px-3 py-2 border rounded-lg text-sm bg-white"
+          className="form-select text-sm"
         >
           <option value="all">All Events</option>
           <option value="patterns">Patterns</option>
           <option value="sparring">Sparring</option>
         </select>
 
-        <div className="flex bg-white border rounded-lg overflow-hidden">
+        <div className="flex bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
           <button
             onClick={() => setViewMode('schools')}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               viewMode === 'schools'
                 ? 'bg-primary-500 text-white'
-                : 'text-gray-600 hover:bg-gray-50'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
             By School
@@ -589,7 +590,7 @@ export default function Results() {
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               viewMode === 'divisions'
                 ? 'bg-primary-500 text-white'
-                : 'text-gray-600 hover:bg-gray-50'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
             By Division
@@ -599,7 +600,7 @@ export default function Results() {
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               viewMode === 'breakdown'
                 ? 'bg-primary-500 text-white'
-                : 'text-gray-600 hover:bg-gray-50'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
             Breakdown
@@ -610,40 +611,44 @@ export default function Results() {
       {/* Content */}
       <div className="p-4">
         {isLoading ? (
-          <div className="text-center py-12 text-gray-500">Loading results...</div>
+          <div className="space-y-4">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
         ) : viewMode === 'schools' ? (
           <>
             {/* School Medal Table */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Rank
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       School
                     </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-yellow-600 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-center text-xs font-medium text-yellow-600 dark:text-yellow-400 uppercase tracking-wider">
                       <Medal className="h-4 w-4 inline" /> Gold
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider">
                       <Medal className="h-4 w-4 inline" /> Silver
                     </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-amber-600 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-center text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wider">
                       <Medal className="h-4 w-4 inline" /> Bronze
                     </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Total
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {schoolStats.map((school, index) => (
                     <tr
                       key={school.name}
-                      className={`hover:bg-gray-50 cursor-pointer ${
-                        selectedSchool === school.name ? 'bg-blue-50' : ''
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer ${
+                        selectedSchool === school.name ? 'bg-blue-50 dark:bg-blue-900/30' : ''
                       }`}
                       onClick={() =>
                         setSelectedSchool(selectedSchool === school.name ? null : school.name)
@@ -653,30 +658,30 @@ export default function Results() {
                         <div
                           className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
                             index === 0
-                              ? 'bg-yellow-100 text-yellow-800'
+                              ? 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-300'
                               : index === 1
-                              ? 'bg-gray-100 text-gray-800'
+                              ? 'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200'
                               : index === 2
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-gray-50 text-gray-600'
+                              ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300'
+                              : 'bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
                           }`}
                         >
                           {index + 1}
                         </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="font-medium text-gray-900">{school.name}</div>
+                        <div className="font-medium text-gray-900 dark:text-white">{school.name}</div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-center text-lg font-bold text-yellow-600">
+                      <td className="px-4 py-3 whitespace-nowrap text-center text-lg font-bold text-yellow-600 dark:text-yellow-400">
                         {school.gold}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center text-lg font-bold text-gray-400">
                         {school.silver}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-center text-lg font-bold text-amber-600">
+                      <td className="px-4 py-3 whitespace-nowrap text-center text-lg font-bold text-amber-600 dark:text-amber-400">
                         {school.bronze}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-center text-lg font-semibold text-gray-700">
+                      <td className="px-4 py-3 whitespace-nowrap text-center text-lg font-semibold text-gray-700 dark:text-gray-300">
                         {school.gold + school.silver + school.bronze}
                       </td>
                     </tr>
@@ -687,9 +692,9 @@ export default function Results() {
 
             {/* School Detail */}
             {selectedSchool && (
-              <div className="mt-4 bg-white rounded-lg shadow p-4">
+              <div className="mt-4 bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-lg">{selectedSchool} - All Placements</h3>
+                  <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{selectedSchool} - All Placements</h3>
                   <a
                     href={`/api/brackets/tournament/${tournamentId}/school-report?school=${encodeURIComponent(selectedSchool)}`}
                     target="_blank"
@@ -697,7 +702,7 @@ export default function Results() {
                     className="btn btn-secondary text-sm flex items-center"
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    Download Report
+                    <span className="hidden sm:inline">Download Report</span>
                   </a>
                 </div>
                 <div className="space-y-2">
@@ -710,27 +715,27 @@ export default function Results() {
                       .map((placement) => (
                         <div
                           key={placement.registrationId}
-                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                          className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
                         >
                           <div className="flex items-center">
                             {getMedalIcon(placement.place)}
                             <div className="ml-3">
-                              <div className="font-medium">
+                              <div className="font-medium text-gray-900 dark:text-white">
                                 {placement.registration.competitor.firstName}{' '}
                                 {placement.registration.competitor.lastName}
                               </div>
-                              <div className="text-sm text-gray-500">{division.name}</div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">{division.name}</div>
                             </div>
                           </div>
                           <span
                             className={`text-sm font-medium ${
                               placement.place === 1
-                                ? 'text-yellow-600'
+                                ? 'text-yellow-600 dark:text-yellow-400'
                                 : placement.place === 2
-                                ? 'text-gray-500'
+                                ? 'text-gray-500 dark:text-gray-400'
                                 : placement.place === 3
-                                ? 'text-amber-600'
-                                : 'text-gray-400'
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-gray-400 dark:text-gray-500'
                             }`}
                           >
                             {getPlaceName(placement.place)}
@@ -746,27 +751,27 @@ export default function Results() {
           /* Division Results View */
           <div className="space-y-4">
             {filteredDivisions?.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                 No completed divisions with results yet.
               </div>
             ) : (
               filteredDivisions?.map((division) => (
-                <div key={division.id} className="bg-white rounded-lg shadow overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+                <div key={division.id} className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{division.name}</h3>
-                      <span className="text-xs text-gray-500 capitalize">{division.eventType}</span>
+                      <h3 className="font-semibold text-gray-900 dark:text-white">{division.name}</h3>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">{division.eventType}</span>
                     </div>
                     <Link
                       to={`/tournaments/${tournamentId}/divisions/${division.id}/bracket`}
-                      className="text-sm text-primary-600 hover:text-primary-700"
+                      className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
                     >
                       View Bracket →
                     </Link>
                   </div>
                   <div className="p-4">
                     {division.bracket?.placements?.length === 0 ? (
-                      <p className="text-gray-500 text-sm">No placements recorded</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-sm">No placements recorded</p>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         {division.bracket?.placements
@@ -777,23 +782,23 @@ export default function Results() {
                               key={placement.registrationId}
                               className={`p-4 rounded-lg border-2 ${
                                 placement.place === 1
-                                  ? 'border-yellow-300 bg-yellow-50'
+                                  ? 'border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/30'
                                   : placement.place === 2
-                                  ? 'border-gray-300 bg-gray-50'
-                                  : 'border-amber-300 bg-amber-50'
+                                  ? 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'
+                                  : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30'
                               }`}
                             >
                               <div className="flex items-center mb-2">
                                 {getMedalIcon(placement.place)}
-                                <span className="ml-2 text-sm font-medium text-gray-500">
+                                <span className="ml-2 text-sm font-medium text-gray-500 dark:text-gray-400">
                                   {getPlaceName(placement.place)}
                                 </span>
                               </div>
-                              <div className="font-semibold text-gray-900">
+                              <div className="font-semibold text-gray-900 dark:text-white">
                                 {placement.registration.competitor.firstName}{' '}
                                 {placement.registration.competitor.lastName}
                               </div>
-                              <div className="text-sm text-gray-500">
+                              <div className="text-sm text-gray-500 dark:text-gray-400">
                                 {placement.registration.competitor.schoolDojang || 'Independent'}
                               </div>
                             </div>
@@ -809,10 +814,10 @@ export default function Results() {
           /* Breakdown View */
           <div className="space-y-6">
             {/* Belt Level Breakdown */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="px-4 py-3 bg-gray-50 border-b flex items-center">
-                <BarChart3 className="h-5 w-5 text-gray-500 mr-2" />
-                <h3 className="font-semibold text-gray-900">By Belt Level</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex items-center">
+                <BarChart3 className="h-5 w-5 text-gray-500 dark:text-gray-400 mr-2" />
+                <h3 className="font-semibold text-gray-900 dark:text-white">By Belt Level</h3>
               </div>
               <div className="p-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -823,30 +828,30 @@ export default function Results() {
                         key={belt.name}
                         className={`p-4 rounded-lg border-2 ${
                           belt.name === 'Black Belt'
-                            ? 'border-gray-800 bg-gray-50'
-                            : 'border-blue-300 bg-blue-50'
+                            ? 'border-gray-800 dark:border-gray-500 bg-gray-50 dark:bg-gray-700'
+                            : 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/30'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-3">
-                          <span className="font-bold text-lg">{belt.name}</span>
-                          <span className="text-sm text-gray-500">{belt.divisions} divisions</span>
+                          <span className="font-bold text-lg text-gray-900 dark:text-white">{belt.name}</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">{belt.divisions} divisions</span>
                         </div>
                         <div className="grid grid-cols-4 gap-2 text-center">
                           <div>
-                            <div className="text-2xl font-bold text-yellow-600">{belt.gold}</div>
-                            <div className="text-xs text-gray-500">Gold</div>
+                            <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{belt.gold}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Gold</div>
                           </div>
                           <div>
                             <div className="text-2xl font-bold text-gray-400">{belt.silver}</div>
-                            <div className="text-xs text-gray-500">Silver</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Silver</div>
                           </div>
                           <div>
-                            <div className="text-2xl font-bold text-amber-600">{belt.bronze}</div>
-                            <div className="text-xs text-gray-500">Bronze</div>
+                            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{belt.bronze}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Bronze</div>
                           </div>
                           <div>
-                            <div className="text-2xl font-bold text-gray-700">{total}</div>
-                            <div className="text-xs text-gray-500">Total</div>
+                            <div className="text-2xl font-bold text-gray-700 dark:text-gray-300">{total}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Total</div>
                           </div>
                         </div>
                       </div>
@@ -857,43 +862,43 @@ export default function Results() {
             </div>
 
             {/* Age Group Breakdown */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="px-4 py-3 bg-gray-50 border-b flex items-center">
-                <Users className="h-5 w-5 text-gray-500 mr-2" />
-                <h3 className="font-semibold text-gray-900">By Age Group</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex items-center">
+                <Users className="h-5 w-5 text-gray-500 dark:text-gray-400 mr-2" />
+                <h3 className="font-semibold text-gray-900 dark:text-white">By Age Group</h3>
               </div>
-              <div className="p-4">
+              <div className="p-4 overflow-x-auto">
                 <table className="min-w-full">
                   <thead>
-                    <tr className="border-b">
-                      <th className="py-2 text-left text-sm font-medium text-gray-500">Age Group</th>
-                      <th className="py-2 text-center text-sm font-medium text-gray-500">Divisions</th>
-                      <th className="py-2 text-center text-sm font-medium text-yellow-600">Gold</th>
+                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="py-2 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Age Group</th>
+                      <th className="py-2 text-center text-sm font-medium text-gray-500 dark:text-gray-400">Divisions</th>
+                      <th className="py-2 text-center text-sm font-medium text-yellow-600 dark:text-yellow-400">Gold</th>
                       <th className="py-2 text-center text-sm font-medium text-gray-400">Silver</th>
-                      <th className="py-2 text-center text-sm font-medium text-amber-600">Bronze</th>
-                      <th className="py-2 text-center text-sm font-medium text-gray-500">Total</th>
+                      <th className="py-2 text-center text-sm font-medium text-amber-600 dark:text-amber-400">Bronze</th>
+                      <th className="py-2 text-center text-sm font-medium text-gray-500 dark:text-gray-400">Total</th>
                     </tr>
                   </thead>
                   <tbody>
                     {ageBreakdown.map((age) => (
-                      <tr key={age.name} className="border-b hover:bg-gray-50">
-                        <td className="py-3 font-medium">{age.name} years</td>
-                        <td className="py-3 text-center text-gray-500">{age.divisions}</td>
-                        <td className="py-3 text-center font-bold text-yellow-600">{age.gold}</td>
+                      <tr key={age.name} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="py-3 font-medium text-gray-900 dark:text-white">{age.name} years</td>
+                        <td className="py-3 text-center text-gray-500 dark:text-gray-400">{age.divisions}</td>
+                        <td className="py-3 text-center font-bold text-yellow-600 dark:text-yellow-400">{age.gold}</td>
                         <td className="py-3 text-center font-bold text-gray-400">{age.silver}</td>
-                        <td className="py-3 text-center font-bold text-amber-600">{age.bronze}</td>
-                        <td className="py-3 text-center font-semibold">{age.gold + age.silver + age.bronze}</td>
+                        <td className="py-3 text-center font-bold text-amber-600 dark:text-amber-400">{age.bronze}</td>
+                        <td className="py-3 text-center font-semibold text-gray-900 dark:text-white">{age.gold + age.silver + age.bronze}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-gray-50 font-semibold">
-                      <td className="py-3">Total</td>
-                      <td className="py-3 text-center">{ageBreakdown.reduce((s, a) => s + a.divisions, 0)}</td>
-                      <td className="py-3 text-center text-yellow-600">{ageBreakdown.reduce((s, a) => s + a.gold, 0)}</td>
+                    <tr className="bg-gray-50 dark:bg-gray-700 font-semibold">
+                      <td className="py-3 text-gray-900 dark:text-white">Total</td>
+                      <td className="py-3 text-center text-gray-700 dark:text-gray-300">{ageBreakdown.reduce((s, a) => s + a.divisions, 0)}</td>
+                      <td className="py-3 text-center text-yellow-600 dark:text-yellow-400">{ageBreakdown.reduce((s, a) => s + a.gold, 0)}</td>
                       <td className="py-3 text-center text-gray-400">{ageBreakdown.reduce((s, a) => s + a.silver, 0)}</td>
-                      <td className="py-3 text-center text-amber-600">{ageBreakdown.reduce((s, a) => s + a.bronze, 0)}</td>
-                      <td className="py-3 text-center">{ageBreakdown.reduce((s, a) => s + a.gold + a.silver + a.bronze, 0)}</td>
+                      <td className="py-3 text-center text-amber-600 dark:text-amber-400">{ageBreakdown.reduce((s, a) => s + a.bronze, 0)}</td>
+                      <td className="py-3 text-center text-gray-900 dark:text-white">{ageBreakdown.reduce((s, a) => s + a.gold + a.silver + a.bronze, 0)}</td>
                     </tr>
                   </tfoot>
                 </table>

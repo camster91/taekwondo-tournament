@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Trophy, Users, LayoutGrid, Plus, ArrowRight, School, Calendar, Target } from 'lucide-react';
+import { StatsSkeleton, CardSkeleton } from '../components/ui/Skeleton';
+import EmptyState from '../components/ui/EmptyState';
+import { StatusBadge } from '../components/ui/Badge';
 
 interface Tournament {
   id: string;
@@ -42,7 +45,7 @@ const BELT_COLORS: Record<string, string> = {
 };
 
 export default function Dashboard() {
-  const { data: tournaments } = useQuery<Tournament[]>({
+  const { data: tournaments, isLoading: tournamentsLoading } = useQuery<Tournament[]>({
     queryKey: ['tournaments'],
     queryFn: async () => {
       const res = await fetch('/api/tournaments');
@@ -50,7 +53,7 @@ export default function Dashboard() {
     },
   });
 
-  const { data: competitorsData } = useQuery<CompetitorsResponse>({
+  const { data: competitorsData, isLoading: competitorsLoading } = useQuery<CompetitorsResponse>({
     queryKey: ['competitors', 'count'],
     queryFn: async () => {
       const res = await fetch('/api/competitors?limit=1');
@@ -58,13 +61,15 @@ export default function Dashboard() {
     },
   });
 
-  const { data: analytics } = useQuery<AnalyticsData>({
+  const { data: analytics, isLoading: analyticsLoading } = useQuery<AnalyticsData>({
     queryKey: ['analytics', 'dashboard'],
     queryFn: async () => {
       const res = await fetch('/api/analytics/dashboard');
       return res.json();
     },
   });
+
+  const isLoading = tournamentsLoading || competitorsLoading || analyticsLoading;
 
   const upcomingTournaments = tournaments?.filter(
     (t) => t.status !== 'completed'
@@ -118,21 +123,30 @@ export default function Dashboard() {
       </div>
 
       {/* Stats - responsive grid */}
-      <div className="stats-grid mb-6 sm:mb-8">
-        {stats.map((stat) => (
-          <div key={stat.name} className="stat-card">
-            <div className="flex items-center">
-              <div className={`${stat.color} p-2 sm:p-3 rounded-lg flex-shrink-0`}>
-                <stat.icon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
-              </div>
-              <div className="ml-3 sm:ml-4 min-w-0">
-                <p className="stat-label truncate">{stat.name}</p>
-                <p className="stat-value">{stat.value}</p>
+      {isLoading ? (
+        <div className="mb-6 sm:mb-8">
+          <StatsSkeleton />
+        </div>
+      ) : (
+        <div className="stats-grid mb-6 sm:mb-8">
+          {stats.map((stat) => (
+            <div key={stat.name} className="stat-card">
+              <div className="flex items-center">
+                <div className={`${stat.color} p-2 sm:p-3 rounded-lg flex-shrink-0`}>
+                  <stat.icon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                </div>
+                <div className="ml-3 sm:ml-4 min-w-0">
+                  <p className="stat-label truncate">{stat.name}</p>
+                  <p className="stat-value">{stat.value}</p>
+                  {stat.subtitle && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500">{stat.subtitle}</p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Analytics Section */}
       {analytics && (analytics.beltDistribution.length > 0 || analytics.topSchools.length > 0) && (
@@ -214,19 +228,25 @@ export default function Dashboard() {
       {/* Recent Tournaments */}
       <div className="card">
         <div className="card-header flex items-center justify-between">
-          <h2 className="text-base sm:text-lg font-medium text-gray-900">
+          <h2 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white">
             Recent Tournaments
           </h2>
           <Link
             to="/tournaments"
-            className="text-sm text-primary-600 hover:text-primary-700 flex items-center touch-target"
+            className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 flex items-center touch-target"
           >
             View all
             <ArrowRight className="ml-1 h-4 w-4" />
           </Link>
         </div>
         <div className="card-body p-0">
-          {tournaments && tournaments.length > 0 ? (
+          {tournamentsLoading ? (
+            <div className="p-4 space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <CardSkeleton key={i} />
+              ))}
+            </div>
+          ) : tournaments && tournaments.length > 0 ? (
             <>
               {/* Mobile Card View */}
               <div className="mobile-cards p-4 space-y-3">
@@ -234,31 +254,21 @@ export default function Dashboard() {
                   <Link
                     key={tournament.id}
                     to={`/tournaments/${tournament.id}`}
-                    className="mobile-card block hover:border-primary-300 transition-colors"
+                    className="mobile-card block hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <div className="font-semibold text-gray-900">{tournament.name}</div>
-                      <span
-                        className={`badge ${
-                          tournament.status === 'completed'
-                            ? 'badge-green'
-                            : tournament.status === 'in_progress'
-                            ? 'badge-yellow'
-                            : 'badge-blue'
-                        }`}
-                      >
-                        {tournament.status}
-                      </span>
+                      <div className="font-semibold text-gray-900 dark:text-white">{tournament.name}</div>
+                      <StatusBadge status={tournament.status} />
                     </div>
-                    <div className="text-sm text-gray-500 mb-2">
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
                       {new Date(tournament.date).toLocaleDateString()}
                     </div>
                     <div className="flex gap-4 text-sm">
-                      <span className="text-gray-600">
-                        <span className="font-medium">{tournament._count.registrations}</span> competitors
+                      <span className="text-gray-600 dark:text-gray-400">
+                        <span className="font-medium text-gray-900 dark:text-white">{tournament._count.registrations}</span> competitors
                       </span>
-                      <span className="text-gray-600">
-                        <span className="font-medium">{tournament._count.divisions}</span> divisions
+                      <span className="text-gray-600 dark:text-gray-400">
+                        <span className="font-medium text-gray-900 dark:text-white">{tournament._count.divisions}</span> divisions
                       </span>
                     </div>
                   </Link>
@@ -278,32 +288,22 @@ export default function Dashboard() {
                       <th></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 bg-white">
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
                     {tournaments.slice(0, 5).map((tournament) => (
-                      <tr key={tournament.id}>
-                        <td className="font-medium">{tournament.name}</td>
-                        <td>
+                      <tr key={tournament.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td className="font-medium text-gray-900 dark:text-white">{tournament.name}</td>
+                        <td className="text-gray-600 dark:text-gray-400">
                           {new Date(tournament.date).toLocaleDateString()}
                         </td>
-                        <td>{tournament._count.registrations}</td>
-                        <td>{tournament._count.divisions}</td>
+                        <td className="text-gray-600 dark:text-gray-400">{tournament._count.registrations}</td>
+                        <td className="text-gray-600 dark:text-gray-400">{tournament._count.divisions}</td>
                         <td>
-                          <span
-                            className={`badge ${
-                              tournament.status === 'completed'
-                                ? 'badge-green'
-                                : tournament.status === 'in_progress'
-                                ? 'badge-yellow'
-                                : 'badge-blue'
-                            }`}
-                          >
-                            {tournament.status}
-                          </span>
+                          <StatusBadge status={tournament.status} />
                         </td>
                         <td>
                           <Link
                             to={`/tournaments/${tournament.id}`}
-                            className="text-primary-600 hover:text-primary-700"
+                            className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
                           >
                             View
                           </Link>
@@ -315,16 +315,15 @@ export default function Dashboard() {
               </div>
             </>
           ) : (
-            <div className="empty-state">
-              <Trophy className="empty-state-icon" />
-              <p className="empty-state-title">No tournaments yet</p>
-              <Link
-                to="/tournaments"
-                className="mt-4 inline-block text-primary-600 hover:text-primary-700"
-              >
-                Create your first tournament
-              </Link>
-            </div>
+            <EmptyState
+              icon={Trophy}
+              title="No tournaments yet"
+              description="Get started by creating your first tournament."
+              action={{
+                label: 'Create Tournament',
+                href: '/tournaments',
+              }}
+            />
           )}
         </div>
       </div>
@@ -333,31 +332,31 @@ export default function Dashboard() {
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card">
           <div className="card-body">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
               Quick Actions
             </h3>
             <div className="space-y-3">
               <Link
                 to="/competitors"
-                className="block p-3 rounded-lg border border-gray-200 hover:border-primary-500 hover:bg-primary-50 transition-colors"
+                className="block p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-500 dark:hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
               >
                 <div className="flex items-center">
-                  <Users className="h-5 w-5 text-primary-600" />
-                  <span className="ml-3 font-medium">Import Competitors</span>
+                  <Users className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                  <span className="ml-3 font-medium text-gray-900 dark:text-white">Import Competitors</span>
                 </div>
-                <p className="mt-1 ml-8 text-sm text-gray-500">
+                <p className="mt-1 ml-8 text-sm text-gray-500 dark:text-gray-400">
                   Import from Excel file
                 </p>
               </Link>
               <Link
                 to="/tournaments"
-                className="block p-3 rounded-lg border border-gray-200 hover:border-primary-500 hover:bg-primary-50 transition-colors"
+                className="block p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-500 dark:hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
               >
                 <div className="flex items-center">
-                  <Trophy className="h-5 w-5 text-primary-600" />
-                  <span className="ml-3 font-medium">Create Tournament</span>
+                  <Trophy className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                  <span className="ml-3 font-medium text-gray-900 dark:text-white">Create Tournament</span>
                 </div>
-                <p className="mt-1 ml-8 text-sm text-gray-500">
+                <p className="mt-1 ml-8 text-sm text-gray-500 dark:text-gray-400">
                   Start a new tournament
                 </p>
               </Link>
@@ -367,12 +366,12 @@ export default function Dashboard() {
 
         <div className="card">
           <div className="card-body">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
               Getting Started
             </h3>
-            <ol className="space-y-3 text-sm text-gray-600">
+            <ol className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
               <li className="flex items-start">
-                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 text-primary-600 font-medium text-xs">
+                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium text-xs">
                   1
                 </span>
                 <span className="ml-3">
@@ -380,7 +379,7 @@ export default function Dashboard() {
                 </span>
               </li>
               <li className="flex items-start">
-                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 text-primary-600 font-medium text-xs">
+                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium text-xs">
                   2
                 </span>
                 <span className="ml-3">
@@ -388,7 +387,7 @@ export default function Dashboard() {
                 </span>
               </li>
               <li className="flex items-start">
-                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 text-primary-600 font-medium text-xs">
+                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium text-xs">
                   3
                 </span>
                 <span className="ml-3">
@@ -396,7 +395,7 @@ export default function Dashboard() {
                 </span>
               </li>
               <li className="flex items-start">
-                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 text-primary-600 font-medium text-xs">
+                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium text-xs">
                   4
                 </span>
                 <span className="ml-3">
