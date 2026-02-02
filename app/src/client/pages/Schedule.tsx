@@ -10,6 +10,9 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { CardSkeleton } from '../components/ui/Skeleton';
+import EmptyState from '../components/ui/EmptyState';
+import Spinner from '../components/ui/Spinner';
 
 interface ScheduledDivision {
   divisionId: string;
@@ -185,16 +188,17 @@ export default function Schedule() {
     doc.save(fileName);
   };
 
-  const getRingColor = (ring: number) => {
+  const getRingColor = (ring: number, dark = false) => {
     const colors = [
-      'bg-blue-100 border-blue-300',
-      'bg-green-100 border-green-300',
-      'bg-yellow-100 border-yellow-300',
-      'bg-purple-100 border-purple-300',
-      'bg-pink-100 border-pink-300',
-      'bg-orange-100 border-orange-300',
+      { light: 'bg-blue-100 border-blue-300', dark: 'dark:bg-blue-900/30 dark:border-blue-700', text: 'text-blue-900 dark:text-blue-200' },
+      { light: 'bg-green-100 border-green-300', dark: 'dark:bg-green-900/30 dark:border-green-700', text: 'text-green-900 dark:text-green-200' },
+      { light: 'bg-yellow-100 border-yellow-300', dark: 'dark:bg-yellow-900/30 dark:border-yellow-700', text: 'text-yellow-900 dark:text-yellow-200' },
+      { light: 'bg-purple-100 border-purple-300', dark: 'dark:bg-purple-900/30 dark:border-purple-700', text: 'text-purple-900 dark:text-purple-200' },
+      { light: 'bg-pink-100 border-pink-300', dark: 'dark:bg-pink-900/30 dark:border-pink-700', text: 'text-pink-900 dark:text-pink-200' },
+      { light: 'bg-orange-100 border-orange-300', dark: 'dark:bg-orange-900/30 dark:border-orange-700', text: 'text-orange-900 dark:text-orange-200' },
     ];
-    return colors[(ring - 1) % colors.length];
+    const color = colors[(ring - 1) % colors.length];
+    return `${color.light} ${color.dark} ${color.text}`;
   };
 
   // Group schedule by ring for display
@@ -206,30 +210,31 @@ export default function Schedule() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      {/* Page Header */}
+      <div className="page-header mb-6">
         <div>
           <Link
             to={`/tournaments/${id}`}
-            className="text-sm text-gray-500 hover:text-gray-700 flex items-center mb-2"
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back to Tournament
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="page-title">
             Schedule - {schedule?.tournamentName}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {schedule?.schedule.length || 0} divisions scheduled
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3">
           <button
             onClick={() => regenerateMutation.mutate()}
             disabled={regenerateMutation.isPending}
             className="btn btn-secondary"
           >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            {regenerateMutation.isPending ? 'Generating...' : 'Regenerate'}
+            {regenerateMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            <span className="hidden sm:inline">{regenerateMutation.isPending ? 'Generating...' : 'Regenerate'}</span>
           </button>
           <button
             onClick={exportPDF}
@@ -237,7 +242,7 @@ export default function Schedule() {
             className="btn btn-primary"
           >
             <Download className="h-4 w-4 mr-2" />
-            Export PDF
+            <span className="hidden sm:inline">Export PDF</span>
           </button>
         </div>
       </div>
@@ -245,8 +250,8 @@ export default function Schedule() {
       {/* Configuration */}
       <div className="card mb-6">
         <div className="card-header">
-          <h2 className="text-lg font-medium flex items-center">
-            <Clock className="h-5 w-5 mr-2" />
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
+            <Clock className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
             Schedule Configuration
           </h2>
         </div>
@@ -349,12 +354,12 @@ export default function Schedule() {
 
       {/* Warnings */}
       {schedule?.warnings && schedule.warnings.length > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
           <div className="flex items-start">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
             <div>
-              <h3 className="font-medium text-yellow-800">Schedule Warnings</h3>
-              <ul className="mt-1 text-sm text-yellow-700 list-disc list-inside">
+              <h3 className="font-medium text-yellow-800 dark:text-yellow-200">Schedule Warnings</h3>
+              <ul className="mt-1 text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside">
                 {schedule.warnings.map((warning, i) => (
                   <li key={i}>{warning}</li>
                 ))}
@@ -366,42 +371,46 @@ export default function Schedule() {
 
       {/* Schedule Display */}
       {isLoading ? (
-        <div className="text-center py-12 text-gray-500">Loading...</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
       ) : schedule?.schedule && schedule.schedule.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {Object.keys(scheduleByRing)
             .sort((a, b) => Number(a) - Number(b))
             .map((ring) => (
-              <div key={ring} className="card">
+              <div key={ring} className="card overflow-hidden">
                 <div
                   className={`card-header ${getRingColor(Number(ring))} border-b-2`}
                 >
-                  <h3 className="font-semibold text-gray-900">Ring {ring}</h3>
-                  <p className="text-sm text-gray-600">
+                  <h3 className="font-semibold">Ring {ring}</h3>
+                  <p className="text-sm opacity-75">
                     {scheduleByRing[Number(ring)].length} divisions
                   </p>
                 </div>
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-gray-100 dark:divide-gray-700">
                   {scheduleByRing[Number(ring)].map((div) => (
-                    <div key={div.divisionId} className="p-3">
+                    <div key={div.divisionId} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-500">
+                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
                           {div.startTime} - {div.endTime}
                         </span>
                         <span
                           className={`text-xs px-2 py-0.5 rounded ${
                             div.eventType === 'patterns'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-red-100 text-red-800'
+                              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
+                              : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
                           }`}
                         >
                           {div.eventType === 'patterns' ? 'Patterns' : 'Sparring'}
                         </span>
                       </div>
-                      <p className="font-medium text-gray-900 text-sm">
+                      <p className="font-medium text-gray-900 dark:text-white text-sm">
                         {div.divisionName}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         {div.competitorCount} competitors •{' '}
                         {div.estimatedDurationMinutes} min
                       </p>
@@ -413,26 +422,19 @@ export default function Schedule() {
         </div>
       ) : (
         <div className="card">
-          <div className="card-body text-center py-12">
-            <Calendar className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">
-              No schedule generated
-            </h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Generate divisions first, then create a schedule.
-            </p>
-            <div className="mt-4 flex gap-3 justify-center">
-              <Link to={`/tournaments/${id}/divisions`} className="btn btn-secondary">
-                Manage Divisions
-              </Link>
-              <button
-                onClick={() => regenerateMutation.mutate()}
-                className="btn btn-primary"
-              >
-                Generate Schedule
-              </button>
-            </div>
-          </div>
+          <EmptyState
+            icon={Calendar}
+            title="No schedule generated"
+            description="Generate divisions first, then create a schedule."
+            action={{
+              label: 'Generate Schedule',
+              onClick: () => regenerateMutation.mutate(),
+            }}
+            secondaryAction={{
+              label: 'Manage Divisions',
+              href: `/tournaments/${id}/divisions`,
+            }}
+          />
         </div>
       )}
 
@@ -440,9 +442,9 @@ export default function Schedule() {
       {schedule?.schedule && schedule.schedule.length > 0 && (
         <div className="card mt-6">
           <div className="card-header">
-            <h2 className="text-lg font-medium">Timeline View</h2>
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white">Timeline View</h2>
           </div>
-          <div className="card-body overflow-x-auto">
+          <div className="card-body p-0 overflow-x-auto">
             <table className="data-table">
               <thead>
                 <tr>
@@ -454,10 +456,10 @@ export default function Schedule() {
                   <th>Duration</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
                 {schedule.schedule.map((div) => (
-                  <tr key={div.divisionId}>
-                    <td className="font-medium">
+                  <tr key={div.divisionId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td className="font-medium text-gray-900 dark:text-white">
                       {div.startTime} - {div.endTime}
                     </td>
                     <td>
@@ -472,7 +474,7 @@ export default function Schedule() {
                     <td>
                       <Link
                         to={`/tournaments/${id}/divisions/${div.divisionId}/bracket`}
-                        className="text-primary-600 hover:text-primary-700"
+                        className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
                       >
                         {div.divisionName}
                       </Link>
@@ -481,15 +483,15 @@ export default function Schedule() {
                       <span
                         className={`text-xs px-2 py-1 rounded ${
                           div.eventType === 'patterns'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-red-100 text-red-800'
+                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
+                            : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
                         }`}
                       >
                         {div.eventType === 'patterns' ? 'Patterns' : 'Sparring'}
                       </span>
                     </td>
-                    <td>{div.competitorCount}</td>
-                    <td>{div.estimatedDurationMinutes} min</td>
+                    <td className="text-gray-600 dark:text-gray-400">{div.competitorCount}</td>
+                    <td className="text-gray-600 dark:text-gray-400">{div.estimatedDurationMinutes} min</td>
                   </tr>
                 ))}
               </tbody>

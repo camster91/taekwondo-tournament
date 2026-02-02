@@ -7,7 +7,11 @@ import {
   Plus,
   Trash2,
   Settings,
+  RotateCcw,
 } from 'lucide-react';
+import { CardSkeleton } from '../components/ui/Skeleton';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import Spinner from '../components/ui/Spinner';
 
 interface Tournament {
   id: string;
@@ -61,6 +65,8 @@ export default function TournamentSettings() {
   const queryClient = useQueryClient();
   const [settings, setSettings] = useState<TournamentSettings>(DEFAULT_SETTINGS);
   const [hasChanges, setHasChanges] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
   const { data: tournament, isLoading } = useQuery<Tournament>({
     queryKey: ['tournament', id],
@@ -99,7 +105,8 @@ export default function TournamentSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
       setHasChanges(false);
-      alert('Settings saved!');
+      setShowSaveSuccess(true);
+      setTimeout(() => setShowSaveSuccess(false), 3000);
     },
   });
 
@@ -136,54 +143,76 @@ export default function TournamentSettings() {
   };
 
   const resetToDefaults = () => {
-    if (confirm('Reset all settings to defaults?')) {
-      setSettings(DEFAULT_SETTINGS);
-      setHasChanges(true);
-    }
+    setSettings(DEFAULT_SETTINGS);
+    setHasChanges(true);
+    setShowResetConfirm(false);
   };
 
   if (isLoading) {
-    return <div className="text-center py-12 text-gray-500">Loading...</div>;
+    return (
+      <div className="space-y-6">
+        <CardSkeleton />
+        <CardSkeleton />
+      </div>
+    );
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      {/* Page Header */}
+      <div className="page-header mb-6">
         <div>
           <Link
             to={`/tournaments/${id}`}
-            className="text-sm text-gray-500 hover:text-gray-700 flex items-center mb-2"
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back to Tournament
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="page-title">
             Settings - {tournament?.name}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Configure tournament rules and categorization
           </p>
         </div>
-        <div className="flex gap-3">
-          <button onClick={resetToDefaults} className="btn btn-secondary">
-            Reset to Defaults
+        <div className="flex gap-2 sm:gap-3">
+          <button onClick={() => setShowResetConfirm(true)} className="btn btn-secondary">
+            <RotateCcw className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Reset</span>
           </button>
           <button
             onClick={() => saveMutation.mutate(settings)}
             disabled={!hasChanges || saveMutation.isPending}
-            className="btn btn-primary"
+            className="btn btn-primary flex items-center"
           >
-            <Save className="h-4 w-4 mr-2" />
-            {saveMutation.isPending ? 'Saving...' : 'Save Settings'}
+            {saveMutation.isPending ? (
+              <>
+                <Spinner size="sm" className="mr-2" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Save Settings</span>
+              </>
+            )}
           </button>
         </div>
       </div>
 
+      {/* Success Message */}
+      {showSaveSuccess && (
+        <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-300">
+          Settings saved successfully!
+        </div>
+      )}
+
       {/* General Settings */}
       <div className="card mb-6">
         <div className="card-header">
-          <h2 className="text-lg font-medium flex items-center">
-            <Settings className="h-5 w-5 mr-2" />
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
+            <Settings className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
             General Settings
           </h2>
         </div>
@@ -191,7 +220,7 @@ export default function TournamentSettings() {
           <div className="max-w-md">
             <label className="form-label">
               Division Split Threshold
-              <span className="text-gray-500 font-normal ml-2">
+              <span className="text-gray-500 dark:text-gray-400 font-normal ml-2">
                 (max competitors per division)
               </span>
             </label>
@@ -205,7 +234,7 @@ export default function TournamentSettings() {
               }
               className="form-input w-32"
             />
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Divisions with more competitors will be split (e.g., DIV1, DIV2)
             </p>
           </div>
@@ -215,13 +244,13 @@ export default function TournamentSettings() {
       {/* Age Groups */}
       <div className="card mb-6">
         <div className="card-header flex items-center justify-between">
-          <h2 className="text-lg font-medium">Age Groups</h2>
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white">Age Groups</h2>
           <button onClick={addAgeGroup} className="btn btn-secondary text-sm">
             <Plus className="h-4 w-4 mr-1" />
-            Add Age Group
+            Add
           </button>
         </div>
-        <div className="card-body p-0">
+        <div className="card-body p-0 overflow-x-auto">
           <table className="data-table">
             <thead>
               <tr>
@@ -231,9 +260,9 @@ export default function TournamentSettings() {
                 <th></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
               {settings.ageGroups.map((group, index) => (
-                <tr key={index}>
+                <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                   <td>
                     <input
                       type="text"
@@ -271,7 +300,7 @@ export default function TournamentSettings() {
                   <td>
                     <button
                       onClick={() => removeAgeGroup(index)}
-                      className="text-gray-400 hover:text-red-600"
+                      className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 touch-target"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -286,35 +315,35 @@ export default function TournamentSettings() {
       {/* Weight Classes Info */}
       <div className="card">
         <div className="card-header">
-          <h2 className="text-lg font-medium">Weight Classes</h2>
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white">Weight Classes</h2>
         </div>
         <div className="card-body">
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
             Weight classes are configured in the system defaults. The auto-categorization
             engine uses standard weight brackets based on age and gender.
           </p>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <h4 className="font-medium text-gray-900 mb-2">Default Weight Classes:</h4>
+          <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
+            <h4 className="font-medium text-gray-900 dark:text-white mb-2">Default Weight Classes:</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
-                <p className="font-medium">Feather</p>
-                <p className="text-gray-500">Lightest category</p>
+                <p className="font-medium text-gray-900 dark:text-white">Feather</p>
+                <p className="text-gray-500 dark:text-gray-400">Lightest category</p>
               </div>
               <div>
-                <p className="font-medium">Light</p>
-                <p className="text-gray-500">Below average</p>
+                <p className="font-medium text-gray-900 dark:text-white">Light</p>
+                <p className="text-gray-500 dark:text-gray-400">Below average</p>
               </div>
               <div>
-                <p className="font-medium">Middle</p>
-                <p className="text-gray-500">Average weight</p>
+                <p className="font-medium text-gray-900 dark:text-white">Middle</p>
+                <p className="text-gray-500 dark:text-gray-400">Average weight</p>
               </div>
               <div>
-                <p className="font-medium">Heavy</p>
-                <p className="text-gray-500">Above average</p>
+                <p className="font-medium text-gray-900 dark:text-white">Heavy</p>
+                <p className="text-gray-500 dark:text-gray-400">Above average</p>
               </div>
             </div>
           </div>
-          <p className="mt-4 text-sm text-gray-500">
+          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
             Weight boundaries are automatically adjusted based on age group and gender.
             Contact support for custom weight class configurations.
           </p>
@@ -323,16 +352,27 @@ export default function TournamentSettings() {
 
       {/* Unsaved Changes Warning */}
       {hasChanges && (
-        <div className="fixed bottom-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-2 rounded-lg shadow-lg flex items-center gap-3">
-          <span>You have unsaved changes</span>
+        <div className="fixed bottom-4 right-4 bg-yellow-100 dark:bg-yellow-900/80 border border-yellow-400 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3">
+          <span className="text-sm">You have unsaved changes</span>
           <button
             onClick={() => saveMutation.mutate(settings)}
-            className="btn btn-primary text-sm py-1"
+            className="btn btn-primary text-sm py-1.5 px-3"
           >
             Save
           </button>
         </div>
       )}
+
+      {/* Reset Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showResetConfirm}
+        onClose={() => setShowResetConfirm(false)}
+        onConfirm={resetToDefaults}
+        title="Reset Settings"
+        message="Are you sure you want to reset all settings to defaults? This will discard any custom age groups."
+        confirmText="Reset to Defaults"
+        variant="warning"
+      />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   Target,
   TrendingUp,
 } from 'lucide-react';
+import { CardSkeleton } from '../components/ui/Skeleton';
 
 interface DivisionStats {
   id: string;
@@ -228,8 +229,15 @@ export default function DirectorDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading dashboard...</div>
+      <div className="space-y-6">
+        <CardSkeleton />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+        <CardSkeleton />
       </div>
     );
   }
@@ -237,7 +245,7 @@ export default function DirectorDashboard() {
   if (!progress) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">Tournament not found</p>
+        <p className="text-gray-500 dark:text-gray-400">Tournament not found</p>
       </div>
     );
   }
@@ -252,38 +260,38 @@ export default function DirectorDashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
           <Link
             to={`/tournaments/${tournamentId}`}
-            className="text-sm text-gray-500 hover:text-gray-700 flex items-center mb-2"
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back to Tournament
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+          <h1 className="page-title flex items-center">
             <LayoutDashboard className="h-6 w-6 mr-2" />
             Director Dashboard
           </h1>
-          <p className="text-gray-600">{progress.tournament.name}</p>
+          <p className="text-gray-600 dark:text-gray-400">{progress.tournament.name}</p>
         </div>
         <div className="text-right">
-          <div className="text-sm text-gray-500">Last updated</div>
-          <div className="text-lg font-medium">{new Date().toLocaleTimeString()}</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Last updated</div>
+          <div className="text-lg font-medium text-gray-900 dark:text-white">{new Date().toLocaleTimeString()}</div>
         </div>
       </div>
 
       {/* Warnings */}
       {progress.warnings.length > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
           <div className="flex items-center mb-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2" />
-            <h3 className="font-medium text-yellow-800">Attention Required</h3>
+            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2" />
+            <h3 className="font-medium text-yellow-800 dark:text-yellow-200">Attention Required</h3>
           </div>
           <ul className="space-y-1">
             {progress.warnings.map((warning, i) => (
-              <li key={i} className="text-sm text-yellow-700 flex items-center">
-                <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-2" />
+              <li key={i} className="text-sm text-yellow-700 dark:text-yellow-300 flex items-center">
+                <span className="w-1.5 h-1.5 bg-yellow-500 dark:bg-yellow-400 rounded-full mr-2" />
                 {warning}
               </li>
             ))}
@@ -297,17 +305,17 @@ export default function DirectorDashboard() {
           <div className="card-body">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Divisions</p>
-                <p className="text-2xl font-bold">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Divisions</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
                   {progress.divisions.completed}/{progress.divisions.total}
                 </p>
-                <p className="text-sm text-gray-400">{divisionProgress}% complete</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500">{divisionProgress}% complete</p>
               </div>
-              <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <Target className="h-6 w-6 text-blue-600" />
+              <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                <Target className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
-            <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="mt-3 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-600 transition-all duration-500"
                 style={{ width: `${divisionProgress}%` }}
@@ -320,17 +328,17 @@ export default function DirectorDashboard() {
           <div className="card-body">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Matches</p>
-                <p className="text-2xl font-bold">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Matches</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
                   {progress.matches.completed}/{progress.matches.total}
                 </p>
-                <p className="text-sm text-gray-400">{matchProgress}% complete</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500">{matchProgress}% complete</p>
               </div>
-              <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
-                <Trophy className="h-6 w-6 text-green-600" />
+              <div className="h-12 w-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                <Trophy className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
             </div>
-            <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="mt-3 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-green-600 transition-all duration-500"
                 style={{ width: `${matchProgress}%` }}
@@ -343,14 +351,14 @@ export default function DirectorDashboard() {
           <div className="card-body">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Active Matches</p>
-                <p className="text-2xl font-bold">{progress.matches.inProgress}</p>
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Active Matches</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{progress.matches.inProgress}</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500">
                   {progress.matches.scheduled} scheduled
                 </p>
               </div>
-              <div className="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
-                <Activity className="h-6 w-6 text-purple-600" />
+              <div className="h-12 w-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
+                <Activity className="h-6 w-6 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
           </div>
@@ -360,16 +368,16 @@ export default function DirectorDashboard() {
           <div className="card-body">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Est. Time Remaining</p>
-                <p className="text-2xl font-bold">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Est. Time Remaining</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
                   {progress.estimatedTimeRemaining > 60
                     ? `${Math.floor(progress.estimatedTimeRemaining / 60)}h ${progress.estimatedTimeRemaining % 60}m`
                     : `${progress.estimatedTimeRemaining}m`}
                 </p>
-                <p className="text-sm text-gray-400">~5 min/match</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500">~5 min/match</p>
               </div>
-              <div className="h-12 w-12 bg-orange-100 rounded-full flex items-center justify-center">
-                <Timer className="h-6 w-6 text-orange-600" />
+              <div className="h-12 w-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
+                <Timer className="h-6 w-6 text-orange-600 dark:text-orange-400" />
               </div>
             </div>
           </div>
@@ -379,14 +387,14 @@ export default function DirectorDashboard() {
       {/* Ring Status */}
       <div className="card">
         <div className="card-header">
-          <h2 className="text-lg font-medium flex items-center">
-            <TrendingUp className="h-5 w-5 mr-2" />
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
+            <TrendingUp className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
             Ring Status
           </h2>
         </div>
         <div className="card-body">
           {progress.rings.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">
+            <p className="text-gray-500 dark:text-gray-400 text-center py-4">
               No rings assigned yet. Assign rings in the schedule page.
             </p>
           ) : (
@@ -396,21 +404,21 @@ export default function DirectorDashboard() {
                   key={ring.ring}
                   className={`p-4 rounded-lg border-2 ${
                     ring.status === 'active'
-                      ? 'border-green-500 bg-green-50'
+                      ? 'border-green-500 dark:border-green-600 bg-green-50 dark:bg-green-900/30'
                       : ring.status === 'completed'
-                      ? 'border-gray-300 bg-gray-50'
-                      : 'border-yellow-400 bg-yellow-50'
+                      ? 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'
+                      : 'border-yellow-400 dark:border-yellow-600 bg-yellow-50 dark:bg-yellow-900/30'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-bold text-lg">Ring {ring.ring}</h3>
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white">Ring {ring.ring}</h3>
                     <span
                       className={`flex items-center text-sm ${
                         ring.status === 'active'
-                          ? 'text-green-600'
+                          ? 'text-green-600 dark:text-green-400'
                           : ring.status === 'completed'
-                          ? 'text-gray-500'
-                          : 'text-yellow-600'
+                          ? 'text-gray-500 dark:text-gray-400'
+                          : 'text-yellow-600 dark:text-yellow-400'
                       }`}
                     >
                       {ring.status === 'active' ? (
@@ -433,15 +441,15 @@ export default function DirectorDashboard() {
                   </div>
                   {ring.currentMatch ? (
                     <div className="text-sm">
-                      <p className="text-gray-600 mb-1">{ring.currentMatch.divisionName}</p>
-                      <p className="font-medium">
+                      <p className="text-gray-600 dark:text-gray-400 mb-1">{ring.currentMatch.divisionName}</p>
+                      <p className="font-medium text-gray-900 dark:text-white">
                         {ring.currentMatch.competitor1} vs {ring.currentMatch.competitor2}
                       </p>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">No active match</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">No active match</p>
                   )}
-                  <p className="text-xs text-gray-400 mt-2">
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
                     {ring.upcomingMatches} match{ring.upcomingMatches !== 1 ? 'es' : ''} remaining
                   </p>
                 </div>
@@ -454,14 +462,14 @@ export default function DirectorDashboard() {
       {/* Division Progress */}
       <div className="card">
         <div className="card-header">
-          <h2 className="text-lg font-medium flex items-center">
-            <Users className="h-5 w-5 mr-2" />
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
+            <Users className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
             Division Progress
           </h2>
         </div>
         <div className="card-body">
           {progress.divisionDetails.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">
+            <p className="text-gray-500 dark:text-gray-400 text-center py-4">
               No divisions created yet.
             </p>
           ) : (
@@ -475,44 +483,44 @@ export default function DirectorDashboard() {
                   <div key={division.id} className="flex items-center gap-4">
                     <div className="w-8 flex-shrink-0">
                       {division.status === 'completed' ? (
-                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400" />
                       ) : division.status === 'in_progress' ? (
-                        <Play className="h-5 w-5 text-blue-500" />
+                        <Play className="h-5 w-5 text-blue-500 dark:text-blue-400" />
                       ) : (
-                        <Clock className="h-5 w-5 text-gray-400" />
+                        <Clock className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <Link
                           to={`/tournaments/${tournamentId}/divisions/${division.id}/bracket`}
-                          className="text-sm font-medium truncate hover:text-primary-600"
+                          className="text-sm font-medium truncate text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400"
                         >
                           {division.name}
                         </Link>
-                        <span className="text-xs text-gray-500 ml-2">
+                        <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
                           {division.completedMatches}/{division.totalMatches} matches
                         </span>
                       </div>
-                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                         <div
                           className={`h-full transition-all duration-300 ${
                             division.status === 'completed'
                               ? 'bg-green-500'
                               : division.status === 'in_progress'
                               ? 'bg-blue-500'
-                              : 'bg-gray-300'
+                              : 'bg-gray-300 dark:bg-gray-600'
                           }`}
                           style={{ width: `${percent}%` }}
                         />
                       </div>
                     </div>
                     {division.ring && (
-                      <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                      <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded">
                         Ring {division.ring}
                       </span>
                     )}
-                    <span className="text-xs text-gray-500 w-16 text-right">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 w-16 text-right">
                       ~{division.estimatedMinutesRemaining}m
                     </span>
                   </div>

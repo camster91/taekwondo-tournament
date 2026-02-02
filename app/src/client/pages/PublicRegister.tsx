@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Trophy, CheckCircle, AlertCircle, User, Calendar, Award } from 'lucide-react';
+import Spinner from '../components/ui/Spinner';
 
 interface Tournament {
   id: string;
@@ -133,45 +134,48 @@ export default function PublicRegister() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-500">Loading...</div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="flex items-center text-gray-500 dark:text-gray-400">
+          <Spinner className="mr-2" />
+          Loading tournaments...
+        </div>
       </div>
     );
   }
 
   if (result) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
         <div className="max-w-md mx-auto">
-          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Registration Complete!</h1>
-            <p className="text-gray-600 mb-6">{result.message}</p>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center">
+            <CheckCircle className="h-16 w-16 text-green-500 dark:text-green-400 mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Registration Complete!</h1>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">{result.message}</p>
 
-            <div className="bg-gray-50 rounded-lg p-4 text-left mb-6">
-              <h3 className="font-semibold text-gray-900 mb-3">Registration Details</h3>
+            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 text-left mb-6">
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Registration Details</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Competitor:</span>
-                  <span className="font-medium">{result.registration.competitorName}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Competitor:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{result.registration.competitorName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Tournament:</span>
-                  <span className="font-medium">{result.registration.tournamentName}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Tournament:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{result.registration.tournamentName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Date:</span>
-                  <span className="font-medium">
+                  <span className="text-gray-500 dark:text-gray-400">Date:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
                     {new Date(result.registration.tournamentDate).toLocaleDateString()}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Age Group:</span>
-                  <span className="font-medium">{result.registration.ageGroup}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Age Group:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{result.registration.ageGroup}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Events:</span>
-                  <span className="font-medium">
+                  <span className="text-gray-500 dark:text-gray-400">Events:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
                     {[
                       result.registration.events.patterns && 'Patterns',
                       result.registration.events.sparring && 'Sparring',
@@ -217,11 +221,11 @@ export default function PublicRegister() {
 
   if (tournaments.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
         <div className="max-w-md mx-auto text-center">
-          <Trophy className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">No Open Tournaments</h1>
-          <p className="text-gray-600">
+          <Trophy className="h-16 w-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">No Open Tournaments</h1>
+          <p className="text-gray-600 dark:text-gray-400">
             There are currently no tournaments open for registration. Please check back later.
           </p>
         </div>
@@ -230,26 +234,26 @@ export default function PublicRegister() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <Trophy className="h-12 w-12 text-primary-500 mx-auto mb-3" />
-          <h1 className="text-3xl font-bold text-gray-900">Tournament Registration</h1>
-          <p className="text-gray-600 mt-2">
+          <Trophy className="h-12 w-12 text-primary-500 dark:text-primary-400 mx-auto mb-3" />
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Tournament Registration</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">
             Register for an upcoming Taekwondo tournament
           </p>
         </div>
 
         {/* Error Display */}
         {(error || validationErrors.length > 0) && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
             <div className="flex items-start">
-              <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-2" />
+              <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400 mt-0.5 mr-2" />
               <div>
-                {error && <p className="text-red-700 font-medium">{error}</p>}
+                {error && <p className="text-red-700 dark:text-red-300 font-medium">{error}</p>}
                 {validationErrors.length > 0 && (
-                  <ul className="text-red-700 text-sm list-disc list-inside">
+                  <ul className="text-red-700 dark:text-red-300 text-sm list-disc list-inside">
                     {validationErrors.map((err, i) => (
                       <li key={i}>{err}</li>
                     ))}
@@ -261,10 +265,10 @@ export default function PublicRegister() {
         )}
 
         {/* Registration Form */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-lg p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 space-y-6">
           {/* Tournament Selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               <Trophy className="h-4 w-4 inline mr-1" />
               Select Tournament *
             </label>
@@ -272,7 +276,7 @@ export default function PublicRegister() {
               name="tournamentId"
               value={formData.tournamentId}
               onChange={handleChange}
-              className="form-input w-full"
+              className="form-select w-full"
               required
             >
               <option value="">-- Select a Tournament --</option>
@@ -286,15 +290,15 @@ export default function PublicRegister() {
           </div>
 
           {/* Competitor Information */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <User className="h-5 w-5 mr-2" />
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+              <User className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
               Competitor Information
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   First Name *
                 </label>
                 <input
@@ -308,7 +312,7 @@ export default function PublicRegister() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Last Name *
                 </label>
                 <input
@@ -322,14 +326,14 @@ export default function PublicRegister() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Gender *
                 </label>
                 <select
                   name="gender"
                   value={formData.gender}
                   onChange={handleChange}
-                  className="form-input w-full"
+                  className="form-select w-full"
                   required
                 >
                   <option value="">-- Select --</option>
@@ -339,7 +343,7 @@ export default function PublicRegister() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <Calendar className="h-4 w-4 inline mr-1" />
                   Date of Birth *
                 </label>
@@ -356,22 +360,22 @@ export default function PublicRegister() {
           </div>
 
           {/* Belt Information */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <Award className="h-5 w-5 mr-2" />
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+              <Award className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
               Belt Rank
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Belt Level *
                 </label>
                 <select
                   name="belt"
                   value={formData.belt}
                   onChange={handleChange}
-                  className="form-input w-full"
+                  className="form-select w-full"
                   required
                 >
                   <option value="">-- Select Belt --</option>
@@ -385,14 +389,14 @@ export default function PublicRegister() {
 
               {formData.belt === 'Black' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Dan Rank *
                   </label>
                   <select
                     name="danRank"
                     value={formData.danRank}
                     onChange={handleChange}
-                    className="form-input w-full"
+                    className="form-select w-full"
                     required
                   >
                     {[1, 2, 3, 4, 5, 6].map((dan) => (
@@ -406,7 +410,7 @@ export default function PublicRegister() {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   School / Dojang
                 </label>
                 <input
@@ -422,14 +426,14 @@ export default function PublicRegister() {
           </div>
 
           {/* Physical Info */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
               Physical Information
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Height (inches)
                 </label>
                 <input
@@ -445,7 +449,7 @@ export default function PublicRegister() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Weight (lbs) {formData.sparring && '*'}
                 </label>
                 <input
@@ -460,13 +464,13 @@ export default function PublicRegister() {
                   required={formData.sparring}
                 />
                 {formData.sparring && (
-                  <p className="text-xs text-gray-500 mt-1">Required for sparring events</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Required for sparring events</p>
                 )}
               </div>
             </div>
 
             <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Special Needs / Medical Notes
               </label>
               <textarea
@@ -481,16 +485,16 @@ export default function PublicRegister() {
           </div>
 
           {/* Event Selection */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
               Event Selection *
             </h3>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
               Select at least one event to compete in
             </p>
 
             <div className="space-y-3">
-              <label className="flex items-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                 <input
                   type="checkbox"
                   name="patterns"
@@ -499,14 +503,14 @@ export default function PublicRegister() {
                   className="h-5 w-5 text-primary-600 rounded"
                 />
                 <div className="ml-3">
-                  <span className="font-medium text-gray-900">Patterns (Forms/Poomsae)</span>
-                  <p className="text-sm text-gray-500">
+                  <span className="font-medium text-gray-900 dark:text-white">Patterns (Forms/Poomsae)</span>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     Demonstrate your forms in a choreographed sequence
                   </p>
                 </div>
               </label>
 
-              <label className="flex items-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                 <input
                   type="checkbox"
                   name="sparring"
@@ -515,8 +519,8 @@ export default function PublicRegister() {
                   className="h-5 w-5 text-primary-600 rounded"
                 />
                 <div className="ml-3">
-                  <span className="font-medium text-gray-900">Sparring</span>
-                  <p className="text-sm text-gray-500">
+                  <span className="font-medium text-gray-900 dark:text-white">Sparring</span>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     Compete in controlled fighting matches (requires weight)
                   </p>
                 </div>
@@ -525,14 +529,14 @@ export default function PublicRegister() {
           </div>
 
           {/* Parent/Guardian Info */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
               Parent/Guardian Contact (Optional)
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Parent/Guardian Name
                 </label>
                 <input
@@ -545,7 +549,7 @@ export default function PublicRegister() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Email
                 </label>
                 <input
@@ -558,7 +562,7 @@ export default function PublicRegister() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Phone
                 </label>
                 <input
@@ -573,15 +577,22 @@ export default function PublicRegister() {
           </div>
 
           {/* Submit Button */}
-          <div className="border-t pt-6">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
             <button
               type="submit"
               disabled={submitting}
-              className="btn btn-primary w-full py-3 text-lg"
+              className="btn btn-primary w-full py-3 text-lg flex items-center justify-center"
             >
-              {submitting ? 'Submitting...' : 'Complete Registration'}
+              {submitting ? (
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  Submitting...
+                </>
+              ) : (
+                'Complete Registration'
+              )}
             </button>
-            <p className="text-xs text-gray-500 text-center mt-3">
+            <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-3">
               By registering, you agree to follow all tournament rules and regulations.
             </p>
           </div>

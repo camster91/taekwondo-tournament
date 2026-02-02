@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth, getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import Spinner from '../components/ui/Spinner';
 
 export default function Profile() {
   const { user, refreshUser } = useAuth();
@@ -106,7 +107,7 @@ export default function Profile() {
   if (!user) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">Please log in to view your profile.</p>
+        <p className="text-gray-500 dark:text-gray-400">Please log in to view your profile.</p>
         <Link to="/login" className="mt-4 btn btn-primary inline-block">
           Go to Login
         </Link>
@@ -120,13 +121,13 @@ export default function Profile() {
       <div className="mb-6">
         <Link
           to="/"
-          className="text-sm text-gray-500 hover:text-gray-700 flex items-center mb-2"
+          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Dashboard
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-          <User className="h-6 w-6 mr-2" />
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">
+          <User className="h-6 w-6 mr-2 text-primary-600 dark:text-primary-400" />
           Profile Settings
         </h1>
       </div>
@@ -134,29 +135,35 @@ export default function Profile() {
       {/* Account Info */}
       <div className="card mb-6">
         <div className="card-header">
-          <h2 className="text-lg font-medium">Account Information</h2>
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white">Account Information</h2>
         </div>
         <div className="card-body">
           <div className="space-y-4">
             <div className="flex items-center">
-              <Mail className="h-5 w-5 text-gray-400 mr-3" />
+              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg mr-3">
+                <Mail className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+              </div>
               <div>
-                <p className="text-sm text-gray-500">Email</p>
-                <p className="font-medium">{user.email}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Email</p>
+                <p className="font-medium text-gray-900 dark:text-white">{user.email}</p>
               </div>
             </div>
             <div className="flex items-center">
-              <Shield className="h-5 w-5 text-gray-400 mr-3" />
+              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg mr-3">
+                <Shield className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+              </div>
               <div>
-                <p className="text-sm text-gray-500">Role</p>
-                <p className="font-medium capitalize">{user.role}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Role</p>
+                <p className="font-medium text-gray-900 dark:text-white capitalize">{user.role}</p>
               </div>
             </div>
             <div className="flex items-center">
-              <Calendar className="h-5 w-5 text-gray-400 mr-3" />
+              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg mr-3">
+                <Calendar className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+              </div>
               <div>
-                <p className="text-sm text-gray-500">Member Since</p>
-                <p className="font-medium">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Member Since</p>
+                <p className="font-medium text-gray-900 dark:text-white">
                   {user.createdAt
                     ? new Date(user.createdAt).toLocaleDateString()
                     : 'N/A'}
@@ -170,11 +177,11 @@ export default function Profile() {
       {/* Profile Form */}
       <div className="card mb-6">
         <div className="card-header">
-          <h2 className="text-lg font-medium">Edit Profile</h2>
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white">Edit Profile</h2>
         </div>
         <div className="card-body">
           <form onSubmit={handleProfileSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="form-label">First Name</label>
                 <input
@@ -184,7 +191,7 @@ export default function Profile() {
                   onChange={(e) =>
                     setProfileData({ ...profileData, firstName: e.target.value })
                   }
-                  className="form-input"
+                  className="form-input w-full"
                 />
               </div>
               <div>
@@ -196,7 +203,7 @@ export default function Profile() {
                   onChange={(e) =>
                     setProfileData({ ...profileData, lastName: e.target.value })
                   }
-                  className="form-input"
+                  className="form-input w-full"
                 />
               </div>
             </div>
@@ -204,10 +211,19 @@ export default function Profile() {
               <button
                 type="submit"
                 disabled={updateProfileMutation.isPending}
-                className="btn btn-primary"
+                className="btn btn-primary flex items-center"
               >
-                <Save className="h-4 w-4 mr-2" />
-                {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
+                {updateProfileMutation.isPending ? (
+                  <>
+                    <Spinner size="sm" className="mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Changes
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -217,7 +233,7 @@ export default function Profile() {
       {/* Password Change */}
       <div className="card">
         <div className="card-header flex items-center justify-between">
-          <h2 className="text-lg font-medium">Change Password</h2>
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white">Change Password</h2>
           {!showPasswordForm && (
             <button
               onClick={() => setShowPasswordForm(true)}
@@ -243,7 +259,7 @@ export default function Profile() {
                       currentPassword: e.target.value,
                     })
                   }
-                  className="form-input"
+                  className="form-input w-full"
                 />
               </div>
               <div>
@@ -259,7 +275,7 @@ export default function Profile() {
                       newPassword: e.target.value,
                     })
                   }
-                  className="form-input"
+                  className="form-input w-full"
                   placeholder="Minimum 8 characters"
                 />
               </div>
@@ -275,10 +291,10 @@ export default function Profile() {
                       confirmPassword: e.target.value,
                     })
                   }
-                  className="form-input"
+                  className="form-input w-full"
                 />
               </div>
-              <div className="flex justify-end gap-3">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -296,12 +312,19 @@ export default function Profile() {
                 <button
                   type="submit"
                   disabled={changePasswordMutation.isPending}
-                  className="btn btn-primary"
+                  className="btn btn-primary flex items-center justify-center"
                 >
-                  <Check className="h-4 w-4 mr-2" />
-                  {changePasswordMutation.isPending
-                    ? 'Changing...'
-                    : 'Change Password'}
+                  {changePasswordMutation.isPending ? (
+                    <>
+                      <Spinner size="sm" className="mr-2" />
+                      Changing...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Change Password
+                    </>
+                  )}
                 </button>
               </div>
             </form>
