@@ -67,7 +67,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
 // Serve static files in production
 if (isProduction) {
-  const distPath = path.join(__dirname, '../../dist');
+  const distPath = path.join(__dirname, '../../app/dist');
   app.use(express.static(distPath, {
     setHeaders: (res, filePath) => {
       // Set correct MIME types for JavaScript modules
