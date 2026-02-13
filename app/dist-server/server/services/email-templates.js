@@ -48,18 +48,22 @@ export function invitationEmail(params) {
     `),
     };
 }
-export function passwordResetEmail(params) {
+export function magicLinkEmail(params) {
     const greeting = params.recipientName ? `Hi ${params.recipientName},` : 'Hi,';
     return {
-        subject: 'Reset your password - TKD Tournament Manager',
+        subject: 'Sign in to TKD Tournament Manager',
         html: layout(`
       <p>${greeting}</p>
-      <p>We received a request to reset your password. Click the button below to choose a new password.</p>
+      <p>Click the button below to sign in to your account.</p>
       <p style="text-align:center; margin: 24px 0;">
-        <a href="${params.resetUrl}" class="btn">Reset Password</a>
+        <a href="${params.magicUrl}" class="btn">Sign In</a>
       </p>
-      <p class="muted">This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.</p>
-      <p class="muted" style="word-break:break-all;">Or copy this link: ${params.resetUrl}</p>
+      <p style="text-align:center; margin: 0 0 8px;">Or enter this code:</p>
+      <p style="text-align:center; margin: 0 0 24px;">
+        <span style="display:inline-block; font-size:32px; font-weight:700; letter-spacing:8px; font-family:monospace; background:#f3f4f6; padding:12px 24px; border-radius:8px; color:#111827;">${params.code}</span>
+      </p>
+      <p class="muted">This link and code expire in 10 minutes. If you didn't request this, you can safely ignore this email.</p>
+      <p class="muted" style="word-break:break-all;">Or copy this link: ${params.magicUrl}</p>
     `),
     };
 }
