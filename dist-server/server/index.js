@@ -21,6 +21,8 @@ const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
+// Trust proxy (behind Coolify/Docker reverse proxy)
+app.set('trust proxy', 1);
 // Security middleware
 const corsOptions = {
     origin: isProduction
