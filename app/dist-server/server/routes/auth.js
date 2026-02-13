@@ -4,6 +4,8 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { createToken, authenticate } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
+import { sendEmail } from '../services/email.js';
+import { passwordResetEmail, welcomeEmail } from '../services/email-templates.js';
 const router = Router();
 // Rate limiting for auth routes
 const authLimiter = rateLimit({
@@ -411,11 +413,17 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
             where: { id: user.id },
             data: { resetToken, resetTokenExpiry },
         });
-        // In production, send email here
-        // For now, log the reset link
-        const resetUrl = `${process.env.ALLOWED_ORIGINS || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
-        console.log(`Password reset requested for ${email}`);
-        console.log(`Reset URL: ${resetUrl}`);
+        const baseUrl = process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:5173';
+        const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+        const template = passwordResetEmail({
+            recipientName: user.firstName,
+            resetUrl,
+        });
+        const emailResult = await sendEmail(user.email, template.subject, template.html);
+        if (!emailResult.success) {
+            console.log(`Password reset requested for ${email} — email not sent: ${emailResult.error}`);
+            console.log(`Reset URL: ${resetUrl}`);
+        }
         res.json({ message: 'If an account exists, a reset link has been sent' });
     }
     catch (error) {
@@ -457,6 +465,84 @@ router.post('/reset-password', async (req, res) => {
     catch (error) {
         console.error('Reset password error:', error);
         res.status(500).json({ error: 'Failed to reset password' });
+    }
+});
+// Accept invitation and create account
+router.post('/accept-invite', registerLimiter, async (req, res) => {
+    const prisma = req.app.locals.prisma;
+    const { token, password, firstName, lastName } = req.body;
+    if (!token || !password) {
+        return res.status(400).json({ error: 'Token and password are required' });
+    }
+    if (password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    if (!firstName || !lastName) {
+        return res.status(400).json({ error: 'First name and last name are required' });
+    }
+    try {
+        const invitation = await prisma.invitation.findUnique({ where: { token } });
+        if (!invitation) {
+            return res.status(400).json({ error: 'Invalid invitation token' });
+        }
+        if (invitation.status === 'accepted') {
+            return res.status(400).json({ error: 'Invitation already accepted' });
+        }
+        if (invitation.tokenExpiry < new Date()) {
+            return res.status(400).json({ error: 'Invitation has expired' });
+        }
+        // Check if user already exists
+        const existingUser = await prisma.user.findUnique({
+            where: { email: invitation.email },
+        });
+        if (existingUser) {
+            return res.status(409).json({ error: 'An account with this email already exists' });
+        }
+        const passwordHash = await bcrypt.hash(password, 12);
+        const user = await prisma.user.create({
+            data: {
+                email: invitation.email,
+                passwordHash,
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
+                role: invitation.role,
+            },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                role: true,
+                createdAt: true,
+            },
+        });
+        // Mark invitation as accepted
+        await prisma.invitation.update({
+            where: { id: invitation.id },
+            data: { status: 'accepted' },
+        });
+        const jwtToken = createToken({
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+        });
+        // Send welcome email (non-blocking)
+        const baseUrl = process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:5173';
+        const template = welcomeEmail({
+            recipientName: firstName.trim(),
+            role: user.role,
+            loginUrl: baseUrl,
+        });
+        sendEmail(user.email, template.subject, template.html).catch(() => { });
+        res.status(201).json({
+            user,
+            token: jwtToken,
+            message: 'Account created successfully',
+        });
+    }
+    catch (error) {
+        console.error('Accept invitation error:', error);
+        res.status(500).json({ error: 'Failed to create account' });
     }
 });
 // Setup first admin account (only works when no admins exist)
