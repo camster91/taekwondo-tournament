@@ -36,6 +36,7 @@ import Results from './pages/Results';
 import UserManagement from './pages/UserManagement';
 import Profile from './pages/Profile';
 import DirectorDashboard from './pages/DirectorDashboard';
+import AcceptInvite from './pages/AcceptInvite';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -260,6 +261,7 @@ function AppRoutes() {
     location.pathname.startsWith('/signup') ||
     location.pathname.startsWith('/forgot-password') ||
     location.pathname.startsWith('/reset-password') ||
+    location.pathname.startsWith('/accept-invite') ||
     location.pathname.startsWith('/scorekeeper') ||
     location.pathname.startsWith('/checkin') ||
     location.pathname.startsWith('/display');
@@ -272,6 +274,7 @@ function AppRoutes() {
         <Route path="/signup" element={<StaffRegister />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route path="/scorekeeper/:tournamentId" element={<Scorekeeper />} />
         <Route path="/checkin/:tournamentId" element={<CheckIn />} />
         <Route path="/display/:tournamentId" element={<PublicScoreboard />} />

@@ -291,6 +291,25 @@ model CompetitorRating {
   @@index([rating])
 }
 
+// Email invitations
+model Invitation {
+  id          String   @id @default(uuid())
+  email       String
+  firstName   String?
+  lastName    String?
+  role        String   @default("viewer")
+  token       String   @unique
+  tokenExpiry DateTime
+  invitedBy   String
+  status      String   @default("pending") // pending, accepted, expired
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([email])
+  @@index([token])
+  @@index([status])
+}
+
 // Match audit log for undo functionality
 model MatchAuditLog {
   id            String   @id @default(uuid())
