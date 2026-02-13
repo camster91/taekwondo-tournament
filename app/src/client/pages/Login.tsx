@@ -1,19 +1,20 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Trophy, LogIn, AlertCircle, UserPlus, Eye, EyeOff } from 'lucide-react';
+import { Trophy, Mail, AlertCircle, UserPlus, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated } = useAuth();
+  const { requestMagicLink, verifyCode, isAuthenticated } = useAuth();
 
+  const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const codeInputRef = useRef<HTMLInputElement>(null);
 
   // Redirect if already logged in
   if (isAuthenticated) {
@@ -21,18 +22,41 @@ export default function Login() {
     navigate(from, { replace: true });
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Focus code input when switching to code step
+  useEffect(() => {
+    if (step === 'code') {
+      codeInputRef.current?.focus();
+    }
+  }, [step]);
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    const result = await login(email, password);
+    const result = await requestMagicLink(email);
+
+    if (result.success) {
+      setStep('code');
+    } else {
+      setError(result.error || 'Failed to send sign-in link');
+    }
+
+    setIsLoading(false);
+  };
+
+  const handleCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    const result = await verifyCode(email, code);
 
     if (result.success) {
       const from = (location.state as any)?.from?.pathname || '/';
       navigate(from, { replace: true });
     } else {
-      setError(result.error || 'Login failed');
+      setError(result.error || 'Verification failed');
     }
 
     setIsLoading(false);
@@ -50,7 +74,7 @@ export default function Login() {
           TKD Tournament Manager
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-          Sign in to manage tournaments
+          {step === 'email' ? 'Sign in to manage tournaments' : 'Check your email'}
         </p>
       </div>
 
@@ -63,74 +87,105 @@ export default function Login() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="form-input w-full"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Password
-              </label>
-              <div className="relative">
+          {step === 'email' ? (
+            <form onSubmit={handleEmailSubmit} className="space-y-5">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Email address
+                </label>
                 <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
                   required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="form-input w-full pr-10"
-                  placeholder="Enter your password"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="form-input w-full"
+                  placeholder="you@example.com"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
               </div>
-            </div>
 
-            <div className="flex items-center justify-end">
-              <Link to="/forgot-password" className="text-sm text-primary-600 hover:text-primary-500 dark:text-primary-400">
-                Forgot password?
-              </Link>
-            </div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full btn btn-primary py-3 flex items-center justify-center text-base font-medium"
+              >
+                {isLoading ? (
+                  <>
+                    <Spinner size="sm" className="mr-2" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-5 w-5 mr-2" />
+                    Send sign-in link
+                  </>
+                )}
+              </button>
+            </form>
+          ) : (
+            <>
+              <div className="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-start">
+                <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400 mr-3 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-green-700 dark:text-green-300">
+                  <p className="font-medium">Sign-in link sent!</p>
+                  <p className="mt-1">
+                    We sent a link and a 6-digit code to <strong>{email}</strong>. Click the link or enter the code below.
+                  </p>
+                </div>
+              </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full btn btn-primary py-3 flex items-center justify-center text-base font-medium"
-            >
-              {isLoading ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  Signing in...
-                </>
-              ) : (
-                <>
-                  <LogIn className="h-5 w-5 mr-2" />
-                  Sign in
-                </>
-              )}
-            </button>
-          </form>
+              <form onSubmit={handleCodeSubmit} className="space-y-5">
+                <div>
+                  <label htmlFor="code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    6-digit code
+                  </label>
+                  <input
+                    ref={codeInputRef}
+                    id="code"
+                    name="code"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    required
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="form-input w-full text-center text-2xl tracking-[0.5em] font-mono"
+                    placeholder="000000"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading || code.length !== 6}
+                  className="w-full btn btn-primary py-3 flex items-center justify-center text-base font-medium"
+                >
+                  {isLoading ? (
+                    <>
+                      <Spinner size="sm" className="mr-2" />
+                      Verifying...
+                    </>
+                  ) : (
+                    'Verify code'
+                  )}
+                </button>
+              </form>
+
+              <button
+                onClick={() => {
+                  setStep('email');
+                  setCode('');
+                  setError('');
+                }}
+                className="mt-4 w-full flex items-center justify-center text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Use a different email
+              </button>
+            </>
+          )}
 
           <div className="mt-6">
             <div className="relative">
@@ -152,10 +207,6 @@ export default function Login() {
               </Link>
             </div>
           </div>
-
-          <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
-            Staff member? <Link to="/signup" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400">Create an account</Link>
-          </p>
         </div>
       </div>
     </div>

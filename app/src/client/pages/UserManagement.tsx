@@ -54,15 +54,8 @@ const ROLES = [
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [editingRole, setEditingRole] = useState<string | null>(null);
-  const [newUser, setNewUser] = useState({
-    email: '',
-    password: '',
-    firstName: '',
-    lastName: '',
-  });
   const [inviteData, setInviteData] = useState({
     email: '',
     firstName: '',
@@ -80,34 +73,6 @@ export default function UserManagement() {
       });
       if (!res.ok) throw new Error('Failed to fetch users');
       return res.json();
-    },
-  });
-
-  const createUserMutation = useMutation({
-    mutationFn: async (userData: typeof newUser) => {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify(userData),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to create user');
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      setShowCreateModal(false);
-      setNewUser({ email: '', password: '', firstName: '', lastName: '' });
-      setSuccess('User created successfully');
-      setTimeout(() => setSuccess(null), 3000);
-    },
-    onError: (err: Error) => {
-      setError(err.message);
     },
   });
 
@@ -261,12 +226,6 @@ export default function UserManagement() {
     }
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    createUserMutation.mutate(newUser);
-  };
-
   const handleSendInvite = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -310,10 +269,6 @@ export default function UserManagement() {
           <button onClick={() => setShowInviteModal(true)} className="btn btn-primary">
             <Send className="h-4 w-4 mr-2" />
             <span className="hidden sm:inline">Invite User</span>
-          </button>
-          <button onClick={() => setShowCreateModal(true)} className="btn btn-secondary">
-            <UserPlus className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Add User</span>
           </button>
         </div>
       </div>
@@ -695,114 +650,6 @@ export default function UserManagement() {
         </div>
       )}
 
-      {/* Create User Modal */}
-      {showCreateModal && (
-        <div className="modal-container flex items-center justify-center p-4">
-          <div className="modal-backdrop" onClick={() => {
-            setShowCreateModal(false);
-            setNewUser({ email: '', password: '', firstName: '', lastName: '' });
-            setError(null);
-          }} />
-          <div className="modal-panel max-w-md">
-            <div className="modal-header">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Create New User</h2>
-              <button
-                onClick={() => {
-                  setShowCreateModal(false);
-                  setNewUser({ email: '', password: '', firstName: '', lastName: '' });
-                  setError(null);
-                }}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <form onSubmit={handleCreateUser}>
-              <div className="modal-body space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="form-label">First Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={newUser.firstName}
-                      onChange={(e) =>
-                        setNewUser({ ...newUser, firstName: e.target.value })
-                      }
-                      className="form-input w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label">Last Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={newUser.lastName}
-                      onChange={(e) =>
-                        setNewUser({ ...newUser, lastName: e.target.value })
-                      }
-                      className="form-input w-full"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="form-label">Email</label>
-                  <input
-                    type="email"
-                    required
-                    value={newUser.email}
-                    onChange={(e) =>
-                      setNewUser({ ...newUser, email: e.target.value })
-                    }
-                    className="form-input w-full"
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Password</label>
-                  <input
-                    type="password"
-                    required
-                    minLength={8}
-                    value={newUser.password}
-                    onChange={(e) =>
-                      setNewUser({ ...newUser, password: e.target.value })
-                    }
-                    className="form-input w-full"
-                    placeholder="Minimum 8 characters"
-                  />
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setNewUser({ email: '', password: '', firstName: '', lastName: '' });
-                    setError(null);
-                  }}
-                  className="btn btn-secondary w-full sm:w-auto"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createUserMutation.isPending}
-                  className="btn btn-primary w-full sm:w-auto flex items-center justify-center"
-                >
-                  {createUserMutation.isPending ? (
-                    <>
-                      <Spinner size="sm" className="mr-2" />
-                      Creating...
-                    </>
-                  ) : (
-                    'Create User'
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

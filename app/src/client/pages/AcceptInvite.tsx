@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Trophy, UserPlus, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import { Trophy, UserPlus, AlertCircle } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
 
 export default function AcceptInvite() {
@@ -16,8 +16,6 @@ export default function AcceptInvite() {
   } | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,7 +57,7 @@ export default function AcceptInvite() {
       const res = await fetch('/api/auth/accept-invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password, firstName, lastName }),
+        body: JSON.stringify({ token, firstName, lastName }),
       });
 
       const data = await res.json();
@@ -184,31 +182,6 @@ export default function AcceptInvite() {
                   onChange={(e) => setLastName(e.target.value)}
                   className="form-input w-full"
                 />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  minLength={8}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="form-input w-full pr-10"
-                  placeholder="Minimum 8 characters"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
               </div>
             </div>
 

@@ -26,9 +26,7 @@ import Schedule from './pages/Schedule';
 import BracketEditor from './pages/BracketEditor';
 import PublicRegister from './pages/PublicRegister';
 import Login from './pages/Login';
-import StaffRegister from './pages/StaffRegister';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
+import VerifyMagicLink from './pages/VerifyMagicLink';
 import Scorekeeper from './pages/Scorekeeper';
 import CheckIn from './pages/CheckIn';
 import PublicScoreboard from './pages/PublicScoreboard';
@@ -258,9 +256,7 @@ function AppRoutes() {
   const isPublicPage =
     location.pathname.startsWith('/register') ||
     location.pathname.startsWith('/login') ||
-    location.pathname.startsWith('/signup') ||
-    location.pathname.startsWith('/forgot-password') ||
-    location.pathname.startsWith('/reset-password') ||
+    location.pathname.startsWith('/verify') ||
     location.pathname.startsWith('/accept-invite') ||
     location.pathname.startsWith('/scorekeeper') ||
     location.pathname.startsWith('/checkin') ||
@@ -271,9 +267,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/register" element={<PublicRegister />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<StaffRegister />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify" element={<VerifyMagicLink />} />
         <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route path="/scorekeeper/:tournamentId" element={<Scorekeeper />} />
         <Route path="/checkin/:tournamentId" element={<CheckIn />} />

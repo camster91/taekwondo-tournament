@@ -14,7 +14,9 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  requestMagicLink: (email: string) => Promise<{ success: boolean; error?: string }>;
+  verifyCode: (email: string, code: string) => Promise<{ success: boolean; error?: string }>;
+  verifyToken: (token: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   hasRole: (roles: string[]) => boolean;
   refreshUser: () => Promise<void>;
@@ -104,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(parsedUser);
         setupLogoutTimer(savedToken);
         // Verify token is still valid on server
-        verifyToken(savedToken);
+        checkToken(savedToken);
       } catch {
         // Invalid saved state, clear it
         localStorage.removeItem(TOKEN_KEY);
@@ -114,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const verifyToken = async (authToken: string) => {
+  const checkToken = async (authToken: string) => {
     try {
       const res = await fetch('/api/auth/me', {
         headers: {
@@ -136,28 +138,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const storeAuth = (data: { token: string; user: User }) => {
+    setToken(data.token);
+    setUser(data.user);
+    localStorage.setItem(TOKEN_KEY, data.token);
+    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    setupLogoutTimer(data.token);
+  };
+
+  const requestMagicLink = async (email: string) => {
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/request-magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        return { success: false, error: data.error || 'Login failed' };
+        return { success: false, error: data.error || 'Failed to send sign-in link' };
       }
 
-      setToken(data.token);
-      setUser(data.user);
-      localStorage.setItem(TOKEN_KEY, data.token);
-      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  };
 
-      // Set up auto-logout timer
-      setupLogoutTimer(data.token);
+  const verifyCode = async (email: string, code: string) => {
+    try {
+      const res = await fetch('/api/auth/verify-magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      });
 
+      const data = await res.json();
+
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Verification failed' };
+      }
+
+      storeAuth(data);
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  };
+
+  const verifyToken = async (magicToken: string) => {
+    try {
+      const res = await fetch('/api/auth/verify-magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: magicToken }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Verification failed' };
+      }
+
+      storeAuth(data);
       return { success: true };
     } catch {
       return { success: false, error: 'Network error. Please try again.' };
@@ -183,7 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = async () => {
     if (token) {
-      await verifyToken(token);
+      await checkToken(token);
     }
   };
 
@@ -194,7 +238,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         isLoading,
         isAuthenticated: !!user,
-        login,
+        requestMagicLink,
+        verifyCode,
+        verifyToken,
         logout,
         hasRole,
         refreshUser,
