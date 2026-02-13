@@ -12,7 +12,9 @@ import authRouter from './routes/auth.js';
 import publicRouter from './routes/public.js';
 import fairnessRouter from './routes/fairness.js';
 import analyticsRouter from './routes/analytics.js';
+import invitesRouter from './routes/invites.js';
 import { isAppError, toApiError } from './utils/errors.js';
+import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
@@ -51,6 +53,7 @@ app.use('/api/divisions', divisionsRouter);
 app.use('/api/brackets', bracketsRouter);
 app.use('/api/fairness', fairnessRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/invites', invitesRouter);
 // Health check
 app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -97,8 +100,15 @@ app.use((err, req, res, _next) => {
     });
 });
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    if (isEmailConfigured()) {
+        const ok = await verifyEmailConnection();
+        console.log(ok ? 'SMTP connection verified' : 'SMTP connection failed — emails will not be sent');
+    }
+    else {
+        console.log('SMTP not configured — email features disabled');
+    }
 });
 // Graceful shutdown
 process.on('SIGINT', async () => {

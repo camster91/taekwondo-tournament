@@ -198,7 +198,7 @@ model WeightClass {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
-  passwordHash String
+  passwordHash String?
   firstName    String
   lastName     String
   role         String   @default("viewer") // admin, director, scorekeeper, viewer
@@ -209,6 +209,21 @@ model User {
 
   // Tournament-specific permissions
   tournamentAccess UserTournamentAccess[]
+}
+
+// Magic link / code authentication
+model MagicLink {
+  id        String    @id @default(uuid())
+  email     String
+  token     String    @unique
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+  @@index([token])
+  @@index([email, code])
 }
 
 // Tournament-specific user access
@@ -285,4 +300,39 @@ model CompetitorRating {
   @@index([competitorId])
   @@index([eventType])
   @@index([rating])
+}
+
+// Email invitations
+model Invitation {
+  id          String   @id @default(uuid())
+  email       String
+  firstName   String?
+  lastName    String?
+  role        String   @default("viewer")
+  token       String   @unique
+  tokenExpiry DateTime
+  invitedBy   String
+  status      String   @default("pending") // pending, accepted, expired
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([email])
+  @@index([token])
+  @@index([status])
+}
+
+// Match audit log for undo functionality
+model MatchAuditLog {
+  id            String   @id @default(uuid())
+  matchId       String
+  action        String   // update, complete, reset
+  previousState String   // JSON of previous match state
+  newState      String   // JSON of new match state
+  userId        String?  // Who made the change
+  userEmail     String?  // Email for reference
+  reason        String?  // Optional reason for change
+  createdAt     DateTime @default(now())
+
+  @@index([matchId])
+  @@index([createdAt])
 }
