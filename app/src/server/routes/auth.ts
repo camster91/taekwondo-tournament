@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { createToken, authenticate, type AuthenticatedRequest } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { sendEmail } from '../services/email.js';
-import { passwordResetEmail, welcomeEmail } from '../services/email-templates.js';
+import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
 
 const router = Router();
 
@@ -29,23 +29,6 @@ const registerLimiter = rateLimit({
 });
 
 // Validation schemas
-const registerSchema = z.object({
-  email: z.string().email('Invalid email format'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  firstName: z.string().min(1, 'First name is required').max(100),
-  lastName: z.string().min(1, 'Last name is required').max(100),
-});
-
-const loginSchema = z.object({
-  email: z.string().email('Invalid email format'),
-  password: z.string().min(1, 'Password is required'),
-});
-
-const passwordChangeSchema = z.object({
-  currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
-});
-
 const profileUpdateSchema = z.object({
   firstName: z.string().min(1, 'First name is required').max(100),
   lastName: z.string().min(1, 'Last name is required').max(100),
@@ -64,87 +47,125 @@ const tournamentAccessSchema = z.object({
   role: z.enum(['director', 'scorekeeper', 'viewer']),
 });
 
-// Register new user
-router.post('/register', registerLimiter, validateRequest(registerSchema), async (req: Request, res: Response) => {
+// Request magic link — sends email with link + 6-digit code
+router.post('/request-magic-link', authLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { email, password, firstName, lastName } = req.body;
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
 
   try {
-    // Check if email already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+    const normalizedEmail = email.toLowerCase();
+
+    // Clean up expired magic links for this email
+    await prisma.magicLink.deleteMany({
+      where: {
+        email: normalizedEmail,
+        expiresAt: { lt: new Date() },
+      },
     });
 
-    if (existingUser) {
-      return res.status(409).json({ error: 'Email already registered' });
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    // Always return success to prevent email enumeration
+    if (!user || !user.isActive) {
+      return res.json({ message: 'If an account exists, a sign-in link has been sent' });
     }
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 12);
+    // Generate 32-byte hex token + random 6-digit code
+    const token = crypto.randomBytes(32).toString('hex');
+    const code = String(Math.floor(100000 + Math.random() * 900000));
 
-    // Check if this is the first user (make them admin)
-    const userCount = await prisma.user.count();
-    const role = userCount === 0 ? 'admin' : 'viewer';
-
-    // Create user
-    const user = await prisma.user.create({
+    // Create MagicLink record (10-min expiry)
+    await prisma.magicLink.create({
       data: {
-        email: email.toLowerCase(),
-        passwordHash,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        role,
-      },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        createdAt: true,
+        email: normalizedEmail,
+        token,
+        code,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
     });
 
-    // Create token
-    const token = createToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
+    // Build magic link URL
+    const baseUrl = process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:5173';
+    const magicUrl = `${baseUrl}/verify?token=${token}`;
+
+    const template = magicLinkEmail({
+      recipientName: user.firstName,
+      magicUrl,
+      code,
     });
 
-    res.status(201).json({
-      user,
-      token,
-      message: userCount === 0 ? 'Admin account created successfully' : 'Account created successfully',
-    });
+    const emailResult = await sendEmail(user.email, template.subject, template.html);
+    if (!emailResult.success) {
+      console.log(`Magic link requested for ${email} — email not sent: ${emailResult.error}`);
+      console.log(`Magic URL: ${magicUrl}`);
+      console.log(`Code: ${code}`);
+    }
+
+    res.json({ message: 'If an account exists, a sign-in link has been sent' });
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Failed to create account' });
+    console.error('Request magic link error:', error);
+    res.status(500).json({ error: 'Failed to process request' });
   }
 });
 
-// Login
-router.post('/login', authLimiter, validateRequest(loginSchema), async (req: Request, res: Response) => {
+// Verify magic link token or 6-digit code
+router.post('/verify-magic-link', authLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { email, password } = req.body;
+  const { token, email, code } = req.body;
+
+  if (!token && !(email && code)) {
+    return res.status(400).json({ error: 'Provide a token or email + code' });
+  }
 
   try {
+    let magicLink;
+
+    if (token) {
+      magicLink = await prisma.magicLink.findFirst({
+        where: {
+          token,
+          expiresAt: { gt: new Date() },
+          usedAt: null,
+        },
+      });
+    } else {
+      magicLink = await prisma.magicLink.findFirst({
+        where: {
+          email: email.toLowerCase(),
+          code,
+          expiresAt: { gt: new Date() },
+          usedAt: null,
+        },
+      });
+    }
+
+    if (!magicLink) {
+      return res.status(400).json({ error: 'Invalid or expired link/code' });
+    }
+
+    // Mark as used
+    await prisma.magicLink.update({
+      where: { id: magicLink.id },
+      data: { usedAt: new Date() },
+    });
+
+    // Look up user
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: magicLink.email },
     });
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(400).json({ error: 'Account not found' });
     }
 
     if (!user.isActive) {
       return res.status(401).json({ error: 'Account is disabled' });
-    }
-
-    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     // Update last login
@@ -153,8 +174,8 @@ router.post('/login', authLimiter, validateRequest(loginSchema), async (req: Req
       data: { lastLogin: new Date() },
     });
 
-    // Create token
-    const token = createToken({
+    // Create JWT
+    const jwtToken = createToken({
       userId: user.id,
       email: user.email,
       role: user.role,
@@ -168,11 +189,11 @@ router.post('/login', authLimiter, validateRequest(loginSchema), async (req: Req
         lastName: user.lastName,
         role: user.role,
       },
-      token,
+      token: jwtToken,
     });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error('Verify magic link error:', error);
+    res.status(500).json({ error: 'Verification failed' });
   }
 });
 
@@ -209,40 +230,6 @@ router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response)
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
-  }
-});
-
-// Change password
-router.put('/password', authenticate, validateRequest(passwordChangeSchema), async (req: AuthenticatedRequest, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const { currentPassword, newPassword } = req.body;
-
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
-    });
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const isValidPassword = await bcrypt.compare(currentPassword, user.passwordHash);
-
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
-    }
-
-    const passwordHash = await bcrypt.hash(newPassword, 12);
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash },
-    });
-
-    res.json({ message: 'Password updated successfully' });
-  } catch (error) {
-    console.error('Password change error:', error);
-    res.status(500).json({ error: 'Failed to change password' });
   }
 });
 
@@ -449,108 +436,13 @@ router.delete('/tournaments/:tournamentId/access/:userId', authenticate, async (
   }
 });
 
-// Forgot password - request reset
-router.post('/forgot-password', authLimiter, async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const { email } = req.body;
-
-  if (!email) {
-    return res.status(400).json({ error: 'Email is required' });
-  }
-
-  try {
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-    });
-
-    // Always return success to prevent email enumeration
-    if (!user) {
-      return res.json({ message: 'If an account exists, a reset link has been sent' });
-    }
-
-    // Generate reset token
-    const crypto = await import('crypto');
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { resetToken, resetTokenExpiry },
-    });
-
-    const baseUrl = process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:5173';
-    const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
-
-    const template = passwordResetEmail({
-      recipientName: user.firstName,
-      resetUrl,
-    });
-    const emailResult = await sendEmail(user.email, template.subject, template.html);
-    if (!emailResult.success) {
-      console.log(`Password reset requested for ${email} — email not sent: ${emailResult.error}`);
-      console.log(`Reset URL: ${resetUrl}`);
-    }
-
-    res.json({ message: 'If an account exists, a reset link has been sent' });
-  } catch (error) {
-    console.error('Forgot password error:', error);
-    res.status(500).json({ error: 'Failed to process request' });
-  }
-});
-
-// Reset password with token
-router.post('/reset-password', async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const { token, password } = req.body;
-
-  if (!token || !password) {
-    return res.status(400).json({ error: 'Token and password are required' });
-  }
-
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters' });
-  }
-
-  try {
-    const user = await prisma.user.findFirst({
-      where: {
-        resetToken: token,
-        resetTokenExpiry: { gt: new Date() },
-      },
-    });
-
-    if (!user) {
-      return res.status(400).json({ error: 'Invalid or expired reset token' });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        passwordHash,
-        resetToken: null,
-        resetTokenExpiry: null,
-      },
-    });
-
-    res.json({ message: 'Password reset successfully' });
-  } catch (error) {
-    console.error('Reset password error:', error);
-    res.status(500).json({ error: 'Failed to reset password' });
-  }
-});
-
-// Accept invitation and create account
+// Accept invitation and create account (passwordless)
 router.post('/accept-invite', registerLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { token, password, firstName, lastName } = req.body;
+  const { token, firstName, lastName } = req.body;
 
-  if (!token || !password) {
-    return res.status(400).json({ error: 'Token and password are required' });
-  }
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!token) {
+    return res.status(400).json({ error: 'Token is required' });
   }
   if (!firstName || !lastName) {
     return res.status(400).json({ error: 'First name and last name are required' });
@@ -577,12 +469,9 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
-
     const user = await prisma.user.create({
       data: {
         email: invitation.email,
-        passwordHash,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         role: invitation.role,
@@ -632,7 +521,7 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
 // Setup first admin account (only works when no admins exist)
 router.post('/setup-admin', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { email, password, firstName, lastName, setupKey } = req.body;
+  const { email, firstName, lastName, setupKey } = req.body;
 
   // Require setup key from environment or use a default for initial setup
   const requiredKey = process.env.ADMIN_SETUP_KEY || 'tkd-admin-setup-2024';
@@ -641,12 +530,8 @@ router.post('/setup-admin', async (req: Request, res: Response) => {
     return res.status(403).json({ error: 'Invalid setup key' });
   }
 
-  if (!email || !password || !firstName || !lastName) {
-    return res.status(400).json({ error: 'All fields are required' });
-  }
-
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!email || !firstName || !lastName) {
+    return res.status(400).json({ error: 'Email, first name, and last name are required' });
   }
 
   try {
@@ -687,13 +572,10 @@ router.post('/setup-admin', async (req: Request, res: Response) => {
       return res.json({ user, token, message: 'Existing user promoted to admin' });
     }
 
-    // Create new admin user
-    const passwordHash = await bcrypt.hash(password, 12);
-
+    // Create new admin user (no password)
     const user = await prisma.user.create({
       data: {
         email: email.toLowerCase(),
-        passwordHash,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         role: 'admin',

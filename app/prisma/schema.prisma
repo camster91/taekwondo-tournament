@@ -198,7 +198,7 @@ model WeightClass {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
-  passwordHash String
+  passwordHash String?
   firstName    String
   lastName     String
   role         String   @default("viewer") // admin, director, scorekeeper, viewer
@@ -207,12 +207,23 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  // Password reset
-  resetToken       String?
-  resetTokenExpiry DateTime?
-
   // Tournament-specific permissions
   tournamentAccess UserTournamentAccess[]
+}
+
+// Magic link / code authentication
+model MagicLink {
+  id        String    @id @default(uuid())
+  email     String
+  token     String    @unique
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+  @@index([token])
+  @@index([email, code])
 }
 
 // Tournament-specific user access
