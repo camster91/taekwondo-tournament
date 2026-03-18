@@ -18,7 +18,8 @@
     "db:studio": "prisma studio",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "seed": "node --loader ts-node/esm prisma/seed.ts"
   },
   "keywords": [
     "taekwondo",
