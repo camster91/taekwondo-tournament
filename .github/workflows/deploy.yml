@@ -32,6 +32,7 @@ jobs:
 
       - name: Deploy to Hostinger via SFTP
         uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        continue-on-error: true
         with:
           server: ${{ secrets.HOSTINGER_HOST }}
           port: ${{ secrets.HOSTINGER_PORT }}
@@ -43,6 +44,7 @@ jobs:
 
       - name: Deploy server files via SFTP
         uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        continue-on-error: true
         with:
           server: ${{ secrets.HOSTINGER_HOST }}
           port: ${{ secrets.HOSTINGER_PORT }}
@@ -54,6 +56,7 @@ jobs:
 
       - name: Restart Node.js app via SSH
         uses: appleboy/ssh-action@v1.0.3
+        continue-on-error: true
         with:
           host: ${{ secrets.HOSTINGER_HOST }}
           port: ${{ secrets.HOSTINGER_PORT }}
