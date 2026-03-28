@@ -20,7 +20,7 @@ const tournamentCreateSchema = z.object({
 });
 
 const tournamentUpdateSchema = tournamentCreateSchema.partial().extend({
-  status: z.enum(['draft', 'active', 'completed']).optional(),
+  status: z.enum(['draft', 'registration', 'brackets', 'in_progress', 'active', 'completed']).optional(),
 });
 
 const registrationSchema = z.object({
