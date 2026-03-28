@@ -25,6 +25,7 @@ const getParam = (param: string | string[] | undefined): string => {
 // Get divisions for a tournament
 router.get('/tournament/:tournamentId', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const withMatches = req.query.withMatches === 'true';
 
   const divisions = await prisma.division.findMany({
     where: { tournamentId: getParam(req.params.tournamentId) },
@@ -32,7 +33,17 @@ router.get('/tournament/:tournamentId', async (req: Request, res: Response) => {
       _count: {
         select: { assignments: true },
       },
-      bracket: true,
+      bracket: withMatches ? {
+        include: {
+          matches: {
+            include: {
+              competitor1: { include: { competitor: true } },
+              competitor2: { include: { competitor: true } },
+            },
+            orderBy: [{ roundNumber: 'asc' }, { matchNumber: 'asc' }],
+          },
+        },
+      } : true,
     },
     orderBy: [
       { beltLevel: 'asc' },

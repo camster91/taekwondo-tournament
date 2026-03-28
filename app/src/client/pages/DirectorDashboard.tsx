@@ -81,53 +81,65 @@ export default function DirectorDashboard() {
     queryKey: ['director-dashboard', tournamentId],
     queryFn: async () => {
       // Fetch tournament data
-      const [tournamentRes, divisionsRes, matchesRes] = await Promise.all([
+      const [tournamentRes, divisionsRes] = await Promise.all([
         fetch(`/api/tournaments/${tournamentId}`),
-        fetch(`/api/divisions?tournamentId=${tournamentId}`),
-        fetch(`/api/matches?tournamentId=${tournamentId}`),
+        fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`),
       ]);
 
       if (!tournamentRes.ok) throw new Error('Failed to fetch tournament');
 
       const tournament = await tournamentRes.json();
-      const divisions = divisionsRes.ok ? await divisionsRes.json() : [];
-      const matches = matchesRes.ok ? await matchesRes.json() : [];
+      const divisions: any[] = divisionsRes.ok ? await divisionsRes.json() : [];
 
-      // Calculate statistics
-      const completedDivisions = divisions.filter((d: any) => d.status === 'completed').length;
-      const inProgressDivisions = divisions.filter((d: any) => d.status === 'in_progress').length;
+      // Flatten all matches from brackets, annotated with divisionId and divisionName
+      const matches = divisions.flatMap((d: any) =>
+        (d.bracket?.matches ?? []).map((m: any) => ({
+          ...m,
+          _divisionId: d.id,
+          _divisionName: d.name,
+        }))
+      );
+
+      // A division is "completed" when all its matches are done, "in_progress" when any match is active
+      const completedDivisions = divisions.filter((d: any) => {
+        const dm = matches.filter((m: any) => m._divisionId === d.id);
+        return dm.length > 0 && dm.every((m: any) => m.status === 'completed' || m.status === 'bye');
+      }).length;
+      const inProgressDivisions = divisions.filter((d: any) =>
+        matches.some((m: any) => m._divisionId === d.id && m.status === 'in_progress')
+      ).length;
 
       const completedMatches = matches.filter((m: any) => m.status === 'completed').length;
       const inProgressMatches = matches.filter((m: any) => m.status === 'in_progress').length;
-      const scheduledMatches = matches.filter((m: any) => m.status === 'scheduled').length;
+      const scheduledMatches = matches.filter((m: any) => m.status === 'ready' || m.status === 'pending').length;
 
-      // Group matches by ring for ring status
+      // Group matches by ring number for ring status
       const ringMap = new Map<string, any[]>();
       matches.forEach((m: any) => {
-        const ring = m.ring || 'Unassigned';
+        const ring = m.ringNumber != null ? `Ring ${m.ringNumber}` : null;
+        if (!ring) return; // skip unassigned
         if (!ringMap.has(ring)) ringMap.set(ring, []);
         ringMap.get(ring)!.push(m);
       });
 
       const rings: RingStatus[] = [];
       ringMap.forEach((ringMatches, ring) => {
-        if (ring === 'Unassigned') return;
-
         const currentMatch = ringMatches.find((m: any) => m.status === 'in_progress');
-        const upcoming = ringMatches.filter((m: any) => m.status === 'scheduled').length;
-        const allCompleted = ringMatches.every((m: any) => m.status === 'completed');
+        const upcoming = ringMatches.filter((m: any) => m.status === 'ready' || m.status === 'pending').length;
+        const allCompleted = ringMatches.every((m: any) => m.status === 'completed' || m.status === 'bye');
+
+        const getCompetitorName = (slot: any) => {
+          const comp = slot?.competitor;
+          return comp ? `${comp.firstName} ${comp.lastName}` : 'TBD';
+        };
 
         rings.push({
           ring,
           currentMatch: currentMatch ? {
             id: currentMatch.id,
-            divisionName: currentMatch.bracket?.division?.name || 'Unknown',
-            competitor1: currentMatch.competitor1?.firstName
-              ? `${currentMatch.competitor1.firstName} ${currentMatch.competitor1.lastName}`
-              : 'TBD',
-            competitor2: currentMatch.competitor2?.firstName
-              ? `${currentMatch.competitor2.firstName} ${currentMatch.competitor2.lastName}`
-              : 'TBD',
+            divisionName: currentMatch._divisionName || 'Unknown',
+            competitor1: getCompetitorName(currentMatch.competitor1),
+            competitor2: getCompetitorName(currentMatch.competitor2),
             startedAt: currentMatch.updatedAt,
           } : undefined,
           upcomingMatches: upcoming,
@@ -137,7 +149,7 @@ export default function DirectorDashboard() {
 
       // Calculate division details
       const divisionDetails: DivisionStats[] = divisions.map((d: any) => {
-        const divMatches = matches.filter((m: any) => m.bracket?.divisionId === d.id);
+        const divMatches = matches.filter((m: any) => m._divisionId === d.id);
         const completed = divMatches.filter((m: any) => m.status === 'completed').length;
         const inProgress = divMatches.filter((m: any) => m.status === 'in_progress').length;
         const remaining = divMatches.length - completed;
