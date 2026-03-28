@@ -252,15 +252,21 @@ router.post('/:id/registrations/bulk', authenticate, validateRequest(bulkRegistr
 // Update registration (requires authentication)
 router.put('/:id/registrations/:regId', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { patterns, sparring, weightAtRegistration } = req.body;
+  const { patterns, sparring, weightAtRegistration, checkedIn, checkInWeight } = req.body;
+
+  const updateData: Record<string, unknown> = {};
+  if (patterns !== undefined) updateData.patterns = patterns;
+  if (sparring !== undefined) updateData.sparring = sparring;
+  if (weightAtRegistration !== undefined) updateData.weightAtRegistration = weightAtRegistration;
+  if (checkedIn !== undefined) {
+    updateData.checkedIn = checkedIn;
+    updateData.checkInTime = checkedIn ? new Date() : null;
+  }
+  if (checkInWeight !== undefined) updateData.checkInWeight = checkInWeight;
 
   const registration = await prisma.registration.update({
     where: { id: getParam(req.params.regId) },
-    data: {
-      patterns,
-      sparring,
-      weightAtRegistration,
-    },
+    data: updateData,
     include: {
       competitor: true,
     },
