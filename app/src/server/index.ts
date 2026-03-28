@@ -14,6 +14,7 @@ import publicRouter from './routes/public.js';
 import fairnessRouter from './routes/fairness.js';
 import analyticsRouter from './routes/analytics.js';
 import invitesRouter from './routes/invites.js';
+import sportsRouter from './routes/sports.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 
@@ -65,6 +66,7 @@ app.use('/api/brackets', bracketsRouter);
 app.use('/api/fairness', fairnessRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/invites', invitesRouter);
+app.use('/api/sports', sportsRouter);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {
