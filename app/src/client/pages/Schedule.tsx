@@ -433,7 +433,7 @@ export default function Schedule() {
             }}
             secondaryAction={{
               label: 'Manage Divisions',
-              href: `/tournaments/${id}/divisions`,
+              onClick: () => window.location.href = `/tournaments/${id}/divisions`,
             }}
           />
         </div>
