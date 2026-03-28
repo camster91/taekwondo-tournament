@@ -17,7 +17,6 @@ import {
   Check,
   X,
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
@@ -247,7 +246,7 @@ export default function Divisions() {
     {} as Record<string, Division[]>
   );
 
-  // Export all brackets as PDFs
+  // Export all brackets as PDFs using the server endpoint
   const exportAllPDFs = async () => {
     if (!divisions || divisions.length === 0) return;
 
@@ -262,77 +261,21 @@ export default function Divisions() {
         return;
       }
 
-      // Create a combined PDF with all brackets
-      const doc = new jsPDF('landscape', 'pt', 'letter');
-      let isFirstPage = true;
-
-      for (const division of divisionsWithBrackets) {
-        // Fetch division details with bracket
-        const res = await fetch(`/api/divisions/${division.id}`);
-        const divisionData = await res.json();
-
-        if (!divisionData.bracket) continue;
-
-        if (!isFirstPage) {
-          doc.addPage();
-        }
-        isFirstPage = false;
-
-        const pageWidth = doc.internal.pageSize.getWidth();
-
-        // Title
-        doc.setFontSize(14);
-        doc.text(division.name, pageWidth / 2, 40, { align: 'center' });
-
-        doc.setFontSize(10);
-        doc.text(`${tournament?.name || 'Tournament'}`, pageWidth / 2, 55, {
-          align: 'center',
-        });
-
-        // Draw simplified bracket info
-        doc.setFontSize(9);
-        let y = 80;
-
-        const winnersMatches = divisionData.bracket.matches.filter(
-          (m: any) => m.bracketType === 'winners'
-        );
-
-        doc.text('Winners Bracket:', 50, y);
-        y += 15;
-
-        for (const match of winnersMatches.slice(0, 7)) {
-          const name1 = match.competitor1
-            ? `${match.competitor1.competitor.firstName} ${match.competitor1.competitor.lastName}`
-            : 'BYE';
-          const name2 = match.competitor2
-            ? `${match.competitor2.competitor.firstName} ${match.competitor2.competitor.lastName}`
-            : 'BYE';
-
-          doc.text(`  M${match.matchNumber}: ${name1} vs ${name2}`, 50, y);
-          y += 12;
-        }
-
-        // Competitor list
-        y = 80;
-        doc.text('Competitors:', 400, y);
-        y += 15;
-
-        divisionData.assignments.forEach((a: any, i: number) => {
-          if (y > 500) return;
-          doc.text(
-            `${i + 1}. ${a.registration.competitor.firstName} ${a.registration.competitor.lastName}`,
-            400,
-            y
-          );
-          y += 12;
-        });
+      // Use the server-side batch PDF endpoint
+      const res = await fetch(`/api/brackets/tournament/${id}/pdf`);
+      if (!res.ok) {
+        throw new Error('Failed to generate PDF');
       }
 
-      // Save the combined PDF
-      const fileName = `${tournament?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Tournament'}_All_Brackets.pdf`;
-      doc.save(fileName);
-
-      alert(`Exported ${divisionsWithBrackets.length} brackets to ${fileName}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${tournament?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Tournament'}_All_Brackets.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Export error:', error);
       alert('Error exporting PDFs. Please try again.');

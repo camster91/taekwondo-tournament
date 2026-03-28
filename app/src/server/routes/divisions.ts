@@ -113,11 +113,17 @@ router.post('/tournament/:tournamentId/preview', authenticate, async (req: Reque
     ? { patterns: sportProfile.eventTypes[0]?.name ?? 'Patterns', sparring: sportProfile.eventTypes[1]?.name ?? 'Sparring' }
     : undefined;
 
+  // Fetch custom weight classes from DB
+  const customWeightClasses = await prisma.weightClass.findMany({
+    where: { tournamentId: getParam(req.params.tournamentId) },
+  });
+
   // Run preview (no database changes)
   const categorizationConfig: CategorizationConfig = {
     divisionThreshold: config?.divisionThreshold ?? 8,
     ...config,
     eventTypeLabels,
+    customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
   };
 
   const preview = previewCategorization(registrations, categorizationConfig);
@@ -184,11 +190,17 @@ router.post('/tournament/:tournamentId/auto-generate', authenticate, async (req:
     ? { patterns: sportProfile.eventTypes[0]?.name ?? 'Patterns', sparring: sportProfile.eventTypes[1]?.name ?? 'Sparring' }
     : undefined;
 
+  // Fetch custom weight classes from DB
+  const customWeightClasses = await prisma.weightClass.findMany({
+    where: { tournamentId },
+  });
+
   // Run auto-categorization
   const categorizationConfig: CategorizationConfig = {
     divisionThreshold: config?.divisionThreshold ?? 8,
     ...config,
     eventTypeLabels,
+    customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
   };
 
   const result = await autoCategorize(prisma, tournamentId, registrations, categorizationConfig);
