@@ -19,6 +19,9 @@ import {
   Search,
   X,
   ChevronLeft,
+  Globe,
+  Lock,
+  Copy,
 } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
 import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
@@ -69,6 +72,7 @@ export default function TournamentDetail() {
   const [searchQuery, setSearchQuery] = useState('');
   const [modalSearch, setModalSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Registration | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const { data: tournament, isLoading: tournamentLoading } = useQuery<Tournament>({
     queryKey: ['tournament', id],
@@ -150,6 +154,29 @@ export default function TournamentDetail() {
       queryClient.invalidateQueries({ queryKey: ['registrations', id] });
     },
   });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async (status: string) => {
+      const res = await fetch(`/api/tournaments/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error('Failed to update status');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+    },
+  });
+
+  const registrationUrl = `${window.location.origin}/register?tournament=${id}`;
+
+  const copyRegistrationLink = () => {
+    navigator.clipboard.writeText(registrationUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
 
   const registeredIds = new Set(registrations?.map((r) => r.competitorId) || []);
   const availableCompetitors =
@@ -385,6 +412,47 @@ export default function TournamentDetail() {
           </div>
         </div>
       </div>
+
+      {/* Public Registration Banner */}
+      {tournament.status === 'registration' ? (
+        <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-2 text-green-700 dark:text-green-300 flex-1 min-w-0">
+              <Globe className="h-5 w-5 flex-shrink-0" />
+              <span className="font-medium">Open for Registration</span>
+              <span className="text-sm truncate hidden sm:block">{registrationUrl}</span>
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              <button onClick={copyRegistrationLink} className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1">
+                <Copy className="h-3.5 w-3.5" />
+                {copiedLink ? 'Copied!' : 'Copy Link'}
+              </button>
+              <button
+                onClick={() => updateStatusMutation.mutate('active')}
+                disabled={updateStatusMutation.isPending}
+                className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                <Lock className="h-3.5 w-3.5" />
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : tournament.status !== 'completed' ? (
+        <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+          <p className="text-sm text-gray-600 dark:text-gray-400 flex-1">
+            Open this tournament for public self-registration to share a signup link with competitors.
+          </p>
+          <button
+            onClick={() => updateStatusMutation.mutate('registration')}
+            disabled={updateStatusMutation.isPending}
+            className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1 flex-shrink-0"
+          >
+            <Globe className="h-3.5 w-3.5 mr-1" />
+            Open for Registration
+          </button>
+        </div>
+      ) : null}
 
       {/* Registrations */}
       <div className="card">
