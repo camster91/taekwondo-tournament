@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface Tournament {
   id: string;
@@ -43,7 +44,7 @@ export default function Tournaments() {
     mutationFn: async (data: typeof formData) => {
       const res = await fetch('/api/tournaments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(data),
       });
       return res.json();
@@ -57,7 +58,7 @@ export default function Tournaments() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await fetch(`/api/tournaments/${id}`, { method: 'DELETE' });
+      await fetch(`/api/tournaments/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournaments'] });

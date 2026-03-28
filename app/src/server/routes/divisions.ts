@@ -8,6 +8,8 @@ import {
   validateTournamentState,
   backupDivisionState,
   saveBackup,
+  getBackup,
+  restoreDivisionState,
 } from '../services/backup-recovery.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -459,6 +461,49 @@ router.post('/:id/split', authenticate, async (req: Request, res: Response) => {
   }
 
   res.json(newDivisions);
+});
+
+// Get current backup state for a tournament (requires authentication)
+router.get('/tournament/:tournamentId/backup', authenticate, async (req: Request, res: Response) => {
+  const tournamentId = getParam(req.params.tournamentId);
+  const backup = getBackup(tournamentId);
+
+  if (!backup) {
+    return res.status(404).json({
+      error: 'No backup found',
+      code: 'NO_BACKUP',
+      suggestion: 'Backups are created automatically before auto-generation or clearing divisions',
+    });
+  }
+
+  res.json({
+    tournamentId: backup.tournamentId,
+    timestamp: backup.timestamp,
+    divisionCount: backup.divisions.length,
+  });
+});
+
+// Restore tournament divisions from backup (requires authentication)
+router.post('/tournament/:tournamentId/restore', authenticate, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = getParam(req.params.tournamentId);
+
+  const backup = getBackup(tournamentId);
+
+  if (!backup) {
+    return res.status(404).json({
+      error: 'No backup found to restore',
+      code: 'NO_BACKUP',
+      suggestion: 'Backups are created automatically before auto-generation or clearing divisions',
+    });
+  }
+
+  const result = await restoreDivisionState(prisma, backup);
+
+  res.json({
+    ...result,
+    message: `Restored ${result.restored} division(s)`,
+  });
 });
 
 export default router;

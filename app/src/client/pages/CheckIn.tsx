@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import Spinner from '../components/ui/Spinner';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface Registration {
   id: string;
@@ -82,7 +83,7 @@ export default function CheckIn() {
     mutationFn: async (data: { registrationId: string; weight?: number }) => {
       const res = await fetch(`/api/tournaments/${tournamentId}/registrations/${data.registrationId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           checkedIn: true,
           checkInTime: new Date().toISOString(),
@@ -103,7 +104,7 @@ export default function CheckIn() {
     mutationFn: async (registrationId: string) => {
       const res = await fetch(`/api/tournaments/${tournamentId}/registrations/${registrationId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           checkedIn: false,
           checkInTime: null,

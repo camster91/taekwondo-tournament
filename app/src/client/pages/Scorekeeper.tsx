@@ -15,6 +15,7 @@ import {
   Timer,
 } from 'lucide-react';
 import MatchTimer from '../components/MatchTimer';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface Match {
   id: string;
@@ -95,7 +96,7 @@ export default function Scorekeeper() {
     }) => {
       const res = await fetch(`/api/brackets/match/${data.matchId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           winnerId: data.winnerId,
           score1: data.score1,

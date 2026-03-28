@@ -20,6 +20,7 @@ import {
   X,
   ChevronLeft,
 } from 'lucide-react';
+import { getAuthHeaders } from '../context/AuthContext';
 import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
@@ -102,7 +103,7 @@ export default function TournamentDetail() {
     }) => {
       const res = await fetch(`/api/tournaments/${id}/registrations/bulk`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(data),
       });
       return res.json();
@@ -119,6 +120,7 @@ export default function TournamentDetail() {
     mutationFn: async (regId: string) => {
       await fetch(`/api/tournaments/${id}/registrations/${regId}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
       });
     },
     onSuccess: () => {
@@ -139,7 +141,7 @@ export default function TournamentDetail() {
     }) => {
       const res = await fetch(`/api/tournaments/${id}/registrations/${regId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ patterns, sparring }),
       });
       return res.json();
