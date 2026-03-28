@@ -90,6 +90,7 @@ export default function Competitors() {
   const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Competitor | null>(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [pageLimit, setPageLimit] = useState(100);
   const [importData, setImportData] = useState<any[] | null>(null);
   const [importColumns, setImportColumns] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState<ImportMapping>({
@@ -123,11 +124,11 @@ export default function Competitors() {
   }, [editingCompetitor]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['competitors', search],
+    queryKey: ['competitors', search, pageLimit],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      params.set('limit', '100');
+      params.set('limit', String(pageLimit));
       const res = await fetch(`/api/competitors?${params}`);
       return res.json();
     },
@@ -300,6 +301,34 @@ export default function Competitors() {
     window.location.href = '/api/competitors/template';
   };
 
+  const handleExportExcel = async () => {
+    // Fetch all competitors (no limit) for export
+    const res = await fetch('/api/competitors?limit=10000', { headers: getAuthHeaders() });
+    const result = await res.json();
+    const all: Competitor[] = result.competitors || [];
+
+    const wsData = [
+      ['First Name', 'Last Name', 'Gender', 'Date of Birth', 'Belt', 'Dan Rank', 'Height (in)', 'Weight (lbs)', 'School/Dojang', 'Special Needs'],
+      ...all.map((c) => [
+        c.firstName,
+        c.lastName,
+        c.gender,
+        c.dateOfBirth ? new Date(c.dateOfBirth).toLocaleDateString() : '',
+        c.belt,
+        c.danRank ?? '',
+        c.heightInches ?? '',
+        c.weightLbs ?? '',
+        c.schoolDojang ?? '',
+        c.specialNeeds ?? '',
+      ]),
+    ];
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Competitors');
+    XLSX.writeFile(wb, `Competitors_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   const getBeltColor = (belt: string) => {
     const lower = belt.toLowerCase();
     if (lower.includes('black')) return 'bg-gray-900 text-white';
@@ -330,6 +359,13 @@ export default function Competitors() {
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+          <button
+            onClick={handleExportExcel}
+            className="btn btn-secondary"
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Export Excel
+          </button>
           <button
             onClick={handleDownloadTemplate}
             className="btn btn-secondary"
@@ -554,6 +590,14 @@ export default function Competitors() {
             <span>
               Showing {filteredCompetitors?.length || 0} of {data.total} competitors
             </span>
+            {data.total > pageLimit && (
+              <button
+                onClick={() => setPageLimit((p) => p + 100)}
+                className="text-primary-600 dark:text-primary-400 hover:underline text-sm font-medium"
+              >
+                Load more
+              </button>
+            )}
           </div>
         )}
       </div>
