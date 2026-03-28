@@ -560,7 +560,6 @@ export default function Divisions() {
             action={{
               label: 'Auto-Generate Divisions',
               onClick: () => autoGenerateMutation.mutate(),
-              icon: Wand2,
             }}
           />
         </div>

@@ -110,7 +110,7 @@ export default function Dashboard() {
         <div>
           <h1 className="page-title">Dashboard</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Welcome to the Taekwondo Tournament Manager
+            Welcome to Tournament Manager
           </p>
         </div>
         <Link
@@ -321,7 +321,7 @@ export default function Dashboard() {
               description="Get started by creating your first tournament."
               action={{
                 label: 'Create Tournament',
-                href: '/tournaments',
+                onClick: () => window.location.href = '/tournaments',
               }}
             />
           )}
