@@ -55,6 +55,7 @@ export function StatusBadge({ status }: { status: string }) {
     draft: { variant: 'default', label: 'Draft' },
     registration: { variant: 'info', label: 'Registration' },
     brackets: { variant: 'purple', label: 'Brackets' },
+    active: { variant: 'warning', label: 'Active' },
     in_progress: { variant: 'warning', label: 'In Progress' },
     completed: { variant: 'success', label: 'Completed' },
     pending: { variant: 'default', label: 'Pending' },
