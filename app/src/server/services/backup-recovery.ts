@@ -12,6 +12,18 @@ export interface TournamentBackup {
 export interface DivisionBackup {
   id: string;
   name: string;
+  beltLevel: string;
+  gender: string;
+  eventType: string;
+  ageMin: number;
+  ageMax: number;
+  beltColors: string | null;
+  danMin: number | null;
+  danMax: number | null;
+  weightClass: string | null;
+  divisionNumber: number;
+  isSpecialNeeds: boolean;
+  displayOrder: number | null;
   assignments: Array<{
     registrationId: string;
     seedPosition: number | null;
@@ -53,6 +65,18 @@ export async function backupDivisionState(
     divisions: divisions.map((d) => ({
       id: d.id,
       name: d.name,
+      beltLevel: d.beltLevel,
+      gender: d.gender,
+      eventType: d.eventType,
+      ageMin: d.ageMin,
+      ageMax: d.ageMax,
+      beltColors: d.beltColors,
+      danMin: d.danMin,
+      danMax: d.danMax,
+      weightClass: d.weightClass,
+      divisionNumber: d.divisionNumber,
+      isSpecialNeeds: d.isSpecialNeeds,
+      displayOrder: d.displayOrder,
       assignments: d.assignments,
       bracket: d.bracket || undefined,
     })),
@@ -83,11 +107,18 @@ export async function restoreDivisionState(
           id: div.id,
           tournamentId: backup.tournamentId,
           name: div.name,
-          beltLevel: 'CB', // Will need full backup to restore these
-          gender: 'M',
-          eventType: 'patterns',
-          ageMin: 0,
-          ageMax: 99,
+          beltLevel: div.beltLevel,
+          gender: div.gender,
+          eventType: div.eventType,
+          ageMin: div.ageMin,
+          ageMax: div.ageMax,
+          beltColors: div.beltColors,
+          danMin: div.danMin,
+          danMax: div.danMax,
+          weightClass: div.weightClass,
+          divisionNumber: div.divisionNumber,
+          isSpecialNeeds: div.isSpecialNeeds,
+          displayOrder: div.displayOrder,
         },
       });
 

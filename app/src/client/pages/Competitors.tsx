@@ -17,6 +17,7 @@ import { TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface Competitor {
   id: string;
@@ -126,7 +127,7 @@ export default function Competitors() {
     mutationFn: async (data: typeof formData) => {
       const res = await fetch('/api/competitors', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           ...data,
           danRank: data.danRank ? parseInt(data.danRank) : null,
@@ -146,7 +147,7 @@ export default function Competitors() {
     mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
       const res = await fetch(`/api/competitors/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           ...data,
           danRank: data.danRank ? parseInt(data.danRank) : null,
@@ -164,7 +165,7 @@ export default function Competitors() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await fetch(`/api/competitors/${id}`, { method: 'DELETE' });
+      await fetch(`/api/competitors/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['competitors'] });
@@ -188,7 +189,7 @@ export default function Competitors() {
     }) => {
       const res = await fetch('/api/competitors/import', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ data, columnMapping: mapping }),
       });
       return res.json();

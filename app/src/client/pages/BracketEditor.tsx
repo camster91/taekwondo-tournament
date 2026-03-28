@@ -13,6 +13,7 @@ import { jsPDF } from 'jspdf';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface Competitor {
   id: string;
@@ -82,7 +83,7 @@ export default function BracketEditor() {
     mutationFn: async () => {
       const res = await fetch(`/api/brackets/division/${divisionId}/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ seedingStrategy: 'school_spread' }),
       });
       return res.json();
@@ -102,7 +103,7 @@ export default function BracketEditor() {
     }) => {
       const res = await fetch(`/api/brackets/match/${matchId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ winnerId, status: 'completed' }),
       });
       return res.json();
@@ -117,6 +118,7 @@ export default function BracketEditor() {
     mutationFn: async () => {
       await fetch(`/api/brackets/division/${divisionId}/reset`, {
         method: 'POST',
+        headers: getAuthHeaders(),
       });
     },
     onSuccess: () => {

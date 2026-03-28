@@ -12,6 +12,7 @@ import {
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface Tournament {
   id: string;
@@ -95,7 +96,7 @@ export default function TournamentSettings() {
     mutationFn: async (newSettings: TournamentSettings) => {
       const res = await fetch(`/api/tournaments/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           settings: newSettings,
         }),

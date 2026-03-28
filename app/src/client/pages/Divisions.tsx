@@ -22,6 +22,7 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface Division {
   id: string;
@@ -100,7 +101,7 @@ export default function Divisions() {
     mutationFn: async () => {
       const res = await fetch(`/api/divisions/tournament/${id}/auto-generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ config: { divisionThreshold: 8 } }),
       });
       return res.json();
@@ -121,7 +122,7 @@ export default function Divisions() {
     mutationFn: async () => {
       const res = await fetch(`/api/brackets/tournament/${id}/generate-all`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ seedingStrategy: 'school_spread' }),
       });
       return res.json();
@@ -139,6 +140,7 @@ export default function Divisions() {
     mutationFn: async () => {
       await fetch(`/api/divisions/tournament/${id}/all`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
       });
     },
     onSuccess: () => {
@@ -152,6 +154,7 @@ export default function Divisions() {
     mutationFn: async (divisionId: string) => {
       await fetch(`/api/divisions/${divisionId}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
       });
     },
     onSuccess: () => {
@@ -165,7 +168,7 @@ export default function Divisions() {
     mutationFn: async (divisionId: string) => {
       const res = await fetch(`/api/divisions/${divisionId}/split`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ splitCount: 2 }),
       });
       return res.json();
@@ -186,7 +189,7 @@ export default function Divisions() {
     try {
       const res = await fetch(`/api/divisions/tournament/${id}/preview`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ config: { divisionThreshold: 8 } }),
       });
       const data = await res.json();

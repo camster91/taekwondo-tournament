@@ -13,6 +13,7 @@ import { jsPDF } from 'jspdf';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface ScheduledDivision {
   divisionId: string;
@@ -72,7 +73,7 @@ export default function Schedule() {
     mutationFn: async () => {
       const res = await fetch(`/api/tournaments/${id}/schedule`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ config }),
       });
       return res.json();
