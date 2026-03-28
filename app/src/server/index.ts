@@ -41,7 +41,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Security headers
-app.use((_req, res, next) => {
+app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
@@ -77,7 +77,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 if (isProduction) {
   const distPath = path.join(__dirname, '../../app/dist');
   app.use(express.static(distPath, {
-    setHeaders: (res, filePath) => {
+    setHeaders: (res: Response, filePath: string) => {
       // Set correct MIME types for JavaScript modules
       if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
