@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { autoCategorize, previewCategorization, type CategorizationConfig } from '../services/categorization-engine.js';
+import { getSportProfile } from '../../shared/constants/sport-profiles.js';
 import { Errors } from '../utils/errors.js';
 import {
   checkDataLoss,
@@ -106,10 +107,17 @@ router.post('/tournament/:tournamentId/preview', authenticate, async (req: Reque
     });
   }
 
+  // Derive event type labels from sport profile
+  const sportProfile = getSportProfile(tournament.sportProfileSlug || 'taekwondo');
+  const eventTypeLabels = sportProfile
+    ? { patterns: sportProfile.eventTypes[0]?.name ?? 'Patterns', sparring: sportProfile.eventTypes[1]?.name ?? 'Sparring' }
+    : undefined;
+
   // Run preview (no database changes)
   const categorizationConfig: CategorizationConfig = {
     divisionThreshold: config?.divisionThreshold ?? 8,
     ...config,
+    eventTypeLabels,
   };
 
   const preview = previewCategorization(registrations, categorizationConfig);
@@ -170,10 +178,17 @@ router.post('/tournament/:tournamentId/auto-generate', authenticate, async (req:
     include: { competitor: true },
   });
 
+  // Derive event type labels from sport profile
+  const sportProfile = getSportProfile(tournament.sportProfileSlug || 'taekwondo');
+  const eventTypeLabels = sportProfile
+    ? { patterns: sportProfile.eventTypes[0]?.name ?? 'Patterns', sparring: sportProfile.eventTypes[1]?.name ?? 'Sparring' }
+    : undefined;
+
   // Run auto-categorization
   const categorizationConfig: CategorizationConfig = {
     divisionThreshold: config?.divisionThreshold ?? 8,
     ...config,
+    eventTypeLabels,
   };
 
   const result = await autoCategorize(prisma, tournamentId, registrations, categorizationConfig);

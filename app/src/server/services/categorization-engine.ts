@@ -12,6 +12,8 @@ export interface CategorizationConfig {
   divisionThreshold: number;
   useBlackBeltAgeGroups?: boolean;
   customAgeGroups?: AgeGroup[];
+  // Sport-aware event type labels (e.g. {patterns: 'Kata', sparring: 'Kumite'} for Karate)
+  eventTypeLabels?: { patterns: string; sparring: string };
   // Enhanced options for smart categorization
   enableSmartSplitting?: boolean;      // Balance skill when splitting divisions
   enableSmartMerging?: boolean;        // Merge small adjacent divisions
@@ -262,13 +264,13 @@ function categorizeByEvent(
 
   // Process Black Belt
   if (bbRegs.length > 0) {
-    const bbGroups = categorizeBeltLevel(bbRegs, 'BB', eventType, config);
+    const bbGroups = categorizeBeltLevel(bbRegs, 'BB', eventType, config, config.eventTypeLabels);
     groups.push(...bbGroups);
   }
 
   // Process Colored Belt
   if (cbRegs.length > 0) {
-    const cbGroups = categorizeBeltLevel(cbRegs, 'CB', eventType, config);
+    const cbGroups = categorizeBeltLevel(cbRegs, 'CB', eventType, config, config.eventTypeLabels);
     groups.push(...cbGroups);
   }
 
@@ -279,7 +281,8 @@ function categorizeBeltLevel(
   registrations: RegistrationWithCompetitor[],
   beltLevel: 'BB' | 'CB',
   eventType: 'patterns' | 'sparring',
-  config: CategorizationConfig
+  config: CategorizationConfig,
+  eventTypeLabels?: { patterns: string; sparring: string }
 ): DivisionGroup[] {
   const groups: DivisionGroup[] = [];
 
@@ -318,7 +321,9 @@ function categorizeBeltLevel(
                 ageGroup,
                 ['Black'],
                 danGroup.danMin,
-                danGroup.danMax
+                danGroup.danMax,
+                undefined,
+                eventTypeLabels
               )
             );
           }
@@ -336,7 +341,8 @@ function categorizeBeltLevel(
                 ['Black'],
                 undefined,
                 undefined,
-                weightGroup.weightClass
+                weightGroup.weightClass,
+                eventTypeLabels
               )
             );
           }
@@ -353,7 +359,11 @@ function categorizeBeltLevel(
                 gender,
                 eventType,
                 ageGroup,
-                beltGroup.belts
+                beltGroup.belts,
+                undefined,
+                undefined,
+                undefined,
+                eventTypeLabels
               )
             );
           }
@@ -373,7 +383,8 @@ function categorizeBeltLevel(
                   beltGroup.belts,
                   undefined,
                   undefined,
-                  weightGroup.weightClass
+                  weightGroup.weightClass,
+                  eventTypeLabels
                 )
               );
             }
@@ -506,11 +517,12 @@ function createDivisionGroup(
   beltColors: string[],
   danMin?: number,
   danMax?: number,
-  weightClass?: string
+  weightClass?: string,
+  eventTypeLabels?: { patterns: string; sparring: string }
 ): DivisionGroup {
   // Generate name
   const genderName = gender === 'M' ? 'Males' : 'Females';
-  const eventName = eventType === 'patterns' ? 'Patterns' : 'Sparring';
+  const eventName = eventTypeLabels?.[eventType] ?? (eventType === 'patterns' ? 'Patterns' : 'Sparring');
 
   let beltPart = '';
   if (beltLevel === 'BB') {

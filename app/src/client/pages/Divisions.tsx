@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import {
@@ -23,6 +23,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
 import { getAuthHeaders } from '../context/AuthContext';
+import { getSportProfile } from '../../shared/constants/sport-profiles';
 
 interface Division {
   id: string;
@@ -43,6 +44,7 @@ interface Division {
 interface Tournament {
   id: string;
   name: string;
+  sportProfileSlug: string | null;
 }
 
 interface PreviewDivision {
@@ -88,6 +90,17 @@ export default function Divisions() {
       return res.json();
     },
   });
+
+  const sportProfile = useMemo(() => {
+    const slug = tournament?.sportProfileSlug || 'taekwondo';
+    return getSportProfile(slug) ?? getSportProfile('taekwondo')!;
+  }, [tournament]);
+
+  const getEventLabel = (eventType: string) => {
+    // Map internal event keys (patterns/sparring) to sport-specific names
+    const idx = eventType === 'patterns' ? 0 : 1;
+    return sportProfile.eventTypes[idx]?.name ?? eventType;
+  };
 
   const { data: divisions, isLoading } = useQuery<Division[]>({
     queryKey: ['divisions', id],
@@ -226,9 +239,7 @@ export default function Divisions() {
   // Group divisions by category
   const groupedDivisions = filteredDivisions?.reduce(
     (acc, div) => {
-      const key = `${div.beltLevel} ${div.gender === 'M' ? 'Males' : 'Females'} ${
-        div.eventType === 'patterns' ? 'Patterns' : 'Sparring'
-      }`;
+      const key = `${div.beltLevel} ${div.gender === 'M' ? 'Males' : 'Females'} ${getEventLabel(div.eventType)}`;
       if (!acc[key]) acc[key] = [];
       acc[key].push(div);
       return acc;
@@ -433,8 +444,9 @@ export default function Divisions() {
                 className="form-input"
               >
                 <option value="">All</option>
-                <option value="patterns">Patterns</option>
-                <option value="sparring">Sparring</option>
+                {sportProfile.eventTypes.map((et, i) => (
+                  <option key={et.id} value={i === 0 ? 'patterns' : 'sparring'}>{et.name}</option>
+                ))}
               </select>
             </div>
             {divisions?.length ? (

@@ -51,10 +51,20 @@ interface ImportMapping {
 
 const BELT_OPTIONS = [
   'White',
+  'White / Single Yellow Stripe',
+  'White / Double Yellow Stripe',
   'Yellow',
+  'Yellow / Single Green Stripe',
+  'Yellow / Double Green Stripe',
   'Green',
+  'Green / Single Blue Stripe',
+  'Green / Double Blue Stripe',
   'Blue',
+  'Blue / Single Red Stripe',
+  'Blue / Double Red Stripe',
   'Red',
+  'Red / Single Black Stripe',
+  'Red / Double Black Stripe',
   'Black',
 ];
 

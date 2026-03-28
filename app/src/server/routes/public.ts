@@ -23,6 +23,7 @@ router.get('/tournaments', async (req: Request, res: Response) => {
       name: true,
       date: true,
       location: true,
+      sportProfileSlug: true,
       _count: {
         select: { registrations: true },
       },
@@ -46,6 +47,7 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
       location: true,
       status: true,
       settings: true,
+      sportProfileSlug: true,
     },
   });
 

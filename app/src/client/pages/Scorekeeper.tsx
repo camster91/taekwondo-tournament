@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import MatchTimer from '../components/MatchTimer';
 import { getAuthHeaders } from '../context/AuthContext';
+import { getSportProfile } from '../../shared/constants/sport-profiles';
 
 interface Match {
   id: string;
@@ -46,6 +47,11 @@ interface Division {
   } | null;
 }
 
+interface Tournament {
+  id: string;
+  sportProfileSlug: string | null;
+}
+
 type ResultType = 'win' | 'dq' | 'forfeit' | 'injury';
 
 export default function Scorekeeper() {
@@ -63,8 +69,27 @@ export default function Scorekeeper() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [showTimer, setShowTimer] = useState(true);
-  const [penalties1, setPenalties1] = useState(0); // Gamjeon for competitor 1
-  const [penalties2, setPenalties2] = useState(0); // Gamjeon for competitor 2
+  const [penalties1, setPenalties1] = useState(0); // {sportProfile.scoringConfig.penaltyName} for competitor 1
+  const [penalties2, setPenalties2] = useState(0); // {sportProfile.scoringConfig.penaltyName} for competitor 2
+
+  // Fetch tournament for sport profile
+  const { data: tournament } = useQuery<Tournament>({
+    queryKey: ['tournament', tournamentId],
+    queryFn: async () => {
+      const res = await fetch(`/api/tournaments/${tournamentId}`);
+      return res.json();
+    },
+  });
+
+  const sportProfile = useMemo(() => {
+    const slug = tournament?.sportProfileSlug || 'taekwondo';
+    return getSportProfile(slug) ?? getSportProfile('taekwondo')!;
+  }, [tournament]);
+
+  const getEventLabel = (eventType: string) => {
+    const idx = eventType === 'patterns' ? 0 : 1;
+    return sportProfile.eventTypes[idx]?.name ?? eventType;
+  };
 
   // Fetch divisions with brackets
   const { data: divisions, isLoading } = useQuery<Division[]>({
@@ -135,8 +160,9 @@ export default function Scorekeeper() {
     let noteText = '';
     if (penalties1 > 0 || penalties2 > 0) {
       const penaltyNotes = [];
-      if (penalties1 > 0) penaltyNotes.push(`${getCompetitorName(currentMatch.competitor1).split(' ')[0]}: ${penalties1} gamjeon`);
-      if (penalties2 > 0) penaltyNotes.push(`${getCompetitorName(currentMatch.competitor2).split(' ')[0]}: ${penalties2} gamjeon`);
+      const penaltyName = sportProfile.scoringConfig.penaltyName.toLowerCase();
+      if (penalties1 > 0) penaltyNotes.push(`${getCompetitorName(currentMatch.competitor1).split(' ')[0]}: ${penalties1} ${penaltyName}`);
+      if (penalties2 > 0) penaltyNotes.push(`${getCompetitorName(currentMatch.competitor2).split(' ')[0]}: ${penalties2} ${penaltyName}`);
       noteText = `Penalties: ${penaltyNotes.join(', ')}`;
     }
     if (resultType !== 'win') {
@@ -307,7 +333,7 @@ export default function Scorekeeper() {
                           <div>
                             <div className="font-semibold text-lg">{division.name}</div>
                             <div className="text-sm text-gray-400 mt-1">
-                              {division.eventType === 'patterns' ? 'Patterns' : 'Sparring'}
+                              {getEventLabel(division.eventType)}
                             </div>
                           </div>
                           <div className="text-right">
@@ -376,7 +402,7 @@ export default function Scorekeeper() {
       </div>
 
       {/* Match Timer */}
-      {showTimer && division?.eventType === 'sparring' && (
+      {showTimer && division?.eventType === 'sparring' && sportProfile.eventTypes[1]?.isCombat && (
         <div className="p-4 border-b border-gray-800">
           <MatchTimer
             defaultRoundTime={120}
@@ -451,7 +477,7 @@ export default function Scorekeeper() {
                     </div>
                     {penalties1 > 0 && (
                       <div className="text-red-400 text-sm mt-1">
-                        {penalties1} Gamjeon ({penalties1} pts to opponent)
+                        {penalties1} {sportProfile.scoringConfig.penaltyName} ({penalties1} pts to opponent)
                       </div>
                     )}
                   </div>
@@ -465,17 +491,17 @@ export default function Scorekeeper() {
                 <button
                   onClick={(e) => { e.stopPropagation(); setPenalties1(p => p + 1); }}
                   className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold"
-                  title="Add Gamjeon"
+                  title={`Add ${sportProfile.scoringConfig.penaltyName}`}
                 >
-                  +GAM
+                  +{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); setPenalties1(p => Math.max(0, p - 1)); }}
                   disabled={penalties1 === 0}
                   className="px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-sm disabled:opacity-50"
-                  title="Remove Gamjeon"
+                  title={`Remove ${sportProfile.scoringConfig.penaltyName}`}
                 >
-                  -GAM
+                  -{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
                 <div className="text-center text-xl font-bold text-red-400">
                   {penalties1}
@@ -510,7 +536,7 @@ export default function Scorekeeper() {
                     </div>
                     {penalties2 > 0 && (
                       <div className="text-red-400 text-sm mt-1">
-                        {penalties2} Gamjeon ({penalties2} pts to opponent)
+                        {penalties2} {sportProfile.scoringConfig.penaltyName} ({penalties2} pts to opponent)
                       </div>
                     )}
                   </div>
@@ -524,17 +550,17 @@ export default function Scorekeeper() {
                 <button
                   onClick={(e) => { e.stopPropagation(); setPenalties2(p => p + 1); }}
                   className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold"
-                  title="Add Gamjeon"
+                  title={`Add ${sportProfile.scoringConfig.penaltyName}`}
                 >
-                  +GAM
+                  +{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); setPenalties2(p => Math.max(0, p - 1)); }}
                   disabled={penalties2 === 0}
                   className="px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-sm disabled:opacity-50"
-                  title="Remove Gamjeon"
+                  title={`Remove ${sportProfile.scoringConfig.penaltyName}`}
                 >
-                  -GAM
+                  -{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
                 <div className="text-center text-xl font-bold text-red-400">
                   {penalties2}
