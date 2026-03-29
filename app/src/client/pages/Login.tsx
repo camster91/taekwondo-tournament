@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Trophy, Mail, AlertCircle, UserPlus, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
@@ -16,6 +17,21 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
 
+  // Setup state
+  const [setupFirstName, setSetupFirstName] = useState('');
+  const [setupLastName, setSetupLastName] = useState('');
+
+  const { data: setupStatus } = useQuery<{ needsSetup: boolean }>({
+    queryKey: ['setup-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/auth/setup-status');
+      return res.json();
+    },
+    staleTime: 60000,
+  });
+
+  const needsSetup = setupStatus?.needsSetup === true;
+
   // Redirect if already logged in
   if (isAuthenticated) {
     const from = (location.state as any)?.from?.pathname || '/';
@@ -28,6 +44,32 @@ export default function Login() {
       codeInputRef.current?.focus();
     }
   }, [step]);
+
+  const handleSetupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, firstName: setupFirstName, lastName: setupLastName }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Setup failed');
+      } else {
+        // Store token and redirect
+        localStorage.setItem('auth_token', data.token);
+        window.location.href = '/';
+      }
+    } catch {
+      setError('Setup failed. Please try again.');
+    }
+
+    setIsLoading(false);
+  };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,10 +113,14 @@ export default function Login() {
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-bold text-gray-900 dark:text-white">
-          TKD Tournament Manager
+          Tournament Manager
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-          {step === 'email' ? 'Sign in to manage tournaments' : 'Check your email'}
+          {needsSetup
+            ? 'Create your admin account to get started'
+            : step === 'email'
+              ? 'Sign in to manage tournaments'
+              : 'Check your email'}
         </p>
       </div>
 
@@ -87,7 +133,57 @@ export default function Login() {
             </div>
           )}
 
-          {step === 'email' ? (
+          {needsSetup ? (
+            // First-run setup form
+            <form onSubmit={handleSetupSubmit} className="space-y-5">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-sm text-blue-800 dark:text-blue-300">
+                No accounts exist yet. Create your admin account to get started.
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={setupFirstName}
+                    onChange={(e) => setSetupFirstName(e.target.value)}
+                    className="form-input w-full"
+                    placeholder="Jane"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={setupLastName}
+                    onChange={(e) => setSetupLastName(e.target.value)}
+                    className="form-input w-full"
+                    placeholder="Smith"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email address</label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="form-input w-full"
+                  placeholder="you@example.com"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full btn btn-primary py-3 flex items-center justify-center text-base font-medium"
+              >
+                {isLoading ? <Spinner size="sm" className="mr-2" /> : null}
+                Create Admin Account
+              </button>
+            </form>
+          ) : step === 'email' ? (
             <form onSubmit={handleEmailSubmit} className="space-y-5">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -187,26 +283,28 @@ export default function Login() {
             </>
           )}
 
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+          {!needsSetup && (
+            <div className="mt-6">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-4 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">Or continue with</span>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">Or continue with</span>
-              </div>
-            </div>
 
-            <div className="mt-6 space-y-3">
-              <Link
-                to="/register"
-                className="w-full btn btn-secondary py-2.5 flex items-center justify-center"
-              >
-                <UserPlus className="h-4 w-4 mr-2" />
-                Register as Competitor
-              </Link>
+              <div className="mt-6 space-y-3">
+                <Link
+                  to="/register"
+                  className="w-full btn btn-secondary py-2.5 flex items-center justify-center"
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Register as Competitor
+                </Link>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
