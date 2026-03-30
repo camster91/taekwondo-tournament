@@ -7,6 +7,8 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
+import { getAuthHeaders } from '../context/AuthContext';
+import { SPORT_PROFILES } from '../../shared/constants/sport-profiles';
 
 interface Tournament {
   id: string;
@@ -14,6 +16,7 @@ interface Tournament {
   date: string;
   location: string | null;
   status: string;
+  sportProfileSlug: string | null;
   _count: {
     registrations: number;
     divisions: number;
@@ -29,6 +32,7 @@ export default function Tournaments() {
     name: '',
     date: '',
     location: '',
+    sportProfileSlug: 'taekwondo',
   });
 
   const { data: tournaments, isLoading } = useQuery<Tournament[]>({
@@ -43,7 +47,7 @@ export default function Tournaments() {
     mutationFn: async (data: typeof formData) => {
       const res = await fetch('/api/tournaments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(data),
       });
       return res.json();
@@ -51,13 +55,13 @@ export default function Tournaments() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournaments'] });
       setShowCreateModal(false);
-      setFormData({ name: '', date: '', location: '' });
+      setFormData({ name: '', date: '', location: '', sportProfileSlug: 'taekwondo' });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await fetch(`/api/tournaments/${id}`, { method: 'DELETE' });
+      await fetch(`/api/tournaments/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournaments'] });
@@ -205,6 +209,26 @@ export default function Tournaments() {
             >
               <div className="modal-body space-y-4">
                 <div>
+                  <label className="form-label">Sport</label>
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                    {SPORT_PROFILES.map((sport) => (
+                      <button
+                        key={sport.slug}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, sportProfileSlug: sport.slug })}
+                        className={`flex flex-col items-center p-2 rounded-lg border-2 text-xs font-medium transition-colors ${
+                          formData.sportProfileSlug === sport.slug
+                            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 text-gray-600 dark:text-gray-400'
+                        }`}
+                      >
+                        <span className="text-2xl mb-1">{sport.icon}</span>
+                        <span>{sport.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
                   <label className="form-label">Tournament Name *</label>
                   <input
                     type="text"
@@ -312,6 +336,12 @@ function TournamentCard({
                 {tournament.name}
               </h3>
               <StatusBadge status={tournament.status} />
+              {tournament.sportProfileSlug && tournament.sportProfileSlug !== 'taekwondo' && (
+                <span className="text-xs text-gray-500 mt-0.5">
+                  {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.icon}{' '}
+                  {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.name}
+                </span>
+              )}
             </div>
           </div>
         </div>

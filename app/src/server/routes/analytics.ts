@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
+import { authenticate } from '../middleware/auth.js';
+import type { AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
 // Get dashboard analytics
-router.get('/dashboard', async (req: Request, res: Response) => {
+router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   try {

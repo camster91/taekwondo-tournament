@@ -12,6 +12,10 @@ export interface CategorizationConfig {
   divisionThreshold: number;
   useBlackBeltAgeGroups?: boolean;
   customAgeGroups?: AgeGroup[];
+  // Sport-aware event type labels (e.g. {patterns: 'Kata', sparring: 'Kumite'} for Karate)
+  eventTypeLabels?: { patterns: string; sparring: string };
+  // Custom weight classes from the DB (overrides DEFAULT_WEIGHT_CLASSES when present)
+  customWeightClasses?: Array<{ name: string; gender: string | null; ageMin: number | null; ageMax: number | null; weightMinLbs: number | null; weightMaxLbs: number | null }>;
   // Enhanced options for smart categorization
   enableSmartSplitting?: boolean;      // Balance skill when splitting divisions
   enableSmartMerging?: boolean;        // Merge small adjacent divisions
@@ -262,13 +266,13 @@ function categorizeByEvent(
 
   // Process Black Belt
   if (bbRegs.length > 0) {
-    const bbGroups = categorizeBeltLevel(bbRegs, 'BB', eventType, config);
+    const bbGroups = categorizeBeltLevel(bbRegs, 'BB', eventType, config, config.eventTypeLabels);
     groups.push(...bbGroups);
   }
 
   // Process Colored Belt
   if (cbRegs.length > 0) {
-    const cbGroups = categorizeBeltLevel(cbRegs, 'CB', eventType, config);
+    const cbGroups = categorizeBeltLevel(cbRegs, 'CB', eventType, config, config.eventTypeLabels);
     groups.push(...cbGroups);
   }
 
@@ -279,7 +283,8 @@ function categorizeBeltLevel(
   registrations: RegistrationWithCompetitor[],
   beltLevel: 'BB' | 'CB',
   eventType: 'patterns' | 'sparring',
-  config: CategorizationConfig
+  config: CategorizationConfig,
+  eventTypeLabels?: { patterns: string; sparring: string }
 ): DivisionGroup[] {
   const groups: DivisionGroup[] = [];
 
@@ -318,13 +323,15 @@ function categorizeBeltLevel(
                 ageGroup,
                 ['Black'],
                 danGroup.danMin,
-                danGroup.danMax
+                danGroup.danMax,
+                undefined,
+                eventTypeLabels
               )
             );
           }
         } else {
           // Sparring - split by weight class
-          const weightGroups = groupByWeightClass(ageRegs, gender, ageGroup);
+          const weightGroups = groupByWeightClass(ageRegs, gender, ageGroup, config.customWeightClasses);
           for (const weightGroup of weightGroups) {
             groups.push(
               createDivisionGroup(
@@ -336,7 +343,8 @@ function categorizeBeltLevel(
                 ['Black'],
                 undefined,
                 undefined,
-                weightGroup.weightClass
+                weightGroup.weightClass,
+                eventTypeLabels
               )
             );
           }
@@ -353,7 +361,11 @@ function categorizeBeltLevel(
                 gender,
                 eventType,
                 ageGroup,
-                beltGroup.belts
+                beltGroup.belts,
+                undefined,
+                undefined,
+                undefined,
+                eventTypeLabels
               )
             );
           }
@@ -361,7 +373,7 @@ function categorizeBeltLevel(
           // Sparring - first group by belt, then by weight
           const beltGroups = groupByBeltColor(ageRegs);
           for (const beltGroup of beltGroups) {
-            const weightGroups = groupByWeightClass(beltGroup.registrations, gender, ageGroup);
+            const weightGroups = groupByWeightClass(beltGroup.registrations, gender, ageGroup, config.customWeightClasses);
             for (const weightGroup of weightGroups) {
               groups.push(
                 createDivisionGroup(
@@ -373,7 +385,8 @@ function categorizeBeltLevel(
                   beltGroup.belts,
                   undefined,
                   undefined,
-                  weightGroup.weightClass
+                  weightGroup.weightClass,
+                  eventTypeLabels
                 )
               );
             }
@@ -476,14 +489,27 @@ function groupByBeltColor(
 function groupByWeightClass(
   registrations: RegistrationWithCompetitor[],
   gender: 'M' | 'F',
-  ageGroup: AgeGroup
+  ageGroup: AgeGroup,
+  customWeightClasses?: CategorizationConfig['customWeightClasses']
 ): Array<{ weightClass: string; registrations: RegistrationWithCompetitor[] }> {
   const groups = new Map<string, RegistrationWithCompetitor[]>();
+
+  // Convert DB weight class format to WeightClassConfig format if custom classes provided
+  const weightClassConfig = customWeightClasses && customWeightClasses.length > 0
+    ? customWeightClasses.map(wc => ({
+        name: wc.name,
+        gender: (wc.gender as 'M' | 'F' | null) || null,
+        ageMin: wc.ageMin ?? 0,
+        ageMax: wc.ageMax ?? 99,
+        weightMinLbs: wc.weightMinLbs ?? 0,
+        weightMaxLbs: wc.weightMaxLbs ?? 999,
+      }))
+    : undefined;
 
   for (const reg of registrations) {
     const weight = reg.weightAtRegistration || reg.competitor.weightLbs || 0;
     const age = reg.ageAtTournament || 0;
-    const weightClass = getWeightClass(weight, age, gender) || 'Unassigned';
+    const weightClass = getWeightClass(weight, age, gender, weightClassConfig) || 'Unassigned';
 
     if (!groups.has(weightClass)) {
       groups.set(weightClass, []);
@@ -506,11 +532,12 @@ function createDivisionGroup(
   beltColors: string[],
   danMin?: number,
   danMax?: number,
-  weightClass?: string
+  weightClass?: string,
+  eventTypeLabels?: { patterns: string; sparring: string }
 ): DivisionGroup {
   // Generate name
   const genderName = gender === 'M' ? 'Males' : 'Females';
-  const eventName = eventType === 'patterns' ? 'Patterns' : 'Sparring';
+  const eventName = eventTypeLabels?.[eventType] ?? (eventType === 'patterns' ? 'Patterns' : 'Sparring');
 
   let beltPart = '';
   if (beltLevel === 'BB') {

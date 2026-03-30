@@ -15,10 +15,12 @@ const tournamentCreateSchema = z.object({
   date: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' }),
   location: z.string().max(300).optional().nullable(),
   settings: z.record(z.string(), z.unknown()).optional(),
+  sportProfileSlug: z.string().optional().default('taekwondo'),
+  organizationId: z.string().optional(),
 });
 
 const tournamentUpdateSchema = tournamentCreateSchema.partial().extend({
-  status: z.enum(['draft', 'active', 'completed']).optional(),
+  status: z.enum(['draft', 'registration', 'brackets', 'in_progress', 'active', 'completed']).optional(),
 });
 
 const registrationSchema = z.object({
@@ -86,7 +88,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 // Create tournament (requires authentication)
 router.post('/', authenticate, validateRequest(tournamentCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { name, date, location, settings } = req.body;
+  const { name, date, location, settings, sportProfileSlug, organizationId } = req.body;
 
   const tournament = await prisma.tournament.create({
     data: {
@@ -95,6 +97,8 @@ router.post('/', authenticate, validateRequest(tournamentCreateSchema), async (r
       location,
       settings: settings ? JSON.stringify(settings) : null,
       status: 'draft',
+      sportProfileSlug: sportProfileSlug || 'taekwondo',
+      organizationId: organizationId || null,
     },
   });
 
@@ -248,15 +252,21 @@ router.post('/:id/registrations/bulk', authenticate, validateRequest(bulkRegistr
 // Update registration (requires authentication)
 router.put('/:id/registrations/:regId', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { patterns, sparring, weightAtRegistration } = req.body;
+  const { patterns, sparring, weightAtRegistration, checkedIn, checkInWeight } = req.body;
+
+  const updateData: Record<string, unknown> = {};
+  if (patterns !== undefined) updateData.patterns = patterns;
+  if (sparring !== undefined) updateData.sparring = sparring;
+  if (weightAtRegistration !== undefined) updateData.weightAtRegistration = weightAtRegistration;
+  if (checkedIn !== undefined) {
+    updateData.checkedIn = checkedIn;
+    updateData.checkInTime = checkedIn ? new Date() : null;
+  }
+  if (checkInWeight !== undefined) updateData.checkInWeight = checkInWeight;
 
   const registration = await prisma.registration.update({
     where: { id: getParam(req.params.regId) },
-    data: {
-      patterns,
-      sparring,
-      weightAtRegistration,
-    },
+    data: updateData,
     include: {
       competitor: true,
     },
@@ -274,6 +284,55 @@ router.delete('/:id/registrations/:regId', authenticate, async (req: Request, re
   });
 
   res.status(204).send();
+});
+
+// Get weight classes for tournament
+router.get('/:id/weight-classes', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const weightClasses = await prisma.weightClass.findMany({
+    where: { tournamentId: getParam(req.params.id) },
+    orderBy: [{ ageMin: 'asc' }, { gender: 'asc' }, { weightMinLbs: 'asc' }],
+  });
+  res.json(weightClasses);
+});
+
+// Save weight classes for tournament (bulk replace)
+router.put('/:id/weight-classes', authenticate, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = getParam(req.params.id);
+  const { weightClasses } = req.body as {
+    weightClasses: Array<{
+      name: string;
+      gender?: string;
+      ageMin?: number;
+      ageMax?: number;
+      weightMinLbs?: number;
+      weightMaxLbs?: number;
+      displayOrder?: number;
+    }>;
+  };
+
+  if (!Array.isArray(weightClasses)) {
+    return res.status(400).json({ error: 'weightClasses must be an array' });
+  }
+
+  // Delete existing and recreate
+  await prisma.weightClass.deleteMany({ where: { tournamentId } });
+
+  const created = await prisma.weightClass.createMany({
+    data: weightClasses.map((wc, i) => ({
+      tournamentId,
+      name: wc.name,
+      gender: wc.gender || null,
+      ageMin: wc.ageMin ?? null,
+      ageMax: wc.ageMax ?? null,
+      weightMinLbs: wc.weightMinLbs ?? null,
+      weightMaxLbs: wc.weightMaxLbs ?? null,
+      displayOrder: wc.displayOrder ?? i,
+    })),
+  });
+
+  res.json({ saved: created.count });
 });
 
 // Generate tournament schedule (requires authentication)
