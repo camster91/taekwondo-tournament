@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Trophy, CheckCircle, AlertCircle, User, Calendar, Award } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
+import { getSportProfile } from '../../shared/constants/sport-profiles';
 
 interface Tournament {
   id: string;
   name: string;
   date: string;
   location: string | null;
+  sportProfileSlug: string | null;
   _count: { registrations: number };
 }
 
@@ -23,7 +25,8 @@ interface RegistrationResult {
   };
 }
 
-const BELT_OPTIONS = [
+// Taekwondo-specific detailed belt options (for stripe-level granularity)
+const TKD_BELT_OPTIONS = [
   'White',
   'White / Single Yellow Stripe',
   'White / Double Yellow Stripe',
@@ -72,6 +75,28 @@ export default function PublicRegister() {
     parentPhone: '',
   });
 
+  const selectedTournament = useMemo(
+    () => tournaments.find((t) => t.id === formData.tournamentId),
+    [tournaments, formData.tournamentId]
+  );
+
+  const sportProfile = useMemo(() => {
+    const slug = selectedTournament?.sportProfileSlug || 'taekwondo';
+    return getSportProfile(slug) ?? getSportProfile('taekwondo')!;
+  }, [selectedTournament]);
+
+  const beltOptions = useMemo(() => {
+    const slug = selectedTournament?.sportProfileSlug || 'taekwondo';
+    if (slug === 'taekwondo') return TKD_BELT_OPTIONS;
+    return sportProfile.beltConfig.levels.map((l) => l.name);
+  }, [sportProfile, selectedTournament]);
+
+  const topLevelBeltName = sportProfile.beltConfig.topLevelName.split(' ')[0]; // e.g. "Black"
+
+  // Map sport event types to the two boolean fields (patterns = first event, sparring = second)
+  const eventType0 = sportProfile.eventTypes[0];
+  const eventType1 = sportProfile.eventTypes[1];
+
   useEffect(() => {
     fetch('/api/public/tournaments')
       .then((res) => res.json())
@@ -99,7 +124,7 @@ export default function PublicRegister() {
           ...formData,
           heightInches: formData.heightInches ? parseFloat(formData.heightInches) : null,
           weightLbs: formData.weightLbs ? parseFloat(formData.weightLbs) : null,
-          danRank: formData.belt === 'Black' ? formData.danRank : null,
+          danRank: formData.belt === topLevelBeltName && sportProfile.beltConfig.hasDanRank ? formData.danRank : null,
         }),
       });
 
@@ -241,7 +266,7 @@ export default function PublicRegister() {
           <Trophy className="h-12 w-12 text-primary-500 dark:text-primary-400 mx-auto mb-3" />
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Tournament Registration</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
-            Register for an upcoming Taekwondo tournament
+            Register for an upcoming tournament
           </p>
         </div>
 
@@ -379,7 +404,7 @@ export default function PublicRegister() {
                   required
                 >
                   <option value="">-- Select Belt --</option>
-                  {BELT_OPTIONS.map((belt) => (
+                  {beltOptions.map((belt) => (
                     <option key={belt} value={belt}>
                       {belt}
                     </option>
@@ -387,7 +412,7 @@ export default function PublicRegister() {
                 </select>
               </div>
 
-              {formData.belt === 'Black' && (
+              {formData.belt === topLevelBeltName && sportProfile.beltConfig.hasDanRank && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Dan Rank *
@@ -464,7 +489,9 @@ export default function PublicRegister() {
                   required={formData.sparring}
                 />
                 {formData.sparring && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Required for sparring events</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Required for {eventType1?.name ?? 'combat'} events
+                  </p>
                 )}
               </div>
             </div>
@@ -494,37 +521,44 @@ export default function PublicRegister() {
             </p>
 
             <div className="space-y-3">
-              <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                <input
-                  type="checkbox"
-                  name="patterns"
-                  checked={formData.patterns}
-                  onChange={handleChange}
-                  className="h-5 w-5 text-primary-600 rounded"
-                />
-                <div className="ml-3">
-                  <span className="font-medium text-gray-900 dark:text-white">Patterns (Forms/Poomsae)</span>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Demonstrate your forms in a choreographed sequence
-                  </p>
-                </div>
-              </label>
+              {eventType0 && (
+                <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  <input
+                    type="checkbox"
+                    name="patterns"
+                    checked={formData.patterns}
+                    onChange={handleChange}
+                    className="h-5 w-5 text-primary-600 rounded"
+                  />
+                  <div className="ml-3">
+                    <span className="font-medium text-gray-900 dark:text-white">{eventType0.name}</span>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {eventType0.description}
+                    </p>
+                  </div>
+                </label>
+              )}
 
-              <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                <input
-                  type="checkbox"
-                  name="sparring"
-                  checked={formData.sparring}
-                  onChange={handleChange}
-                  className="h-5 w-5 text-primary-600 rounded"
-                />
-                <div className="ml-3">
-                  <span className="font-medium text-gray-900 dark:text-white">Sparring</span>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Compete in controlled fighting matches (requires weight)
-                  </p>
-                </div>
-              </label>
+              {eventType1 && (
+                <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  <input
+                    type="checkbox"
+                    name="sparring"
+                    checked={formData.sparring}
+                    onChange={handleChange}
+                    className="h-5 w-5 text-primary-600 rounded"
+                  />
+                  <div className="ml-3">
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {eventType1.name}
+                      {eventType1.hasWeightClasses && ' (requires weight)'}
+                    </span>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {eventType1.description}
+                    </p>
+                  </div>
+                </label>
+              )}
             </div>
           </div>
 

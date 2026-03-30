@@ -9,10 +9,10 @@ import {
   Trophy,
   Shuffle,
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface Competitor {
   id: string;
@@ -82,7 +82,7 @@ export default function BracketEditor() {
     mutationFn: async () => {
       const res = await fetch(`/api/brackets/division/${divisionId}/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ seedingStrategy: 'school_spread' }),
       });
       return res.json();
@@ -102,7 +102,7 @@ export default function BracketEditor() {
     }) => {
       const res = await fetch(`/api/brackets/match/${matchId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ winnerId, status: 'completed' }),
       });
       return res.json();
@@ -117,6 +117,7 @@ export default function BracketEditor() {
     mutationFn: async () => {
       await fetch(`/api/brackets/division/${divisionId}/reset`, {
         method: 'POST',
+        headers: getAuthHeaders(),
       });
     },
     onSuccess: () => {
@@ -124,119 +125,23 @@ export default function BracketEditor() {
     },
   });
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     if (!division) return;
-
-    const doc = new jsPDF('landscape', 'pt', 'letter');
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-
-    // Title
-    doc.setFontSize(16);
-    doc.text(division.name, pageWidth / 2, 40, { align: 'center' });
-
-    doc.setFontSize(10);
-    doc.text('8-Person Double Elimination Bracket', pageWidth / 2, 55, {
-      align: 'center',
-    });
-
-    // Draw bracket
-    if (division.bracket?.matches) {
-      const winnersMatches = division.bracket.matches.filter(
-        (m) => m.bracketType === 'winners'
-      );
-      const losersMatches = division.bracket.matches.filter(
-        (m) => m.bracketType === 'losers'
-      );
-
-      // Winners bracket positions
-      const startX = 50;
-      const startY = 100;
-      const matchWidth = 150;
-      const matchHeight = 40;
-      const roundGap = 180;
-      const verticalGap = 60;
-
-      // Draw winners bracket
-      doc.setFontSize(12);
-      doc.text('Winners Bracket', startX, startY - 10);
-
-      winnersMatches.forEach((match, idx) => {
-        const round = match.roundNumber - 1;
-        const matchInRound = match.matchNumber - (round === 0 ? 1 : round === 1 ? 5 : 7);
-        const x = startX + round * roundGap;
-        const y = startY + matchInRound * (matchHeight + verticalGap) * Math.pow(2, round);
-
-        // Match box
-        doc.setDrawColor(200);
-        doc.setFillColor(255, 255, 255);
-        doc.rect(x, y, matchWidth, matchHeight, 'FD');
-
-        // Competitor names
-        doc.setFontSize(9);
-        const name1 = match.competitor1
-          ? `${match.competitor1.competitor.firstName} ${match.competitor1.competitor.lastName}`
-          : 'BYE';
-        const name2 = match.competitor2
-          ? `${match.competitor2.competitor.firstName} ${match.competitor2.competitor.lastName}`
-          : 'BYE';
-
-        doc.text(name1, x + 5, y + 15);
-        doc.line(x, y + matchHeight / 2, x + matchWidth, y + matchHeight / 2);
-        doc.text(name2, x + 5, y + 35);
-
-        // Match number
-        doc.setFontSize(7);
-        doc.text(`M${match.matchNumber}`, x + matchWidth - 15, y + 10);
-      });
-
-      // Draw losers bracket
-      const losersStartY = startY + 250;
-      doc.setFontSize(12);
-      doc.text('Losers Bracket', startX, losersStartY - 10);
-
-      losersMatches.forEach((match, idx) => {
-        const x = startX + (match.roundNumber - 1) * (roundGap * 0.8);
-        const y = losersStartY + idx * (matchHeight + 20);
-
-        doc.setDrawColor(200);
-        doc.setFillColor(255, 255, 255);
-        doc.rect(x, y, matchWidth, matchHeight, 'FD');
-
-        doc.setFontSize(9);
-        const name1 = match.competitor1
-          ? `${match.competitor1.competitor.firstName} ${match.competitor1.competitor.lastName}`
-          : '---';
-        const name2 = match.competitor2
-          ? `${match.competitor2.competitor.firstName} ${match.competitor2.competitor.lastName}`
-          : '---';
-
-        doc.text(name1, x + 5, y + 15);
-        doc.line(x, y + matchHeight / 2, x + matchWidth, y + matchHeight / 2);
-        doc.text(name2, x + 5, y + 35);
-
-        doc.setFontSize(7);
-        doc.text(`M${match.matchNumber}`, x + matchWidth - 15, y + 10);
-      });
+    try {
+      const res = await fetch(`/api/brackets/division/${divisionId}/pdf`);
+      if (!res.ok) throw new Error('Failed to generate PDF');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${division.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Error exporting PDF. Please try again.');
     }
-
-    // Competitor list
-    doc.setFontSize(10);
-    doc.text('Competitors:', 50, pageHeight - 80);
-    division.assignments.forEach((a, i) => {
-      const col = Math.floor(i / 4);
-      const row = i % 4;
-      doc.setFontSize(8);
-      doc.text(
-        `${i + 1}. ${a.registration.competitor.firstName} ${a.registration.competitor.lastName} (${
-          a.registration.competitor.schoolDojang || 'N/A'
-        })`,
-        50 + col * 200,
-        pageHeight - 65 + row * 12
-      );
-    });
-
-    doc.save(`${division.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
   };
 
   if (isLoading) {

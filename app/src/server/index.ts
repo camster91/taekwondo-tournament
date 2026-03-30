@@ -14,6 +14,8 @@ import publicRouter from './routes/public.js';
 import fairnessRouter from './routes/fairness.js';
 import analyticsRouter from './routes/analytics.js';
 import invitesRouter from './routes/invites.js';
+import sportsRouter from './routes/sports.js';
+import organizationsRouter from './routes/organizations.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 
@@ -40,7 +42,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Security headers
-app.use((_req, res, next) => {
+app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
@@ -65,6 +67,8 @@ app.use('/api/brackets', bracketsRouter);
 app.use('/api/fairness', fairnessRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/invites', invitesRouter);
+app.use('/api/sports', sportsRouter);
+app.use('/api/organizations', organizationsRouter);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -73,9 +77,9 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
 // Serve static files in production
 if (isProduction) {
-  const distPath = path.join(__dirname, '../../app/dist');
+  const distPath = path.join(__dirname, '../../dist');
   app.use(express.static(distPath, {
-    setHeaders: (res, filePath) => {
+    setHeaders: (res: Response, filePath: string) => {
       // Set correct MIME types for JavaScript modules
       if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8');

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import {
@@ -17,11 +17,12 @@ import {
   Check,
   X,
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
+import { getAuthHeaders } from '../context/AuthContext';
+import { getSportProfile } from '../../shared/constants/sport-profiles';
 
 interface Division {
   id: string;
@@ -42,6 +43,7 @@ interface Division {
 interface Tournament {
   id: string;
   name: string;
+  sportProfileSlug: string | null;
 }
 
 interface PreviewDivision {
@@ -88,6 +90,17 @@ export default function Divisions() {
     },
   });
 
+  const sportProfile = useMemo(() => {
+    const slug = tournament?.sportProfileSlug || 'taekwondo';
+    return getSportProfile(slug) ?? getSportProfile('taekwondo')!;
+  }, [tournament]);
+
+  const getEventLabel = (eventType: string) => {
+    // Map internal event keys (patterns/sparring) to sport-specific names
+    const idx = eventType === 'patterns' ? 0 : 1;
+    return sportProfile.eventTypes[idx]?.name ?? eventType;
+  };
+
   const { data: divisions, isLoading } = useQuery<Division[]>({
     queryKey: ['divisions', id],
     queryFn: async () => {
@@ -100,7 +113,7 @@ export default function Divisions() {
     mutationFn: async () => {
       const res = await fetch(`/api/divisions/tournament/${id}/auto-generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ config: { divisionThreshold: 8 } }),
       });
       return res.json();
@@ -121,7 +134,7 @@ export default function Divisions() {
     mutationFn: async () => {
       const res = await fetch(`/api/brackets/tournament/${id}/generate-all`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ seedingStrategy: 'school_spread' }),
       });
       return res.json();
@@ -139,6 +152,7 @@ export default function Divisions() {
     mutationFn: async () => {
       await fetch(`/api/divisions/tournament/${id}/all`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
       });
     },
     onSuccess: () => {
@@ -152,6 +166,7 @@ export default function Divisions() {
     mutationFn: async (divisionId: string) => {
       await fetch(`/api/divisions/${divisionId}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
       });
     },
     onSuccess: () => {
@@ -165,7 +180,7 @@ export default function Divisions() {
     mutationFn: async (divisionId: string) => {
       const res = await fetch(`/api/divisions/${divisionId}/split`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ splitCount: 2 }),
       });
       return res.json();
@@ -186,7 +201,7 @@ export default function Divisions() {
     try {
       const res = await fetch(`/api/divisions/tournament/${id}/preview`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ config: { divisionThreshold: 8 } }),
       });
       const data = await res.json();
@@ -223,9 +238,7 @@ export default function Divisions() {
   // Group divisions by category
   const groupedDivisions = filteredDivisions?.reduce(
     (acc, div) => {
-      const key = `${div.beltLevel} ${div.gender === 'M' ? 'Males' : 'Females'} ${
-        div.eventType === 'patterns' ? 'Patterns' : 'Sparring'
-      }`;
+      const key = `${div.beltLevel} ${div.gender === 'M' ? 'Males' : 'Females'} ${getEventLabel(div.eventType)}`;
       if (!acc[key]) acc[key] = [];
       acc[key].push(div);
       return acc;
@@ -233,7 +246,7 @@ export default function Divisions() {
     {} as Record<string, Division[]>
   );
 
-  // Export all brackets as PDFs
+  // Export all brackets as PDFs using the server endpoint
   const exportAllPDFs = async () => {
     if (!divisions || divisions.length === 0) return;
 
@@ -248,77 +261,21 @@ export default function Divisions() {
         return;
       }
 
-      // Create a combined PDF with all brackets
-      const doc = new jsPDF('landscape', 'pt', 'letter');
-      let isFirstPage = true;
-
-      for (const division of divisionsWithBrackets) {
-        // Fetch division details with bracket
-        const res = await fetch(`/api/divisions/${division.id}`);
-        const divisionData = await res.json();
-
-        if (!divisionData.bracket) continue;
-
-        if (!isFirstPage) {
-          doc.addPage();
-        }
-        isFirstPage = false;
-
-        const pageWidth = doc.internal.pageSize.getWidth();
-
-        // Title
-        doc.setFontSize(14);
-        doc.text(division.name, pageWidth / 2, 40, { align: 'center' });
-
-        doc.setFontSize(10);
-        doc.text(`${tournament?.name || 'Tournament'}`, pageWidth / 2, 55, {
-          align: 'center',
-        });
-
-        // Draw simplified bracket info
-        doc.setFontSize(9);
-        let y = 80;
-
-        const winnersMatches = divisionData.bracket.matches.filter(
-          (m: any) => m.bracketType === 'winners'
-        );
-
-        doc.text('Winners Bracket:', 50, y);
-        y += 15;
-
-        for (const match of winnersMatches.slice(0, 7)) {
-          const name1 = match.competitor1
-            ? `${match.competitor1.competitor.firstName} ${match.competitor1.competitor.lastName}`
-            : 'BYE';
-          const name2 = match.competitor2
-            ? `${match.competitor2.competitor.firstName} ${match.competitor2.competitor.lastName}`
-            : 'BYE';
-
-          doc.text(`  M${match.matchNumber}: ${name1} vs ${name2}`, 50, y);
-          y += 12;
-        }
-
-        // Competitor list
-        y = 80;
-        doc.text('Competitors:', 400, y);
-        y += 15;
-
-        divisionData.assignments.forEach((a: any, i: number) => {
-          if (y > 500) return;
-          doc.text(
-            `${i + 1}. ${a.registration.competitor.firstName} ${a.registration.competitor.lastName}`,
-            400,
-            y
-          );
-          y += 12;
-        });
+      // Use the server-side batch PDF endpoint
+      const res = await fetch(`/api/brackets/tournament/${id}/pdf`);
+      if (!res.ok) {
+        throw new Error('Failed to generate PDF');
       }
 
-      // Save the combined PDF
-      const fileName = `${tournament?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Tournament'}_All_Brackets.pdf`;
-      doc.save(fileName);
-
-      alert(`Exported ${divisionsWithBrackets.length} brackets to ${fileName}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${tournament?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Tournament'}_All_Brackets.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Export error:', error);
       alert('Error exporting PDFs. Please try again.');
@@ -430,8 +387,9 @@ export default function Divisions() {
                 className="form-input"
               >
                 <option value="">All</option>
-                <option value="patterns">Patterns</option>
-                <option value="sparring">Sparring</option>
+                {sportProfile.eventTypes.map((et, i) => (
+                  <option key={et.id} value={i === 0 ? 'patterns' : 'sparring'}>{et.name}</option>
+                ))}
               </select>
             </div>
             {divisions?.length ? (
@@ -602,7 +560,6 @@ export default function Divisions() {
             action={{
               label: 'Auto-Generate Divisions',
               onClick: () => autoGenerateMutation.mutate(),
-              icon: Wand2,
             }}
           />
         </div>

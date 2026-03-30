@@ -1,0 +1,8 @@
+node_modules
+dist
+dist-server
+prisma/tournament.db
+prisma/tournament.db-shm
+prisma/tournament.db-wal
+.env
+*.log

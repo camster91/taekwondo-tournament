@@ -12,6 +12,8 @@ import {
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
+import { getAuthHeaders } from '../context/AuthContext';
+import { DEFAULT_WEIGHT_CLASSES } from '../../shared/constants/weight-classes';
 
 interface Tournament {
   id: string;
@@ -93,13 +95,23 @@ export default function TournamentSettings() {
 
   const saveMutation = useMutation({
     mutationFn: async (newSettings: TournamentSettings) => {
+      // Save tournament settings JSON
       const res = await fetch(`/api/tournaments/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          settings: newSettings,
-        }),
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ settings: newSettings }),
       });
+      if (!res.ok) throw new Error('Failed to save settings');
+
+      // Also persist weight classes to the DB if any are defined
+      if (newSettings.weightClasses.length > 0) {
+        await fetch(`/api/tournaments/${id}/weight-classes`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({ weightClasses: newSettings.weightClasses }),
+        });
+      }
+
       return res.json();
     },
     onSuccess: () => {
@@ -146,6 +158,33 @@ export default function TournamentSettings() {
     setSettings(DEFAULT_SETTINGS);
     setHasChanges(true);
     setShowResetConfirm(false);
+  };
+
+  const addWeightClass = () => {
+    const newWc = { name: 'New', gender: 'all' as const, ageMin: 0, ageMax: 99, weightMinLbs: 0, weightMaxLbs: 999 };
+    updateSettings({ weightClasses: [...settings.weightClasses, newWc] });
+  };
+
+  const updateWeightClass = (index: number, updates: Partial<WeightClass>) => {
+    const newWcs = [...settings.weightClasses];
+    newWcs[index] = { ...newWcs[index], ...updates };
+    updateSettings({ weightClasses: newWcs });
+  };
+
+  const removeWeightClass = (index: number) => {
+    updateSettings({ weightClasses: settings.weightClasses.filter((_, i) => i !== index) });
+  };
+
+  const loadDefaultWeightClasses = () => {
+    const defaults = DEFAULT_WEIGHT_CLASSES.map(wc => ({
+      name: wc.name,
+      gender: (wc.gender || 'all') as 'M' | 'F' | 'all',
+      ageMin: wc.ageMin,
+      ageMax: wc.ageMax,
+      weightMinLbs: wc.weightMinLbs,
+      weightMaxLbs: wc.weightMaxLbs,
+    }));
+    updateSettings({ weightClasses: defaults });
   };
 
   if (isLoading) {
@@ -312,42 +351,82 @@ export default function TournamentSettings() {
         </div>
       </div>
 
-      {/* Weight Classes Info */}
+      {/* Weight Classes */}
       <div className="card">
-        <div className="card-header">
+        <div className="card-header flex items-center justify-between">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white">Weight Classes</h2>
+          <button onClick={addWeightClass} className="btn btn-secondary text-sm">
+            <Plus className="h-4 w-4 mr-1" />
+            Add
+          </button>
         </div>
-        <div className="card-body">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Weight classes are configured in the system defaults. The auto-categorization
-            engine uses standard weight brackets based on age and gender.
-          </p>
-          <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
-            <h4 className="font-medium text-gray-900 dark:text-white mb-2">Default Weight Classes:</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <p className="font-medium text-gray-900 dark:text-white">Feather</p>
-                <p className="text-gray-500 dark:text-gray-400">Lightest category</p>
-              </div>
-              <div>
-                <p className="font-medium text-gray-900 dark:text-white">Light</p>
-                <p className="text-gray-500 dark:text-gray-400">Below average</p>
-              </div>
-              <div>
-                <p className="font-medium text-gray-900 dark:text-white">Middle</p>
-                <p className="text-gray-500 dark:text-gray-400">Average weight</p>
-              </div>
-              <div>
-                <p className="font-medium text-gray-900 dark:text-white">Heavy</p>
-                <p className="text-gray-500 dark:text-gray-400">Above average</p>
-              </div>
-            </div>
+        {settings.weightClasses.length === 0 ? (
+          <div className="card-body">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+              No custom weight classes. Using system defaults.
+            </p>
+            <button
+              onClick={loadDefaultWeightClasses}
+              className="btn btn-secondary text-sm"
+            >
+              Load Defaults
+            </button>
           </div>
-          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-            Weight boundaries are automatically adjusted based on age group and gender.
-            Contact support for custom weight class configurations.
-          </p>
-        </div>
+        ) : (
+          <div className="card-body p-0 overflow-x-auto">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Gender</th>
+                  <th>Age Min</th>
+                  <th>Age Max</th>
+                  <th>Min (lbs)</th>
+                  <th>Max (lbs)</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                {settings.weightClasses.map((wc, index) => (
+                  <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td>
+                      <input type="text" value={wc.name}
+                        onChange={(e) => updateWeightClass(index, { name: e.target.value })}
+                        className="form-input w-24" />
+                    </td>
+                    <td>
+                      <select value={wc.gender}
+                        onChange={(e) => updateWeightClass(index, { gender: e.target.value as 'M' | 'F' | 'all' })}
+                        className="form-input w-20">
+                        <option value="all">Both</option>
+                        <option value="M">Male</option>
+                        <option value="F">Female</option>
+                      </select>
+                    </td>
+                    <td><input type="number" min="0" max="99" value={wc.ageMin}
+                      onChange={(e) => updateWeightClass(index, { ageMin: parseInt(e.target.value) || 0 })}
+                      className="form-input w-16" /></td>
+                    <td><input type="number" min="0" max="99" value={wc.ageMax}
+                      onChange={(e) => updateWeightClass(index, { ageMax: parseInt(e.target.value) || 99 })}
+                      className="form-input w-16" /></td>
+                    <td><input type="number" min="0" value={wc.weightMinLbs}
+                      onChange={(e) => updateWeightClass(index, { weightMinLbs: parseInt(e.target.value) || 0 })}
+                      className="form-input w-20" /></td>
+                    <td><input type="number" min="0" value={wc.weightMaxLbs}
+                      onChange={(e) => updateWeightClass(index, { weightMaxLbs: parseInt(e.target.value) || 999 })}
+                      className="form-input w-20" /></td>
+                    <td>
+                      <button onClick={() => removeWeightClass(index)}
+                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 touch-target">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Unsaved Changes Warning */}

@@ -60,7 +60,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center justify-between h-14 px-4">
           <div className="flex items-center">
             <Trophy className="h-6 w-6 text-primary-500" />
-            <span className="ml-2 text-lg font-bold text-white">TKD Manager</span>
+            <span className="ml-2 text-lg font-bold text-white">Tournament Manager</span>
           </div>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -89,7 +89,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       >
         <div className="flex h-16 items-center justify-center border-b border-gray-800">
           <Trophy className="h-8 w-8 text-primary-500" />
-          <span className="ml-2 text-xl font-bold text-white">TKD Manager</span>
+          <span className="ml-2 text-xl font-bold text-white">Tournament Manager</span>
         </div>
         <nav className="mt-6 px-3">
           {navigation.map((item) => {
