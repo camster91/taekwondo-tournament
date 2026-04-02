@@ -13,7 +13,7 @@
 - [ ] Add analytics (Google Analytics or PostHog)
 
 ## Phase 3: Launch
-- [ ] Prepare app store assets (if mobile) or social media graphics
+- [x] Prepare app store assets (if mobile) or social media graphics
 - [ ] Submit to app stores (if applicable)
-- [ ] Write launch post (Product Hunt, Twitter, LinkedIn)
+- [x] Write launch post (Product Hunt, Twitter, LinkedIn)
 - [ ] Monitor logs and feedback post-launch
