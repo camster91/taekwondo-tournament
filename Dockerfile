@@ -2,41 +2,50 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
+# Install all dependencies
 COPY package*.json ./
 RUN npm ci
 
-# Copy source
+# Copy source code
 COPY . .
 
-# Generate Prisma client and build
+# Generate prisma client, build frontend and backend
 RUN npx prisma generate && \
     npx vite build && \
     npx tsc -p tsconfig.server.json
 
-# ─── Production image ────────────────────────────────────────────────
+# ─── Production Dependencies Stage ─────────────────────────────────
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+COPY package*.json ./
+COPY prisma ./prisma
+RUN npm ci --omit=dev && npx prisma generate
+
+# ─── Production Image ────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 
 WORKDIR /app
 
+# Setup env variables
 ENV NODE_ENV=production
-
-# Install production deps only
-COPY package*.json ./
-RUN npm ci --omit=dev
-
-# Copy built artifacts
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/dist-server ./dist-server
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY prisma ./prisma
-COPY server.js ./
-
-# Create data directory for SQLite
-RUN mkdir -p /data
 ENV DATABASE_URL="file:/data/tournament.db"
+
+# Create data directory for SQLite and make it writable
+RUN mkdir -p /data && chown node:node /data
+
+# Copy production dependencies and built code
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/dist-server ./dist-server
+COPY --from=builder --chown=node:node /app/prisma ./prisma
+COPY --chown=node:node package.json ./
+COPY --chown=node:node server.js ./
+
+# Switch to node user for security
+USER node
 
 EXPOSE 3001
 
-# Run migrations then start
-CMD ["sh", "-c", "node -e \"require('child_process').execSync('./node_modules/.bin/prisma db push --accept-data-loss', {stdio:'inherit'})\" && node server.js"]
+# Run migrations and start server
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node server.js"]
