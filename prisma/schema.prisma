@@ -50,10 +50,16 @@ model Tournament {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  organizationId   String?
+  sportProfileId   String?
+  sportProfileSlug String?  @default("taekwondo")
+
   registrations Registration[]
   divisions     Division[]
   weightClasses WeightClass[]
   userAccess    UserTournamentAccess[]
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  sportProfile SportProfile? @relation(fields: [sportProfileId], references: [id])
 }
 
 // Competitor-Tournament registration link
@@ -209,6 +215,7 @@ model User {
 
   // Tournament-specific permissions
   tournamentAccess UserTournamentAccess[]
+  organizationMembers OrganizationMember[]
 }
 
 // Magic link / code authentication
@@ -335,4 +342,56 @@ model MatchAuditLog {
 
   @@index([matchId])
   @@index([createdAt])
+}
+
+// Organization (multi-tenant isolation)
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("free") // free, starter, pro, enterprise
+  settings  String?  // JSON
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members     OrganizationMember[]
+  tournaments Tournament[]
+
+  @@index([slug])
+}
+
+// Organization membership
+model OrganizationMember {
+  id             String   @id @default(uuid())
+  organizationId String
+  userId         String
+  role           String   @default("member") // owner, admin, member
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+// Sport configuration profile
+model SportProfile {
+  id             String   @id @default(uuid())
+  name           String   // "Taekwondo", "Karate", "Judo", "Wrestling", "BJJ"
+  slug           String   // "taekwondo", "karate", "judo", "wrestling", "bjj"
+  icon           String?  // emoji
+  eventTypes     String   // JSON array: [{id, name, hasWeightClasses, description}]
+  beltConfig     String   // JSON: {levels:[{name,abbreviation,rank,color}], hasStripes, hasDanRank, topLevelName}
+  scoringConfig  String   // JSON: {type:"points"|"decision"|"time", hasPenalties, penaltyName}
+  ageGroupConfig String?  // JSON array: [{min,max,label}]
+  isGlobal       Boolean  @default(true)  // false = org-specific
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tournaments    Tournament[]
+
+  @@unique([slug])
+  @@index([slug])
 }

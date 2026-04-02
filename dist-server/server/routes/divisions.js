@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { autoCategorize, previewCategorization } from '../services/categorization-engine.js';
+import { getSportProfile } from '../../shared/constants/sport-profiles.js';
 import { Errors } from '../utils/errors.js';
-import { checkDataLoss, validateTournamentState, backupDivisionState, saveBackup, } from '../services/backup-recovery.js';
+import { checkDataLoss, validateTournamentState, backupDivisionState, saveBackup, getBackup, restoreDivisionState, } from '../services/backup-recovery.js';
 import { authenticate } from '../middleware/auth.js';
 const router = Router();
 // Helper to safely get string param
@@ -13,13 +14,24 @@ const getParam = (param) => {
 // Get divisions for a tournament
 router.get('/tournament/:tournamentId', async (req, res) => {
     const prisma = req.app.locals.prisma;
+    const withMatches = req.query.withMatches === 'true';
     const divisions = await prisma.division.findMany({
         where: { tournamentId: getParam(req.params.tournamentId) },
         include: {
             _count: {
                 select: { assignments: true },
             },
-            bracket: true,
+            bracket: withMatches ? {
+                include: {
+                    matches: {
+                        include: {
+                            competitor1: { include: { competitor: true } },
+                            competitor2: { include: { competitor: true } },
+                        },
+                        orderBy: [{ roundNumber: 'asc' }, { matchNumber: 'asc' }],
+                    },
+                },
+            } : true,
         },
         orderBy: [
             { beltLevel: 'asc' },
@@ -83,10 +95,21 @@ router.post('/tournament/:tournamentId/preview', authenticate, async (req, res) 
             warnings: ['No registrations found for this tournament'],
         });
     }
+    // Derive event type labels from sport profile
+    const sportProfile = getSportProfile(tournament.sportProfileSlug || 'taekwondo');
+    const eventTypeLabels = sportProfile
+        ? { patterns: sportProfile.eventTypes[0]?.name ?? 'Patterns', sparring: sportProfile.eventTypes[1]?.name ?? 'Sparring' }
+        : undefined;
+    // Fetch custom weight classes from DB
+    const customWeightClasses = await prisma.weightClass.findMany({
+        where: { tournamentId: getParam(req.params.tournamentId) },
+    });
     // Run preview (no database changes)
     const categorizationConfig = {
         divisionThreshold: config?.divisionThreshold ?? 8,
         ...config,
+        eventTypeLabels,
+        customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
     };
     const preview = previewCategorization(registrations, categorizationConfig);
     res.json(preview);
@@ -136,10 +159,21 @@ router.post('/tournament/:tournamentId/auto-generate', authenticate, async (req,
         where: { tournamentId },
         include: { competitor: true },
     });
+    // Derive event type labels from sport profile
+    const sportProfile = getSportProfile(tournament.sportProfileSlug || 'taekwondo');
+    const eventTypeLabels = sportProfile
+        ? { patterns: sportProfile.eventTypes[0]?.name ?? 'Patterns', sparring: sportProfile.eventTypes[1]?.name ?? 'Sparring' }
+        : undefined;
+    // Fetch custom weight classes from DB
+    const customWeightClasses = await prisma.weightClass.findMany({
+        where: { tournamentId },
+    });
     // Run auto-categorization
     const categorizationConfig = {
         divisionThreshold: config?.divisionThreshold ?? 8,
         ...config,
+        eventTypeLabels,
+        customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
     };
     const result = await autoCategorize(prisma, tournamentId, registrations, categorizationConfig);
     res.json({
@@ -363,5 +397,40 @@ router.post('/:id/split', authenticate, async (req, res) => {
         newDivisions.push(newDivision);
     }
     res.json(newDivisions);
+});
+// Get current backup state for a tournament (requires authentication)
+router.get('/tournament/:tournamentId/backup', authenticate, async (req, res) => {
+    const tournamentId = getParam(req.params.tournamentId);
+    const backup = getBackup(tournamentId);
+    if (!backup) {
+        return res.status(404).json({
+            error: 'No backup found',
+            code: 'NO_BACKUP',
+            suggestion: 'Backups are created automatically before auto-generation or clearing divisions',
+        });
+    }
+    res.json({
+        tournamentId: backup.tournamentId,
+        timestamp: backup.timestamp,
+        divisionCount: backup.divisions.length,
+    });
+});
+// Restore tournament divisions from backup (requires authentication)
+router.post('/tournament/:tournamentId/restore', authenticate, async (req, res) => {
+    const prisma = req.app.locals.prisma;
+    const tournamentId = getParam(req.params.tournamentId);
+    const backup = getBackup(tournamentId);
+    if (!backup) {
+        return res.status(404).json({
+            error: 'No backup found to restore',
+            code: 'NO_BACKUP',
+            suggestion: 'Backups are created automatically before auto-generation or clearing divisions',
+        });
+    }
+    const result = await restoreDivisionState(prisma, backup);
+    res.json({
+        ...result,
+        message: `Restored ${result.restored} division(s)`,
+    });
 });
 export default router;
