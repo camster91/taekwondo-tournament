@@ -166,6 +166,46 @@ router.post('/verify-magic-link', authLimiter, async (req, res) => {
         res.status(500).json({ error: 'Verification failed' });
     }
 });
+// First-run setup: creates initial admin user (only when no users exist)
+router.post('/setup', registerLimiter, async (req, res) => {
+    const prisma = req.app.locals.prisma;
+    try {
+        const existingCount = await prisma.user.count();
+        if (existingCount > 0) {
+            return res.status(403).json({ error: 'Setup already completed' });
+        }
+        const { email, firstName, lastName } = req.body;
+        if (!email || !firstName || !lastName) {
+            return res.status(400).json({ error: 'email, firstName, and lastName are required' });
+        }
+        const user = await prisma.user.create({
+            data: {
+                email: email.toLowerCase().trim(),
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
+                role: 'admin',
+                isActive: true,
+            },
+        });
+        // Issue JWT directly so they can log in
+        const jwtToken = createToken({ userId: user.id, email: user.email, role: user.role });
+        res.status(201).json({
+            message: 'Admin account created. Use magic link to sign in.',
+            user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+            token: jwtToken,
+        });
+    }
+    catch (error) {
+        console.error('Setup error:', error);
+        res.status(500).json({ error: 'Setup failed' });
+    }
+});
+// Check if setup is needed (no users exist)
+router.get('/setup-status', async (req, res) => {
+    const prisma = req.app.locals.prisma;
+    const count = await prisma.user.count();
+    res.json({ needsSetup: count === 0 });
+});
 // Get current user
 router.get('/me', authenticate, async (req, res) => {
     const prisma = req.app.locals.prisma;

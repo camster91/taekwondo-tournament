@@ -1,8 +1,18 @@
 // Public registration routes - no authentication required
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { normalizeBelt } from '../../shared/constants/belts.js';
+import { sendEmail, isEmailConfigured } from '../services/email.js';
 const router = Router();
+// Rate limit public registration to prevent abuse: 10 submissions per 15 minutes per IP
+const registrationLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: 'Too many registration attempts. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 // Get open tournaments (status = 'registration')
 router.get('/tournaments', async (req, res) => {
     const prisma = req.app.locals.prisma;
@@ -18,6 +28,7 @@ router.get('/tournaments', async (req, res) => {
             name: true,
             date: true,
             location: true,
+            sportProfileSlug: true,
             _count: {
                 select: { registrations: true },
             },
@@ -38,6 +49,7 @@ router.get('/tournaments/:id', async (req, res) => {
             location: true,
             status: true,
             settings: true,
+            sportProfileSlug: true,
         },
     });
     if (!tournament) {
@@ -49,7 +61,7 @@ router.get('/tournaments/:id', async (req, res) => {
     res.json(tournament);
 });
 // Public self-registration
-router.post('/register', async (req, res) => {
+router.post('/register', registrationLimiter, async (req, res) => {
     const prisma = req.app.locals.prisma;
     const { tournamentId, firstName, lastName, gender, dateOfBirth, belt, danRank, heightInches, weightLbs, schoolDojang, specialNeeds, patterns, sparring, parentName, parentEmail, parentPhone, } = req.body;
     // Validation
@@ -165,7 +177,7 @@ router.post('/register', async (req, res) => {
                 },
             },
         });
-        res.status(201).json({
+        const responseData = {
             success: true,
             message: 'Registration successful!',
             registration: {
@@ -179,7 +191,34 @@ router.post('/register', async (req, res) => {
                 },
                 ageGroup: getAgeGroupLabel(ageAtTournament),
             },
-        });
+        };
+        res.status(201).json(responseData);
+        // Send confirmation email if parent email is provided and email is configured
+        if (parentEmail && isEmailConfigured()) {
+            const eventList = [
+                patterns && 'Patterns',
+                sparring && 'Sparring',
+            ].filter(Boolean).join(' & ');
+            const tournamentDate = new Date(registration.tournament.date).toLocaleDateString('en-US', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+            });
+            const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #4F46E5;">Registration Confirmed!</h2>
+          <p>Hello${parentName ? ` ${parentName}` : ''},</p>
+          <p><strong>${competitor.firstName} ${competitor.lastName}</strong> has been successfully registered for:</p>
+          <div style="background: #F3F4F6; border-radius: 8px; padding: 16px; margin: 16px 0;">
+            <p style="margin: 4px 0;"><strong>Tournament:</strong> ${registration.tournament.name}</p>
+            <p style="margin: 4px 0;"><strong>Date:</strong> ${tournamentDate}</p>
+            ${registration.tournament.location ? `<p style="margin: 4px 0;"><strong>Location:</strong> ${registration.tournament.location}</p>` : ''}
+            <p style="margin: 4px 0;"><strong>Events:</strong> ${eventList}</p>
+            <p style="margin: 4px 0;"><strong>Age Group:</strong> ${getAgeGroupLabel(ageAtTournament)}</p>
+          </div>
+          <p style="color: #6B7280; font-size: 14px;">Please keep this email for your records. You may be asked to provide registration confirmation at check-in.</p>
+        </div>
+      `;
+            sendEmail(parentEmail, `Registration Confirmed - ${registration.tournament.name}`, html).catch(() => { });
+        }
     }
     catch (error) {
         console.error('Registration error:', error);

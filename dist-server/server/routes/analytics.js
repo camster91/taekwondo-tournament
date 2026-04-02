@@ -1,7 +1,8 @@
 import { Router } from 'express';
+import { authenticate } from '../middleware/auth.js';
 const router = Router();
 // Get dashboard analytics
-router.get('/dashboard', async (req, res) => {
+router.get('/dashboard', authenticate, async (req, res) => {
     const prisma = req.app.locals.prisma;
     try {
         // Get total counts

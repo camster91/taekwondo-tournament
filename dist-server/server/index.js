@@ -13,6 +13,8 @@ import publicRouter from './routes/public.js';
 import fairnessRouter from './routes/fairness.js';
 import analyticsRouter from './routes/analytics.js';
 import invitesRouter from './routes/invites.js';
+import sportsRouter from './routes/sports.js';
+import organizationsRouter from './routes/organizations.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 const __filename = fileURLToPath(import.meta.url);
@@ -56,13 +58,15 @@ app.use('/api/brackets', bracketsRouter);
 app.use('/api/fairness', fairnessRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/invites', invitesRouter);
+app.use('/api/sports', sportsRouter);
+app.use('/api/organizations', organizationsRouter);
 // Health check
 app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 // Serve static files in production
 if (isProduction) {
-    const distPath = path.join(__dirname, '../../app/dist');
+    const distPath = path.join(__dirname, '../../dist');
     app.use(express.static(distPath, {
         setHeaders: (res, filePath) => {
             // Set correct MIME types for JavaScript modules
