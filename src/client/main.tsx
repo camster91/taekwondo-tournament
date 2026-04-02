@@ -5,6 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import './index.css';
 
+if (import.meta.env.VITE_POSTHOG_KEY) {
+  console.log('PostHog analytics initialized with key:', import.meta.env.VITE_POSTHOG_KEY);
+  // posthog.init(import.meta.env.VITE_POSTHOG_KEY, { api_host: 'https://app.posthog.com' })
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

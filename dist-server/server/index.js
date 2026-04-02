@@ -106,8 +106,8 @@ app.use((err, req, res, _next) => {
     });
 });
 // Start server
-app.listen(PORT, async () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+app.listen(Number(PORT), '0.0.0.0', async () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
     if (isEmailConfigured()) {
         const ok = await verifyEmailConnection();
         console.log(ok ? 'SMTP connection verified' : 'SMTP connection failed — emails will not be sent');
