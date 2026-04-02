@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  taekwondo-tournament:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taekwondo-tournament
+    ports:
+      - "3001:3001"
+    volumes:
+      - tournament_data:/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=file:/data/tournament.db
+    restart: unless-stopped
+
+volumes:
+  tournament_data:
