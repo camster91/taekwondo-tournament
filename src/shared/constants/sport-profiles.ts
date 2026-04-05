@@ -217,6 +217,171 @@ export const BJJ_PROFILE: SportProfile = {
   },
 };
 
+// ─── MUAY THAI ───────────────────────────────────────────────────────────────
+export const MUAY_THAI_PROFILE: SportProfile = {
+  id: 'muay-thai',
+  name: 'Muay Thai',
+  slug: 'muay-thai',
+  icon: '🥊',
+  description: 'Thai boxing using fists, elbows, knees, and shins',
+  eventTypes: [
+    { id: 'sparring', name: 'Sparring', description: 'Full-rules Muay Thai bout', hasWeightClasses: true, isCombat: true },
+    { id: 'wai-kru', name: 'Wai Kru', description: 'Traditional pre-fight dance/ritual performance', hasWeightClasses: false, isCombat: false },
+  ],
+  beltConfig: {
+    levels: [
+      { name: 'White', abbreviation: 'W', rank: 1, color: '#FFFFFF', isTopLevel: false },
+      { name: 'Yellow', abbreviation: 'Y', rank: 2, color: '#FFD700', isTopLevel: false },
+      { name: 'Green', abbreviation: 'G', rank: 3, color: '#22C55E', isTopLevel: false },
+      { name: 'Blue', abbreviation: 'B', rank: 4, color: '#3B82F6', isTopLevel: false },
+      { name: 'Red', abbreviation: 'R', rank: 5, color: '#EF4444', isTopLevel: false },
+      { name: 'Black', abbreviation: 'BB', rank: 6, color: '#111827', isTopLevel: true },
+    ],
+    hasStripes: false,
+    hasDanRank: false,
+    topLevelName: 'Black Prajioud',
+    topLevelAbbreviation: 'BB',
+  },
+  scoringConfig: {
+    type: 'points',
+    hasPenalties: true,
+    penaltyName: 'Warning',
+    hasRounds: true,
+    defaultRounds: 3,
+    defaultRoundDurationSeconds: 180,
+  },
+};
+
+// ─── BOXING ──────────────────────────────────────────────────────────────────
+export const BOXING_PROFILE: SportProfile = {
+  id: 'boxing',
+  name: 'Boxing',
+  slug: 'boxing',
+  icon: '🥊',
+  description: 'Western boxing with weight classes',
+  eventTypes: [
+    { id: 'sparring', name: 'Bout', description: 'Boxing match', hasWeightClasses: true, isCombat: true },
+  ],
+  beltConfig: {
+    levels: [
+      { name: 'Novice', abbreviation: 'N', rank: 1, color: '#6B7280', isTopLevel: false },
+      { name: 'Open', abbreviation: 'O', rank: 2, color: '#3B82F6', isTopLevel: false },
+      { name: 'Elite', abbreviation: 'E', rank: 3, color: '#EF4444', isTopLevel: true },
+    ],
+    hasStripes: false,
+    hasDanRank: false,
+    topLevelName: 'Elite',
+    topLevelAbbreviation: 'EL',
+  },
+  scoringConfig: {
+    type: 'points',
+    hasPenalties: true,
+    penaltyName: 'Warning',
+    hasRounds: true,
+    defaultRounds: 3,
+    defaultRoundDurationSeconds: 180,
+  },
+};
+
+// ─── KICKBOXING ──────────────────────────────────────────────────────────────
+export const KICKBOXING_PROFILE: SportProfile = {
+  id: 'kickboxing',
+  name: 'Kickboxing',
+  slug: 'kickboxing',
+  icon: '🦵',
+  description: 'Stand-up combat sport combining punches and kicks',
+  eventTypes: [
+    { id: 'sparring', name: 'Bout', description: 'Kickboxing bout', hasWeightClasses: true, isCombat: true },
+    { id: 'patterns', name: 'Forms', description: 'Choreographed routine', hasWeightClasses: false, isCombat: false },
+  ],
+  beltConfig: {
+    levels: [
+      { name: 'Novice', abbreviation: 'N', rank: 1, color: '#6B7280', isTopLevel: false },
+      { name: 'Intermediate', abbreviation: 'I', rank: 2, color: '#3B82F6', isTopLevel: false },
+      { name: 'Advanced', abbreviation: 'A', rank: 3, color: '#EF4444', isTopLevel: true },
+    ],
+    hasStripes: false,
+    hasDanRank: false,
+    topLevelName: 'Advanced',
+    topLevelAbbreviation: 'ADV',
+  },
+  scoringConfig: {
+    type: 'points',
+    hasPenalties: true,
+    penaltyName: 'Warning',
+    hasRounds: true,
+    defaultRounds: 3,
+    defaultRoundDurationSeconds: 120,
+  },
+};
+
+// ─── MMA ─────────────────────────────────────────────────────────────────────
+export const MMA_PROFILE: SportProfile = {
+  id: 'mma',
+  name: 'MMA',
+  slug: 'mma',
+  icon: '🤼',
+  description: 'Mixed Martial Arts combining striking and grappling',
+  eventTypes: [
+    { id: 'sparring', name: 'Bout', description: 'MMA bout', hasWeightClasses: true, isCombat: true },
+  ],
+  beltConfig: {
+    levels: [
+      { name: 'Amateur', abbreviation: 'AM', rank: 1, color: '#6B7280', isTopLevel: false },
+      { name: 'Semi-Pro', abbreviation: 'SP', rank: 2, color: '#3B82F6', isTopLevel: false },
+      { name: 'Pro', abbreviation: 'PRO', rank: 3, color: '#EF4444', isTopLevel: true },
+    ],
+    hasStripes: false,
+    hasDanRank: false,
+    topLevelName: 'Pro',
+    topLevelAbbreviation: 'PRO',
+  },
+  scoringConfig: {
+    type: 'points',
+    hasPenalties: true,
+    penaltyName: 'Foul',
+    hasRounds: true,
+    defaultRounds: 3,
+    defaultRoundDurationSeconds: 300,
+  },
+};
+
+// ─── KUNG FU ─────────────────────────────────────────────────────────────────
+export const KUNG_FU_PROFILE: SportProfile = {
+  id: 'kung-fu',
+  name: 'Kung Fu',
+  slug: 'kung-fu',
+  icon: '🐉',
+  description: 'Chinese martial arts encompassing many styles',
+  eventTypes: [
+    { id: 'patterns', name: 'Forms', description: 'Wushu / traditional forms', hasWeightClasses: false, isCombat: false },
+    { id: 'sparring', name: 'Sanda', description: 'Chinese kickboxing / Lei Tai', hasWeightClasses: true, isCombat: true },
+  ],
+  beltConfig: {
+    levels: [
+      { name: 'White', abbreviation: 'W', rank: 1, color: '#FFFFFF', isTopLevel: false },
+      { name: 'Yellow', abbreviation: 'Y', rank: 2, color: '#FFD700', isTopLevel: false },
+      { name: 'Orange', abbreviation: 'O', rank: 3, color: '#F97316', isTopLevel: false },
+      { name: 'Green', abbreviation: 'G', rank: 4, color: '#22C55E', isTopLevel: false },
+      { name: 'Blue', abbreviation: 'B', rank: 5, color: '#3B82F6', isTopLevel: false },
+      { name: 'Brown', abbreviation: 'BR', rank: 6, color: '#92400E', isTopLevel: false },
+      { name: 'Black', abbreviation: 'BB', rank: 7, color: '#111827', isTopLevel: true },
+    ],
+    hasStripes: false,
+    hasDanRank: true,
+    topLevelName: 'Black Sash',
+    topLevelAbbreviation: 'BB',
+  },
+  scoringConfig: {
+    type: 'points',
+    hasPenalties: true,
+    penaltyName: 'Penalty',
+    hasRounds: true,
+    defaultRounds: 2,
+    defaultRoundDurationSeconds: 120,
+  },
+};
+
 // ─── All profiles ─────────────────────────────────────────────────────────────
 export const SPORT_PROFILES: SportProfile[] = [
   TAEKWONDO_PROFILE,
@@ -224,6 +389,11 @@ export const SPORT_PROFILES: SportProfile[] = [
   JUDO_PROFILE,
   WRESTLING_PROFILE,
   BJJ_PROFILE,
+  MUAY_THAI_PROFILE,
+  BOXING_PROFILE,
+  KICKBOXING_PROFILE,
+  MMA_PROFILE,
+  KUNG_FU_PROFILE,
 ];
 
 export function getSportProfile(slug: string): SportProfile | undefined {

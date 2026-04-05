@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  taekwondo-tournament:
+  martial-arts-tournament:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: taekwondo-tournament
+    container_name: martial-arts-tournament
     ports:
       - "3001:3001"
     volumes:

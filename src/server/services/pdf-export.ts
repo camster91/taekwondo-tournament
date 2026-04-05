@@ -571,7 +571,7 @@ export function generateCertificatePDF(data: CertificateData): jsPDF {
   // Footer
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.text('Taekwondo Tournament Management System', centerX, pageHeight - 45, { align: 'center' });
+  doc.text('Martial Arts Tournament Management System', centerX, pageHeight - 45, { align: 'center' });
 
   return doc;
 }
@@ -706,7 +706,7 @@ export function generateBatchCertificatesPDF(
 
     doc.setFontSize(8);
     doc.setTextColor(150);
-    doc.text('Taekwondo Tournament Management System', centerX, pageHeight - 45, { align: 'center' });
+    doc.text('Martial Arts Tournament Management System', centerX, pageHeight - 45, { align: 'center' });
   }
 
   return doc;

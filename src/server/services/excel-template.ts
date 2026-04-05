@@ -132,7 +132,7 @@ export function generateImportTemplate(): Buffer {
 
   // Create instructions sheet
   const instructions = [
-    { 'Import Instructions': 'Taekwondo Tournament - Competitor Import Template' },
+    { 'Import Instructions': 'Martial Arts Tournament - Competitor Import Template' },
     { 'Import Instructions': '' },
     { 'Import Instructions': 'HOW TO USE THIS TEMPLATE:' },
     { 'Import Instructions': '1. Delete the sample data rows (rows 2-6) from the "Competitors" sheet' },
