@@ -25,7 +25,7 @@ interface RegistrationResult {
   };
 }
 
-// Taekwondo-specific detailed belt options (for stripe-level granularity)
+// Taekwondo-specific detailed belt options (for stripe-level granularity in TKD tournaments)
 const TKD_BELT_OPTIONS = [
   'White',
   'White / Single Yellow Stripe',
@@ -443,7 +443,7 @@ export default function PublicRegister() {
                   name="schoolDojang"
                   value={formData.schoolDojang}
                   onChange={handleChange}
-                  placeholder="e.g., Newton's Taekwondo"
+                  placeholder="e.g., Downtown Martial Arts Academy"
                   className="form-input w-full"
                 />
               </div>

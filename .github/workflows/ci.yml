@@ -70,9 +70,9 @@ jobs:
           context: .
           push: false
           load: true
-          tags: taekwondo-tournament:test
+          tags: martial-arts-tournament:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Verify image exists
-        run: docker images taekwondo-tournament:test --format '{{.Repository}}:{{.Tag}}'
+        run: docker images martial-arts-tournament:test --format '{{.Repository}}:{{.Tag}}'

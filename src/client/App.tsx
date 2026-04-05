@@ -35,6 +35,7 @@ import UserManagement from './pages/UserManagement';
 import Profile from './pages/Profile';
 import DirectorDashboard from './pages/DirectorDashboard';
 import AcceptInvite from './pages/AcceptInvite';
+import NotFound from './pages/NotFound';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -54,13 +55,13 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       {/* Mobile header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-gray-900 border-b border-gray-800">
         <div className="flex items-center justify-between h-14 px-4">
           <div className="flex items-center">
             <Trophy className="h-6 w-6 text-primary-500" />
-            <span className="ml-2 text-lg font-bold text-white">Tournament Manager</span>
+            <span className="ml-2 text-lg font-bold text-white">Martial Arts TM</span>
           </div>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -89,7 +90,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       >
         <div className="flex h-16 items-center justify-center border-b border-gray-800">
           <Trophy className="h-8 w-8 text-primary-500" />
-          <span className="ml-2 text-xl font-bold text-white">Tournament Manager</span>
+          <span className="ml-2 text-xl font-bold text-white">Martial Arts TM</span>
         </div>
         <nav className="mt-6 px-3">
           {navigation.map((item) => {
@@ -272,6 +273,7 @@ function AppRoutes() {
         <Route path="/scorekeeper/:tournamentId" element={<Scorekeeper />} />
         <Route path="/checkin/:tournamentId" element={<CheckIn />} />
         <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     );
   }
@@ -335,6 +337,7 @@ function AppRoutes() {
               </ProtectedRoute>
             }
           />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </AdminLayout>
     </ProtectedRoute>

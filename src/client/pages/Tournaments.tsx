@@ -262,7 +262,7 @@ export default function Tournaments() {
                     onChange={(e) =>
                       setFormData({ ...formData, location: e.target.value })
                     }
-                    placeholder="e.g., Newton's Taekwondo Center"
+                    placeholder="e.g., Downtown Martial Arts Center"
                     className="form-input w-full"
                   />
                   <p className="mt-1 text-xs text-gray-500">Optional</p>
@@ -336,7 +336,7 @@ function TournamentCard({
                 {tournament.name}
               </h3>
               <StatusBadge status={tournament.status} />
-              {tournament.sportProfileSlug && tournament.sportProfileSlug !== 'taekwondo' && (
+              {tournament.sportProfileSlug && (
                 <span className="text-xs text-gray-500 mt-0.5">
                   {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.icon}{' '}
                   {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.name}

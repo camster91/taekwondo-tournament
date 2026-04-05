@@ -26,7 +26,7 @@ model Competitor {
 
   // Experience tracking for fair matching
   beltPromotionDate DateTime? // When they earned current belt
-  yearsTraining     Float?    // Total years of Taekwondo training
+  yearsTraining     Float?    // Total years of martial arts training
   region            String?   // Geographic region for regional diversity
   reachInches       Float?    // Arm reach for sparring matching
 
@@ -379,8 +379,8 @@ model OrganizationMember {
 // Sport configuration profile
 model SportProfile {
   id             String   @id @default(uuid())
-  name           String   // "Taekwondo", "Karate", "Judo", "Wrestling", "BJJ"
-  slug           String   // "taekwondo", "karate", "judo", "wrestling", "bjj"
+  name           String   // e.g. "Taekwondo", "Karate", "Judo", "MMA", "Boxing"
+  slug           String   // e.g. "taekwondo", "karate", "judo", "mma", "boxing"
   icon           String?  // emoji
   eventTypes     String   // JSON array: [{id, name, hasWeightClasses, description}]
   beltConfig     String   // JSON: {levels:[{name,abbreviation,rank,color}], hasStripes, hasDanRank, topLevelName}

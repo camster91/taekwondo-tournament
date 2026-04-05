@@ -1,7 +1,7 @@
 {
-  "name": "taekwondo-tournament-manager",
+  "name": "martial-arts-tournament-manager",
   "version": "1.0.0",
-  "description": "Tournament management application for Taekwondo competitions",
+  "description": "Tournament management application for martial arts competitions",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
@@ -22,7 +22,7 @@
     "seed": "node --loader ts-node/esm prisma/seed.ts"
   },
   "keywords": [
-    "taekwondo",
+    "martial-arts",
     "tournament",
     "brackets"
   ],

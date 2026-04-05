@@ -1,24 +1,38 @@
-# Taekwondo Tournament Management System
+# Martial Arts Tournament Management System
 
-**A robust, real-time web application designed to orchestrate martial arts tournaments, manage competitor brackets, and display live schedules.**
+**A robust, real-time web application designed to orchestrate martial arts tournaments across multiple disciplines, manage competitor brackets, and display live schedules.**
 
-As part of the **Nexus AI Business Solutions Portfolio**, this application was originally developed for the Newtons Championship. Moving forward, it serves as the foundational template for a generalized Martial Arts Tournament SaaS, allowing studio owners to seamlessly organize events.
+As part of the **Nexus AI Business Solutions Portfolio**, this application was originally developed for Taekwondo tournaments and has evolved into a multi-sport Martial Arts Tournament SaaS, allowing studio owners to seamlessly organize events for any martial art.
 
-## 🏆 Core Capabilities
+## Supported Disciplines
 
+- Taekwondo
+- Karate
+- Judo
+- Brazilian Jiu-Jitsu (BJJ)
+- Wrestling
+- Muay Thai
+- Boxing
+- Kickboxing
+- MMA
+- Kung Fu
+
+## Core Capabilities
+
+- **Multi-Sport Support:** Each tournament can be configured for a specific martial art with sport-appropriate scoring, belt/rank systems, and event types.
 - **Automated Bracket Generation:** Parses Excel `.xlsm` rosters to dynamically generate sparring and pattern brackets.
 - **Live Scheduling:** Real-time event synchronization across multiple rings/mats.
-- **Competitor Management:** Handles Black Belt (BB) and Color Belt (CB) divisions, separated by gender, age, and weight classes.
+- **Competitor Management:** Handles divisions separated by rank, gender, age, and weight classes.
 - **Digital Displays:** Outputs clean, high-contrast UI for TV monitors at the event.
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - **Frontend:** React / Vite
 - **Backend:** Node.js Express server
-- **Database:** Prisma ORM (configured for scalable tournament data)
+- **Database:** Prisma ORM with SQLite
 - **Deployment:** Vercel / Docker
 
-## 🚀 Getting Started
+## Getting Started
 
 ```bash
 # Clone the repository
@@ -32,9 +46,9 @@ npm install
 npm run dev
 ```
 
-## 📈 Future Monetization & SaaS Strategy
+## Future Monetization & SaaS Strategy
 
-- **White-Labeling:** Package the app as a white-label solution for independent Dojangs.
+- **White-Labeling:** Package the app as a white-label solution for independent dojos, dojangs, and gyms.
 - **GlowOS Integration:** Allow tournament directors to ask their Pi Coding Agent to *"Shift all Ring 2 matches by 15 minutes due to a delay,"* automatically updating all digital displays.
 - **Payment Gateway:** Integrate registration and entry fee collection directly into the bracket generator.
 

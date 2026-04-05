@@ -113,7 +113,7 @@ export default function Login() {
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-bold text-gray-900 dark:text-white">
-          Tournament Manager
+          Martial Arts Tournament Manager
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
           {needsSetup
