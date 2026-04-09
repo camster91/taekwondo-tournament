@@ -3,7 +3,7 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validate.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, type AuthenticatedRequest } from '../middleware/auth.js';
 import {
   quickFairnessCheck,
   getDivisionFairnessRecommendations,
@@ -35,8 +35,8 @@ const matchupCheckSchema = z.object({
 });
 
 // GET /api/fairness/division/:divisionId/report
-// Returns comprehensive fairness analysis for a division
-router.get('/division/:divisionId/report', async (req: Request, res: Response) => {
+// Returns comprehensive fairness analysis for a division (requires authentication)
+router.get('/division/:divisionId/report', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.divisionId);
 
@@ -86,8 +86,8 @@ router.post('/matchup/check', authenticate, validateRequest(matchupCheckSchema),
 });
 
 // GET /api/fairness/bracket/:bracketId/analysis
-// Analyzes bracket difficulty distribution
-router.get('/bracket/:bracketId/analysis', async (req: Request, res: Response) => {
+// Analyzes bracket difficulty distribution (requires authentication)
+router.get('/bracket/:bracketId/analysis', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const bracketId = getParam(req.params.bracketId);
 
@@ -132,8 +132,8 @@ router.get('/bracket/:bracketId/analysis', async (req: Request, res: Response) =
 });
 
 // GET /api/fairness/competitor/:competitorId/rating
-// Returns skill rating and history for a competitor
-router.get('/competitor/:competitorId/rating', async (req: Request, res: Response) => {
+// Returns skill rating and history for a competitor (requires authentication)
+router.get('/competitor/:competitorId/rating', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const competitorId = getParam(req.params.competitorId);
   const eventType = (getParam(req.query.eventType as string) || 'sparring') as 'patterns' | 'sparring';
@@ -157,8 +157,8 @@ router.get('/competitor/:competitorId/rating', async (req: Request, res: Respons
 });
 
 // GET /api/fairness/competitor/:competitorId/opponents
-// Returns recent opponents for a competitor
-router.get('/competitor/:competitorId/opponents', async (req: Request, res: Response) => {
+// Returns recent opponents for a competitor (requires authentication)
+router.get('/competitor/:competitorId/opponents', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const competitorId = getParam(req.params.competitorId);
   const limit = parseInt(getParam(req.query.limit as string)) || 10;
@@ -180,8 +180,8 @@ router.get('/competitor/:competitorId/opponents', async (req: Request, res: Resp
 });
 
 // GET /api/fairness/head-to-head/:competitor1Id/:competitor2Id
-// Returns head-to-head history between two competitors
-router.get('/head-to-head/:competitor1Id/:competitor2Id', async (req: Request, res: Response) => {
+// Returns head-to-head history between two competitors (requires authentication)
+router.get('/head-to-head/:competitor1Id/:competitor2Id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const competitor1Id = getParam(req.params.competitor1Id);
   const competitor2Id = getParam(req.params.competitor2Id);
@@ -222,8 +222,8 @@ router.get('/head-to-head/:competitor1Id/:competitor2Id', async (req: Request, r
 });
 
 // GET /api/fairness/division/:divisionId/rematch-warnings
-// Get rematch avoidance recommendations for a division
-router.get('/division/:divisionId/rematch-warnings', async (req: Request, res: Response) => {
+// Get rematch avoidance recommendations for a division (requires authentication)
+router.get('/division/:divisionId/rematch-warnings', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.divisionId);
 
@@ -271,8 +271,8 @@ router.get('/division/:divisionId/rematch-warnings', async (req: Request, res: R
 });
 
 // GET /api/fairness/division/:divisionId/ratings
-// Get skill ratings for all competitors in a division
-router.get('/division/:divisionId/ratings', async (req: Request, res: Response) => {
+// Get skill ratings for all competitors in a division (requires authentication)
+router.get('/division/:divisionId/ratings', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.divisionId);
 

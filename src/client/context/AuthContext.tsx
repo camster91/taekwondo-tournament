@@ -70,8 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logoutTimerRef.current = setTimeout(() => {
       console.log('Session expired, logging out...');
       logout();
-      // Show alert to user
-      alert('Your session has expired. Please log in again.');
+      // Dispatch a custom event so the toast system (mounted as a child) can display a message
+      window.dispatchEvent(new CustomEvent('session-expired'));
     }, timerMs);
   };
 

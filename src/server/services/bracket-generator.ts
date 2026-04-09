@@ -83,8 +83,8 @@ export function generateBracket(
   // Apply seeding strategy
   const seeded = applySeedingStrategy(competitors, strategy, config);
 
-  // Pad to power of 2 (max 8 for standard bracket)
-  const bracketSize = Math.min(8, nextPowerOf2(count));
+  // Pad to power of 2
+  const bracketSize = nextPowerOf2(count);
   const padded = padWithByes(seeded, bracketSize);
 
   // Calculate seeding quality metrics
@@ -95,7 +95,7 @@ export function generateBracket(
   if (bracketSize <= 4) {
     bracket = generateSmallBracket(padded);
   } else {
-    bracket = generate8PersonBracket(padded);
+    bracket = generateDoubleEliminationBracket(padded);
   }
 
   bracket.seedingInfo = seedingInfo;
@@ -189,7 +189,8 @@ function seedBySkill(competitors: CompetitorSeed[]): CompetitorSeed[] {
   // Seeds 5-8 fill remaining positions
   const seedOrder = [0, 7, 3, 4, 1, 6, 2, 5];
 
-  const result: (CompetitorSeed | null)[] = new Array(Math.min(8, competitors.length)).fill(null);
+  const bracketSize = nextPowerOf2(competitors.length);
+  const result: (CompetitorSeed | null)[] = new Array(bracketSize).fill(null);
 
   for (let i = 0; i < sorted.length && i < seedOrder.length; i++) {
     const targetPos = seedOrder[i];
@@ -198,10 +199,18 @@ function seedBySkill(competitors: CompetitorSeed[]): CompetitorSeed[] {
     }
   }
 
-  // Handle competitors beyond standard positions
-  if (sorted.length > 8) {
-    for (let i = 8; i < sorted.length; i++) {
-      result.push({ ...sorted[i], seedPosition: i + 1 });
+  // Handle competitors beyond standard seed positions
+  if (sorted.length > seedOrder.length) {
+    let nextEmptyIdx = 0;
+    for (let i = seedOrder.length; i < sorted.length; i++) {
+      while (nextEmptyIdx < result.length && result[nextEmptyIdx] !== null) {
+        nextEmptyIdx++;
+      }
+      if (nextEmptyIdx < result.length) {
+        result[nextEmptyIdx] = { ...sorted[i], seedPosition: i + 1 };
+      } else {
+        result.push({ ...sorted[i], seedPosition: i + 1 });
+      }
     }
   }
 
@@ -219,7 +228,7 @@ function seedForBalance(competitors: CompetitorSeed[]): CompetitorSeed[] {
     (a, b) => (b.skillRating || 0) - (a.skillRating || 0)
   );
 
-  const bracketSize = Math.min(8, competitors.length);
+  const bracketSize = nextPowerOf2(competitors.length);
   const result: (CompetitorSeed | null)[] = new Array(bracketSize).fill(null);
 
   // Alternate placing in left and right halves to balance skill
@@ -362,7 +371,12 @@ function calculateSeedingScore(
 function getFirstRoundPairs(size: number): [number, number][] {
   if (size <= 2) return [[0, 1]];
   if (size <= 4) return [[0, 3], [1, 2]];
-  return [[0, 7], [1, 6], [2, 5], [3, 4]];
+  const pairs: [number, number][] = [];
+  const halfSize = Math.floor(size / 2);
+  for (let i = 0; i < halfSize; i++) {
+    pairs.push([i, size - 1 - i]);
+  }
+  return pairs;
 }
 
 function distributeBySchool(competitors: CompetitorSeed[]): CompetitorSeed[] {
@@ -427,9 +441,12 @@ function shuffle<T>(array: T[]): T[] {
 }
 
 function nextPowerOf2(n: number): number {
-  if (n <= 2) return 2;
-  if (n <= 4) return 4;
-  return 8;
+  if (n <= 1) return 2;
+  let power = 2;
+  while (power < n && power < 64) {
+    power *= 2;
+  }
+  return power;
 }
 
 function padWithByes(competitors: CompetitorSeed[], targetSize: number): (CompetitorSeed | null)[] {
@@ -521,137 +538,234 @@ function generateSmallBracket(competitors: (CompetitorSeed | null)[]): BracketSt
   return { winners, losers, finals, competitorCount: count };
 }
 
-function generate8PersonBracket(competitors: (CompetitorSeed | null)[]): BracketStructure {
+function generateDoubleEliminationBracket(competitors: (CompetitorSeed | null)[]): BracketStructure {
+  const bracketSize = competitors.length; // already a power of 2
   const count = competitors.filter((c) => c !== null).length;
 
-  // Standard 8-person double elimination bracket
-  // Winners bracket: 7 matches (4 + 2 + 1)
-  // Losers bracket: 6 matches
-  // Grand finals: 1-2 matches
+  let matchNumber = 1;
+  const winners: MatchData[] = [];
+  const losers: MatchData[] = [];
 
-  const winners: MatchData[] = [
-    // Round 1 - Quarterfinals (matches 1-4)
-    {
-      matchNumber: 1,
-      round: 1,
-      competitor1Id: competitors[0]?.registrationId || null,
-      competitor2Id: competitors[7]?.registrationId || null,
-      nextWinnerMatch: 5,
-      nextLoserMatch: 8,
-    },
-    {
-      matchNumber: 2,
-      round: 1,
-      competitor1Id: competitors[3]?.registrationId || null,
-      competitor2Id: competitors[4]?.registrationId || null,
-      nextWinnerMatch: 5,
-      nextLoserMatch: 8,
-    },
-    {
-      matchNumber: 3,
-      round: 1,
-      competitor1Id: competitors[1]?.registrationId || null,
-      competitor2Id: competitors[6]?.registrationId || null,
-      nextWinnerMatch: 6,
-      nextLoserMatch: 9,
-    },
-    {
-      matchNumber: 4,
-      round: 1,
-      competitor1Id: competitors[2]?.registrationId || null,
-      competitor2Id: competitors[5]?.registrationId || null,
-      nextWinnerMatch: 6,
-      nextLoserMatch: 9,
-    },
-    // Round 2 - Semifinals (matches 5-6)
-    {
-      matchNumber: 5,
-      round: 2,
-      competitor1Id: null,
-      competitor2Id: null,
-      nextWinnerMatch: 7,
-      nextLoserMatch: 11,
-    },
-    {
-      matchNumber: 6,
-      round: 2,
-      competitor1Id: null,
-      competitor2Id: null,
-      nextWinnerMatch: 7,
-      nextLoserMatch: 12,
-    },
-    // Round 3 - Winners Final (match 7)
-    {
-      matchNumber: 7,
-      round: 3,
-      competitor1Id: null,
-      competitor2Id: null,
-      nextWinnerMatch: 14,
-      nextLoserMatch: 13,
-    },
-  ];
+  // --- Winners bracket ---
+  // Number of winners rounds = log2(bracketSize)
+  const winnersRounds = Math.log2(bracketSize);
+  // Build round-by-round, track match numbers per round for linking
+  const winnersRoundMatches: number[][] = [];
 
-  const losers: MatchData[] = [
-    // Losers Round 1 (matches 8-9)
-    {
-      matchNumber: 8,
+  // Round 1: seed competitors
+  const round1Matches = bracketSize / 2;
+  const round1MatchNumbers: number[] = [];
+  for (let i = 0; i < round1Matches; i++) {
+    const m: MatchData = {
+      matchNumber,
       round: 1,
-      competitor1Id: null, // Loser of match 1
-      competitor2Id: null, // Loser of match 2
-      nextWinnerMatch: 10,
-    },
-    {
-      matchNumber: 9,
-      round: 1,
-      competitor1Id: null, // Loser of match 3
-      competitor2Id: null, // Loser of match 4
-      nextWinnerMatch: 10,
-    },
-    // Losers Round 2 (match 10)
-    {
-      matchNumber: 10,
-      round: 2,
-      competitor1Id: null,
-      competitor2Id: null,
-      nextWinnerMatch: 11,
-    },
-    // Losers Round 3 (matches 11-12)
-    {
-      matchNumber: 11,
-      round: 3,
-      competitor1Id: null, // Winner of match 10
-      competitor2Id: null, // Loser of match 5
-      nextWinnerMatch: 12,
-    },
-    {
-      matchNumber: 12,
-      round: 3,
-      competitor1Id: null,
-      competitor2Id: null, // Loser of match 6
-      nextWinnerMatch: 13,
-    },
-    // Losers Final (match 13)
-    {
-      matchNumber: 13,
-      round: 4,
-      competitor1Id: null,
-      competitor2Id: null, // Loser of match 7
-      nextWinnerMatch: 14,
-    },
-  ];
+      competitor1Id: competitors[i]?.registrationId || null,
+      competitor2Id: competitors[bracketSize - 1 - i]?.registrationId || null,
+    };
+    round1MatchNumbers.push(matchNumber);
+    winners.push(m);
+    matchNumber++;
+  }
+  winnersRoundMatches.push(round1MatchNumbers);
+
+  // Subsequent winners rounds
+  for (let round = 2; round <= winnersRounds; round++) {
+    const prevMatches = winnersRoundMatches[round - 2];
+    const thisRoundCount = prevMatches.length / 2;
+    const thisRoundMatchNumbers: number[] = [];
+
+    for (let i = 0; i < thisRoundCount; i++) {
+      const m: MatchData = {
+        matchNumber,
+        round,
+        competitor1Id: null,
+        competitor2Id: null,
+      };
+      thisRoundMatchNumbers.push(matchNumber);
+      winners.push(m);
+
+      // Link previous round matches to this one
+      const prev1 = prevMatches[i * 2];
+      const prev2 = prevMatches[i * 2 + 1];
+      const w1 = winners.find(w => w.matchNumber === prev1)!;
+      const w2 = winners.find(w => w.matchNumber === prev2)!;
+      w1.nextWinnerMatch = matchNumber;
+      w2.nextWinnerMatch = matchNumber;
+
+      matchNumber++;
+    }
+    winnersRoundMatches.push(thisRoundMatchNumbers);
+  }
+
+  // --- Losers bracket ---
+  // Double elimination losers bracket structure:
+  // For each winners round R (1..winnersRounds), losers drop down.
+  // Losers bracket has (winnersRounds - 1) * 2 rounds:
+  //   Odd losers rounds: losers from winners play each other (or feed from previous losers round)
+  //   Even losers rounds: losers from winners drop-down play losers bracket survivors
+  const losersRoundMatches: number[][] = [];
+
+  // First losers round: losers from winners round 1 paired up
+  {
+    const wr1 = winnersRoundMatches[0]; // winners round 1 match numbers
+    const numMatches = wr1.length / 2;
+    const thisRoundMatchNumbers: number[] = [];
+    for (let i = 0; i < numMatches; i++) {
+      const m: MatchData = {
+        matchNumber,
+        round: 1,
+        competitor1Id: null,
+        competitor2Id: null,
+      };
+      thisRoundMatchNumbers.push(matchNumber);
+
+      // Link losers from winners round 1
+      const w1 = winners.find(w => w.matchNumber === wr1[i * 2])!;
+      const w2 = winners.find(w => w.matchNumber === wr1[i * 2 + 1])!;
+      w1.nextLoserMatch = matchNumber;
+      w2.nextLoserMatch = matchNumber;
+
+      losers.push(m);
+      matchNumber++;
+    }
+    losersRoundMatches.push(thisRoundMatchNumbers);
+  }
+
+  // Remaining losers rounds
+  for (let wr = 2; wr <= winnersRounds; wr++) {
+    // Even losers round: previous losers survivors vs nothing yet (just consolidate)
+    const prevLosersMatches = losersRoundMatches[losersRoundMatches.length - 1];
+
+    if (prevLosersMatches.length > 1) {
+      // Consolidation round: pair up previous losers survivors
+      const numMatches = prevLosersMatches.length / 2;
+      const thisRoundMatchNumbers: number[] = [];
+      for (let i = 0; i < numMatches; i++) {
+        const m: MatchData = {
+          matchNumber,
+          round: losersRoundMatches.length + 1,
+          competitor1Id: null,
+          competitor2Id: null,
+        };
+        thisRoundMatchNumbers.push(matchNumber);
+
+        // Link previous losers round
+        const l1 = losers.find(l => l.matchNumber === prevLosersMatches[i * 2])!;
+        const l2 = losers.find(l => l.matchNumber === prevLosersMatches[i * 2 + 1])!;
+        l1.nextWinnerMatch = matchNumber;
+        l2.nextWinnerMatch = matchNumber;
+
+        losers.push(m);
+        matchNumber++;
+      }
+      losersRoundMatches.push(thisRoundMatchNumbers);
+    }
+
+    // Drop-down round: losers from winners round wr play losers bracket survivors
+    const wrMatches = winnersRoundMatches[wr - 1]; // winners round wr match numbers
+    const currentLosersMatches = losersRoundMatches[losersRoundMatches.length - 1];
+    const numDropDownMatches = wrMatches.length;
+
+    if (numDropDownMatches > 0 && currentLosersMatches.length === numDropDownMatches) {
+      const thisRoundMatchNumbers: number[] = [];
+      for (let i = 0; i < numDropDownMatches; i++) {
+        const m: MatchData = {
+          matchNumber,
+          round: losersRoundMatches.length + 1,
+          competitor1Id: null,
+          competitor2Id: null,
+        };
+        thisRoundMatchNumbers.push(matchNumber);
+
+        // Link winners loser to this match
+        const wMatch = winners.find(w => w.matchNumber === wrMatches[i])!;
+        wMatch.nextLoserMatch = matchNumber;
+
+        // Link losers bracket survivor to this match
+        const lMatch = losers.find(l => l.matchNumber === currentLosersMatches[i])!;
+        lMatch.nextWinnerMatch = matchNumber;
+
+        losers.push(m);
+        matchNumber++;
+      }
+      losersRoundMatches.push(thisRoundMatchNumbers);
+    } else if (numDropDownMatches > 0) {
+      // For the final winners round, there's one loser dropping to losers final
+      const lastLosersRound = losersRoundMatches[losersRoundMatches.length - 1];
+      if (lastLosersRound.length === 1) {
+        const thisRoundMatchNumbers: number[] = [];
+        const m: MatchData = {
+          matchNumber,
+          round: losersRoundMatches.length + 1,
+          competitor1Id: null,
+          competitor2Id: null,
+        };
+        thisRoundMatchNumbers.push(matchNumber);
+
+        // Link winners final loser
+        const wMatch = winners.find(w => w.matchNumber === wrMatches[0])!;
+        wMatch.nextLoserMatch = matchNumber;
+
+        // Link losers bracket survivor
+        const lMatch = losers.find(l => l.matchNumber === lastLosersRound[0])!;
+        lMatch.nextWinnerMatch = matchNumber;
+
+        losers.push(m);
+        matchNumber++;
+        losersRoundMatches.push(thisRoundMatchNumbers);
+      }
+    }
+  }
+
+  // Ensure losers bracket ends with a single match (losers final)
+  let lastLosersRound = losersRoundMatches[losersRoundMatches.length - 1];
+  while (lastLosersRound.length > 1) {
+    const numMatches = lastLosersRound.length / 2;
+    const thisRoundMatchNumbers: number[] = [];
+    for (let i = 0; i < numMatches; i++) {
+      const m: MatchData = {
+        matchNumber,
+        round: losersRoundMatches.length + 1,
+        competitor1Id: null,
+        competitor2Id: null,
+      };
+      thisRoundMatchNumbers.push(matchNumber);
+
+      const l1 = losers.find(l => l.matchNumber === lastLosersRound[i * 2])!;
+      const l2 = losers.find(l => l.matchNumber === lastLosersRound[i * 2 + 1])!;
+      l1.nextWinnerMatch = matchNumber;
+      l2.nextWinnerMatch = matchNumber;
+
+      losers.push(m);
+      matchNumber++;
+    }
+    losersRoundMatches.push(thisRoundMatchNumbers);
+    lastLosersRound = thisRoundMatchNumbers;
+  }
+
+  // --- Grand finals ---
+  const winnersChampMatch = winnersRoundMatches[winnersRoundMatches.length - 1][0];
+  const losersChampMatch = losersRoundMatches[losersRoundMatches.length - 1][0];
+
+  // Link winners champion and losers champion to grand finals
+  const winnersChamp = winners.find(w => w.matchNumber === winnersChampMatch)!;
+  const losersChamp = losers.find(l => l.matchNumber === losersChampMatch)!;
+
+  const grandFinalsNumber = matchNumber;
+  winnersChamp.nextWinnerMatch = grandFinalsNumber;
+  losersChamp.nextWinnerMatch = grandFinalsNumber;
 
   const finals: MatchData[] = [
-    // Grand Finals (match 14)
     {
-      matchNumber: 14,
-      round: 5,
-      competitor1Id: null, // Winner of match 7 (winners bracket champion)
-      competitor2Id: null, // Winner of match 13 (losers bracket champion)
+      matchNumber: grandFinalsNumber,
+      round: winnersRounds + 1,
+      competitor1Id: null,
+      competitor2Id: null,
     },
-    // Reset match (match 15) - only if losers bracket champion wins match 14
+    // Reset match - only if losers bracket champion wins the grand final
     {
-      matchNumber: 15,
-      round: 6,
+      matchNumber: grandFinalsNumber + 1,
+      round: winnersRounds + 2,
       competitor1Id: null,
       competitor2Id: null,
     },

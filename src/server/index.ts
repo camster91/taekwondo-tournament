@@ -27,13 +27,15 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Trust proxy (behind Coolify/Docker reverse proxy)
-app.set('trust proxy', 1);
+// Trust proxy only in production (behind Coolify/Docker reverse proxy)
+if (isProduction) {
+  app.set('trust proxy', 1);
+}
 
 // Security middleware
 const corsOptions = {
   origin: isProduction
-    ? process.env.ALLOWED_ORIGINS?.split(',') || true // Configure allowed origins in production
+    ? process.env.ALLOWED_ORIGINS?.split(',') || false // Fail closed: reject if not configured
     : true, // Allow all in development
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -48,11 +50,12 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   if (isProduction) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'");
   }
   next();
 });
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '10mb' }));
 
 // Make prisma available to routes
 app.locals.prisma = prisma;

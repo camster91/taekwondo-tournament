@@ -18,6 +18,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 interface Competitor {
   id: string;
@@ -83,6 +84,7 @@ const emptyForm = {
 
 export default function Competitors() {
   const queryClient = useQueryClient();
+  const { addToast } = useToast();
   const [search, setSearch] = useState('');
   const [beltFilter, setBeltFilter] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
@@ -129,7 +131,8 @@ export default function Competitors() {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       params.set('limit', String(pageLimit));
-      const res = await fetch(`/api/competitors?${params}`);
+      const res = await fetch(`/api/competitors?${params}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch competitors');
       return res.json();
     },
   });
@@ -146,6 +149,7 @@ export default function Competitors() {
           weightLbs: data.weightLbs ? parseFloat(data.weightLbs) : null,
         }),
       });
+      if (!res.ok) throw new Error('Failed to create competitor');
       return res.json();
     },
     onSuccess: () => {
@@ -166,6 +170,7 @@ export default function Competitors() {
           weightLbs: data.weightLbs ? parseFloat(data.weightLbs) : null,
         }),
       });
+      if (!res.ok) throw new Error('Failed to update competitor');
       return res.json();
     },
     onSuccess: () => {
@@ -203,11 +208,13 @@ export default function Competitors() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ data, columnMapping: mapping }),
       });
+      if (!res.ok) throw new Error('Failed to import competitors');
       return res.json();
     },
     onSuccess: (result) => {
-      alert(
-        `Import complete!\nImported: ${result.imported}\nUpdated: ${result.updated}\nSkipped: ${result.skipped}`
+      addToast(
+        `Import complete! Imported: ${result.imported}, Updated: ${result.updated}, Skipped: ${result.skipped}`,
+        'success'
       );
       queryClient.invalidateQueries({ queryKey: ['competitors'] });
       setShowImportModal(false);

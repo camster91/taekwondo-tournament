@@ -59,6 +59,7 @@ interface Registration {
   competitorId: string;
   patterns: boolean;
   sparring: boolean;
+  checkedIn: boolean;
   ageAtTournament: number | null;
   competitor: Competitor;
 }
@@ -74,11 +75,13 @@ export default function TournamentDetail() {
   const [modalSearch, setModalSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Registration | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [showCloseRegistrationConfirm, setShowCloseRegistrationConfirm] = useState(false);
 
   const { data: tournament, isLoading: tournamentLoading } = useQuery<Tournament>({
     queryKey: ['tournament', id],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${id}`);
+      const res = await fetch(`/api/tournaments/${id}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch tournament');
       return res.json();
     },
   });
@@ -86,7 +89,8 @@ export default function TournamentDetail() {
   const { data: registrations, isLoading: regsLoading } = useQuery<Registration[]>({
     queryKey: ['registrations', id],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${id}/registrations`);
+      const res = await fetch(`/api/tournaments/${id}/registrations`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch registrations');
       return res.json();
     },
   });
@@ -94,7 +98,8 @@ export default function TournamentDetail() {
   const { data: allCompetitors } = useQuery({
     queryKey: ['competitors', 'all'],
     queryFn: async () => {
-      const res = await fetch('/api/competitors?limit=1000');
+      const res = await fetch('/api/competitors?limit=1000', { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch competitors');
       return res.json();
     },
     enabled: showAddModal,
@@ -111,6 +116,7 @@ export default function TournamentDetail() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(data),
       });
+      if (!res.ok) throw new Error('Failed to register competitors');
       return res.json();
     },
     onSuccess: () => {
@@ -149,6 +155,7 @@ export default function TournamentDetail() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ patterns, sparring }),
       });
+      if (!res.ok) throw new Error('Failed to update registration');
       return res.json();
     },
     onSuccess: () => {
@@ -378,7 +385,7 @@ export default function TournamentDetail() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <div className="card">
           <div className="card-body flex items-center">
             <div className="bg-blue-500 p-3 rounded-lg">
@@ -387,6 +394,19 @@ export default function TournamentDetail() {
             <div className="ml-4">
               <p className="text-sm text-gray-500">Registered</p>
               <p className="text-2xl font-semibold">{registrations?.length || 0}</p>
+            </div>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-body flex items-center">
+            <div className="bg-teal-500 p-3 rounded-lg">
+              <ClipboardCheck className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm text-gray-500">Checked In</p>
+              <p className="text-2xl font-semibold">
+                {registrations?.filter(r => r.checkedIn).length || 0} / {registrations?.length || 0}
+              </p>
             </div>
           </div>
         </div>
@@ -429,7 +449,7 @@ export default function TournamentDetail() {
                 {copiedLink ? 'Copied!' : 'Copy Link'}
               </button>
               <button
-                onClick={() => updateStatusMutation.mutate('active')}
+                onClick={() => setShowCloseRegistrationConfirm(true)}
                 disabled={updateStatusMutation.isPending}
                 className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
               >
@@ -730,6 +750,21 @@ export default function TournamentDetail() {
         message={`Remove ${deleteTarget?.competitor.firstName} ${deleteTarget?.competitor.lastName} from this tournament?`}
         confirmText="Remove"
         isLoading={removeRegistrationMutation.isPending}
+      />
+
+      {/* Close Registration Confirmation */}
+      <ConfirmDialog
+        isOpen={showCloseRegistrationConfirm}
+        onClose={() => setShowCloseRegistrationConfirm(false)}
+        onConfirm={() => {
+          updateStatusMutation.mutate('active');
+          setShowCloseRegistrationConfirm(false);
+        }}
+        title="Close Registration"
+        message="Are you sure you want to close registration? No new public signups will be accepted."
+        confirmText="Close Registration"
+        variant="warning"
+        isLoading={updateStatusMutation.isPending}
       />
 
       {/* Add Competitors Modal */}

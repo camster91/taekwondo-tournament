@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Calendar,
@@ -50,6 +50,7 @@ interface TournamentSchedule {
 
 export default function Schedule() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [config, setConfig] = useState<Partial<ScheduleConfig>>({
     startTime: '09:00',
     endTime: '17:00',
@@ -64,7 +65,8 @@ export default function Schedule() {
   const { data: schedule, isLoading, refetch } = useQuery<TournamentSchedule>({
     queryKey: ['schedule', id],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${id}/schedule`);
+      const res = await fetch(`/api/tournaments/${id}/schedule`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch schedule');
       return res.json();
     },
   });
@@ -76,6 +78,7 @@ export default function Schedule() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ config }),
       });
+      if (!res.ok) throw new Error('Failed to regenerate schedule');
       return res.json();
     },
     onSuccess: () => {
@@ -433,7 +436,7 @@ export default function Schedule() {
             }}
             secondaryAction={{
               label: 'Manage Divisions',
-              onClick: () => window.location.href = `/tournaments/${id}/divisions`,
+              onClick: () => navigate(`/tournaments/${id}/divisions`),
             }}
           />
         </div>
