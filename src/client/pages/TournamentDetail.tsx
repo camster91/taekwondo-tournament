@@ -752,6 +752,21 @@ export default function TournamentDetail() {
         isLoading={removeRegistrationMutation.isPending}
       />
 
+      {/* Close Registration Confirmation */}
+      <ConfirmDialog
+        isOpen={showCloseRegistrationConfirm}
+        onClose={() => setShowCloseRegistrationConfirm(false)}
+        onConfirm={() => {
+          updateStatusMutation.mutate('active');
+          setShowCloseRegistrationConfirm(false);
+        }}
+        title="Close Registration"
+        message="Are you sure you want to close registration? No new public signups will be accepted."
+        confirmText="Close Registration"
+        variant="warning"
+        isLoading={updateStatusMutation.isPending}
+      />
+
       {/* Add Competitors Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
