@@ -59,11 +59,14 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
   try {
     const normalizedEmail = email.toLowerCase();
 
-    // Clean up expired magic links for this email
+    // Clean up expired AND unused magic links for this email (invalidate old codes)
     await prisma.magicLink.deleteMany({
       where: {
         email: normalizedEmail,
-        expiresAt: { lt: new Date() },
+        OR: [
+          { expiresAt: { lt: new Date() } },
+          { usedAt: null },
+        ],
       },
     });
 
@@ -78,7 +81,7 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
 
     // Generate 32-byte hex token + random 6-digit code
     const token = crypto.randomBytes(32).toString('hex');
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = String(crypto.randomInt(100000, 999999));
 
     // Create MagicLink record (10-min expiry)
     await prisma.magicLink.create({
@@ -565,12 +568,15 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
 });
 
 // Setup first admin account (only works when no admins exist)
-router.post('/setup-admin', async (req: Request, res: Response) => {
+router.post('/setup-admin', registerLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { email, firstName, lastName, setupKey } = req.body;
 
-  // Require setup key from environment or use a default for initial setup
-  const requiredKey = process.env.ADMIN_SETUP_KEY || 'tkd-admin-setup-2024';
+  // Require setup key from environment — no hardcoded fallback
+  const requiredKey = process.env.ADMIN_SETUP_KEY;
+  if (!requiredKey) {
+    return res.status(503).json({ error: 'Admin setup is not configured. Set ADMIN_SETUP_KEY environment variable.' });
+  }
 
   if (setupKey !== requiredKey) {
     return res.status(403).json({ error: 'Invalid setup key' });

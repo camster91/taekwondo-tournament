@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./tournament.db"
+  url      = env("DATABASE_URL")
 }
 
 // Persistent competitor registry
@@ -83,7 +83,7 @@ model Registration {
   skillEstimate        Float?    // Estimated skill level
 
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  competitor  Competitor           @relation(fields: [competitorId], references: [id])
+  competitor  Competitor           @relation(fields: [competitorId], references: [id], onDelete: Cascade)
   assignments DivisionAssignment[]
   matches1    Match[]              @relation("Competitor1")
   matches2    Match[]              @relation("Competitor2")
@@ -123,6 +123,8 @@ model Division {
   bracket     Bracket?
 
   @@index([tournamentId])
+  @@index([tournamentId, eventType])
+  @@index([tournamentId, gender, eventType])
 }
 
 // Competitor-Division assignment
@@ -174,9 +176,9 @@ model Match {
   updatedAt     DateTime @updatedAt
 
   bracket     Bracket       @relation(fields: [bracketId], references: [id], onDelete: Cascade)
-  competitor1 Registration? @relation("Competitor1", fields: [competitor1Id], references: [id])
-  competitor2 Registration? @relation("Competitor2", fields: [competitor2Id], references: [id])
-  winner      Registration? @relation("Winner", fields: [winnerId], references: [id])
+  competitor1 Registration? @relation("Competitor1", fields: [competitor1Id], references: [id], onDelete: SetNull)
+  competitor2 Registration? @relation("Competitor2", fields: [competitor2Id], references: [id], onDelete: SetNull)
+  winner      Registration? @relation("Winner", fields: [winnerId], references: [id], onDelete: SetNull)
 
   @@index([bracketId])
   @@index([status])
@@ -393,5 +395,4 @@ model SportProfile {
   tournaments    Tournament[]
 
   @@unique([slug])
-  @@index([slug])
 }

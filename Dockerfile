@@ -10,7 +10,7 @@ RUN npm ci
 COPY . .
 
 # Generate prisma client, build frontend and backend
-RUN npx prisma generate && \
+RUN ./node_modules/.bin/prisma generate && \
     npx vite build && \
     npx tsc -p tsconfig.server.json
 
@@ -20,7 +20,7 @@ FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma
-RUN npm ci --omit=dev && npx prisma generate
+RUN npm ci --omit=dev && ./node_modules/.bin/prisma generate
 
 # ─── Production Image ────────────────────────────────────────────────
 FROM node:20-alpine AS runner
@@ -47,5 +47,5 @@ USER node
 
 EXPOSE 3001
 
-# Run migrations and start server
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node server.js"]
+# Run schema sync and start server (use local prisma binary to ensure correct version)
+CMD ["sh", "-c", "./node_modules/.bin/prisma db push --skip-generate && node server.js"]
