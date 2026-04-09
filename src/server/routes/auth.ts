@@ -56,6 +56,11 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
     return res.status(400).json({ error: 'Email is required' });
   }
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+
   try {
     const normalizedEmail = email.toLowerCase();
 

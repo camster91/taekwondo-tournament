@@ -1,3 +1,12 @@
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function layout(content: string): string {
   return `<!DOCTYPE html>
 <html>
@@ -40,19 +49,22 @@ export function invitationEmail(params: {
   inviteUrl: string;
   expiresInHours: number;
 }): { subject: string; html: string } {
-  const greeting = params.recipientName ? `Hi ${params.recipientName},` : 'Hi,';
-  const roleLabel = params.role.charAt(0).toUpperCase() + params.role.slice(1);
+  const safeName = params.recipientName ? escapeHtml(params.recipientName) : '';
+  const greeting = safeName ? `Hi ${safeName},` : 'Hi,';
+  const safeInviterName = escapeHtml(params.inviterName);
+  const safeRole = escapeHtml(params.role.charAt(0).toUpperCase() + params.role.slice(1));
+  const safeInviteUrl = escapeHtml(params.inviteUrl);
 
   return {
     subject: "You've been invited to TKD Tournament Manager",
     html: layout(`
       <p>${greeting}</p>
-      <p><strong>${params.inviterName}</strong> has invited you to join TKD Tournament Manager as a <strong>${roleLabel}</strong>.</p>
+      <p><strong>${safeInviterName}</strong> has invited you to join TKD Tournament Manager as a <strong>${safeRole}</strong>.</p>
       <p style="text-align:center; margin: 24px 0;">
-        <a href="${params.inviteUrl}" class="btn">Accept Invitation</a>
+        <a href="${safeInviteUrl}" class="btn">Accept Invitation</a>
       </p>
       <p class="muted">This invitation expires in ${params.expiresInHours} hours. If you didn't expect this invitation, you can safely ignore this email.</p>
-      <p class="muted" style="word-break:break-all;">Or copy this link: ${params.inviteUrl}</p>
+      <p class="muted" style="word-break:break-all;">Or copy this link: ${safeInviteUrl}</p>
     `),
   };
 }
@@ -62,22 +74,25 @@ export function magicLinkEmail(params: {
   magicUrl: string;
   code: string;
 }): { subject: string; html: string } {
-  const greeting = params.recipientName ? `Hi ${params.recipientName},` : 'Hi,';
+  const safeName = params.recipientName ? escapeHtml(params.recipientName) : '';
+  const greetingMagic = safeName ? `Hi ${safeName},` : 'Hi,';
+  const safeMagicUrl = escapeHtml(params.magicUrl);
+  const safeCode = escapeHtml(params.code);
 
   return {
     subject: 'Sign in to TKD Tournament Manager',
     html: layout(`
-      <p>${greeting}</p>
+      <p>${greetingMagic}</p>
       <p>Click the button below to sign in to your account.</p>
       <p style="text-align:center; margin: 24px 0;">
-        <a href="${params.magicUrl}" class="btn">Sign In</a>
+        <a href="${safeMagicUrl}" class="btn">Sign In</a>
       </p>
       <p style="text-align:center; margin: 0 0 8px;">Or enter this code:</p>
       <p style="text-align:center; margin: 0 0 24px;">
-        <span style="display:inline-block; font-size:32px; font-weight:700; letter-spacing:8px; font-family:monospace; background:#f3f4f6; padding:12px 24px; border-radius:8px; color:#111827;">${params.code}</span>
+        <span style="display:inline-block; font-size:32px; font-weight:700; letter-spacing:8px; font-family:monospace; background:#f3f4f6; padding:12px 24px; border-radius:8px; color:#111827;">${safeCode}</span>
       </p>
       <p class="muted">This link and code expire in 10 minutes. If you didn't request this, you can safely ignore this email.</p>
-      <p class="muted" style="word-break:break-all;">Or copy this link: ${params.magicUrl}</p>
+      <p class="muted" style="word-break:break-all;">Or copy this link: ${safeMagicUrl}</p>
     `),
   };
 }
@@ -87,15 +102,17 @@ export function welcomeEmail(params: {
   role: string;
   loginUrl: string;
 }): { subject: string; html: string } {
-  const roleLabel = params.role.charAt(0).toUpperCase() + params.role.slice(1);
+  const safeRecipientName = escapeHtml(params.recipientName);
+  const safeWelcomeRole = escapeHtml(params.role.charAt(0).toUpperCase() + params.role.slice(1));
+  const safeLoginUrl = escapeHtml(params.loginUrl);
 
   return {
     subject: 'Welcome to TKD Tournament Manager',
     html: layout(`
-      <p>Hi ${params.recipientName},</p>
-      <p>Your account has been created! You now have <strong>${roleLabel}</strong> access to TKD Tournament Manager.</p>
+      <p>Hi ${safeRecipientName},</p>
+      <p>Your account has been created! You now have <strong>${safeWelcomeRole}</strong> access to TKD Tournament Manager.</p>
       <p style="text-align:center; margin: 24px 0;">
-        <a href="${params.loginUrl}" class="btn">Go to Dashboard</a>
+        <a href="${safeLoginUrl}" class="btn">Go to Dashboard</a>
       </p>
       <p class="muted">You can log in anytime using the email address this message was sent to.</p>
     `),
