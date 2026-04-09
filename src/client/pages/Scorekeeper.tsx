@@ -76,7 +76,8 @@ export default function Scorekeeper() {
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['tournament', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${tournamentId}`);
+      const res = await fetch(`/api/tournaments/${tournamentId}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch tournament');
       return res.json();
     },
   });
@@ -95,7 +96,8 @@ export default function Scorekeeper() {
   const { data: divisions, isLoading } = useQuery<Division[]>({
     queryKey: ['scorekeeper-divisions', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/divisions/tournament/${tournamentId}`);
+      const res = await fetch(`/api/divisions/tournament/${tournamentId}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch divisions');
       return res.json();
     },
     refetchInterval: 10000, // Refresh every 10 seconds
@@ -130,6 +132,7 @@ export default function Scorekeeper() {
           notes: data.notes,
         }),
       });
+      if (!res.ok) throw new Error('Failed to record match result');
       return res.json();
     },
     onSuccess: () => {
@@ -273,7 +276,7 @@ export default function Scorekeeper() {
         }
       }
     },
-    [showConfirm, selectedDivision, currentMatch, selectedWinner, readyMatches.length]
+    [showConfirm, selectedDivision, currentMatch, selectedWinner, readyMatches.length, handleSubmit]
   );
 
   useEffect(() => {

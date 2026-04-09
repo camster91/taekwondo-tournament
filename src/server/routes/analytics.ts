@@ -119,8 +119,8 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
   }
 });
 
-// Get tournament-specific analytics
-router.get('/tournament/:tournamentId', async (req: Request, res: Response) => {
+// Get tournament-specific analytics (requires authentication)
+router.get('/tournament/:tournamentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { tournamentId } = req.params;
 

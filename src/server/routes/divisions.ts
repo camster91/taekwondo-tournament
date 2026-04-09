@@ -12,7 +12,9 @@ import {
   getBackup,
   restoreDivisionState,
 } from '../services/backup-recovery.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import { z } from 'zod';
+import { validateRequest } from '../middleware/validate.js';
 
 const router = Router();
 
@@ -22,8 +24,41 @@ const getParam = (param: string | string[] | undefined): string => {
   return param || '';
 };
 
-// Get divisions for a tournament
-router.get('/tournament/:tournamentId', async (req: Request, res: Response) => {
+// Validation schemas
+const divisionCreateSchema = z.object({
+  tournamentId: z.string().min(1),
+  name: z.string().min(1),
+  beltLevel: z.string().min(1),
+  gender: z.string().min(1),
+  eventType: z.string().min(1),
+  ageMin: z.number().int().min(0),
+  ageMax: z.number().int().min(0),
+  beltColors: z.string().optional(),
+  danMin: z.number().int().optional(),
+  danMax: z.number().int().optional(),
+  weightClass: z.string().optional(),
+  divisionNumber: z.number().int().optional(),
+  isSpecialNeeds: z.boolean().optional(),
+});
+
+const divisionUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  beltLevel: z.string().min(1).optional(),
+  gender: z.string().min(1).optional(),
+  eventType: z.string().min(1).optional(),
+  ageMin: z.number().int().min(0).optional(),
+  ageMax: z.number().int().min(0).optional(),
+  weightClass: z.string().optional(),
+  isSpecialNeeds: z.boolean().optional(),
+  beltColors: z.string().optional(),
+  danMin: z.number().int().optional(),
+  danMax: z.number().int().optional(),
+  divisionNumber: z.number().int().optional(),
+  displayOrder: z.number().int().optional(),
+});
+
+// Get divisions for a tournament (requires authentication)
+router.get('/tournament/:tournamentId', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const withMatches = req.query.withMatches === 'true';
 
@@ -57,8 +92,8 @@ router.get('/tournament/:tournamentId', async (req: Request, res: Response) => {
   res.json(divisions);
 });
 
-// Get single division with competitors
-router.get('/:id', async (req: Request, res: Response) => {
+// Get single division with competitors (requires authentication)
+router.get('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const division = await prisma.division.findUnique({
@@ -91,8 +126,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   res.json(division);
 });
 
-// Preview divisions before generating (requires authentication)
-router.post('/tournament/:tournamentId/preview', authenticate, async (req: Request, res: Response) => {
+// Preview divisions before generating (requires authentication + admin/director role)
+router.post('/tournament/:tournamentId/preview', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { config } = req.body;
 
@@ -141,8 +176,8 @@ router.post('/tournament/:tournamentId/preview', authenticate, async (req: Reque
   res.json(preview);
 });
 
-// Check if regenerating divisions would lose data
-router.get('/tournament/:tournamentId/check-data-loss', async (req: Request, res: Response) => {
+// Check if regenerating divisions would lose data (requires authentication)
+router.get('/tournament/:tournamentId/check-data-loss', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
 
@@ -150,8 +185,8 @@ router.get('/tournament/:tournamentId/check-data-loss', async (req: Request, res
   res.json(dataLoss);
 });
 
-// Auto-generate divisions for tournament (requires authentication)
-router.post('/tournament/:tournamentId/auto-generate', authenticate, async (req: Request, res: Response) => {
+// Auto-generate divisions for tournament (requires authentication + admin/director role)
+router.post('/tournament/:tournamentId/auto-generate', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
   const { config, force = false } = req.body;
@@ -223,8 +258,8 @@ router.post('/tournament/:tournamentId/auto-generate', authenticate, async (req:
   });
 });
 
-// Create manual division (requires authentication)
-router.post('/', authenticate, async (req: Request, res: Response) => {
+// Create manual division (requires authentication + admin/director role)
+router.post('/', authenticate, requireRole('admin', 'director'), validateRequest(divisionCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const {
     tournamentId,
@@ -263,8 +298,8 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
   res.status(201).json(division);
 });
 
-// Update division (requires authentication)
-router.put('/:id', authenticate, async (req: Request, res: Response) => {
+// Update division (requires authentication + admin/director role)
+router.put('/:id', authenticate, requireRole('admin', 'director'), validateRequest(divisionUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const {
     name,
@@ -298,8 +333,8 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
   res.json(division);
 });
 
-// Delete division (requires authentication)
-router.delete('/:id', authenticate, async (req: Request, res: Response) => {
+// Delete division (requires authentication + admin/director role)
+router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.id);
   const force = req.query.force === 'true';
@@ -427,8 +462,8 @@ router.post('/:id/move', authenticate, async (req: Request, res: Response) => {
   res.json(assignment);
 });
 
-// Split division (requires authentication)
-router.post('/:id/split', authenticate, async (req: Request, res: Response) => {
+// Split division (requires authentication + admin/director role)
+router.post('/:id/split', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { splitCount = 2 } = req.body;
 
@@ -521,8 +556,8 @@ router.get('/tournament/:tournamentId/backup', authenticate, async (req: Request
   });
 });
 
-// Restore tournament divisions from backup (requires authentication)
-router.post('/tournament/:tournamentId/restore', authenticate, async (req: Request, res: Response) => {
+// Restore tournament divisions from backup (requires authentication + admin/director role)
+router.post('/tournament/:tournamentId/restore', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
 

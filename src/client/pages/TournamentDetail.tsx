@@ -78,7 +78,8 @@ export default function TournamentDetail() {
   const { data: tournament, isLoading: tournamentLoading } = useQuery<Tournament>({
     queryKey: ['tournament', id],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${id}`);
+      const res = await fetch(`/api/tournaments/${id}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch tournament');
       return res.json();
     },
   });
@@ -86,7 +87,8 @@ export default function TournamentDetail() {
   const { data: registrations, isLoading: regsLoading } = useQuery<Registration[]>({
     queryKey: ['registrations', id],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${id}/registrations`);
+      const res = await fetch(`/api/tournaments/${id}/registrations`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch registrations');
       return res.json();
     },
   });
@@ -94,7 +96,8 @@ export default function TournamentDetail() {
   const { data: allCompetitors } = useQuery({
     queryKey: ['competitors', 'all'],
     queryFn: async () => {
-      const res = await fetch('/api/competitors?limit=1000');
+      const res = await fetch('/api/competitors?limit=1000', { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch competitors');
       return res.json();
     },
     enabled: showAddModal,
@@ -111,6 +114,7 @@ export default function TournamentDetail() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(data),
       });
+      if (!res.ok) throw new Error('Failed to register competitors');
       return res.json();
     },
     onSuccess: () => {
@@ -149,6 +153,7 @@ export default function TournamentDetail() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ patterns, sparring }),
       });
+      if (!res.ok) throw new Error('Failed to update registration');
       return res.json();
     },
     onSuccess: () => {

@@ -15,6 +15,7 @@ import {
   FileDown,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface Placement {
   place: number;
@@ -84,7 +85,8 @@ export default function Results() {
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['results-tournament', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${tournamentId}`);
+      const res = await fetch(`/api/tournaments/${tournamentId}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch tournament');
       return res.json();
     },
   });
@@ -93,7 +95,8 @@ export default function Results() {
   const { data: divisions, isLoading } = useQuery<Division[]>({
     queryKey: ['results-divisions', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/divisions/tournament/${tournamentId}`);
+      const res = await fetch(`/api/divisions/tournament/${tournamentId}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch divisions');
       return res.json();
     },
   });

@@ -13,6 +13,7 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 interface Competitor {
   id: string;
@@ -67,13 +68,14 @@ export default function BracketEditor() {
     divisionId: string;
   }>();
   const queryClient = useQueryClient();
-  const [selectedMatch, setSelectedMatch] = useState<string | null>(null);
+  const { addToast } = useToast();
   const [showReseedConfirm, setShowReseedConfirm] = useState(false);
 
   const { data: division, isLoading } = useQuery<Division>({
     queryKey: ['division', divisionId],
     queryFn: async () => {
-      const res = await fetch(`/api/divisions/${divisionId}`);
+      const res = await fetch(`/api/divisions/${divisionId}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch division');
       return res.json();
     },
   });
@@ -85,6 +87,7 @@ export default function BracketEditor() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ seedingStrategy: 'school_spread' }),
       });
+      if (!res.ok) throw new Error('Failed to generate bracket');
       return res.json();
     },
     onSuccess: () => {
@@ -105,11 +108,11 @@ export default function BracketEditor() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ winnerId, status: 'completed' }),
       });
+      if (!res.ok) throw new Error('Failed to update match');
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
-      setSelectedMatch(null);
     },
   });
 
@@ -140,7 +143,7 @@ export default function BracketEditor() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      alert('Error exporting PDF. Please try again.');
+      addToast('Error exporting PDF. Please try again.', 'error');
     }
   };
 

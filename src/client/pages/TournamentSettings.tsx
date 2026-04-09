@@ -73,7 +73,8 @@ export default function TournamentSettings() {
   const { data: tournament, isLoading } = useQuery<Tournament>({
     queryKey: ['tournament', id],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${id}`);
+      const res = await fetch(`/api/tournaments/${id}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch tournament');
       return res.json();
     },
   });
