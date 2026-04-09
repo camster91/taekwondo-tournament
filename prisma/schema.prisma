@@ -401,6 +401,25 @@ model SportProfile {
   @@unique([slug])
 }
 
+// Medical/incident tracking
+model Incident {
+  id              String   @id @default(uuid())
+  tournamentId    String
+  matchId         String?
+  registrationId  String?
+  type            String   // injury, disqualification, medical, equipment, conduct
+  severity        String   // minor, moderate, serious
+  description     String
+  actionTaken     String?  // first_aid, withdrawn, continued, ambulance
+  reportedBy      String?  // userId of reporter
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tournamentId])
+  @@index([matchId])
+  @@index([registrationId])
+}
+
 // Tournament fairness rules (configurable per tournament)
 model TournamentRule {
   id           String   @id @default(uuid())

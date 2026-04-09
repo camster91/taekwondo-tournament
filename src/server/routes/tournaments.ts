@@ -382,4 +382,34 @@ router.get('/:id/schedule', authenticate, async (req: Request, res: Response) =>
   }
 });
 
+// Reassign division to a different ring (requires authentication + admin/director role)
+router.put('/:id/schedule/reassign', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { divisionId, ring } = req.body;
+
+  if (!divisionId || !ring || ring < 1) {
+    return res.status(400).json({ error: 'divisionId and ring (>= 1) are required' });
+  }
+
+  try {
+    // Update all matches in this division's bracket to the new ring
+    const bracket = await prisma.bracket.findUnique({
+      where: { divisionId },
+    });
+
+    if (!bracket) {
+      return res.status(404).json({ error: 'No bracket found for this division' });
+    }
+
+    await prisma.match.updateMany({
+      where: { bracketId: bracket.id },
+      data: { ringNumber: ring },
+    });
+
+    res.json({ success: true, divisionId, ring });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 export default router;

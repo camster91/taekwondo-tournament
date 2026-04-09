@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useState, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -51,6 +51,7 @@ interface TournamentSchedule {
 export default function Schedule() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [config, setConfig] = useState<Partial<ScheduleConfig>>({
     startTime: '09:00',
     endTime: '17:00',
@@ -85,6 +86,17 @@ export default function Schedule() {
       refetch();
     },
   });
+
+  // Ring reassignment for individual divisions
+  const reassignRing = useCallback(async (divisionId: string, newRing: number) => {
+    const res = await fetch(`/api/tournaments/${id}/schedule/reassign`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ divisionId, ring: newRing }),
+    });
+    if (!res.ok) throw new Error('Failed to reassign ring');
+    refetch();
+  }, [id, refetch]);
 
   const exportPDF = () => {
     if (!schedule) return;
@@ -467,13 +479,15 @@ export default function Schedule() {
                       {div.startTime} - {div.endTime}
                     </td>
                     <td>
-                      <span
-                        className={`inline-flex px-2 py-1 rounded text-sm font-medium ${getRingColor(
-                          div.ring
-                        )}`}
+                      <select
+                        value={div.ring}
+                        onChange={(e) => reassignRing(div.divisionId, parseInt(e.target.value))}
+                        className={`inline-flex px-2 py-1 rounded text-sm font-medium border-0 cursor-pointer ${getRingColor(div.ring)}`}
                       >
-                        Ring {div.ring}
-                      </span>
+                        {Array.from({ length: config.ringCount || 4 }, (_, i) => i + 1).map((r) => (
+                          <option key={r} value={r}>Ring {r}</option>
+                        ))}
+                      </select>
                     </td>
                     <td>
                       <Link
