@@ -74,6 +74,11 @@ export default function Scorekeeper() {
   const [penalties1, setPenalties1] = useState(0); // {sportProfile.scoringConfig.penaltyName} for competitor 1
   const [penalties2, setPenalties2] = useState(0); // {sportProfile.scoringConfig.penaltyName} for competitor 2
   const [divisionSearch, setDivisionSearch] = useState('');
+  const [showIncidentModal, setShowIncidentModal] = useState(false);
+  const [incidentType, setIncidentType] = useState<string>('injury');
+  const [incidentSeverity, setIncidentSeverity] = useState<string>('minor');
+  const [incidentDescription, setIncidentDescription] = useState('');
+  const [incidentAction, setIncidentAction] = useState<string>('');
 
   // Fetch tournament for sport profile
   const { data: tournament } = useQuery<Tournament>({
@@ -170,6 +175,51 @@ export default function Scorekeeper() {
       addToast(error.message || 'Operation failed', 'error');
     },
   });
+
+  // Report incident mutation
+  const reportIncident = useMutation({
+    mutationFn: async (data: {
+      tournamentId: string;
+      matchId?: string;
+      registrationId?: string;
+      type: string;
+      severity: string;
+      description: string;
+      actionTaken?: string;
+    }) => {
+      const res = await fetch('/api/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to report incident');
+      return res.json();
+    },
+    onSuccess: () => {
+      addToast('Incident reported successfully', 'success');
+      setShowIncidentModal(false);
+      setIncidentType('injury');
+      setIncidentSeverity('minor');
+      setIncidentDescription('');
+      setIncidentAction('');
+    },
+    onError: (error: Error) => {
+      addToast(error.message || 'Failed to report incident', 'error');
+    },
+  });
+
+  const handleIncidentSubmit = () => {
+    if (!tournamentId || !incidentDescription.trim()) return;
+    reportIncident.mutate({
+      tournamentId,
+      matchId: currentMatch?.id,
+      registrationId: currentMatch?.competitor1?.id || undefined,
+      type: incidentType,
+      severity: incidentSeverity,
+      description: incidentDescription,
+      actionTaken: incidentAction || undefined,
+    });
+  };
 
   const resetForm = () => {
     setScore1('');
