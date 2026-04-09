@@ -56,7 +56,8 @@ export default function CheckIn() {
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['tournament', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${tournamentId}`);
+      const res = await fetch(`/api/tournaments/${tournamentId}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch tournament');
       return res.json();
     },
   });
@@ -65,7 +66,8 @@ export default function CheckIn() {
   const { data: registrations, isLoading } = useQuery<Registration[]>({
     queryKey: ['checkin-registrations', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${tournamentId}/registrations`);
+      const res = await fetch(`/api/tournaments/${tournamentId}/registrations`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch registrations');
       const data = await res.json();
       // Add checkedIn field if not present (simulated for now)
       return data.map((r: any) => ({
@@ -90,6 +92,7 @@ export default function CheckIn() {
           checkInWeight: data.weight || null,
         }),
       });
+      if (!res.ok) throw new Error('Failed to check in');
       return res.json();
     },
     onSuccess: () => {
@@ -111,6 +114,7 @@ export default function CheckIn() {
           checkInWeight: null,
         }),
       });
+      if (!res.ok) throw new Error('Failed to undo check-in');
       return res.json();
     },
     onSuccess: () => {

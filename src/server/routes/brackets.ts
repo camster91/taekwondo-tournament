@@ -14,7 +14,9 @@ import {
   type DivisionInfo,
   type TournamentInfo,
 } from '../services/pdf-export.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import { z } from 'zod';
+import { validateRequest } from '../middleware/validate.js';
 
 const router = Router();
 
@@ -24,8 +26,17 @@ const getParam = (param: string | string[] | undefined): string => {
   return param || '';
 };
 
-// Generate bracket for division (requires authentication)
-router.post('/division/:divisionId/generate', authenticate, async (req: Request, res: Response) => {
+// Validation schemas
+const matchResultSchema = z.object({
+  winnerId: z.string().optional(),
+  score1: z.string().optional(),
+  score2: z.string().optional(),
+  status: z.enum(['pending', 'ready', 'in_progress', 'completed', 'bye']).optional(),
+  notes: z.string().optional(),
+});
+
+// Generate bracket for division (requires authentication + admin/director role)
+router.post('/division/:divisionId/generate', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { seedingStrategy = 'school_spread' } = req.body;
 
@@ -111,8 +122,8 @@ router.post('/division/:divisionId/generate', authenticate, async (req: Request,
   res.json(completeBracket);
 });
 
-// Get bracket for division
-router.get('/division/:divisionId', async (req: Request, res: Response) => {
+// Get bracket for division (requires authentication)
+router.get('/division/:divisionId', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const bracket = await prisma.bracket.findUnique({
@@ -136,8 +147,8 @@ router.get('/division/:divisionId', async (req: Request, res: Response) => {
   res.json(bracket);
 });
 
-// Update match result (requires authentication)
-router.put('/match/:matchId', authenticate, async (req: Request, res: Response) => {
+// Update match result (requires authentication + admin/director/scorekeeper role)
+router.put('/match/:matchId', authenticate, requireRole('admin', 'director', 'scorekeeper'), validateRequest(matchResultSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { winnerId, score1, score2, status, notes} = req.body;
   const user = (req as any).user;
@@ -197,8 +208,8 @@ router.put('/match/:matchId', authenticate, async (req: Request, res: Response) 
   res.json(matchWithoutBracket);
 });
 
-// Get bracket placements
-router.get('/division/:divisionId/placements', async (req: Request, res: Response) => {
+// Get bracket placements (requires authentication)
+router.get('/division/:divisionId/placements', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const bracket = await prisma.bracket.findUnique({
@@ -333,8 +344,8 @@ router.post('/division/:divisionId/reset', authenticate, async (req: Request, re
   res.status(204).send();
 });
 
-// Generate brackets for all divisions in tournament (requires authentication)
-router.post('/tournament/:tournamentId/generate-all', authenticate, async (req: Request, res: Response) => {
+// Generate brackets for all divisions in tournament (requires authentication + admin/director role)
+router.post('/tournament/:tournamentId/generate-all', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { seedingStrategy = 'school_spread' } = req.body;
 

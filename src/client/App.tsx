@@ -270,8 +270,8 @@ function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/verify" element={<VerifyMagicLink />} />
         <Route path="/accept-invite" element={<AcceptInvite />} />
-        <Route path="/scorekeeper/:tournamentId" element={<Scorekeeper />} />
-        <Route path="/checkin/:tournamentId" element={<CheckIn />} />
+        <Route path="/scorekeeper/:tournamentId" element={<ProtectedRoute><Scorekeeper /></ProtectedRoute>} />
+        <Route path="/checkin/:tournamentId" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
         <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

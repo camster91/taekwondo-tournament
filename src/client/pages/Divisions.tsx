@@ -22,6 +22,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
 import { getAuthHeaders } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { getSportProfile } from '../../shared/constants/sport-profiles';
 
 interface Division {
@@ -81,11 +82,13 @@ export default function Divisions() {
   const [clearConfirm, setClearConfirm] = useState(false);
   const [regenerateConfirm, setRegenerateConfirm] = useState(false);
   const [resultMessage, setResultMessage] = useState<{ title: string; message: string } | null>(null);
+  const { addToast } = useToast();
 
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['tournament', id],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${id}`);
+      const res = await fetch(`/api/tournaments/${id}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch tournament');
       return res.json();
     },
   });
@@ -104,7 +107,8 @@ export default function Divisions() {
   const { data: divisions, isLoading } = useQuery<Division[]>({
     queryKey: ['divisions', id],
     queryFn: async () => {
-      const res = await fetch(`/api/divisions/tournament/${id}`);
+      const res = await fetch(`/api/divisions/tournament/${id}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch divisions');
       return res.json();
     },
   });
@@ -116,6 +120,7 @@ export default function Divisions() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ config: { divisionThreshold: 8 } }),
       });
+      if (!res.ok) throw new Error('Failed to auto-generate divisions');
       return res.json();
     },
     onSuccess: (result) => {
@@ -137,6 +142,7 @@ export default function Divisions() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ seedingStrategy: 'school_spread' }),
       });
+      if (!res.ok) throw new Error('Failed to generate brackets');
       return res.json();
     },
     onSuccess: (result) => {
@@ -183,6 +189,7 @@ export default function Divisions() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ splitCount: 2 }),
       });
+      if (!res.ok) throw new Error('Failed to split division');
       return res.json();
     },
     onSuccess: () => {
@@ -209,7 +216,7 @@ export default function Divisions() {
       setShowPreview(true);
     } catch (error) {
       console.error('Preview error:', error);
-      alert('Failed to generate preview');
+      addToast('Failed to generate preview', 'error');
     }
     setPreviewLoading(false);
   };
@@ -256,7 +263,7 @@ export default function Divisions() {
       const divisionsWithBrackets = divisions.filter((d) => d.bracket);
 
       if (divisionsWithBrackets.length === 0) {
-        alert('No brackets to export. Generate brackets first.');
+        addToast('No brackets to export. Generate brackets first.', 'warning');
         setExportingAll(false);
         return;
       }
@@ -278,7 +285,7 @@ export default function Divisions() {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Export error:', error);
-      alert('Error exporting PDFs. Please try again.');
+      addToast('Error exporting PDFs. Please try again.', 'error');
     }
 
     setExportingAll(false);

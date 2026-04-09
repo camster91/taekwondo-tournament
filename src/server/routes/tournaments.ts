@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -36,14 +36,34 @@ const bulkRegistrationSchema = z.object({
   sparring: z.boolean().optional(),
 });
 
+const registrationUpdateSchema = z.object({
+  patterns: z.boolean().optional(),
+  sparring: z.boolean().optional(),
+  weightAtRegistration: z.number().positive().optional(),
+  checkedIn: z.boolean().optional(),
+  checkInWeight: z.number().positive().optional(),
+});
+
+const weightClassesSchema = z.object({
+  weightClasses: z.array(z.object({
+    name: z.string().min(1),
+    gender: z.string().optional(),
+    ageMin: z.number().int().optional(),
+    ageMax: z.number().int().optional(),
+    weightMinLbs: z.number().optional(),
+    weightMaxLbs: z.number().optional(),
+    displayOrder: z.number().int().optional(),
+  })),
+});
+
 // Helper to safely get string param
 const getParam = (param: string | string[] | undefined): string => {
   if (Array.isArray(param)) return param[0];
   return param || '';
 };
 
-// Get all tournaments
-router.get('/', async (req: Request, res: Response) => {
+// Get all tournaments (requires authentication)
+router.get('/', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const tournaments = await prisma.tournament.findMany({
@@ -61,8 +81,8 @@ router.get('/', async (req: Request, res: Response) => {
   res.json(tournaments);
 });
 
-// Get single tournament
-router.get('/:id', async (req: Request, res: Response) => {
+// Get single tournament (requires authentication)
+router.get('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const tournament = await prisma.tournament.findUnique({
@@ -85,8 +105,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   res.json(tournament);
 });
 
-// Create tournament (requires authentication)
-router.post('/', authenticate, validateRequest(tournamentCreateSchema), async (req: Request, res: Response) => {
+// Create tournament (requires authentication + admin/director role)
+router.post('/', authenticate, requireRole('admin', 'director'), validateRequest(tournamentCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, settings, sportProfileSlug, organizationId } = req.body;
 
@@ -105,8 +125,8 @@ router.post('/', authenticate, validateRequest(tournamentCreateSchema), async (r
   res.status(201).json(tournament);
 });
 
-// Update tournament (requires authentication)
-router.put('/:id', authenticate, validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
+// Update tournament (requires authentication + admin/director role)
+router.put('/:id', authenticate, requireRole('admin', 'director'), validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, status, settings } = req.body;
 
@@ -124,8 +144,8 @@ router.put('/:id', authenticate, validateRequest(tournamentUpdateSchema), async 
   res.json(tournament);
 });
 
-// Delete tournament (requires authentication)
-router.delete('/:id', authenticate, async (req: Request, res: Response) => {
+// Delete tournament (requires authentication + admin/director role)
+router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.tournament.delete({
@@ -135,8 +155,8 @@ router.delete('/:id', authenticate, async (req: Request, res: Response) => {
   res.status(204).send();
 });
 
-// Get tournament registrations
-router.get('/:id/registrations', async (req: Request, res: Response) => {
+// Get tournament registrations (requires authentication)
+router.get('/:id/registrations', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const registrations = await prisma.registration.findMany({
@@ -159,8 +179,8 @@ router.get('/:id/registrations', async (req: Request, res: Response) => {
   res.json(registrations);
 });
 
-// Register competitor to tournament (requires authentication)
-router.post('/:id/registrations', authenticate, validateRequest(registrationSchema), async (req: Request, res: Response) => {
+// Register competitor to tournament (requires authentication + admin/director role)
+router.post('/:id/registrations', authenticate, requireRole('admin', 'director'), validateRequest(registrationSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { competitorId, patterns, sparring, weightAtRegistration } = req.body;
 
@@ -201,8 +221,8 @@ router.post('/:id/registrations', authenticate, validateRequest(registrationSche
   res.status(201).json(registration);
 });
 
-// Bulk register competitors (requires authentication)
-router.post('/:id/registrations/bulk', authenticate, validateRequest(bulkRegistrationSchema), async (req: Request, res: Response) => {
+// Bulk register competitors (requires authentication + admin/director role)
+router.post('/:id/registrations/bulk', authenticate, requireRole('admin', 'director'), validateRequest(bulkRegistrationSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { competitorIds, patterns, sparring } = req.body;
 
@@ -249,10 +269,18 @@ router.post('/:id/registrations/bulk', authenticate, validateRequest(bulkRegistr
   res.json({ registered: registrations.length });
 });
 
-// Update registration (requires authentication)
-router.put('/:id/registrations/:regId', authenticate, async (req: Request, res: Response) => {
+// Update registration (requires authentication + admin/director role)
+router.put('/:id/registrations/:regId', authenticate, requireRole('admin', 'director'), validateRequest(registrationUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { patterns, sparring, weightAtRegistration, checkedIn, checkInWeight } = req.body;
+
+  // Verify registration belongs to this tournament
+  const existing = await prisma.registration.findFirst({
+    where: { id: getParam(req.params.regId), tournamentId: getParam(req.params.id) },
+  });
+  if (!existing) {
+    return res.status(404).json({ error: 'Registration not found in this tournament' });
+  }
 
   const updateData: Record<string, unknown> = {};
   if (patterns !== undefined) updateData.patterns = patterns;
@@ -275,9 +303,17 @@ router.put('/:id/registrations/:regId', authenticate, async (req: Request, res: 
   res.json(registration);
 });
 
-// Remove registration (requires authentication)
-router.delete('/:id/registrations/:regId', authenticate, async (req: Request, res: Response) => {
+// Remove registration (requires authentication + admin/director role)
+router.delete('/:id/registrations/:regId', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+
+  // Verify registration belongs to this tournament
+  const existing = await prisma.registration.findFirst({
+    where: { id: getParam(req.params.regId), tournamentId: getParam(req.params.id) },
+  });
+  if (!existing) {
+    return res.status(404).json({ error: 'Registration not found in this tournament' });
+  }
 
   await prisma.registration.delete({
     where: { id: getParam(req.params.regId) },
@@ -286,8 +322,8 @@ router.delete('/:id/registrations/:regId', authenticate, async (req: Request, re
   res.status(204).send();
 });
 
-// Get weight classes for tournament
-router.get('/:id/weight-classes', async (req: Request, res: Response) => {
+// Get weight classes for tournament (requires authentication)
+router.get('/:id/weight-classes', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const weightClasses = await prisma.weightClass.findMany({
     where: { tournamentId: getParam(req.params.id) },
@@ -296,25 +332,11 @@ router.get('/:id/weight-classes', async (req: Request, res: Response) => {
   res.json(weightClasses);
 });
 
-// Save weight classes for tournament (bulk replace)
-router.put('/:id/weight-classes', authenticate, async (req: Request, res: Response) => {
+// Save weight classes for tournament (bulk replace, requires authentication + admin/director role)
+router.put('/:id/weight-classes', authenticate, requireRole('admin', 'director'), validateRequest(weightClassesSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.id);
-  const { weightClasses } = req.body as {
-    weightClasses: Array<{
-      name: string;
-      gender?: string;
-      ageMin?: number;
-      ageMax?: number;
-      weightMinLbs?: number;
-      weightMaxLbs?: number;
-      displayOrder?: number;
-    }>;
-  };
-
-  if (!Array.isArray(weightClasses)) {
-    return res.status(400).json({ error: 'weightClasses must be an array' });
-  }
+  const { weightClasses } = req.body;
 
   // Delete existing and recreate
   await prisma.weightClass.deleteMany({ where: { tournamentId } });
@@ -348,8 +370,8 @@ router.post('/:id/schedule', authenticate, async (req: Request, res: Response) =
   }
 });
 
-// Get tournament schedule (same as generate but GET method for simple fetch)
-router.get('/:id/schedule', async (req: Request, res: Response) => {
+// Get tournament schedule (requires authentication)
+router.get('/:id/schedule', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   try {

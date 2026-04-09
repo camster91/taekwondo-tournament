@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -72,6 +72,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (message: string) => addToast(message, 'warning', 6000),
     [addToast]
   );
+
+  // Listen for session-expired events dispatched by AuthContext
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      addToast('Your session has expired. Please log in again.', 'warning', 8000);
+    };
+    window.addEventListener('session-expired', handleSessionExpired);
+    return () => window.removeEventListener('session-expired', handleSessionExpired);
+  }, [addToast]);
 
   return (
     <ToastContext.Provider
