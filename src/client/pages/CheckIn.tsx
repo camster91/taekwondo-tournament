@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -15,6 +15,7 @@ import {
 import { CardSkeleton } from '../components/ui/Skeleton';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 interface Registration {
   id: string;
@@ -45,12 +46,29 @@ interface Tournament {
 export default function CheckIn() {
   const { tournamentId } = useParams();
   const queryClient = useQueryClient();
+  const toast = useToast();
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'checked' | 'unchecked'>('all');
   const [filterEvent, setFilterEvent] = useState<'all' | 'patterns' | 'sparring'>('all');
+  const [schoolFilter, setSchoolFilter] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'school' | 'status'>('name');
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
   const [checkInWeight, setCheckInWeight] = useState('');
+  const [isBulkCheckingIn, setIsBulkCheckingIn] = useState(false);
+
+  // Keyboard shortcut: "/" to focus search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'SELECT') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   // Fetch tournament
   const { data: tournament } = useQuery<Tournament>({
@@ -122,6 +140,11 @@ export default function CheckIn() {
     },
   });
 
+  // Extract unique schools for the filter dropdown
+  const uniqueSchools = registrations
+    ? [...new Set(registrations.map((r) => r.competitor.schoolDojang).filter(Boolean))].sort() as string[]
+    : [];
+
   // Filter registrations
   const filteredRegistrations = registrations?.filter((r) => {
     const matchesSearch =
@@ -141,8 +164,31 @@ export default function CheckIn() {
       (filterEvent === 'patterns' && r.patterns) ||
       (filterEvent === 'sparring' && r.sparring);
 
-    return matchesSearch && matchesStatus && matchesEvent;
+    const matchesSchool =
+      schoolFilter === '' || r.competitor.schoolDojang === schoolFilter;
+
+    return matchesSearch && matchesStatus && matchesEvent && matchesSchool;
   });
+
+  // Sort filtered registrations
+  const sortedRegistrations = filteredRegistrations
+    ? [...filteredRegistrations].sort((a, b) => {
+        if (sortBy === 'name')
+          return (
+            a.competitor.lastName.localeCompare(b.competitor.lastName) ||
+            a.competitor.firstName.localeCompare(b.competitor.firstName)
+          );
+        if (sortBy === 'school')
+          return (a.competitor.schoolDojang || '').localeCompare(b.competitor.schoolDojang || '');
+        if (sortBy === 'status')
+          return (a.checkedIn ? 1 : 0) - (b.checkedIn ? 1 : 0);
+        return 0;
+      })
+    : [];
+
+  // Unchecked-in registrations from the current filtered view (for bulk check-in)
+  const uncheckedFiltered = sortedRegistrations.filter((r) => !r.checkedIn);
+  const hasActiveFilter = searchTerm !== '' || schoolFilter !== '';
 
   // Stats
   const stats = {
@@ -160,6 +206,37 @@ export default function CheckIn() {
     } else {
       // Patterns only - quick check in
       checkInMutation.mutate({ registrationId: registration.id });
+    }
+  };
+
+  const handleBulkCheckIn = async () => {
+    // Only bulk check-in non-sparring registrations (sparring needs weight)
+    const eligibleForBulk = uncheckedFiltered.filter((r) => !r.sparring);
+    if (eligibleForBulk.length === 0) {
+      toast.warning('All filtered unchecked competitors require weigh-in (sparring). Check them in individually.');
+      return;
+    }
+    setIsBulkCheckingIn(true);
+    try {
+      await Promise.all(
+        eligibleForBulk.map((r) =>
+          fetch(`/api/tournaments/${tournamentId}/registrations/${r.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({
+              checkedIn: true,
+              checkInTime: new Date().toISOString(),
+              checkInWeight: null,
+            }),
+          })
+        )
+      );
+      queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
+      toast.success(`Checked in ${eligibleForBulk.length} competitor${eligibleForBulk.length === 1 ? '' : 's'}`);
+    } catch {
+      toast.error('Some check-ins failed. Please try again.');
+    } finally {
+      setIsBulkCheckingIn(false);
     }
   };
 
@@ -185,7 +262,7 @@ export default function CheckIn() {
         </div>
 
         {/* Stats Bar */}
-        <div className="px-4 pb-4 grid grid-cols-4 gap-2">
+        <div className="px-4 pb-2 grid grid-cols-4 gap-2">
           <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-3 text-center">
             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.total}</div>
             <div className="text-xs text-blue-600 dark:text-blue-400">Registered</div>
@@ -207,6 +284,18 @@ export default function CheckIn() {
             <div className="text-xs text-purple-600 dark:text-purple-400">Complete</div>
           </div>
         </div>
+        {/* Progress Bar */}
+        <div className="px-4 pb-4">
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+            <div
+              className="bg-green-500 dark:bg-green-400 h-2.5 rounded-full transition-all duration-500"
+              style={{ width: `${stats.total > 0 ? Math.round((stats.checkedIn / stats.total) * 100) : 0}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center">
+            {stats.checkedIn} / {stats.total} checked in ({stats.total > 0 ? Math.round((stats.checkedIn / stats.total) * 100) : 0}%)
+          </p>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -214,15 +303,16 @@ export default function CheckIn() {
         <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
           <input
+            ref={searchRef}
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by name or school..."
+            placeholder='Search by name or school... (press "/" to focus)'
             className="form-input w-full pl-10 pr-4 py-3 text-lg"
           />
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex gap-2 overflow-x-auto pb-1 flex-wrap">
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as any)}
@@ -242,7 +332,53 @@ export default function CheckIn() {
             <option value="patterns">Patterns Only</option>
             <option value="sparring">Sparring Only</option>
           </select>
+
+          <select
+            value={schoolFilter}
+            onChange={(e) => setSchoolFilter(e.target.value)}
+            className="form-select text-sm"
+          >
+            <option value="">All Schools</option>
+            {uniqueSchools.map((school) => (
+              <option key={school} value={school}>
+                {school}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'name' | 'school' | 'status')}
+            className="form-select text-sm"
+          >
+            <option value="name">Name (A-Z)</option>
+            <option value="school">School</option>
+            <option value="status">Status</option>
+          </select>
         </div>
+
+        {/* Bulk Check-In Button */}
+        {hasActiveFilter && uncheckedFiltered.length > 0 && (
+          <div className="mt-3">
+            <button
+              onClick={handleBulkCheckIn}
+              disabled={isBulkCheckingIn}
+              className="w-full px-4 py-2 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg text-sm flex items-center justify-center gap-2"
+            >
+              {isBulkCheckingIn ? (
+                <>
+                  <Spinner size="sm" />
+                  Checking in...
+                </>
+              ) : (
+                <>
+                  <Users className="h-4 w-4" />
+                  Check In All Filtered ({uncheckedFiltered.length})
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Registration List */}
@@ -253,13 +389,13 @@ export default function CheckIn() {
             <CardSkeleton />
             <CardSkeleton />
           </div>
-        ) : filteredRegistrations?.length === 0 ? (
+        ) : sortedRegistrations.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">
             No registrations found matching your filters.
           </div>
         ) : (
           <div className="space-y-2">
-            {filteredRegistrations?.map((registration) => (
+            {sortedRegistrations.map((registration) => (
               <div
                 key={registration.id}
                 className={`bg-white dark:bg-gray-800 rounded-lg shadow p-4 ${
@@ -377,10 +513,15 @@ export default function CheckIn() {
                   type="number"
                   value={checkInWeight}
                   onChange={(e) => setCheckInWeight(e.target.value)}
+                  min={20}
+                  max={400}
                   className="form-input w-full p-3 text-lg"
                   placeholder="Enter weight"
                   autoFocus
                 />
+                {checkInWeight && (parseFloat(checkInWeight) < 20 || parseFloat(checkInWeight) > 400) && (
+                  <p className="text-red-500 text-sm mt-1">Weight must be between 20 and 400 lbs</p>
+                )}
               </div>
 
               {checkInWeight &&
