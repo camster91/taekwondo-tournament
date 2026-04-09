@@ -377,8 +377,9 @@ export default function UserManagement() {
                       <td className="whitespace-nowrap">
                         <button
                           onClick={() =>
-                            toggleStatusMutation.mutate({
+                            setPendingToggle({
                               userId: user.id,
+                              userName: `${user.firstName} ${user.lastName}`,
                               isActive: !user.isActive,
                             })
                           }
