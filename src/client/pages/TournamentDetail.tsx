@@ -24,6 +24,7 @@ import {
   Copy,
   Flag,
   Shield,
+  Building2,
 } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
 import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
@@ -76,6 +77,7 @@ export default function TournamentDetail() {
   const [modalSearch, setModalSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Registration | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedSchoolLink, setCopiedSchoolLink] = useState(false);
   const [showCloseRegistrationConfirm, setShowCloseRegistrationConfirm] = useState(false);
 
   const { data: tournament, isLoading: tournamentLoading } = useQuery<Tournament>({
@@ -185,6 +187,14 @@ export default function TournamentDetail() {
     navigator.clipboard.writeText(registrationUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const schoolPortalUrl = `${window.location.origin}/tournaments/${id}/school`;
+
+  const copySchoolPortalLink = () => {
+    navigator.clipboard.writeText(schoolPortalUrl);
+    setCopiedSchoolLink(true);
+    setTimeout(() => setCopiedSchoolLink(false), 2000);
   };
 
   const registeredIds = new Set(registrations?.map((r) => r.competitorId) || []);
@@ -387,6 +397,31 @@ export default function TournamentDetail() {
             <ArrowRight className="h-5 w-5 text-gray-400" />
           </div>
         </Link>
+      </div>
+
+      {/* Share School Portal */}
+      <div className="mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 flex-1 min-w-0">
+            <Building2 className="h-5 w-5 flex-shrink-0" />
+            <span className="font-medium">School / Coach Portal</span>
+            <span className="text-sm truncate hidden sm:block text-indigo-500 dark:text-indigo-400">{schoolPortalUrl}</span>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button onClick={copySchoolPortalLink} className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1">
+              <Copy className="h-3.5 w-3.5" />
+              {copiedSchoolLink ? 'Copied!' : 'Copy Link'}
+            </button>
+            <Link
+              to={`/tournaments/${id}/school`}
+              target="_blank"
+              className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1"
+            >
+              <ArrowRight className="h-3.5 w-3.5" />
+              Open Portal
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* Stats */}

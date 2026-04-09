@@ -155,12 +155,21 @@ export default function PublicScoreboard() {
               </p>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-4xl font-mono font-bold text-yellow-400">
-              {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </div>
-            <div className="text-gray-400 text-sm">
-              {stats.completed} / {stats.totalMatches} matches complete
+          <div className="flex items-center gap-4">
+            <Link
+              to={`/tournaments/${tournamentId}/school`}
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Building2 className="h-4 w-4" />
+              School Lookup
+            </Link>
+            <div className="text-right">
+              <div className="text-4xl font-mono font-bold text-yellow-400">
+                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+              <div className="text-gray-400 text-sm">
+                {stats.completed} / {stats.totalMatches} matches complete
+              </div>
             </div>
           </div>
         </div>
