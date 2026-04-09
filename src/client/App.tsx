@@ -37,6 +37,7 @@ import DirectorDashboard from './pages/DirectorDashboard';
 import AcceptInvite from './pages/AcceptInvite';
 import NotFound from './pages/NotFound';
 import FairnessRules from './pages/FairnessRules';
+import SchoolPortal from './pages/SchoolPortal';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -262,7 +263,8 @@ function AppRoutes() {
     location.pathname.startsWith('/accept-invite') ||
     location.pathname.startsWith('/scorekeeper') ||
     location.pathname.startsWith('/checkin') ||
-    location.pathname.startsWith('/display');
+    location.pathname.startsWith('/display') ||
+    /^\/tournaments\/[^/]+\/school/.test(location.pathname);
 
   if (isPublicPage) {
     return (
@@ -274,6 +276,7 @@ function AppRoutes() {
         <Route path="/scorekeeper/:tournamentId" element={<ProtectedRoute><Scorekeeper /></ProtectedRoute>} />
         <Route path="/checkin/:tournamentId" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
         <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
+        <Route path="/tournaments/:tournamentId/school" element={<SchoolPortal />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     );

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Trophy, Clock, Users, ChevronRight, Award, Zap } from 'lucide-react';
+import { Trophy, Clock, Users, ChevronRight, Award, Zap, Building2 } from 'lucide-react';
 
 interface Match {
   id: string;
@@ -236,11 +236,17 @@ export default function PublicScoreboard() {
               <div className="space-y-2">
                 {readyMatches.map((match, index) => {
                   const division = getDivisionForMatch(match);
+                  const isOnDeck = index < 2;
+                  const isWarmingUp = index >= 2 && index < 4;
                   return (
                     <div
                       key={match.id}
                       className={`bg-gray-900/50 rounded-lg p-3 flex items-center justify-between ${
-                        index === 0 ? 'ring-2 ring-blue-500/50' : ''
+                        isOnDeck
+                          ? 'ring-2 ring-blue-500/50'
+                          : isWarmingUp
+                          ? 'ring-1 ring-yellow-500/30'
+                          : ''
                       }`}
                     >
                       <div className="flex items-center">
@@ -248,11 +254,26 @@ export default function PublicScoreboard() {
                           {index + 1}
                         </div>
                         <div>
-                          <div className="font-semibold">
+                          <div className="font-semibold flex items-center gap-2">
                             {getCompetitorName(match.competitor1)} vs{' '}
                             {getCompetitorName(match.competitor2)}
+                            {isOnDeck && (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-600 text-white">
+                                ON DECK
+                              </span>
+                            )}
+                            {isWarmingUp && (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded bg-yellow-600 text-white">
+                                WARMING UP
+                              </span>
+                            )}
                           </div>
-                          <div className="text-sm text-gray-500">{division?.name}</div>
+                          <div className="text-sm text-gray-500">
+                            {division?.name}
+                            {match.ringNumber != null && (
+                              <span className="ml-2 text-blue-400">Ring {match.ringNumber}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <ChevronRight className="h-5 w-5 text-gray-600" />
