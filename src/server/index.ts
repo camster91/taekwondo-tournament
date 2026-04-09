@@ -16,6 +16,7 @@ import analyticsRouter from './routes/analytics.js';
 import invitesRouter from './routes/invites.js';
 import sportsRouter from './routes/sports.js';
 import organizationsRouter from './routes/organizations.js';
+import rulesRouter from './routes/rules.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 
@@ -72,6 +73,7 @@ app.use('/api/analytics', analyticsRouter);
 app.use('/api/invites', invitesRouter);
 app.use('/api/sports', sportsRouter);
 app.use('/api/organizations', organizationsRouter);
+app.use('/api/rules', rulesRouter);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {
