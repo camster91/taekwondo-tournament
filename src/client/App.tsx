@@ -36,6 +36,7 @@ import Profile from './pages/Profile';
 import DirectorDashboard from './pages/DirectorDashboard';
 import AcceptInvite from './pages/AcceptInvite';
 import NotFound from './pages/NotFound';
+import FairnessRules from './pages/FairnessRules';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -324,6 +325,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute requiredRoles={['admin', 'director']}>
                 <DirectorDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tournaments/:tournamentId/fairness"
+            element={
+              <ProtectedRoute requiredRoles={['admin', 'director']}>
+                <FairnessRules />
               </ProtectedRoute>
             }
           />

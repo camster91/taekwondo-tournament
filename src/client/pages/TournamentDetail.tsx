@@ -23,6 +23,7 @@ import {
   Lock,
   Copy,
   Flag,
+  Shield,
 } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
 import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
@@ -273,6 +274,10 @@ export default function TournamentDetail() {
           <Link to={`/tournaments/${id}/schedule`} className="btn btn-secondary">
             <Calendar className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Schedule</span>
+          </Link>
+          <Link to={`/tournaments/${id}/fairness`} className="btn btn-secondary">
+            <Shield className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Fairness Rules</span>
           </Link>
           <Link to={`/tournaments/${id}/divisions`} className="btn btn-primary">
             <LayoutGrid className="h-4 w-4 mr-2" />
