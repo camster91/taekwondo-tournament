@@ -93,6 +93,18 @@ export default function PublicRegister() {
 
   const topLevelBeltName = sportProfile.beltConfig.topLevelName.split(' ')[0]; // e.g. "Black"
 
+  const isMinor = useMemo(() => {
+    if (!formData.dateOfBirth) return false;
+    const dob = new Date(formData.dateOfBirth);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    return age < 18;
+  }, [formData.dateOfBirth]);
+
   // Map sport event types to the two boolean fields (patterns = first event, sparring = second)
   const eventType0 = sportProfile.eventTypes[0];
   const eventType1 = sportProfile.eventTypes[1];
@@ -115,6 +127,18 @@ export default function PublicRegister() {
     setError(null);
     setValidationErrors([]);
     setSubmitting(true);
+
+    // Client-side validation: parent contact required for minors
+    if (isMinor) {
+      const clientErrors: string[] = [];
+      if (!formData.parentName.trim()) clientErrors.push('Parent/Guardian name is required for competitors under 18');
+      if (!formData.parentEmail.trim()) clientErrors.push('Parent/Guardian email is required for competitors under 18');
+      if (clientErrors.length > 0) {
+        setValidationErrors(clientErrors);
+        setSubmitting(false);
+        return;
+      }
+    }
 
     try {
       const res = await fetch('/api/public/register', {
@@ -202,8 +226,8 @@ export default function PublicRegister() {
                   <span className="text-gray-500 dark:text-gray-400">Events:</span>
                   <span className="font-medium text-gray-900 dark:text-white">
                     {[
-                      result.registration.events.patterns && 'Patterns',
-                      result.registration.events.sparring && 'Sparring',
+                      result.registration.events.patterns && (sportProfile.eventTypes[0]?.name || 'Patterns'),
+                      result.registration.events.sparring && (sportProfile.eventTypes[1]?.name || 'Sparring'),
                     ]
                       .filter(Boolean)
                       .join(', ')}
@@ -565,13 +589,13 @@ export default function PublicRegister() {
           {/* Parent/Guardian Info */}
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Parent/Guardian Contact (Optional)
+              {isMinor ? 'Parent/Guardian Contact (Required for minors)' : 'Parent/Guardian Contact (Optional)'}
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Parent/Guardian Name
+                  Parent/Guardian Name {isMinor && '*'}
                 </label>
                 <input
                   type="text"
@@ -579,12 +603,13 @@ export default function PublicRegister() {
                   value={formData.parentName}
                   onChange={handleChange}
                   className="form-input w-full"
+                  required={isMinor}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Email
+                  Email {isMinor && '*'}
                 </label>
                 <input
                   type="email"
@@ -592,6 +617,7 @@ export default function PublicRegister() {
                   value={formData.parentEmail}
                   onChange={handleChange}
                   className="form-input w-full"
+                  required={isMinor}
                 />
               </div>
 

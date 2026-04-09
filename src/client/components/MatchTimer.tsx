@@ -111,9 +111,21 @@ export default function MatchTimer({
     return () => clearInterval(interval);
   }, [isRunning, timeLeft, currentRound, totalRounds, isBreak, roundTime, breakTime, playWarning, playEndSound, onRoundEnd, onMatchEnd]);
 
-  const toggleTimer = () => {
-    setIsRunning(!isRunning);
-  };
+  const toggleTimer = useCallback(() => {
+    setIsRunning(prev => !prev);
+  }, []);
+
+  // Space bar shortcut to start/pause timer
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'SELECT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        toggleTimer();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [toggleTimer]);
 
   const resetTimer = () => {
     setIsRunning(false);

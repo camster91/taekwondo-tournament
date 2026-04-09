@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Trophy, Users, LayoutGrid, Plus, ArrowRight, School, Calendar, Target } from 'lucide-react';
 import { StatsSkeleton, CardSkeleton } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface Tournament {
   id: string;
@@ -45,10 +46,13 @@ const BELT_COLORS: Record<string, string> = {
 };
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+
   const { data: tournaments, isLoading: tournamentsLoading } = useQuery<Tournament[]>({
     queryKey: ['tournaments'],
     queryFn: async () => {
-      const res = await fetch('/api/tournaments');
+      const res = await fetch('/api/tournaments', { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch tournaments');
       return res.json();
     },
   });
@@ -56,7 +60,8 @@ export default function Dashboard() {
   const { data: competitorsData, isLoading: competitorsLoading } = useQuery<CompetitorsResponse>({
     queryKey: ['competitors', 'count'],
     queryFn: async () => {
-      const res = await fetch('/api/competitors?limit=1');
+      const res = await fetch('/api/competitors?limit=1', { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch competitors');
       return res.json();
     },
   });
@@ -64,7 +69,8 @@ export default function Dashboard() {
   const { data: analytics, isLoading: analyticsLoading } = useQuery<AnalyticsData>({
     queryKey: ['analytics', 'dashboard'],
     queryFn: async () => {
-      const res = await fetch('/api/analytics/dashboard');
+      const res = await fetch('/api/analytics/dashboard', { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch analytics');
       return res.json();
     },
   });
@@ -321,7 +327,7 @@ export default function Dashboard() {
               description="Get started by creating your first tournament."
               action={{
                 label: 'Create Tournament',
-                onClick: () => window.location.href = '/tournaments',
+                onClick: () => navigate('/tournaments'),
               }}
             />
           )}

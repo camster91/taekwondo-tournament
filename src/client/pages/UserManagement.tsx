@@ -21,6 +21,7 @@ import {
 import { useAuth, getAuthHeaders } from '../context/AuthContext';
 import { TableSkeleton } from '../components/ui/Skeleton';
 import Spinner from '../components/ui/Spinner';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 
 interface User {
   id: string;
@@ -64,6 +65,7 @@ export default function UserManagement() {
   });
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [pendingToggle, setPendingToggle] = useState<{ userId: string; userName: string; isActive: boolean } | null>(null);
 
   const { data: users, isLoading } = useQuery<User[]>({
     queryKey: ['users'],
@@ -375,8 +377,9 @@ export default function UserManagement() {
                       <td className="whitespace-nowrap">
                         <button
                           onClick={() =>
-                            toggleStatusMutation.mutate({
+                            setPendingToggle({
                               userId: user.id,
+                              userName: `${user.firstName} ${user.lastName}`,
                               isActive: !user.isActive,
                             })
                           }
@@ -541,6 +544,30 @@ export default function UserManagement() {
           </div>
         </div>
       )}
+
+      {/* Toggle User Status Confirmation */}
+      <ConfirmDialog
+        isOpen={!!pendingToggle}
+        onClose={() => setPendingToggle(null)}
+        onConfirm={() => {
+          if (pendingToggle) {
+            toggleStatusMutation.mutate({
+              userId: pendingToggle.userId,
+              isActive: pendingToggle.isActive,
+            });
+            setPendingToggle(null);
+          }
+        }}
+        title={pendingToggle?.isActive ? 'Activate User' : 'Deactivate User'}
+        message={
+          pendingToggle?.isActive
+            ? `Are you sure you want to activate ${pendingToggle.userName}? They will regain access to the system.`
+            : `Are you sure you want to deactivate ${pendingToggle?.userName}? They will lose access to the system.`
+        }
+        confirmText={pendingToggle?.isActive ? 'Activate' : 'Deactivate'}
+        variant={pendingToggle?.isActive ? 'info' : 'danger'}
+        isLoading={toggleStatusMutation.isPending}
+      />
 
       {/* Invite User Modal */}
       {showInviteModal && (

@@ -15,6 +15,7 @@ import {
   FileDown,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
+import { getAuthHeaders } from '../context/AuthContext';
 
 interface Placement {
   place: number;
@@ -84,7 +85,8 @@ export default function Results() {
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['results-tournament', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${tournamentId}`);
+      const res = await fetch(`/api/tournaments/${tournamentId}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch tournament');
       return res.json();
     },
   });
@@ -93,14 +95,18 @@ export default function Results() {
   const { data: divisions, isLoading } = useQuery<Division[]>({
     queryKey: ['results-divisions', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/divisions/tournament/${tournamentId}`);
+      const res = await fetch(`/api/divisions/tournament/${tournamentId}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch divisions');
       return res.json();
     },
   });
 
-  // Filter divisions
+  // Filter divisions (show completed and in-progress with partial results)
   const filteredDivisions = divisions?.filter((d) => {
-    if (!d.bracket || d.bracket.status !== 'completed') return false;
+    if (!d.bracket) return false;
+    // Show divisions that have at least one completed match
+    const hasCompletedMatches = d.bracket.matches?.some(m => m.status === 'completed');
+    if (!hasCompletedMatches) return false;
     if (filterEvent === 'all') return true;
     return d.eventType === filterEvent;
   });
@@ -234,7 +240,8 @@ export default function Results() {
     });
 
     const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
-    downloadCSV(data, `school_standings${eventSuffix}.csv`);
+    const tournamentName = (tournament?.name || 'tournament').replace(/[^a-zA-Z0-9]/g, '_');
+    downloadCSV(data, `${tournamentName}_school_standings${eventSuffix}.csv`);
     setShowExportMenu(false);
   };
 
@@ -259,7 +266,8 @@ export default function Results() {
     });
 
     const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
-    downloadCSV(data, `tournament_results${eventSuffix}.csv`);
+    const tournamentName = (tournament?.name || 'tournament').replace(/[^a-zA-Z0-9]/g, '_');
+    downloadCSV(data, `${tournamentName}_results${eventSuffix}.csv`);
     setShowExportMenu(false);
   };
 
@@ -301,7 +309,8 @@ export default function Results() {
     });
 
     const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
-    downloadCSV(data, `competitor_results${eventSuffix}.csv`);
+    const tournamentName = (tournament?.name || 'tournament').replace(/[^a-zA-Z0-9]/g, '_');
+    downloadCSV(data, `${tournamentName}_competitor_results${eventSuffix}.csv`);
     setShowExportMenu(false);
   };
 

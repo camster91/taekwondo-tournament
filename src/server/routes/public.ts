@@ -150,19 +150,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     });
 
     if (competitor) {
-      // Update competitor info with latest data
-      competitor = await prisma.competitor.update({
-        where: { id: competitor.id },
-        data: {
-          gender,
-          belt: normalizedBelt,
-          danRank: normalizedBelt === 'Black' ? (danRank || 1) : null,
-          heightInches: heightInches || null,
-          weightLbs: weightLbs || null,
-          schoolDojang: schoolDojang?.trim() || null,
-          specialNeeds: specialNeeds?.trim() || null,
-        },
-      });
+      // Existing competitor found - use their existing data, don't overwrite
     } else {
       // Create new competitor
       competitor = await prisma.competitor.create({
@@ -207,6 +195,9 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         sparring: sparring || false,
         weightAtRegistration: weightLbs || null,
         ageAtTournament,
+        parentName: parentName?.trim() || null,
+        parentEmail: parentEmail?.trim() || null,
+        parentPhone: parentPhone?.trim() || null,
       },
       include: {
         competitor: true,
@@ -264,6 +255,51 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed. Please try again.' });
   }
+});
+
+// Public scoreboard data (no auth required)
+router.get('/tournaments/:id/scoreboard', async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: req.params.id },
+  });
+
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  const divisions = await prisma.division.findMany({
+    where: { tournamentId: req.params.id },
+    include: {
+      bracket: {
+        include: {
+          matches: {
+            include: {
+              competitor1: {
+                include: {
+                  competitor: {
+                    select: { firstName: true, lastName: true, schoolDojang: true },
+                  },
+                },
+              },
+              competitor2: {
+                include: {
+                  competitor: {
+                    select: { firstName: true, lastName: true, schoolDojang: true },
+                  },
+                },
+              },
+            },
+            orderBy: { matchNumber: 'asc' },
+          },
+        },
+      },
+    },
+    orderBy: { displayOrder: 'asc' },
+  });
+
+  res.json(divisions);
 });
 
 // Check existing registration

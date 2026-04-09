@@ -5,6 +5,9 @@ import { Trophy, Mail, AlertCircle, UserPlus, ArrowLeft, CheckCircle } from 'luc
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
 
+const TOKEN_KEY = 'tkd_auth_token';
+const USER_KEY = 'tkd_auth_user';
+
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -25,6 +28,7 @@ export default function Login() {
     queryKey: ['setup-status'],
     queryFn: async () => {
       const res = await fetch('/api/auth/setup-status');
+      if (!res.ok) throw new Error('Failed to fetch setup status');
       return res.json();
     },
     staleTime: 60000,
@@ -33,10 +37,12 @@ export default function Login() {
   const needsSetup = setupStatus?.needsSetup === true;
 
   // Redirect if already logged in
-  if (isAuthenticated) {
-    const from = (location.state as any)?.from?.pathname || '/';
-    navigate(from, { replace: true });
-  }
+  useEffect(() => {
+    if (isAuthenticated) {
+      const from = (location.state as any)?.from?.pathname || '/';
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, location.state, navigate]);
 
   // Focus code input when switching to code step
   useEffect(() => {
@@ -60,9 +66,12 @@ export default function Login() {
       if (!res.ok) {
         setError(data.error || 'Setup failed');
       } else {
-        // Store token and redirect
-        localStorage.setItem('auth_token', data.token);
-        window.location.href = '/';
+        // Store token and user data, then redirect
+        localStorage.setItem(TOKEN_KEY, data.token);
+        if (data.user) {
+          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        }
+        navigate('/', { replace: true });
       }
     } catch {
       setError('Setup failed. Please try again.');

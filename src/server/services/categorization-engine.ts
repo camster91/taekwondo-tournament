@@ -164,11 +164,6 @@ export async function autoCategorize(
 ): Promise<CategorizationResult> {
   const warnings: string[] = [];
 
-  // Clear existing divisions and assignments
-  await prisma.division.deleteMany({
-    where: { tournamentId },
-  });
-
   // Separate into patterns and sparring registrations
   const patternsRegs = registrations.filter((r) => r.patterns);
   const sparringRegs = registrations.filter((r) => r.sparring);
@@ -199,52 +194,59 @@ export async function autoCategorize(
     finalGroups = smartMergeDivisions(finalGroups, config);
   }
 
-  // Create divisions and assignments
+  // Wrap all DB mutations in a transaction
   let divisionCount = 0;
   let assignmentCount = 0;
-  let displayOrder = 0;
 
-  for (const group of finalGroups) {
-    if (group.registrations.length === 0) continue;
-
-    // Validate group
-    const validation = validateGroup(group);
-    if (validation.warnings.length > 0) {
-      warnings.push(...validation.warnings.map((w) => `${group.name}: ${w}`));
-    }
-
-    const division = await prisma.division.create({
-      data: {
-        tournamentId,
-        name: group.name,
-        beltLevel: group.beltLevel,
-        gender: group.gender,
-        eventType: group.eventType,
-        ageMin: group.ageMin,
-        ageMax: group.ageMax,
-        beltColors: JSON.stringify(group.beltColors),
-        danMin: group.danMin,
-        danMax: group.danMax,
-        weightClass: group.weightClass,
-        divisionNumber: 1,
-        displayOrder: displayOrder++,
-      },
+  await prisma.$transaction(async (tx) => {
+    // Clear existing divisions and assignments
+    await tx.division.deleteMany({
+      where: { tournamentId },
     });
 
-    // Create assignments
-    for (let i = 0; i < group.registrations.length; i++) {
-      await prisma.divisionAssignment.create({
+    // Create divisions and assignments
+    let displayOrder = 0;
+
+    for (const group of finalGroups) {
+      if (group.registrations.length === 0) continue;
+
+      // Validate group
+      const validation = validateGroup(group);
+      if (validation.warnings.length > 0) {
+        warnings.push(...validation.warnings.map((w) => `${group.name}: ${w}`));
+      }
+
+      const division = await tx.division.create({
         data: {
-          divisionId: division.id,
-          registrationId: group.registrations[i].id,
-          seedPosition: i + 1,
+          tournamentId,
+          name: group.name,
+          beltLevel: group.beltLevel,
+          gender: group.gender,
+          eventType: group.eventType,
+          ageMin: group.ageMin,
+          ageMax: group.ageMax,
+          beltColors: JSON.stringify(group.beltColors),
+          danMin: group.danMin,
+          danMax: group.danMax,
+          weightClass: group.weightClass,
+          divisionNumber: 1,
+          displayOrder: displayOrder++,
         },
       });
-      assignmentCount++;
-    }
 
-    divisionCount++;
-  }
+      // Create assignments in bulk
+      const assignmentData = group.registrations.map((reg, i) => ({
+        divisionId: division.id,
+        registrationId: reg.id,
+        seedPosition: i + 1,
+      }));
+
+      await tx.divisionAssignment.createMany({ data: assignmentData });
+      assignmentCount += assignmentData.length;
+
+      divisionCount++;
+    }
+  });
 
   return {
     divisions: divisionCount,
