@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import MatchTimer from '../components/MatchTimer';
 import { getAuthHeaders } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { getSportProfile } from '../../shared/constants/sport-profiles';
 
 interface Match {
@@ -57,6 +58,7 @@ type ResultType = 'win' | 'dq' | 'forfeit' | 'injury';
 export default function Scorekeeper() {
   const { tournamentId } = useParams();
   const queryClient = useQueryClient();
+  const { addToast } = useToast();
 
   const [selectedRing, setSelectedRing] = useState<number | null>(null);
   const [selectedDivision, setSelectedDivision] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export default function Scorekeeper() {
   const [showTimer, setShowTimer] = useState(true);
   const [penalties1, setPenalties1] = useState(0); // {sportProfile.scoringConfig.penaltyName} for competitor 1
   const [penalties2, setPenalties2] = useState(0); // {sportProfile.scoringConfig.penaltyName} for competitor 2
+  const [divisionSearch, setDivisionSearch] = useState('');
 
   // Fetch tournament for sport profile
   const { data: tournament } = useQuery<Tournament>({
@@ -143,6 +146,28 @@ export default function Scorekeeper() {
       if (currentMatchIndex < readyMatches.length - 1) {
         setCurrentMatchIndex((prev) => prev + 1);
       }
+    },
+    onError: (error: Error) => {
+      addToast(error.message || 'Operation failed', 'error');
+    },
+  });
+
+  // Undo match result mutation
+  const undoMatchResult = useMutation({
+    mutationFn: async (matchId: string) => {
+      const res = await fetch(`/api/brackets/match/${matchId}/undo`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      });
+      if (!res.ok) throw new Error('Failed to undo match result');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
+      addToast('Match result undone', 'success');
+    },
+    onError: (error: Error) => {
+      addToast(error.message || 'Operation failed', 'error');
     },
   });
 
@@ -304,9 +329,16 @@ export default function Scorekeeper() {
           ) : (
             <>
               <h2 className="text-lg font-semibold mb-4 text-gray-300">Select Division</h2>
+              <input
+                type="text"
+                placeholder="Search divisions..."
+                value={divisionSearch}
+                onChange={(e) => setDivisionSearch(e.target.value)}
+                className="w-full px-4 py-2 mb-4 rounded-lg bg-gray-800 text-white border border-gray-700 focus:border-yellow-500 focus:outline-none"
+              />
               <div className="grid gap-3">
                 {divisions
-                  ?.filter((d) => d.bracket)
+                  ?.filter((d) => d.bracket && (!divisionSearch || d.name.toLowerCase().includes(divisionSearch.toLowerCase())))
                   .map((division) => {
                     const readyCount =
                       division.bracket?.matches.filter(
@@ -642,6 +674,61 @@ export default function Scorekeeper() {
           </div>
         </>
       )}
+
+      {/* Recent Results */}
+      {(() => {
+        const completedMatches = divisions
+          ?.find((d) => d.id === selectedDivision)
+          ?.bracket?.matches.filter((m) => m.status === 'completed')
+          .slice(-5)
+          .reverse() || [];
+
+        if (completedMatches.length === 0) return null;
+
+        return (
+          <div className="p-4 border-t border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-400 mb-3">Recent Results</h3>
+            <div className="space-y-2">
+              {completedMatches.map((match) => {
+                const winnerName =
+                  match.winnerId === match.competitor1?.id
+                    ? getCompetitorName(match.competitor1)
+                    : getCompetitorName(match.competitor2);
+                const loserName =
+                  match.winnerId === match.competitor1?.id
+                    ? getCompetitorName(match.competitor2)
+                    : getCompetitorName(match.competitor1);
+
+                return (
+                  <div
+                    key={match.id}
+                    className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2"
+                  >
+                    <div className="text-sm">
+                      <span className="text-gray-500 mr-2">#{match.matchNumber}</span>
+                      <span className="text-green-400 font-medium">{winnerName}</span>
+                      <span className="text-gray-500 mx-1">def.</span>
+                      <span className="text-gray-400">{loserName}</span>
+                      {match.score1 && match.score2 && (
+                        <span className="text-gray-500 ml-2">
+                          ({match.score1}-{match.score2})
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => undoMatchResult.mutate(match.id)}
+                      disabled={undoMatchResult.isPending}
+                      className="px-3 py-1 text-xs bg-red-600 hover:bg-red-500 disabled:bg-gray-600 rounded font-medium"
+                    >
+                      Undo
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Confirmation Modal */}
       {showConfirm && currentMatch && (

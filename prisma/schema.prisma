@@ -74,6 +74,9 @@ model Registration {
   checkedIn            Boolean   @default(false)
   checkInTime          DateTime?
   checkInWeight        Float?    // Weight at check-in (for verification)
+  parentName           String?
+  parentEmail          String?
+  parentPhone          String?
   createdAt            DateTime  @default(now())
 
   // Enhanced attributes for fair matching

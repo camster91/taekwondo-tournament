@@ -51,20 +51,22 @@ export default function PublicScoreboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch tournament
+  // Fetch tournament via public endpoint (no auth required)
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['scoreboard-tournament', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${tournamentId}`);
+      const res = await fetch(`/api/public/tournaments/${tournamentId}`);
+      if (!res.ok) throw new Error('Failed to fetch tournament');
       return res.json();
     },
   });
 
-  // Fetch divisions with brackets
+  // Fetch divisions with brackets via public endpoint (no auth required)
   const { data: divisions } = useQuery<Division[]>({
     queryKey: ['scoreboard-divisions', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/divisions/tournament/${tournamentId}`);
+      const res = await fetch(`/api/public/tournaments/${tournamentId}/scoreboard`);
+      if (!res.ok) throw new Error('Failed to fetch scoreboard');
       return res.json();
     },
     refetchInterval: 5000, // Refresh every 5 seconds
@@ -166,7 +168,7 @@ export default function PublicScoreboard() {
         <div className="mt-4 h-2 bg-gray-800 rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-yellow-500 to-green-500 transition-all duration-500"
-            style={{ width: `${(stats.completed / stats.totalMatches) * 100}%` }}
+            style={{ width: `${stats.totalMatches > 0 ? (stats.completed / stats.totalMatches) * 100 : 0}%` }}
           />
         </div>
       </div>
@@ -321,7 +323,6 @@ export default function PublicScoreboard() {
             <div className="grid grid-cols-2 gap-2">
               {divisions
                 ?.filter((d) => d.bracket)
-                .slice(0, 8)
                 .map((division) => {
                   const completed =
                     division.bracket?.matches.filter((m) => m.status === 'completed').length || 0;
@@ -354,7 +355,7 @@ export default function PublicScoreboard() {
                       <div className="mt-1 h-1 bg-gray-800 rounded-full overflow-hidden">
                         <div
                           className={`h-full ${isDone ? 'bg-green-500' : 'bg-blue-500'}`}
-                          style={{ width: `${(completed / total) * 100}%` }}
+                          style={{ width: `${total > 0 ? (completed / total) * 100 : 0}%` }}
                         />
                       </div>
                     </div>
