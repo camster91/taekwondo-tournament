@@ -2,5 +2,6 @@ node_modules/
 .env
 .env.local
 *.log
+prisma/tournament.db
 prisma/tournament.db-journal
 .DS_Store
