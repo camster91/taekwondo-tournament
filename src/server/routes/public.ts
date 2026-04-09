@@ -150,19 +150,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     });
 
     if (competitor) {
-      // Update competitor info with latest data
-      competitor = await prisma.competitor.update({
-        where: { id: competitor.id },
-        data: {
-          gender,
-          belt: normalizedBelt,
-          danRank: normalizedBelt === 'Black' ? (danRank || 1) : null,
-          heightInches: heightInches || null,
-          weightLbs: weightLbs || null,
-          schoolDojang: schoolDojang?.trim() || null,
-          specialNeeds: specialNeeds?.trim() || null,
-        },
-      });
+      // Existing competitor found - use their existing data, don't overwrite
     } else {
       // Create new competitor
       competitor = await prisma.competitor.create({

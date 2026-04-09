@@ -27,6 +27,7 @@ export interface DivisionBackup {
   assignments: Array<{
     registrationId: string;
     seedPosition: number | null;
+    manualOverride: boolean;
   }>;
   bracket?: {
     id: string;
@@ -48,6 +49,7 @@ export async function backupDivisionState(
         select: {
           registrationId: true,
           seedPosition: true,
+          manualOverride: true,
         },
       },
       bracket: {
@@ -93,62 +95,65 @@ export async function restoreDivisionState(
   const errors: string[] = [];
   let restored = 0;
 
-  // Clear current divisions
-  await prisma.division.deleteMany({
-    where: { tournamentId: backup.tournamentId },
-  });
+  await prisma.$transaction(async (tx) => {
+    // Clear current divisions
+    await tx.division.deleteMany({
+      where: { tournamentId: backup.tournamentId },
+    });
 
-  // Restore each division
-  for (const div of backup.divisions) {
-    try {
-      // Create division
-      const division = await prisma.division.create({
-        data: {
-          id: div.id,
-          tournamentId: backup.tournamentId,
-          name: div.name,
-          beltLevel: div.beltLevel,
-          gender: div.gender,
-          eventType: div.eventType,
-          ageMin: div.ageMin,
-          ageMax: div.ageMax,
-          beltColors: div.beltColors,
-          danMin: div.danMin,
-          danMax: div.danMax,
-          weightClass: div.weightClass,
-          divisionNumber: div.divisionNumber,
-          isSpecialNeeds: div.isSpecialNeeds,
-          displayOrder: div.displayOrder,
-        },
-      });
-
-      // Restore assignments
-      for (const assignment of div.assignments) {
-        await prisma.divisionAssignment.create({
+    // Restore each division
+    for (const div of backup.divisions) {
+      try {
+        // Create division
+        const division = await tx.division.create({
           data: {
-            divisionId: division.id,
-            registrationId: assignment.registrationId,
-            seedPosition: assignment.seedPosition,
+            id: div.id,
+            tournamentId: backup.tournamentId,
+            name: div.name,
+            beltLevel: div.beltLevel,
+            gender: div.gender,
+            eventType: div.eventType,
+            ageMin: div.ageMin,
+            ageMax: div.ageMax,
+            beltColors: div.beltColors,
+            danMin: div.danMin,
+            danMax: div.danMax,
+            weightClass: div.weightClass,
+            divisionNumber: div.divisionNumber,
+            isSpecialNeeds: div.isSpecialNeeds,
+            displayOrder: div.displayOrder,
           },
         });
-      }
 
-      // Restore bracket if exists
-      if (div.bracket) {
-        await prisma.bracket.create({
-          data: {
-            id: div.bracket.id,
-            divisionId: division.id,
-            structure: div.bracket.structure,
-          },
-        });
-      }
+        // Restore assignments
+        for (const assignment of div.assignments) {
+          await tx.divisionAssignment.create({
+            data: {
+              divisionId: division.id,
+              registrationId: assignment.registrationId,
+              seedPosition: assignment.seedPosition,
+              manualOverride: assignment.manualOverride,
+            },
+          });
+        }
 
-      restored++;
-    } catch (error: any) {
-      errors.push(`Failed to restore ${div.name}: ${error.message}`);
+        // Restore bracket if exists
+        if (div.bracket) {
+          await tx.bracket.create({
+            data: {
+              id: div.bracket.id,
+              divisionId: division.id,
+              structure: div.bracket.structure,
+            },
+          });
+        }
+
+        restored++;
+      } catch (error: any) {
+        errors.push(`Failed to restore ${div.name}: ${error.message}`);
+      }
     }
-  }
+  });
 
   return { restored, errors };
 }
