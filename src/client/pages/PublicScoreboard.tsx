@@ -12,6 +12,7 @@ interface Match {
   score1: string | null;
   score2: string | null;
   winnerId: string | null;
+  ringNumber: number | null;
   competitor1: {
     id: string;
     competitor: { firstName: string; lastName: string; schoolDojang: string | null };

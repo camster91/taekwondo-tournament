@@ -721,7 +721,50 @@ export default function Scorekeeper() {
             >
               Record Result
             </button>
+
+            {/* Report Incident Button */}
+            <button
+              onClick={() => setShowIncidentModal(true)}
+              className="w-full mt-2 py-3 bg-orange-600 hover:bg-orange-500 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+            >
+              <AlertTriangle className="h-4 w-4" />
+              Report Incident
+            </button>
           </div>
+
+          {/* On Deck Section */}
+          {readyMatches.length > 1 && (
+            <div className="p-4 border-t border-gray-700">
+              <h3 className="text-sm font-semibold text-blue-400 mb-3 flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                ON DECK
+              </h3>
+              <div className="space-y-2">
+                {readyMatches.slice(currentMatchIndex + 1, currentMatchIndex + 3).map((match, idx) => (
+                  <div
+                    key={match.id}
+                    className={`flex items-center justify-between rounded-lg px-3 py-2 ${
+                      idx === 0 ? 'bg-blue-900/40 border border-blue-500/40' : 'bg-gray-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                        idx === 0 ? 'bg-blue-600 text-white' : 'bg-gray-600 text-gray-300'
+                      }`}>
+                        {idx === 0 ? 'Next' : 'After'}
+                      </span>
+                      <div className="text-sm">
+                        <span className="font-medium">{getCompetitorName(match.competitor1)}</span>
+                        <span className="text-gray-500 mx-1">vs</span>
+                        <span className="font-medium">{getCompetitorName(match.competitor2)}</span>
+                      </div>
+                    </div>
+                    <span className="text-xs text-gray-500">Match #{match.matchNumber}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -816,6 +859,104 @@ export default function Scorekeeper() {
                 {recordResult.isPending ? 'Saving...' : 'Confirm'}{' '}
                 <span className="text-xs text-green-200">(Enter)</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Incident Report Modal */}
+      {showIncidentModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-orange-400" />
+                Report Incident
+              </h3>
+              <button
+                onClick={() => setShowIncidentModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {currentMatch && (
+              <div className="text-sm text-gray-400 mb-4">
+                Match #{currentMatch.matchNumber}: {getCompetitorName(currentMatch.competitor1)} vs {getCompetitorName(currentMatch.competitor2)}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Type</label>
+                <select
+                  value={incidentType}
+                  onChange={(e) => setIncidentType(e.target.value)}
+                  className="w-full p-3 bg-gray-700 rounded-lg text-white"
+                >
+                  <option value="injury">Injury</option>
+                  <option value="disqualification">Disqualification</option>
+                  <option value="medical">Medical</option>
+                  <option value="equipment">Equipment</option>
+                  <option value="conduct">Conduct</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Severity</label>
+                <select
+                  value={incidentSeverity}
+                  onChange={(e) => setIncidentSeverity(e.target.value)}
+                  className="w-full p-3 bg-gray-700 rounded-lg text-white"
+                >
+                  <option value="minor">Minor</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="serious">Serious</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <textarea
+                  value={incidentDescription}
+                  onChange={(e) => setIncidentDescription(e.target.value)}
+                  placeholder="Describe the incident..."
+                  rows={3}
+                  className="w-full p-3 bg-gray-700 rounded-lg text-white resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Action Taken</label>
+                <select
+                  value={incidentAction}
+                  onChange={(e) => setIncidentAction(e.target.value)}
+                  className="w-full p-3 bg-gray-700 rounded-lg text-white"
+                >
+                  <option value="">-- Select --</option>
+                  <option value="first_aid">First Aid</option>
+                  <option value="withdrawn">Withdrawn</option>
+                  <option value="continued">Continued</option>
+                  <option value="ambulance">Ambulance</option>
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setShowIncidentModal(false)}
+                  className="flex-1 py-3 bg-gray-600 hover:bg-gray-500 rounded-lg font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleIncidentSubmit}
+                  disabled={!incidentDescription.trim() || reportIncident.isPending}
+                  className="flex-1 py-3 bg-orange-600 hover:bg-orange-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-semibold"
+                >
+                  {reportIncident.isPending ? 'Saving...' : 'Save Incident'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
