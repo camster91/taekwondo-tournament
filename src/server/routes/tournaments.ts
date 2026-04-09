@@ -342,7 +342,7 @@ router.put('/:id/weight-classes', authenticate, requireRole('admin', 'director')
   await prisma.weightClass.deleteMany({ where: { tournamentId } });
 
   const created = await prisma.weightClass.createMany({
-    data: weightClasses.map((wc, i) => ({
+    data: weightClasses.map((wc: z.infer<typeof weightClassesSchema>['weightClasses'][number], i: number) => ({
       tournamentId,
       name: wc.name,
       gender: wc.gender || null,
