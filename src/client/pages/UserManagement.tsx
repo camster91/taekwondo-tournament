@@ -545,6 +545,30 @@ export default function UserManagement() {
         </div>
       )}
 
+      {/* Toggle User Status Confirmation */}
+      <ConfirmDialog
+        isOpen={!!pendingToggle}
+        onClose={() => setPendingToggle(null)}
+        onConfirm={() => {
+          if (pendingToggle) {
+            toggleStatusMutation.mutate({
+              userId: pendingToggle.userId,
+              isActive: pendingToggle.isActive,
+            });
+            setPendingToggle(null);
+          }
+        }}
+        title={pendingToggle?.isActive ? 'Activate User' : 'Deactivate User'}
+        message={
+          pendingToggle?.isActive
+            ? `Are you sure you want to activate ${pendingToggle.userName}? They will regain access to the system.`
+            : `Are you sure you want to deactivate ${pendingToggle?.userName}? They will lose access to the system.`
+        }
+        confirmText={pendingToggle?.isActive ? 'Activate' : 'Deactivate'}
+        variant={pendingToggle?.isActive ? 'info' : 'danger'}
+        isLoading={toggleStatusMutation.isPending}
+      />
+
       {/* Invite User Modal */}
       {showInviteModal && (
         <div className="modal-container flex items-center justify-center p-4">
