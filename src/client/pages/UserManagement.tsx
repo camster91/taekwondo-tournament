@@ -21,6 +21,7 @@ import {
 import { useAuth, getAuthHeaders } from '../context/AuthContext';
 import { TableSkeleton } from '../components/ui/Skeleton';
 import Spinner from '../components/ui/Spinner';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 
 interface User {
   id: string;
@@ -64,6 +65,7 @@ export default function UserManagement() {
   });
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [pendingToggle, setPendingToggle] = useState<{ userId: string; userName: string; isActive: boolean } | null>(null);
 
   const { data: users, isLoading } = useQuery<User[]>({
     queryKey: ['users'],
