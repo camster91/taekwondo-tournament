@@ -70,6 +70,7 @@ export default function BracketEditor() {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [showReseedConfirm, setShowReseedConfirm] = useState(false);
+  const [pendingWinner, setPendingWinner] = useState<{ matchId: string; winnerId: string; name: string } | null>(null);
 
   const { data: division, isLoading } = useQuery<Division>({
     queryKey: ['division', divisionId],
@@ -93,6 +94,9 @@ export default function BracketEditor() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
     },
+    onError: (error: Error) => {
+      addToast(error.message || 'Operation failed', 'error');
+    },
   });
 
   const updateMatchMutation = useMutation({
@@ -114,6 +118,9 @@ export default function BracketEditor() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
     },
+    onError: (error: Error) => {
+      addToast(error.message || 'Operation failed', 'error');
+    },
   });
 
   const resetBracketMutation = useMutation({
@@ -125,6 +132,9 @@ export default function BracketEditor() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
+    },
+    onError: (error: Error) => {
+      addToast(error.message || 'Operation failed', 'error');
     },
   });
 
@@ -170,6 +180,17 @@ export default function BracketEditor() {
     division.bracket?.matches.filter((m) => m.bracketType === 'losers') || [];
   const finalsMatches =
     division.bracket?.matches.filter((m) => m.bracketType === 'finals') || [];
+
+  const winnersRounds = [...new Set(winnersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
+  const losersRounds = [...new Set(losersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
+
+  const handleSelectWinner = (matchId: string, winnerId: string, match: Match) => {
+    const comp = match.competitor1Id === winnerId ? match.competitor1 : match.competitor2;
+    const name = comp
+      ? `${comp.competitor.firstName} ${comp.competitor.lastName}`
+      : 'Unknown';
+    setPendingWinner({ matchId, winnerId, name });
+  };
 
   return (
     <div>
@@ -275,7 +296,7 @@ export default function BracketEditor() {
                 Winners Bracket
               </h4>
               <div className="flex gap-8">
-                {[1, 2, 3].map((round) => (
+                {winnersRounds.map((round) => (
                   <div key={round} className="space-y-4">
                     <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
                       Round {round}
@@ -287,10 +308,7 @@ export default function BracketEditor() {
                           key={match.id}
                           match={match}
                           onSelectWinner={(winnerId) =>
-                            updateMatchMutation.mutate({
-                              matchId: match.id,
-                              winnerId,
-                            })
+                            handleSelectWinner(match.id, winnerId, match)
                           }
                         />
                       ))}
@@ -305,11 +323,10 @@ export default function BracketEditor() {
                 Losers Bracket
               </h4>
               <div className="flex gap-8">
-                {[1, 2, 3, 4].map((round) => {
+                {losersRounds.map((round) => {
                   const roundMatches = losersMatches.filter(
                     (m) => m.roundNumber === round
                   );
-                  if (roundMatches.length === 0) return null;
                   return (
                     <div key={round} className="space-y-4">
                       <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
@@ -320,10 +337,7 @@ export default function BracketEditor() {
                           key={match.id}
                           match={match}
                           onSelectWinner={(winnerId) =>
-                            updateMatchMutation.mutate({
-                              matchId: match.id,
-                              winnerId,
-                            })
+                            handleSelectWinner(match.id, winnerId, match)
                           }
                         />
                       ))}
@@ -345,10 +359,7 @@ export default function BracketEditor() {
                       key={match.id}
                       match={match}
                       onSelectWinner={(winnerId) =>
-                        updateMatchMutation.mutate({
-                          matchId: match.id,
-                          winnerId,
-                        })
+                        handleSelectWinner(match.id, winnerId, match)
                       }
                     />
                   ))}
@@ -397,6 +408,26 @@ export default function BracketEditor() {
         message="Are you sure you want to regenerate the bracket? This will reset all match results and reseed competitors."
         confirmText="Reseed Bracket"
         variant="warning"
+      />
+
+      {/* Winner Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!pendingWinner}
+        onClose={() => setPendingWinner(null)}
+        onConfirm={() => {
+          if (pendingWinner) {
+            updateMatchMutation.mutate({
+              matchId: pendingWinner.matchId,
+              winnerId: pendingWinner.winnerId,
+            });
+            setPendingWinner(null);
+          }
+        }}
+        title="Confirm Winner"
+        message={`Record ${pendingWinner?.name ?? ''} as the winner of this match?`}
+        confirmText="Record Winner"
+        variant="info"
+        isLoading={updateMatchMutation.isPending}
       />
     </div>
   );
@@ -455,7 +486,7 @@ function MatchCard({
           {name1}
           {match.competitor1?.competitor.schoolDojang && (
             <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
-              ({match.competitor1.competitor.schoolDojang.substring(0, 8)})
+              ({match.competitor1.competitor.schoolDojang.substring(0, 20)})
             </span>
           )}
         </button>
@@ -475,7 +506,7 @@ function MatchCard({
           {name2}
           {match.competitor2?.competitor.schoolDojang && (
             <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
-              ({match.competitor2.competitor.schoolDojang.substring(0, 8)})
+              ({match.competitor2.competitor.schoolDojang.substring(0, 20)})
             </span>
           )}
         </button>
