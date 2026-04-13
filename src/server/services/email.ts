@@ -1,43 +1,22 @@
-import nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
-
-let transporter: Transporter | null = null;
-
-function getTransporter(): Transporter | null {
-  if (transporter) return transporter;
-
-  const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT || '587', 10);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (!host || !user || !pass) {
-    return null;
-  }
-
-  transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
-
-  return transporter;
-}
+const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY || '';
+const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'ashbi.ca';
+const MAILGUN_BASE_URL = process.env.MAILGUN_BASE_URL || 'https://api.mailgun.net/v3';
 
 export function isEmailConfigured(): boolean {
-  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  return !!MAILGUN_API_KEY;
 }
 
 export async function verifyEmailConnection(): Promise<boolean> {
-  const t = getTransporter();
-  if (!t) return false;
+  if (!MAILGUN_API_KEY) return false;
 
   try {
-    await t.verify();
-    return true;
+    const auth = Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64');
+    const res = await fetch(`${MAILGUN_BASE_URL}/${MAILGUN_DOMAIN}`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    return res.ok;
   } catch (err) {
-    console.error('SMTP connection verification failed:', err);
+    console.error('Mailgun connection verification failed:', err);
     return false;
   }
 }
@@ -47,23 +26,36 @@ export async function sendEmail(
   subject: string,
   html: string
 ): Promise<{ success: boolean; error?: string }> {
-  const t = getTransporter();
-
-  if (!t) {
+  if (!MAILGUN_API_KEY) {
     console.log(`[Email not configured] To: ${to}, Subject: ${subject}`);
     return { success: false, error: 'Email not configured' };
   }
 
   const fromName = process.env.EMAIL_FROM_NAME || 'TKD Tournament Manager';
-  const fromAddress = process.env.EMAIL_FROM_ADDRESS || process.env.SMTP_USER || 'noreply@example.com';
+  const fromAddress = process.env.EMAIL_FROM_ADDRESS || `noreply@${MAILGUN_DOMAIN}`;
 
   try {
-    await t.sendMail({
-      from: `"${fromName}" <${fromAddress}>`,
-      to,
-      subject,
-      html,
+    const params = new URLSearchParams();
+    params.append('from', `"${fromName}" <${fromAddress}>`);
+    params.append('to', to);
+    params.append('subject', subject);
+    params.append('html', html);
+
+    const auth = Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64');
+    const res = await fetch(`${MAILGUN_BASE_URL}/${MAILGUN_DOMAIN}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
     });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Mailgun API error: ${res.status} - ${err}`);
+    }
+
     return { success: true };
   } catch (err: any) {
     console.error('Failed to send email:', err);
