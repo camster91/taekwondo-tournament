@@ -1,23 +1,42 @@
 version: '3.8'
 
 services:
-  martial-arts-tournament:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: martial-arts-tournament
     ports:
       - "3001:3001"
-    volumes:
-      - tournament_data:/data
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - DATABASE_URL=file:/data/tournament.db
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
       - ADMIN_SETUP_KEY=${ADMIN_SETUP_KEY:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: taekwondo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: taekwondo_tournament
+      POSTGRES_USER: taekwondo
+      POSTGRES_PASSWORD: taekwondo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taekwondo -d taekwondo_tournament"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
-  tournament_data:
+  postgres_data:
