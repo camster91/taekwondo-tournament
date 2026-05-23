@@ -2,8 +2,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install all dependencies
+# Install all dependencies (prisma needed for postinstall)
 COPY package*.json ./
+COPY prisma ./prisma
 RUN npm ci
 
 # Copy source code
