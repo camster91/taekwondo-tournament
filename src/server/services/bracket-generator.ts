@@ -635,8 +635,10 @@ function generateDoubleEliminationBracket(competitors: (CompetitorSeed | null)[]
   for (let wr = 2; wr <= winnersRounds; wr++) {
     // Even losers round: previous losers survivors vs nothing yet (just consolidate)
     const prevLosersMatches = losersRoundMatches[losersRoundMatches.length - 1];
+    const wrMatches = winnersRoundMatches[wr - 1];
+    const numDropDownMatches = wrMatches.length;
 
-    if (prevLosersMatches.length > 1) {
+    if (prevLosersMatches.length > numDropDownMatches) {
       // Consolidation round: pair up previous losers survivors
       const numMatches = prevLosersMatches.length / 2;
       const thisRoundMatchNumbers: number[] = [];
@@ -662,9 +664,8 @@ function generateDoubleEliminationBracket(competitors: (CompetitorSeed | null)[]
     }
 
     // Drop-down round: losers from winners round wr play losers bracket survivors
-    const wrMatches = winnersRoundMatches[wr - 1]; // winners round wr match numbers
+    // wrMatches and numDropDownMatches already declared above
     const currentLosersMatches = losersRoundMatches[losersRoundMatches.length - 1];
-    const numDropDownMatches = wrMatches.length;
 
     if (numDropDownMatches > 0 && currentLosersMatches.length === numDropDownMatches) {
       const thisRoundMatchNumbers: number[] = [];
