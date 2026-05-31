@@ -12,11 +12,12 @@ if (process.env.NODE_ENV === 'production' && !JWT_SECRET) {
   process.exit(1);
 }
 
-// In development, use a default (will show warning)
-const EFFECTIVE_JWT_SECRET = JWT_SECRET || (() => {
-  console.warn('WARNING: Using default JWT secret. Set JWT_SECRET env var for production.');
-  return 'dev-only-secret-do-not-use-in-production';
-})();
+// JWT_SECRET is required in all environments — no hardcoded fallback
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is required');
+  process.exit(1);
+}
+const EFFECTIVE_JWT_SECRET = JWT_SECRET;
 
 export interface JWTPayload {
   userId: string;
