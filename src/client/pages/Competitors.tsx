@@ -794,25 +794,33 @@ export default function Competitors() {
         )}
       </div>
 
-      {/* Delete Confirmation (single) */}
+      {/* Delete Confirmation (single) — soft-delete to Trash */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-        title="Delete Competitor"
-        message={`Are you sure you want to delete ${deleteTarget?.firstName} ${deleteTarget?.lastName}? This will also remove them from any tournaments they're registered in.`}
-        confirmText="Delete"
+        title="Send to Trash?"
+        message={
+          <>
+            <span className="font-semibold">{deleteTarget?.firstName} {deleteTarget?.lastName}</span> will be removed from any tournaments they're registered in. They go to the <span className="font-semibold text-indigo-600 dark:text-indigo-400">Trash</span> for 7 days, then are permanently purged.
+          </>
+        }
+        confirmText="Send to Trash"
         isLoading={deleteMutation.isPending}
       />
 
-      {/* Bulk Delete Confirmation */}
+      {/* Bulk Delete Confirmation — soft-delete: send to Trash, recoverable for 7 days */}
       <ConfirmDialog
         isOpen={bulkDeleteOpen}
         onClose={() => setBulkDeleteOpen(false)}
         onConfirm={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
-        title={`Delete ${selectedIds.size} competitor${selectedIds.size === 1 ? '' : 's'}?`}
-        message={`This will permanently delete ${selectedIds.size} competitor${selectedIds.size === 1 ? '' : 's'} and remove them from every tournament they're registered in. This action cannot be undone (well, you can re-import them — but their history is gone).`}
-        confirmText={`Delete ${selectedIds.size}`}
+        title={`Send ${selectedIds.size} competitor${selectedIds.size === 1 ? '' : 's'} to Trash?`}
+        message={
+          <>
+            {selectedIds.size} competitor{selectedIds.size === 1 ? '' : 's'} will be removed from every tournament they're registered in. They go to the <span className="font-semibold text-indigo-600 dark:text-indigo-400">Trash</span> and can be restored within 7 days. After 7 days they're permanently purged.
+          </>
+        }
+        confirmText={`Send ${selectedIds.size} to Trash`}
         isLoading={bulkDeleteMutation.isPending}
       />
 
