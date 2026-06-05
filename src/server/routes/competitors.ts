@@ -74,36 +74,137 @@ router.post('/auto-map', authenticate, requireRole('admin', 'director'), validat
 // Get all competitors (requires authentication)
 router.get('/', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { search, belt, school, limit = '100', offset = '0' } = req.query;
+  const {
+    search, belt, school, gender,
+    age_min, age_max,
+    weight_min, weight_max,
+    limit = '100', offset = '0',
+  } = req.query as Record<string, string>;
 
   const where: any = {};
 
   if (search) {
     where.OR = [
-      { firstName: { contains: String(search) } },
-      { lastName: { contains: String(search) } },
+      { firstName: { contains: search, mode: 'insensitive' } },
+      { lastName:  { contains: search, mode: 'insensitive' } },
+      { schoolDojang: { contains: search, mode: 'insensitive' } },
     ];
   }
 
   if (belt) {
-    where.belt = String(belt);
+    // Allow comma-separated for "Yellow,Green"
+    const belts = belt.split(',').map((b) => b.trim()).filter(Boolean);
+    where.belt = belts.length > 1 ? { in: belts } : belts[0];
   }
 
   if (school) {
-    where.schoolDojang = { contains: String(school) };
+    // Exact match (no fuzzy) for school — too easy to over-match
+    where.schoolDojang = { equals: school, mode: 'insensitive' };
+  }
+
+  if (gender) {
+    where.gender = String(gender).toUpperCase();
+  }
+
+  // Age / weight filters require computed-from-DOB & weightLbs columns.
+  // We compute age in JS from dateOfBirth. For SQL-level filtering
+  // we use weightLbs directly.
+  if (weight_min || weight_max) {
+    where.weightLbs = {};
+    if (weight_min) where.weightLbs.gte = parseInt(weight_min);
+    if (weight_max) where.weightLbs.lte = parseInt(weight_max);
   }
 
   const [competitors, total] = await Promise.all([
     prisma.competitor.findMany({
       where,
-      take: parseInt(String(limit)),
-      skip: parseInt(String(offset)),
+      take: parseInt(limit),
+      skip: parseInt(offset),
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     }),
     prisma.competitor.count({ where }),
   ]);
 
-  res.json({ competitors, total });
+  // Compute age and belt-level group client-side so the UI can show
+  // "682 kids, 5 with weight = 0" etc.
+  const enriched = competitors.map((c) => {
+    let age: number | null = null;
+    if (c.dateOfBirth) {
+      const dob = new Date(c.dateOfBirth);
+      const now = new Date();
+      age = now.getFullYear() - dob.getFullYear();
+      const m = now.getMonth() - dob.getMonth();
+      if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age--;
+    }
+    const isBlack = /^black/i.test(c.belt || '');
+    return { ...c, age, tier: isBlack ? 'BB' : 'CB' };
+  });
+
+  // Post-filter by age in JS (cheaper to do it here than a Prisma raw query)
+  let filtered = enriched;
+  if (age_min) filtered = filtered.filter((c) => c.age != null && c.age >= parseInt(age_min));
+  if (age_max) filtered = filtered.filter((c) => c.age != null && c.age <= parseInt(age_max));
+
+  res.json({ competitors: filtered, total, filteredCount: filtered.length });
+});
+
+// Aggregates for faceted UI (count by belt, gender, school, age band)
+router.get('/meta/aggregates', authenticate, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const all = await prisma.competitor.findMany({
+    select: { belt: true, gender: true, schoolDojang: true, dateOfBirth: true, weightLbs: true },
+  });
+
+  const now = new Date();
+  const byBelt: Record<string, number> = {};
+  const byGender: Record<string, number> = {};
+  const bySchool: Record<string, number> = {};
+  const byAge: Record<string, number> = {
+    '4-5': 0, '6-7': 0, '8-9': 0, '10-11': 0, '12-14': 0, '15-17': 0, '18-35': 0, '36+': 0,
+  };
+  const byWeight: Record<string, number> = {
+    'Under 50': 0, '50-75': 0, '75-100': 0, '100-150': 0, '150+': 0,
+  };
+
+  for (const c of all) {
+    byBelt[c.belt] = (byBelt[c.belt] || 0) + 1;
+    byGender[c.gender] = (byGender[c.gender] || 0) + 1;
+    if (c.schoolDojang) bySchool[c.schoolDojang] = (bySchool[c.schoolDojang] || 0) + 1;
+
+    if (c.dateOfBirth) {
+      const dob = new Date(c.dateOfBirth);
+      let age = now.getFullYear() - dob.getFullYear();
+      const m = now.getMonth() - dob.getMonth();
+      if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age--;
+      if (age <= 5) byAge['4-5']++;
+      else if (age <= 7) byAge['6-7']++;
+      else if (age <= 9) byAge['8-9']++;
+      else if (age <= 11) byAge['10-11']++;
+      else if (age <= 14) byAge['12-14']++;
+      else if (age <= 17) byAge['15-17']++;
+      else if (age <= 35) byAge['18-35']++;
+      else byAge['36+']++;
+    }
+
+    if (c.weightLbs != null) {
+      if (c.weightLbs < 50) byWeight['Under 50']++;
+      else if (c.weightLbs < 75) byWeight['50-75']++;
+      else if (c.weightLbs < 100) byWeight['75-100']++;
+      else if (c.weightLbs < 150) byWeight['100-150']++;
+      else byWeight['150+']++;
+    }
+  }
+
+  res.json({
+    total: all.length,
+    byBelt,
+    byGender,
+    bySchool: Object.fromEntries(
+      Object.entries(bySchool).sort((a, b) => b[1] - a[1]).slice(0, 20)
+    ),
+    byAge,
+    byWeight,
+  });
 });
 
 // Get unique schools for filtering (requires authentication)
