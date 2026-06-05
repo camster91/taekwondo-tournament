@@ -85,6 +85,10 @@ model Registration {
   reachAtRegistration  Float?    // Reach at registration time
   experienceScore      Float?    // Calculated from history
   skillEstimate        Float?    // Estimated skill level
+  competeWithOlder     Boolean   @default(false) // Competitor/parent opt-in to compete in older age band
+  specialNeeds         String?   // Per-registration notes (separate from competitor-level field)
+  manualDivisionId     String?   // Manager override — pin to a specific Division ID
+  seeding              Int?      // Manual seeding 1..N (null = auto-seed by rating)
 
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   competitor  Competitor           @relation(fields: [competitorId], references: [id], onDelete: Cascade)
