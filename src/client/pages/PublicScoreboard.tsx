@@ -268,19 +268,19 @@ export default function PublicScoreboard() {
                       </div>
                       <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
                         <div className="min-w-0">
-                          <div className="text-3xl lg:text-4xl font-bold tracking-tight truncate">
+                          <div className="text-3xl lg:text-4xl font-bold tracking-tight">
                             {getCompetitorName(match.competitor1)}
                           </div>
-                          <div className="text-slate-400 text-sm truncate mt-0.5">
+                          <div className="text-slate-400 text-sm mt-0.5">
                             {getCompetitorSchool(match.competitor1) || '—'}
                           </div>
                         </div>
                         <div className="px-4 text-2xl font-black text-slate-600 tracking-widest">VS</div>
                         <div className="min-w-0 text-right">
-                          <div className="text-3xl lg:text-4xl font-bold tracking-tight truncate">
+                          <div className="text-3xl lg:text-4xl font-bold tracking-tight">
                             {getCompetitorName(match.competitor2)}
                           </div>
-                          <div className="text-slate-400 text-sm truncate mt-0.5">
+                          <div className="text-slate-400 text-sm mt-0.5">
                             {getCompetitorSchool(match.competitor2) || '—'}
                           </div>
                         </div>
