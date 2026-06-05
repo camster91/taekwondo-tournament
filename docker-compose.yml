@@ -11,16 +11,18 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=postgresql://taekwondo:taekwondo@taekwondo-db:5432/taekwondo_tournament
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_SETUP_KEY=${ADMIN_SETUP_KEY:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
     depends_on:
-      postgres:
+      taekwondo-db:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - tkd-net
 
-  postgres:
+  taekwondo-db:
     image: postgres:16-alpine
     container_name: taekwondo-db
     restart: unless-stopped
@@ -28,8 +30,6 @@ services:
       POSTGRES_DB: taekwondo_tournament
       POSTGRES_USER: taekwondo
       POSTGRES_PASSWORD: taekwondo
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -37,6 +37,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - tkd-net
 
 volumes:
   postgres_data:
+
+networks:
+  tkd-net:
+    driver: bridge

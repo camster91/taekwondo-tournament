@@ -30,10 +30,11 @@ WORKDIR /app
 
 # Setup env variables
 ENV NODE_ENV=production
-ENV DATABASE_URL="file:/data/tournament.db"
+# DATABASE_URL is provided at runtime via Coolify env vars
+# (Coolify injects the linked Postgres service's connection string)
 
-# Create data directory for SQLite and make it writable
-RUN mkdir -p /data && chown node:node /data
+# Install OpenSSL 1.1 for Prisma engines (Alpine needs this)
+RUN apk add --no-cache openssl
 
 # Copy production dependencies and built code
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
