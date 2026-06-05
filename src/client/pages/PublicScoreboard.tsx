@@ -433,26 +433,6 @@ export default function PublicScoreboard() {
           </div>
         </div>
       </div>
-
-      {/* Footer - Active Division Cycle Indicator */}
-      {activeDivisions.length > 1 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 px-8 py-2">
-          <div className="flex items-center justify-center gap-2">
-            {activeDivisions.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => {
-                  setActiveDivisionIndex(index);
-                  setCycleEnabled(false);
-                }}
-                className={`w-3 h-3 rounded-full transition-all ${
-                  index === activeDivisionIndex ? 'bg-yellow-400 w-8' : 'bg-gray-600'
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
