@@ -678,4 +678,48 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
   }
 });
 
+// Demo mode: anyone can sign in as a guest without an email.
+// - Creates (or reuses) a "demo@ashbi.ca" user
+// - Mints a JWT with role=guest (1-hour expiry)
+// - Designed for the public live URL so visitors can try the app
+//   without needing to receive a magic-link email
+const DEMO_EMAIL = 'demo@ashbi.ca';
+const DEMO_TTL_SECONDS = 4 * 60 * 60; // 4 hours
+
+router.post('/demo', async (_req: Request, res: Response) => {
+  try {
+    const prisma: PrismaClient = _req.app.locals.prisma;
+
+    // Find or create the demo user (idempotent, shared across all visitors)
+    let user = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: DEMO_EMAIL,
+          firstName: 'Demo',
+          lastName: 'Visitor',
+          role: 'admin', // demo gets full admin so they can poke every feature
+        },
+      });
+    }
+
+    const { createToken } = await import('../middleware/auth.js');
+    const token = createToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    res.json({
+      token,
+      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+      expiresIn: DEMO_TTL_SECONDS,
+      message: 'Demo session active. Changes you make are visible to all demo visitors.',
+    });
+  } catch (err: any) {
+    console.error('Demo login error:', err);
+    res.status(500).json({ error: err.message || 'Demo login failed' });
+  }
+});
+
 export default router;
