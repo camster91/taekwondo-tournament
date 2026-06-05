@@ -147,7 +147,7 @@ export default function PublicScoreboard() {
     <div className="min-h-screen bg-[#0a0e1a] text-white overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-b border-white/5">
-        <div className="px-8 py-4 flex items-center justify-between">
+        <div className="px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-violet-500 blur-md opacity-50" />
@@ -181,7 +181,7 @@ export default function PublicScoreboard() {
         </div>
 
         {/* Ring tabs */}
-        <div className="px-8 pb-0 flex items-end justify-between border-t border-white/5 pt-2">
+        <div className="px-4 md:px-8 pb-0 flex items-end justify-between border-t border-white/5 pt-2 overflow-x-auto">
           <div className="flex items-end gap-1">
             <button
               onClick={() => { setActiveRing('all'); setCycleEnabled(false); }}
@@ -233,9 +233,9 @@ export default function PublicScoreboard() {
         </div>
       </div>
 
-      <div className="flex h-[calc(100vh-180px)]">
+      <div className="flex flex-col md:flex-row h-[calc(100vh-180px)]">
         {/* Left Column - Current Matches (TV hero) */}
-        <div className="w-1/2 p-6 border-r border-white/5 overflow-hidden">
+        <div className="w-full md:w-1/2 p-4 md:p-6 border-r border-white/5 overflow-hidden">
           <div className="flex items-center mb-6">
             <Zap className="h-6 w-6 text-amber-400 mr-2" />
             <h2 className="text-2xl font-bold text-amber-400 uppercase tracking-wider">Now competing</h2>
@@ -268,16 +268,16 @@ export default function PublicScoreboard() {
                       </div>
                       <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
                         <div className="min-w-0">
-                          <div className="text-3xl lg:text-4xl font-bold tracking-tight">
+                          <div className="text-xl md:text-3xl lg:text-4xl font-bold tracking-tight">
                             {getCompetitorName(match.competitor1)}
                           </div>
                           <div className="text-slate-400 text-sm mt-0.5">
                             {getCompetitorSchool(match.competitor1) || '—'}
                           </div>
                         </div>
-                        <div className="px-4 text-2xl font-black text-slate-600 tracking-widest">VS</div>
+                        <div className="px-2 md:px-4 text-xl md:text-2xl font-black text-slate-600 tracking-widest">VS</div>
                         <div className="min-w-0 text-right">
-                          <div className="text-3xl lg:text-4xl font-bold tracking-tight">
+                          <div className="text-xl md:text-3xl lg:text-4xl font-bold tracking-tight">
                             {getCompetitorName(match.competitor2)}
                           </div>
                           <div className="text-slate-400 text-sm mt-0.5">
@@ -331,8 +331,8 @@ export default function PublicScoreboard() {
           </div>
         </div>
 
-        {/* Right Column - Recent Results & Stats */}
-        <div className="w-1/2 p-6">
+        {/* Right Column - Recent Results& Stats */}
+        <div className="w-full md:w-1/2 p-4 md:p-6">
           <div className="flex items-center mb-6">
             <Award className="h-6 w-6 text-green-400 mr-2" />
             <h2 className="text-2xl font-bold text-green-400">RECENT RESULTS</h2>
@@ -388,7 +388,7 @@ export default function PublicScoreboard() {
               <Users className="h-5 w-5 text-purple-400 mr-2" />
               <h3 className="text-xl font-semibold text-purple-400">DIVISION STATUS</h3>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {divisions
                 ?.filter((d) => d.bracket)
                 .map((division) => {

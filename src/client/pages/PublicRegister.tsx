@@ -323,15 +323,15 @@ export default function PublicRegister() {
         {/* Registration Form */}
         <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 space-y-6">
           {/* Step Indicator */}
-          <div className="flex items-center gap-2 mb-2">
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${step >= 1 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
+          <div className="flex items-center gap-2 mb-2 overflow-x-auto">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px]">1</span>
               Athlete
             </div>
-            <div className={`h-px flex-1 ${step >= 2 ? 'bg-indigo-400' : 'bg-gray-200 dark:bg-gray-700'}`} />
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${step >= 2 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
+            <div className={`h-px flex-1 min-w-[1rem] ${step >= 2 ? 'bg-indigo-400' : 'bg-gray-200 dark:bg-gray-700'}`} />
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 2 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
               <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-indigo-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
-              Parent &amp; Consent
+              Parent & Consent
             </div>
           </div>
 
@@ -626,7 +626,7 @@ export default function PublicRegister() {
           </div>
 
           {/* Step 1 → Step 2 navigation */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex justify-end">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex flex-col sm:flex-row justify-end gap-3">
             <button
               type="button"
               onClick={() => {
@@ -641,9 +641,9 @@ export default function PublicRegister() {
                 setStep(2);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="btn btn-primary px-6 py-2.5"
+              className="btn btn-primary px-6 py-2.5 w-full sm:w-auto flex items-center justify-center"
             >
-              Next: Parent &amp; Consent →
+              Next: Parent & Consent →
             </button>
           </div>
           </>)}
@@ -704,14 +704,14 @@ export default function PublicRegister() {
             <button
               type="button"
               onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-              className="btn btn-secondary px-6 py-2.5"
+              className="btn btn-secondary px-6 py-2.5 w-full sm:w-auto flex items-center justify-center"
             >
               ← Back to Athlete
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="btn btn-primary px-6 py-3 text-lg flex items-center justify-center flex-1 sm:flex-none"
+              className="btn btn-primary px-6 py-3 text-lg flex items-center justify-center w-full sm:w-auto"
             >
               {submitting ? (
                 <>
