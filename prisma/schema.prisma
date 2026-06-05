@@ -157,6 +157,7 @@ model Bracket {
   id         String   @id @default(uuid())
   divisionId String   @unique
   structure  String   // JSON bracket tree structure
+  format     String   @default("double_elim") // double_elim, single_elim, round_robin, pool_play
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -170,7 +171,7 @@ model Match {
   bracketId     String
   roundNumber   Int
   matchNumber   Int
-  bracketType   String   // winners, losers, finals
+  bracketType   String   // winners, losers, finals, pool
   competitor1Id String?
   competitor2Id String?
   winnerId      String?
