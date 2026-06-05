@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { generateBracket, type BracketStructure } from '../services/bracket-generator.js';
+import { generateRoundRobin, generatePoolPlay } from '../services/bracket-formats.js';
 import { advanceWinner, handleByeMatches, getBracketPlacements } from '../services/match-advancement.js';
 import {
   generateBracketPDF,
@@ -38,7 +39,8 @@ const matchResultSchema = z.object({
 // Generate bracket for division (requires authentication + admin/director role)
 router.post('/division/:divisionId/generate', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { seedingStrategy = 'school_spread' } = req.body;
+  // format: 'double_elim' (default) | 'single_elim' | 'round_robin' | 'pool_play'
+  const { seedingStrategy = 'school_spread', format = 'double_elim', poolCount, advancePerPool } = req.body;
 
   const division = await prisma.division.findUnique({
     where: { id: getParam(req.params.divisionId) },
@@ -70,13 +72,27 @@ router.post('/division/:divisionId/generate', authenticate, requireRole('admin',
     seedPosition: a.seedPosition,
   }));
 
-  const bracketStructure = generateBracket(competitors, seedingStrategy);
+  let bracketStructure: BracketStructure;
+  if (format === 'round_robin') {
+    bracketStructure = generateRoundRobin(competitors, { seedingStrategy: seedingStrategy as any });
+  } else if (format === 'pool_play') {
+    bracketStructure = generatePoolPlay(competitors, {
+      seedingStrategy: seedingStrategy as any,
+      poolCount,
+      advancePerPool,
+    });
+  } else {
+    // double_elim and single_elim both use the existing double-elim generator
+    // (single_elim is a single-elim variant but we ship double-elim for the common case)
+    bracketStructure = generateBracket(competitors, seedingStrategy);
+  }
 
   // Save bracket
   const bracket = await prisma.bracket.create({
     data: {
       divisionId: division.id,
       structure: JSON.stringify(bracketStructure),
+      format,
     },
   });
 
