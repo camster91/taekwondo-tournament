@@ -2,8 +2,10 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import * as XLSX from 'xlsx';
 import { importFromExcel } from '../services/excel-import.js';
 import { generateImportTemplate, getDefaultColumnMapping } from '../services/excel-template.js';
+import { autoDetectMapping } from '../services/excel-auto-map.js';
 import { validateRequest } from '../middleware/validate.js';
 import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
 
@@ -44,6 +46,29 @@ router.get('/template', (_req: Request, res: Response) => {
 // Get default column mapping for imports
 router.get('/template/mapping', (_req: Request, res: Response) => {
   res.json(getDefaultColumnMapping());
+});
+
+// Auto-detect the column mapping for an uploaded Excel/CSV file.
+// The client parses the file with xlsx (browser-side), sends the resulting
+// workbook as a base64 buffer; the server re-parses and runs the auto-detector.
+// (Avoids adding multer as a dep — the file is already in memory after
+//  xlsx.read in the browser.)
+const autoMapSchema = z.object({
+  fileBase64: z.string().min(1),
+  fileName: z.string().optional(),
+});
+router.post('/auto-map', authenticate, requireRole('admin', 'director'), validateRequest(autoMapSchema), async (req: Request, res: Response) => {
+  try {
+    const { fileBase64, fileName } = req.body as { fileBase64: string; fileName?: string };
+    const buffer = Buffer.from(fileBase64, 'base64');
+    if (buffer.length > 25 * 1024 * 1024) {
+      return res.status(413).json({ error: 'File too large (max 25MB)' });
+    }
+    const result = autoDetectMapping(buffer);
+    res.json({ ...result, fileName: fileName || 'uploaded' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to parse file' });
+  }
 });
 
 // Get all competitors (requires authentication)
