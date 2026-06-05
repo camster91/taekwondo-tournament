@@ -20,6 +20,7 @@ import {
   Bell,
   Settings as SettingsIcon,
   ExternalLink,
+  Trash2,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -27,6 +28,7 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Dashboard from './pages/Dashboard';
 import Competitors from './pages/Competitors';
+import Trash from './pages/Trash';
 import Tournaments from './pages/Tournaments';
 import TournamentDetail from './pages/TournamentDetail';
 import TournamentSettings from './pages/TournamentSettings';
@@ -50,6 +52,7 @@ import NotFound from './pages/NotFound';
 const primaryNav = [
   { name: 'Dashboard', href: '/', icon: Home, section: 'workspace' },
   { name: 'Competitors', href: '/competitors', icon: Users, section: 'workspace' },
+  { name: 'Trash', href: '/trash', icon: Trash2, section: 'admin' },
   { name: 'Tournaments', href: '/tournaments', icon: Trophy, section: 'workspace' },
 ];
 
@@ -404,6 +407,7 @@ function AppRoutes() {
           {/* General pages - any authenticated user */}
           <Route path="/" element={<Dashboard />} />
           <Route path="/competitors" element={<Competitors />} />
+          <Route path="/trash" element={<Trash />} />
           <Route path="/tournaments" element={<Tournaments />} />
           <Route path="/tournaments/:id" element={<TournamentDetail />} />
           <Route path="/tournaments/:id/results" element={<Results />} />

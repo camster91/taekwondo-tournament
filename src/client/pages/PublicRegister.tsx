@@ -56,6 +56,9 @@ export default function PublicRegister() {
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
+  // 2-step form: step 1 = kid info, step 2 = parent + consent
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+
   const [formData, setFormData] = useState({
     tournamentId: preselectedTournamentId || '',
     firstName: '',
@@ -319,6 +322,20 @@ export default function PublicRegister() {
 
         {/* Registration Form */}
         <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 space-y-6">
+          {/* Step Indicator */}
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${step >= 1 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px]">1</span>
+              Athlete
+            </div>
+            <div className={`h-px flex-1 ${step >= 2 ? 'bg-indigo-400' : 'bg-gray-200 dark:bg-gray-700'}`} />
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${step >= 2 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-indigo-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
+              Parent &amp; Consent
+            </div>
+          </div>
+
+          {step === 1 && (<>
           {/* Tournament Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -608,6 +625,30 @@ export default function PublicRegister() {
             </div>
           </div>
 
+          {/* Step 1 → Step 2 navigation */}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                // Light client-side gate: if the browser-native required
+                // attributes are satisfied, advance. Otherwise let the
+                // browser surface the missing fields with tooltips.
+                const form = document.querySelector('form');
+                if (form && !form.checkValidity()) {
+                  form.reportValidity();
+                  return;
+                }
+                setStep(2);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="btn btn-primary px-6 py-2.5"
+            >
+              Next: Parent &amp; Consent →
+            </button>
+          </div>
+          </>)}
+
+          {step === 2 && (<>
           {/* Parent/Guardian Info */}
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -659,11 +700,18 @@ export default function PublicRegister() {
           </div>
 
           {/* Submit Button */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center">
+            <button
+              type="button"
+              onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              className="btn btn-secondary px-6 py-2.5"
+            >
+              ← Back to Athlete
+            </button>
             <button
               type="submit"
               disabled={submitting}
-              className="btn btn-primary w-full py-3 text-lg flex items-center justify-center"
+              className="btn btn-primary px-6 py-3 text-lg flex items-center justify-center flex-1 sm:flex-none"
             >
               {submitting ? (
                 <>
@@ -674,10 +722,11 @@ export default function PublicRegister() {
                 'Complete Registration'
               )}
             </button>
-            <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-3">
-              By registering, you agree to follow all tournament rules and regulations.
-            </p>
           </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-3">
+            By registering, you agree to follow all tournament rules and regulations.
+          </p>
+          </>)}
         </form>
       </div>
     </div>
