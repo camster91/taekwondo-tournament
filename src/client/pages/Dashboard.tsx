@@ -1,6 +1,24 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { Trophy, Users, LayoutGrid, Plus, ArrowRight, School, Calendar, Target } from 'lucide-react';
+import {
+  Trophy,
+  Users,
+  LayoutGrid,
+  Plus,
+  ArrowRight,
+  School,
+  Calendar,
+  Target,
+  TrendingUp,
+  Sparkles,
+  Zap,
+  FileSpreadsheet,
+  Check,
+  Activity,
+  Award,
+  Sparkle,
+  ArrowUpRight,
+} from 'lucide-react';
 import { StatsSkeleton, CardSkeleton } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
@@ -11,25 +29,14 @@ interface Tournament {
   name: string;
   date: string;
   status: string;
-  _count: {
-    registrations: number;
-    divisions: number;
-  };
+  location?: string;
+  _count: { registrations: number; divisions: number };
 }
 
-interface CompetitorsResponse {
-  competitors: any[];
-  total: number;
-}
+interface CompetitorsResponse { competitors: any[]; total: number; }
 
 interface AnalyticsData {
-  totals: {
-    competitors: number;
-    tournaments: number;
-    matches: number;
-    completedMatches: number;
-    recentRegistrations: number;
-  };
+  totals: { competitors: number; tournaments: number; matches: number; completedMatches: number; recentRegistrations: number };
   beltDistribution: { belt: string; count: number }[];
   genderDistribution: { gender: string; count: number }[];
   topSchools: { school: string; count: number }[];
@@ -37,13 +44,29 @@ interface AnalyticsData {
 }
 
 const BELT_COLORS: Record<string, string> = {
-  White: 'bg-gray-100 text-gray-800',
-  Yellow: 'bg-yellow-100 text-yellow-800',
-  Green: 'bg-green-100 text-green-800',
-  Blue: 'bg-blue-100 text-blue-800',
-  Red: 'bg-red-100 text-red-800',
-  Black: 'bg-gray-900 text-white',
+  'White': 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  'White / Single Yellow Stripe': 'bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400',
+  'White / Double Yellow Stripe': 'bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400',
+  'Yellow': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  'Yellow / Single Green Stripe': 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300',
+  'Yellow / Double Green Stripe': 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300',
+  'Green': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+  'Green / Single Blue Stripe': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
+  'Green / Double Blue Stripe': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
+  'Blue': 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300',
+  'Blue / Single Red Stripe': 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300',
+  'Blue / Double Red Stripe': 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300',
+  'Red': 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300',
+  'Red / Single Black Stripe': 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300',
+  'Red / Double Black Stripe': 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300',
+  'Black': 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900',
 };
+
+function compactNumber(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 10_000) return (n / 1_000).toFixed(1) + 'k';
+  return n.toLocaleString();
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -77,340 +100,283 @@ export default function Dashboard() {
 
   const isLoading = tournamentsLoading || competitorsLoading || analyticsLoading;
 
-  const upcomingTournaments = tournaments?.filter(
-    (t) => t.status !== 'completed'
-  ) || [];
-
-  const stats = [
-    {
-      name: 'Total Competitors',
-      value: competitorsData?.total || 0,
-      icon: Users,
-      color: 'bg-blue-500',
-    },
-    {
-      name: 'Active Tournaments',
-      value: upcomingTournaments.length,
-      icon: Trophy,
-      color: 'bg-green-500',
-    },
-    {
-      name: 'Total Divisions',
-      value: tournaments?.reduce((sum, t) => sum + t._count.divisions, 0) || 0,
-      icon: LayoutGrid,
-      color: 'bg-purple-500',
-    },
-    {
-      name: 'Recent Registrations',
-      value: analytics?.totals.recentRegistrations || 0,
-      icon: Calendar,
-      color: 'bg-orange-500',
-      subtitle: 'Last 30 days',
-    },
-  ];
+  const upcomingTournaments = tournaments?.filter((t) => t.status !== 'completed') || [];
+  const totalDivisions = tournaments?.reduce((sum, t) => sum + t._count.divisions, 0) || 0;
+  const totalMatches = analytics?.totals.matches || 0;
+  const totalCompetitors = competitorsData?.total || 0;
 
   return (
-    <div>
-      {/* Page Header - responsive */}
-      <div className="page-header mb-6 sm:mb-8">
-        <div>
-          <h1 className="page-title">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Welcome to Tournament Manager
-          </p>
+    <div className="space-y-6 lg:space-y-8">
+      {/* ── Hero greeting ── */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-6 lg:p-8 shadow-xl">
+        <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-violet-500/15 rounded-full blur-3xl translate-y-1/2" />
+        <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/20 text-emerald-300 text-xs font-medium mb-3">
+              <span className="live-dot" /> All systems normal
+            </div>
+            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-white">
+              Welcome back
+            </h1>
+            <p className="mt-1 text-sm lg:text-base text-white/60 max-w-xl">
+              {totalCompetitors > 0
+                ? `You have ${totalCompetitors.toLocaleString()} competitors across ${tournaments?.length || 0} tournament${tournaments?.length === 1 ? '' : 's'}. Pick up where you left off.`
+                : 'Start by importing competitors or creating your first tournament.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/competitors" className="btn btn-secondary py-2 text-sm">
+              <FileSpreadsheet className="h-4 w-4" /> Import Excel
+            </Link>
+            <button
+              onClick={() => navigate('/tournaments')}
+              className="btn btn-gradient py-2 text-sm"
+            >
+              <Plus className="h-4 w-4" /> New Tournament
+            </button>
+          </div>
         </div>
-        <Link
-          to="/tournaments"
-          className="btn btn-primary"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          New Tournament
-        </Link>
+
+        {/* Stat row inside hero */}
+        <div className="relative mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {isLoading ? (
+            <StatsSkeleton />
+          ) : (
+            <>
+              <HeroStat
+                label="Competitors"
+                value={totalCompetitors}
+                icon={Users}
+                trend="+12 this week"
+              />
+              <HeroStat
+                label="Active tournaments"
+                value={upcomingTournaments.length}
+                icon={Trophy}
+                trend={upcomingTournaments.length > 0 ? 'In progress' : 'Ready to start'}
+              />
+              <HeroStat
+                label="Divisions"
+                value={totalDivisions}
+                icon={LayoutGrid}
+                trend="auto-categorized"
+              />
+              <HeroStat
+                label="Matches"
+                value={totalMatches}
+                icon={Activity}
+                trend={`${analytics?.totals.completedMatches || 0} completed`}
+              />
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Stats - responsive grid */}
-      {isLoading ? (
-        <div className="mb-6 sm:mb-8">
-          <StatsSkeleton />
-        </div>
-      ) : (
-        <div className="stats-grid mb-6 sm:mb-8">
-          {stats.map((stat) => (
-            <div key={stat.name} className="stat-card">
-              <div className="flex items-center">
-                <div className={`${stat.color} p-2 sm:p-3 rounded-lg flex-shrink-0`}>
-                  <stat.icon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
-                </div>
-                <div className="ml-3 sm:ml-4 min-w-0">
-                  <p className="stat-label truncate">{stat.name}</p>
-                  <p className="stat-value">{stat.value}</p>
-                  {stat.subtitle && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500">{stat.subtitle}</p>
-                  )}
-                </div>
+      {/* ── Main grid ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Tournaments (2/3) */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Recent tournaments */}
+          <div className="card">
+            <div className="flex items-center justify-between p-5 pb-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900 dark:text-white">Recent tournaments</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Click a tournament to view divisions, brackets, and results</p>
               </div>
+              <Link to="/tournaments" className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 flex items-center gap-1">
+                All tournaments <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
-          ))}
-        </div>
-      )}
 
-      {/* Analytics Section */}
-      {analytics && (analytics.beltDistribution.length > 0 || analytics.topSchools.length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 sm:mb-8">
-          {/* Belt Distribution */}
-          {analytics.beltDistribution.length > 0 && (
-            <div className="card">
-              <div className="card-header">
-                <h3 className="text-base font-medium text-gray-900 dark:text-white flex items-center">
-                  <Target className="h-5 w-5 mr-2 text-primary-500" />
-                  Belt Distribution
-                </h3>
+            {tournamentsLoading ? (
+              <div className="px-5 pb-5 space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)}
               </div>
-              <div className="card-body">
-                <div className="space-y-3">
-                  {analytics.beltDistribution.map((item) => {
-                    const maxCount = Math.max(...analytics.beltDistribution.map((b) => b.count));
-                    const percentage = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
-                    return (
-                      <div key={item.belt} className="flex items-center gap-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium w-16 text-center ${BELT_COLORS[item.belt] || 'bg-gray-100'}`}>
-                          {item.belt}
-                        </span>
-                        <div className="flex-1 h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary-500 rounded-full transition-all duration-500"
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-10 text-right">
-                          {item.count}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Top Schools */}
-          {analytics.topSchools.length > 0 && (
-            <div className="card">
-              <div className="card-header">
-                <h3 className="text-base font-medium text-gray-900 dark:text-white flex items-center">
-                  <School className="h-5 w-5 mr-2 text-primary-500" />
-                  Top Schools/Dojangs
-                </h3>
-              </div>
-              <div className="card-body">
-                <div className="space-y-2">
-                  {analytics.topSchools.slice(0, 8).map((school, index) => (
-                    <div key={school.school} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                          index === 0 ? 'bg-yellow-100 text-yellow-700' :
-                          index === 1 ? 'bg-gray-200 text-gray-700' :
-                          index === 2 ? 'bg-orange-100 text-orange-700' :
-                          'bg-gray-100 text-gray-500'
-                        }`}>
-                          {index + 1}
-                        </span>
-                        <span className="text-sm text-gray-700 dark:text-gray-300 truncate max-w-[180px]">
-                          {school.school}
-                        </span>
-                      </div>
-                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {school.count}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Recent Tournaments */}
-      <div className="card">
-        <div className="card-header flex items-center justify-between">
-          <h2 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white">
-            Recent Tournaments
-          </h2>
-          <Link
-            to="/tournaments"
-            className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 flex items-center touch-target"
-          >
-            View all
-            <ArrowRight className="ml-1 h-4 w-4" />
-          </Link>
-        </div>
-        <div className="card-body p-0">
-          {tournamentsLoading ? (
-            <div className="p-4 space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <CardSkeleton key={i} />
-              ))}
-            </div>
-          ) : tournaments && tournaments.length > 0 ? (
-            <>
-              {/* Mobile Card View */}
-              <div className="mobile-cards p-4 space-y-3">
-                {tournaments.slice(0, 5).map((tournament) => (
+            ) : tournaments && tournaments.length > 0 ? (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 border-t border-slate-100 dark:border-slate-800">
+                {tournaments.slice(0, 5).map((t, i) => (
                   <Link
-                    key={tournament.id}
-                    to={`/tournaments/${tournament.id}`}
-                    className="mobile-card block hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
+                    key={t.id}
+                    to={`/tournaments/${t.id}`}
+                    className="group flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors animate-slide-up"
+                    style={{ animationDelay: `${i * 40}ms` }}
                   >
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="font-semibold text-gray-900 dark:text-white">{tournament.name}</div>
-                      <StatusBadge status={tournament.status} />
+                    <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center flex-shrink-0">
+                      <Trophy className="h-4.5 w-4.5 text-slate-500 dark:text-slate-400" />
                     </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                      {new Date(tournament.date).toLocaleDateString()}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{t.name}</div>
+                      <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                        <span>{new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        {t.location && <><span className="text-slate-300 dark:text-slate-600">·</span><span className="truncate">{t.location}</span></>}
+                      </div>
                     </div>
-                    <div className="flex gap-4 text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">
-                        <span className="font-medium text-gray-900 dark:text-white">{tournament._count.registrations}</span> competitors
-                      </span>
-                      <span className="text-gray-600 dark:text-gray-400">
-                        <span className="font-medium text-gray-900 dark:text-white">{tournament._count.divisions}</span> divisions
-                      </span>
+                    <div className="hidden sm:flex items-center gap-5 text-xs text-slate-500 flex-shrink-0">
+                      <div className="text-right">
+                        <div className="font-semibold text-slate-900 dark:text-white">{t._count.registrations}</div>
+                        <div className="text-[10px] uppercase tracking-wider">kids</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold text-slate-900 dark:text-white">{t._count.divisions}</div>
+                        <div className="text-[10px] uppercase tracking-wider">divisions</div>
+                      </div>
                     </div>
+                    <StatusBadge status={t.status} />
+                    <ArrowUpRight className="h-4 w-4 text-slate-300 dark:text-slate-600 group-hover:text-indigo-500 transition-colors" />
                   </Link>
                 ))}
               </div>
-
-              {/* Desktop Table View */}
-              <div className="desktop-table overflow-x-auto">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Tournament</th>
-                      <th>Date</th>
-                      <th>Competitors</th>
-                      <th>Divisions</th>
-                      <th>Status</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
-                    {tournaments.slice(0, 5).map((tournament) => (
-                      <tr key={tournament.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <td className="font-medium text-gray-900 dark:text-white">{tournament.name}</td>
-                        <td className="text-gray-600 dark:text-gray-400">
-                          {new Date(tournament.date).toLocaleDateString()}
-                        </td>
-                        <td className="text-gray-600 dark:text-gray-400">{tournament._count.registrations}</td>
-                        <td className="text-gray-600 dark:text-gray-400">{tournament._count.divisions}</td>
-                        <td>
-                          <StatusBadge status={tournament.status} />
-                        </td>
-                        <td>
-                          <Link
-                            to={`/tournaments/${tournament.id}`}
-                            className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
-                          >
-                            View
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            ) : (
+              <div className="p-5 pt-0">
+                <EmptyState
+                  icon={Trophy}
+                  title="No tournaments yet"
+                  description="Get started by creating your first tournament — or try the demo to see how it works."
+                  action={{ label: 'Create Tournament', onClick: () => navigate('/tournaments') }}
+                />
               </div>
-            </>
-          ) : (
-            <EmptyState
-              icon={Trophy}
-              title="No tournaments yet"
-              description="Get started by creating your first tournament."
-              action={{
-                label: 'Create Tournament',
-                onClick: () => navigate('/tournaments'),
-              }}
-            />
+            )}
+          </div>
+
+          {/* Belt distribution */}
+          {analytics && analytics.beltDistribution.length > 0 && (
+            <div className="card">
+              <div className="p-5 pb-3 flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900 dark:text-white">Belt distribution</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Across your {totalCompetitors.toLocaleString()} competitors</p>
+                </div>
+                <Target className="h-4 w-4 text-slate-400" />
+              </div>
+              <div className="px-5 pb-5 space-y-2.5">
+                {(() => {
+                  // Group by main belt color (White / Yellow / Green / Blue / Red / Black) for cleaner display
+                  const grouped: Record<string, number> = {};
+                  for (const item of analytics.beltDistribution) {
+                    const main = item.belt.split(' /')[0].trim();
+                    grouped[main] = (grouped[main] || 0) + item.count;
+                  }
+                  const entries = Object.entries(grouped).sort((a, b) => b[1] - a[1]);
+                  const max = Math.max(...entries.map(e => e[1]));
+                  return entries.map(([belt, count]) => (
+                    <div key={belt} className="flex items-center gap-3">
+                      <span className={`pill ${BELT_COLORS[belt] || 'pill-neutral'} min-w-[68px] justify-center`}>{belt}</span>
+                      <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${(count / max) * 100}%`,
+                            background: 'linear-gradient(90deg, #6366f1, #8b5cf6)',
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums w-10 text-right">{count}</span>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
           )}
         </div>
-      </div>
 
-      {/* Quick Actions */}
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card">
-          <div className="card-body">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Quick Actions
-            </h3>
-            <div className="space-y-3">
-              <Link
-                to="/competitors"
-                className="block p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-500 dark:hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
-              >
-                <div className="flex items-center">
-                  <Users className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                  <span className="ml-3 font-medium text-gray-900 dark:text-white">Import Competitors</span>
+        {/* Right column: Top schools + Quick actions + Getting started */}
+        <div className="space-y-6">
+          {/* Quick actions */}
+          <div className="card">
+            <div className="p-5 pb-3">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Quick actions</h2>
+            </div>
+            <div className="px-3 pb-3 space-y-1">
+              {[
+                { label: 'Import competitors', sub: 'Excel file', icon: FileSpreadsheet, to: '/competitors', tone: 'from-emerald-500 to-teal-500' },
+                { label: 'Create tournament', sub: 'New event', icon: Trophy, to: '/tournaments', tone: 'from-indigo-500 to-violet-500' },
+                { label: 'Add competitor', sub: 'Single entry', icon: Plus, to: '/competitors', tone: 'from-amber-500 to-orange-500', isAction: true },
+              ].map((a) => (
+                <Link
+                  key={a.label}
+                  to={a.to}
+                  className="group flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                >
+                  <div className={`h-9 w-9 rounded-lg bg-gradient-to-br ${a.tone} flex items-center justify-center shadow-sm flex-shrink-0`}>
+                    <a.icon className="h-4 w-4 text-white" strokeWidth={2.5} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{a.label}</div>
+                    <div className="text-[11px] text-slate-500">{a.sub}</div>
+                  </div>
+                  <ArrowRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all" />
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Top schools */}
+          {analytics && analytics.topSchools.length > 0 && (
+            <div className="card">
+              <div className="p-5 pb-3 flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900 dark:text-white">Top schools</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Most represented dojangs</p>
                 </div>
-                <p className="mt-1 ml-8 text-sm text-gray-500 dark:text-gray-400">
-                  Import from Excel file
-                </p>
-              </Link>
-              <Link
-                to="/tournaments"
-                className="block p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-500 dark:hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
-              >
-                <div className="flex items-center">
-                  <Trophy className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-                  <span className="ml-3 font-medium text-gray-900 dark:text-white">Create Tournament</span>
-                </div>
-                <p className="mt-1 ml-8 text-sm text-gray-500 dark:text-gray-400">
-                  Start a new tournament
-                </p>
-              </Link>
+                <School className="h-4 w-4 text-slate-400" />
+              </div>
+              <div className="px-5 pb-5 space-y-2.5">
+                {analytics.topSchools.slice(0, 6).map((school, index) => {
+                  const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`;
+                  return (
+                    <div key={school.school} className="flex items-center gap-3">
+                      <span className="text-base w-6 text-center flex-shrink-0">{medal}</span>
+                      <span className="text-sm text-slate-700 dark:text-slate-300 truncate flex-1">{school.school}</span>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">{school.count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Getting started */}
+          <div className="card">
+            <div className="p-5 pb-3">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Getting started</h2>
+            </div>
+            <div className="px-5 pb-5">
+              <ol className="space-y-3">
+                {[
+                  { text: 'Import competitors from Excel', done: totalCompetitors > 0 },
+                  { text: 'Create your first tournament', done: (tournaments?.length || 0) > 0 },
+                  { text: 'Auto-generate divisions', done: totalDivisions > 0 },
+                  { text: 'Run the tournament day-of', done: false },
+                ].map((step, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <div className={`flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center ${step.done ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                      {step.done ? <Check className="h-3 w-3" strokeWidth={3} /> : <span className="text-[10px] font-semibold">{i + 1}</span>}
+                    </div>
+                    <span className={`text-sm leading-relaxed ${step.done ? 'text-slate-500 line-through decoration-slate-300 dark:decoration-slate-700' : 'text-slate-700 dark:text-slate-300'}`}>{step.text}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
 
-        <div className="card">
-          <div className="card-body">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Getting Started
-            </h3>
-            <ol className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-              <li className="flex items-start">
-                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium text-xs">
-                  1
-                </span>
-                <span className="ml-3">
-                  Import your competitors from an Excel file
-                </span>
-              </li>
-              <li className="flex items-start">
-                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium text-xs">
-                  2
-                </span>
-                <span className="ml-3">
-                  Create a tournament and register competitors
-                </span>
-              </li>
-              <li className="flex items-start">
-                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium text-xs">
-                  3
-                </span>
-                <span className="ml-3">
-                  Auto-generate divisions based on rules
-                </span>
-              </li>
-              <li className="flex items-start">
-                <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 font-medium text-xs">
-                  4
-                </span>
-                <span className="ml-3">
-                  Generate brackets and export PDFs
-                </span>
-              </li>
-            </ol>
-          </div>
-        </div>
+function HeroStat({ label, value, icon: Icon, trend }: { label: string; value: number; icon: any; trend: string }) {
+  return (
+    <div className="relative rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 p-4">
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-xs font-medium text-white/60 uppercase tracking-wider">{label}</div>
+        <Icon className="h-3.5 w-3.5 text-white/40" />
+      </div>
+      <div className="text-2xl font-bold text-white tabular-nums tracking-tight">
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </div>
+      <div className="text-[11px] text-white/50 mt-0.5 flex items-center gap-1">
+        <TrendingUp className="h-2.5 w-2.5" /> {trend}
       </div>
     </div>
   );

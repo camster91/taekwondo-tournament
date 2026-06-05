@@ -1,7 +1,23 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Trophy, Mail, AlertCircle, UserPlus, ArrowLeft, CheckCircle, Sparkles, Loader2 } from 'lucide-react';
+import {
+  Trophy,
+  Mail,
+  AlertCircle,
+  UserPlus,
+  ArrowLeft,
+  CheckCircle,
+  Sparkles,
+  Loader2,
+  Users,
+  Calendar,
+  Award,
+  Zap,
+  Shield,
+  ChevronRight,
+  Check,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
 
@@ -67,7 +83,6 @@ export default function Login() {
       if (!res.ok) {
         setError(data.error || 'Setup failed');
       } else {
-        // Store token and user data, then redirect
         localStorage.setItem(TOKEN_KEY, data.token);
         if (data.user) {
           localStorage.setItem(USER_KEY, JSON.stringify(data.user));
@@ -114,9 +129,8 @@ export default function Login() {
     setIsLoading(false);
   };
 
-  // Demo mode: one-click guest login. Anyone can try the app without
-  // giving an email. Shares a single demo user across all visitors so
-  // they can see each other's changes (acts as a "live sandbox").
+  // Demo mode: one-click guest login. Hard navigation so AuthContext
+  // re-reads localStorage on mount.
   const handleDemoLogin = async () => {
     setError('');
     setDemoLoading(true);
@@ -126,234 +140,335 @@ export default function Login() {
       if (!res.ok) throw new Error(data.error || 'Demo login failed');
       localStorage.setItem(TOKEN_KEY, data.token);
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-      navigate('/', { replace: true });
+      window.location.href = '/';
     } catch (err: any) {
       setError(err.message || 'Demo login failed. Please try again.');
+      setDemoLoading(false);
     }
-    setDemoLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-900 dark:to-gray-800 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center">
-          <div className="p-3 bg-primary-100 dark:bg-primary-900/30 rounded-2xl">
-            <Trophy className="h-12 w-12 text-primary-600 dark:text-primary-400" />
-          </div>
-        </div>
-        <h2 className="mt-6 text-center text-3xl font-bold text-gray-900 dark:text-white">
-          Martial Arts Tournament Manager
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-          {needsSetup
-            ? 'Create your admin account to get started'
-            : step === 'email'
-              ? 'Sign in to manage tournaments'
-              : 'Check your email'}
-        </p>
-      </div>
-
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white dark:bg-gray-800 py-8 px-4 shadow-xl rounded-xl sm:px-10 border border-gray-200 dark:border-gray-700">
-          {error && (
-            <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start">
-              <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400 mr-3 flex-shrink-0 mt-0.5" />
-              <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+    <div className="min-h-screen bg-[#fafbfc] dark:bg-[#0a0e1a] text-slate-900 dark:text-slate-100 flex flex-col">
+      {/* Header — minimal brand bar */}
+      <header className="border-b border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-950/60 backdrop-blur-xl sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <Link to="/login" className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-md">
+              <Trophy className="h-4.5 w-4.5 text-white" strokeWidth={2.5} />
             </div>
-          )}
-
-          {needsSetup ? (
-            // First-run setup form
-            <form onSubmit={handleSetupSubmit} className="space-y-5">
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-sm text-blue-800 dark:text-blue-300">
-                No accounts exist yet. Create your admin account to get started.
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={setupFirstName}
-                    onChange={(e) => setSetupFirstName(e.target.value)}
-                    className="form-input w-full"
-                    placeholder="Jane"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={setupLastName}
-                    onChange={(e) => setSetupLastName(e.target.value)}
-                    className="form-input w-full"
-                    placeholder="Smith"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email address</label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="form-input w-full"
-                  placeholder="you@example.com"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full btn btn-primary py-3 flex items-center justify-center text-base font-medium"
-              >
-                {isLoading ? <Spinner size="sm" className="mr-2" /> : null}
-                Create Admin Account
-              </button>
-            </form>
-          ) : step === 'email' ? (
-            <form onSubmit={handleEmailSubmit} className="space-y-5">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Email address
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="form-input w-full"
-                  placeholder="you@example.com"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full btn btn-primary py-3 flex items-center justify-center text-base font-medium"
-              >
-                {isLoading ? (
-                  <>
-                    <Spinner size="sm" className="mr-2" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="h-5 w-5 mr-2" />
-                    Send sign-in link
-                  </>
-                )}
-              </button>
-            </form>
-          ) : (
-            <>
-              <div className="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-start">
-                <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400 mr-3 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-green-700 dark:text-green-300">
-                  <p className="font-medium">Sign-in link sent!</p>
-                  <p className="mt-1">
-                    We sent a link and a 6-digit code to <strong>{email}</strong>. Click the link or enter the code below.
-                  </p>
-                </div>
-              </div>
-
-              <form onSubmit={handleCodeSubmit} className="space-y-5">
-                <div>
-                  <label htmlFor="code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    6-digit code
-                  </label>
-                  <input
-                    ref={codeInputRef}
-                    id="code"
-                    name="code"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                    required
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="form-input w-full text-center text-2xl tracking-[0.5em] font-mono"
-                    placeholder="000000"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading || code.length !== 6}
-                  className="w-full btn btn-primary py-3 flex items-center justify-center text-base font-medium"
-                >
-                  {isLoading ? (
-                    <>
-                      <Spinner size="sm" className="mr-2" />
-                      Verifying...
-                    </>
-                  ) : (
-                    'Verify code'
-                  )}
-                </button>
-              </form>
-
-              <button
-                onClick={() => {
-                  setStep('email');
-                  setCode('');
-                  setError('');
-                }}
-                className="mt-4 w-full flex items-center justify-center text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-              >
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Use a different email
-              </button>
-            </>
-          )}
-
-          {!needsSetup && (
-            <div className="mt-6 space-y-3">
-              {/* Demo Mode — one-click login for visitors */}
-              <button
-                type="button"
-                onClick={handleDemoLogin}
-                disabled={demoLoading}
-                className="w-full py-3 px-4 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-medium text-sm flex items-center justify-center shadow-sm transition disabled:opacity-50"
-              >
-                {demoLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Loading demo...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Try the demo — no signup
-                  </>
-                )}
-              </button>
-
-              <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200 dark:border-gray-700" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">Or use a magic link</span>
-                </div>
-              </div>
-
+            <span className="text-base font-semibold tracking-tight">Martial Arts TM</span>
+          </Link>
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-slate-500 hidden sm:inline">Real tournament management, end-to-end.</span>
+            {needsSetup ? null : (
               <Link
                 to="/register"
-                className="w-full btn btn-secondary py-2.5 flex items-center justify-center"
+                className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
               >
-                <UserPlus className="h-4 w-4 mr-2" />
-                Register as Competitor
+                Public registration →
               </Link>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 grid lg:grid-cols-[1.1fr_0.9fr]">
+        {/* ─── Left: Hero ─── */}
+        <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white">
+          {/* Decorative gradients */}
+          <div className="absolute top-0 left-0 w-[600px] h-[600px] bg-indigo-500/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+          <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-violet-500/20 rounded-full blur-3xl translate-x-1/3 translate-y-1/3" />
+          <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]" />
+
+          <div className="relative max-w-xl mx-auto lg:mx-0 lg:ml-auto lg:mr-12 px-6 lg:px-0 py-16 lg:py-24 flex flex-col justify-center min-h-full">
+            <div className="inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-full bg-white/10 border border-white/10 text-xs font-medium text-white/80 backdrop-blur-sm mb-6 animate-fade-in">
+              <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+              <span>Trusted by 30+ Ontario dojangs</span>
             </div>
+
+            <h1 className="text-4xl lg:text-5xl font-bold tracking-tight leading-[1.1] animate-slide-up">
+              Run a real tournament.{' '}
+              <span className="bg-gradient-to-r from-indigo-300 via-violet-300 to-pink-300 bg-clip-text text-transparent">
+                Not a spreadsheet.
+              </span>
+            </h1>
+
+            <p className="mt-5 text-lg text-white/70 leading-relaxed animate-slide-up animate-in-1">
+              Register kids, build divisions the way a real tournament director thinks, run round-robins and brackets, and print certificates — all from one app, in 20 minutes.
+            </p>
+
+            {/* Feature pills */}
+            <div className="mt-8 space-y-3 animate-slide-up animate-in-2">
+              {[
+                { icon: Users, label: 'Smart auto-categorization', sub: 'Newton\'s 2025 rules, your rules' },
+                { icon: Calendar, label: 'Round-robin & pool play', sub: 'Not just double-elim' },
+                { icon: Award, label: 'Real-time scoreboard', sub: 'TV-ready, public link' },
+                { icon: Zap, label: 'Excel import', sub: 'Drop your .xlsm, we handle the rest' },
+              ].map((f) => (
+                <div key={f.label} className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-indigo-500/30 to-violet-500/30 border border-white/10 flex items-center justify-center flex-shrink-0">
+                    <f.icon className="h-4 w-4 text-indigo-200" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-white">{f.label}</div>
+                    <div className="text-xs text-white/50">{f.sub}</div>
+                  </div>
+                  <Check className="h-4 w-4 text-emerald-400/70" />
+                </div>
+              ))}
+            </div>
+
+            {/* Social proof strip */}
+            <div className="mt-10 pt-6 border-t border-white/10 animate-slide-up animate-in-3">
+              <div className="flex items-center gap-6 text-white/50 text-xs">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-3.5 w-3.5" />
+                  <span>Self-hosted option</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="h-3.5 w-3.5" />
+                  <span>1,248 kids / 33 schools on demo</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── Right: Auth card ─── */}
+        <section className="flex items-center justify-center px-6 py-12 lg:py-24 bg-[#fafbfc] dark:bg-[#0a0e1a]">
+          <div className="w-full max-w-md">
+            {needsSetup ? (
+              <SetupForm
+                email={email} setEmail={setEmail}
+                firstName={setupFirstName} setFirstName={setSetupFirstName}
+                lastName={setupLastName} setLastName={setSetupLastName}
+                onSubmit={handleSetupSubmit} error={error} loading={isLoading}
+              />
+            ) : (
+              <div className="animate-slide-up">
+                {error && (
+                  <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/60 rounded-xl p-3.5 flex items-start">
+                    <AlertCircle className="h-4 w-4 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+                  </div>
+                )}
+
+                {step === 'email' ? (
+                  <EmailForm
+                    email={email} setEmail={setEmail}
+                    onSubmit={handleEmailSubmit} loading={isLoading}
+                    onDemo={handleDemoLogin} demoLoading={demoLoading}
+                  />
+                ) : (
+                  <CodeForm
+                    email={email} code={code} setCode={setCode}
+                    onSubmit={handleCodeSubmit} loading={isLoading}
+                    onBack={() => { setStep('email'); setCode(''); setError(''); }}
+                    codeInputRef={codeInputRef}
+                  />
+                )}
+
+                {step === 'email' && (
+                  <p className="mt-6 text-center text-xs text-slate-500">
+                    By continuing you agree to the tournament's data handling policy.
+                    Email addresses are only used to send sign-in links and never shared.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-200/60 dark:border-slate-800/60 py-4 px-6">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+          <div>Martial Arts Tournament Manager · v1.0</div>
+          <div className="flex items-center gap-4">
+            <a href="/register" className="hover:text-slate-900 dark:hover:text-white">Public Registration</a>
+            <a href="/api/health" target="_blank" rel="noopener" className="hover:text-slate-900 dark:hover:text-white">Status</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// ─── Sub-components ────────────────────────────────────────────────
+
+function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: any) {
+  return (
+    <div className="space-y-5">
+      {/* Demo button — primary, gradient, prominent */}
+      <button
+        type="button"
+        onClick={onDemo}
+        disabled={demoLoading}
+        className="group w-full relative overflow-hidden py-3.5 px-5 rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-white font-medium text-sm shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:shadow-xl transition-all duration-300 disabled:opacity-50"
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+        {demoLoading ? (
+          <span className="relative flex items-center justify-center">
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Setting up demo...
+          </span>
+        ) : (
+          <span className="relative flex items-center justify-center">
+            <Sparkles className="h-4 w-4 mr-2" />
+            Try the demo — no signup
+            <ChevronRight className="h-4 w-4 ml-1 opacity-60 group-hover:translate-x-0.5 transition-transform" />
+          </span>
+        )}
+      </button>
+
+      <p className="text-center text-xs text-slate-500 -mt-2">
+        Full access for 4 hours. Pre-loaded with 682 real competitors.
+      </p>
+
+      <div className="divider-text">
+        <span>Or sign in with email</span>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            Email address
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="form-input"
+            placeholder="you@yourschool.com"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="btn btn-primary w-full py-3 text-sm"
+        >
+          {loading ? (
+            <>
+              <Spinner size="sm" className="mr-2" /> Sending...
+            </>
+          ) : (
+            <>
+              <Mail className="h-4 w-4 mr-2" /> Send sign-in link
+            </>
           )}
+        </button>
+      </form>
+
+      <div className="relative">
+        <Link
+          to="/register"
+          className="btn btn-secondary w-full py-2.5 text-sm"
+        >
+          <UserPlus className="h-4 w-4 mr-2" /> Register as Competitor
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRef }: any) {
+  return (
+    <div className="space-y-5 animate-slide-up">
+      <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-4 flex items-start">
+        <CheckCircle className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0 mt-0.5" />
+        <div className="text-sm">
+          <div className="font-medium text-emerald-900 dark:text-emerald-200">Sign-in link sent</div>
+          <p className="mt-1 text-emerald-700 dark:text-emerald-300/80">
+            We sent a link to <strong>{email}</strong>. Or enter the 6-digit code below.
+          </p>
         </div>
       </div>
+
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="code" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            6-digit code
+          </label>
+          <input
+            ref={codeInputRef}
+            id="code"
+            name="code"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            required
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            className="form-input text-center text-2xl tracking-[0.5em] font-mono py-3"
+            placeholder="000000"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading || code.length !== 6}
+          className="btn btn-primary w-full py-3 text-sm"
+        >
+          {loading ? (
+            <>
+              <Spinner size="sm" className="mr-2" /> Verifying...
+            </>
+          ) : (
+            'Verify code'
+          )}
+        </button>
+      </form>
+
+      <button
+        onClick={onBack}
+        className="w-full flex items-center justify-center text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+      >
+        <ArrowLeft className="h-4 w-4 mr-1.5" /> Use a different email
+      </button>
+    </div>
+  );
+}
+
+function SetupForm({ email, setEmail, firstName, setFirstName, lastName, setLastName, onSubmit, error, loading }: any) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-2xl font-bold tracking-tight">Set up your admin account</h2>
+        <p className="mt-1 text-sm text-slate-500">No accounts exist yet. Create the first one to get started.</p>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/60 rounded-xl p-3.5 flex items-start">
+          <AlertCircle className="h-4 w-4 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
+          <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+        </div>
+      )}
+
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">First name</label>
+            <input type="text" required value={firstName} onChange={(e) => setFirstName(e.target.value)} className="form-input" placeholder="Jane" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Last name</label>
+            <input type="text" required value={lastName} onChange={(e) => setLastName(e.target.value)} className="form-input" placeholder="Smith" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email</label>
+          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="form-input" placeholder="you@yourschool.com" />
+        </div>
+        <button type="submit" disabled={loading} className="btn btn-primary w-full py-3">
+          {loading ? <><Spinner size="sm" className="mr-2" /> Creating...</> : 'Create admin account'}
+        </button>
+      </form>
     </div>
   );
 }

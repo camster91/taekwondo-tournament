@@ -356,36 +356,36 @@ export default function Competitors() {
   };
 
   return (
-    <div>
-      {/* Page Header - responsive */}
-      <div className="page-header">
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="page-title">Competitors</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Manage your competitor registry
+          <h1>Competitors</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Manage your competitor registry · {filteredCompetitors?.length ?? data?.competitors?.length ?? 0} total
           </p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={handleExportExcel}
             className="btn btn-secondary"
           >
             <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Export Excel
+            Export
           </button>
           <button
             onClick={handleDownloadTemplate}
             className="btn btn-secondary"
           >
             <Download className="h-4 w-4 mr-2" />
-            Download Template
+            Template
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="btn btn-secondary"
           >
             <Upload className="h-4 w-4 mr-2" />
-            Import Excel
+            Import
           </button>
           <input
             ref={fileInputRef}
@@ -403,56 +403,44 @@ export default function Competitors() {
             className="btn btn-primary"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add Competitor
+            Add
           </button>
         </div>
       </div>
 
       {/* Search & Filter */}
-      <div className="card mb-6">
-        <div className="card-body">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by name or school..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="form-input pl-10 w-full"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-gray-400" />
-              <select
-                value={beltFilter}
-                onChange={(e) => setBeltFilter(e.target.value)}
-                className="form-input py-2"
-              >
-                <option value="">All Belts</option>
-                {BELT_OPTIONS.map((belt) => (
-                  <option key={belt} value={belt}>{belt}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          {(search || beltFilter) && (
-            <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
-              <span>
-                Showing {filteredCompetitors?.length || 0} results
-              </span>
-              <button
-                onClick={() => {
-                  setSearch('');
-                  setBeltFilter('');
-                }}
-                className="text-primary-600 hover:text-primary-700"
-              >
-                Clear filters
-              </button>
-            </div>
-          )}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by name or school…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="form-input pl-9 w-full"
+          />
         </div>
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-slate-400 hidden sm:block" />
+          <select
+            value={beltFilter}
+            onChange={(e) => setBeltFilter(e.target.value)}
+            className="form-input py-2 min-w-[160px]"
+          >
+            <option value="">All belts</option>
+            {BELT_OPTIONS.map((belt) => (
+              <option key={belt} value={belt}>{belt}</option>
+            ))}
+          </select>
+        </div>
+        {(search || beltFilter) && (
+          <button
+            onClick={() => { setSearch(''); setBeltFilter(''); }}
+            className="btn btn-ghost text-sm"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {/* Competitors List */}
@@ -518,54 +506,63 @@ export default function Competitors() {
               </div>
 
               {/* Desktop Table View */}
-              <div className="desktop-table overflow-x-auto">
-                <table className="data-table">
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
                   <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Gender</th>
-                      <th>Age</th>
-                      <th>Belt</th>
-                      <th>Weight</th>
-                      <th className="hide-mobile">School</th>
-                      <th className="w-20"></th>
+                    <tr className="border-b border-slate-200 dark:border-slate-800">
+                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-5 py-3">Name</th>
+                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-3 py-3">Gender</th>
+                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-3 py-3">Age</th>
+                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-3 py-3">Belt</th>
+                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-3 py-3">Weight</th>
+                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-3 py-3 hidden lg:table-cell">School</th>
+                      <th className="w-20 px-3 py-3"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                  <tbody>
                     {filteredCompetitors.map((c: Competitor) => (
-                      <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                        <td className="font-medium text-gray-900 dark:text-white">
-                          {c.firstName} {c.lastName}
+                      <tr key={c.id} className="group border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500/10 to-violet-500/10 border border-indigo-200/40 dark:border-indigo-800/40 flex items-center justify-center text-indigo-700 dark:text-indigo-300 text-xs font-semibold flex-shrink-0">
+                              {c.firstName?.[0]}{c.lastName?.[0]}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium text-sm text-slate-900 dark:text-white truncate">{c.firstName} {c.lastName}</div>
+                              <div className="text-[11px] text-slate-400 lg:hidden truncate">{c.schoolDojang || '—'}</div>
+                            </div>
+                          </div>
                         </td>
-                        <td>{c.gender === 'M' ? 'Male' : 'Female'}</td>
-                        <td>{calculateAge(c.dateOfBirth)}</td>
-                        <td>
-                          <span
-                            className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getBeltColor(
-                              c.belt
-                            )}`}
-                          >
-                            {c.belt}
-                            {c.danRank && ` ${c.danRank}D`}
+                        <td className="px-3 py-3 text-sm text-slate-600 dark:text-slate-300">
+                          <span className="inline-flex items-center gap-1">
+                            <span className={`inline-block h-1.5 w-1.5 rounded-full ${c.gender === 'M' ? 'bg-sky-500' : 'bg-pink-500'}`} />
+                            {c.gender === 'M' ? 'Male' : 'Female'}
                           </span>
                         </td>
-                        <td>{c.weightLbs ? `${c.weightLbs} lbs` : '-'}</td>
-                        <td className="hide-mobile max-w-[150px] truncate">{c.schoolDojang || '-'}</td>
-                        <td>
-                          <div className="flex gap-1">
+                        <td className="px-3 py-3 text-sm text-slate-600 dark:text-slate-300 tabular-nums">{calculateAge(c.dateOfBirth)}</td>
+                        <td className="px-3 py-3">
+                          <span className={`pill ${getBeltColor(c.belt)} text-[11px]`}>
+                            {c.belt}
+                            {c.danRank && <span className="ml-1 opacity-70">{c.danRank}D</span>}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-sm text-slate-600 dark:text-slate-300 tabular-nums">{c.weightLbs ? `${c.weightLbs} lbs` : <span className="text-slate-300">—</span>}</td>
+                        <td className="px-3 py-3 text-sm text-slate-600 dark:text-slate-400 max-w-[180px] truncate hidden lg:table-cell">{c.schoolDojang || '—'}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => setEditingCompetitor(c)}
-                              className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                              className="h-7 w-7 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 flex items-center justify-center transition-colors"
                               title="Edit"
                             >
-                              <Edit className="h-4 w-4" />
+                              <Edit className="h-3.5 w-3.5" />
                             </button>
                             <button
                               onClick={() => setDeleteTarget(c)}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                              className="h-7 w-7 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 flex items-center justify-center transition-colors"
                               title="Delete"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         </td>
