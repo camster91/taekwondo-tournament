@@ -4,6 +4,7 @@ import { normalizeBelt } from '../../shared/constants/belts.js';
 export interface ColumnMapping {
   firstName: string;
   lastName: string;
+  name?: string;        // Combined "Full Name" column (e.g. Newton's .xlsm)
   gender: string;
   dateOfBirth?: string;
   age?: string;
@@ -47,8 +48,22 @@ export async function importFromExcel(
 
       try {
         // Extract and validate required fields
-        const firstName = String(row[mapping.firstName] || '').trim();
-        const lastName = String(row[mapping.lastName] || '').trim();
+        let firstName = String(row[mapping.firstName] || '').trim();
+        let lastName = String(row[mapping.lastName] || '').trim();
+
+        // Handle combined "Name" column (Newton's .xlsm format)
+        if ((!firstName || !lastName) && mapping.name) {
+          const full = String(row[mapping.name] || '').trim();
+          if (full) {
+            const parts = full.split(/\s+/);
+            if (parts.length === 1) {
+              firstName = parts[0];
+            } else {
+              firstName = parts[0];
+              lastName = parts.slice(1).join(' ');
+            }
+          }
+        }
 
         if (!firstName || !lastName) {
           result.errors.push({ row: rowNum, message: 'Missing first or last name' });
