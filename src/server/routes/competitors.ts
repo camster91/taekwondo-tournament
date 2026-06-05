@@ -332,9 +332,10 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
 // Delete competitor (requires authentication + admin/director role)
 // Soft-delete: sets deletedAt, row stays in DB for 7 days, manager can
 // restore via POST /:id/restore before the auto-purge cron runs.
+// Uses updateMany instead of update so a non-existent ID returns204 silently.
 router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  await prisma.competitor.update({
+  await prisma.competitor.updateMany({
     where: { id: getParam(req.params.id) },
     data: { deletedAt: new Date() },
   });
