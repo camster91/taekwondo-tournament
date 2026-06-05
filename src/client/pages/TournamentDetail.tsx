@@ -23,6 +23,9 @@ import {
   Lock,
   Copy,
   Flag,
+  Activity,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
 import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
@@ -433,6 +436,11 @@ export default function TournamentDetail() {
           </div>
         </div>
       </div>
+
+      {/* Day-Of Operations Panel — live stats for the running tournament */}
+      {tournament.status !== 'draft' && (
+        <DayOfPanel tournamentId={tournament.id} />
+      )}
 
       {/* Tournament Status Controls */}
       {tournament.status === 'registration' ? (
@@ -942,6 +950,167 @@ export default function TournamentDetail() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Day-Of Operations Panel ───────────────────────────────────────────────
+// Real-time operational view: who's checked in, what rings are running,
+// what's coming up, weight-mismatch alerts. Auto-refreshes every 10s.
+function DayOfPanel({ tournamentId }: { tournamentId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['day-of', tournamentId],
+    queryFn: async () => {
+      const res = await fetch(`/api/tournaments/${tournamentId}/day-of`, { headers: getAuthHeaders() });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    refetchInterval: 10_000,
+  });
+
+  if (isLoading || !data) return null;
+
+  const checkInPct = data.checkIn.percent;
+
+  return (
+    <div className="card overflow-hidden mb-6">
+      <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-slate-900">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+            <Activity className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">Tournament day</h2>
+            <p className="text-xs text-slate-500">Live operational view · auto-refreshes every 10s</p>
+          </div>
+        </div>
+        <span className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+        </span>
+      </div>
+
+      <div className="p-5 grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Check-in card with progress bar */}
+        <div className="lg:col-span-2 p-4 rounded-xl bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-slate-900/20 border border-slate-200/60 dark:border-slate-800">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Check-in</div>
+              <div className="text-2xl font-bold tabular-nums mt-0.5">
+                <span className="text-slate-900 dark:text-white">{data.checkIn.checkedIn}</span>
+                <span className="text-slate-400"> / {data.checkIn.total}</span>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {checkInPct}%
+              </div>
+              <div className="text-[10px] text-slate-500 uppercase tracking-wider">complete</div>
+            </div>
+          </div>
+          <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-700"
+              style={{ width: `${checkInPct}%` }}
+            />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+            <span><strong className="text-slate-900 dark:text-white tabular-nums">{data.checkIn.checkedIn}</strong> checked in</span>
+            <span className="text-slate-300">·</span>
+            <span><strong className="text-amber-600 dark:text-amber-400 tabular-nums">{data.checkIn.notCheckedIn}</strong> not yet</span>
+            {data.checkIn.weightMismatches > 0 && (
+              <>
+                <span className="text-slate-300">·</span>
+                <span className="text-red-600 dark:text-red-400 font-medium">
+                  <AlertTriangle className="inline h-3 w-3 mr-0.5" />
+                  {data.checkIn.weightMismatches} weight {data.checkIn.weightMismatches === 1 ? 'mismatch' : 'mismatches'}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Matches stat */}
+        <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/30 dark:to-slate-900/20 border border-indigo-200/60 dark:border-indigo-900/40">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Matches</div>
+          <div className="text-2xl font-bold tabular-nums mt-0.5">
+            <span className="text-slate-900 dark:text-white">{data.matches.completed}</span>
+            <span className="text-slate-400"> / {data.matches.total}</span>
+          </div>
+          <div className="mt-2 h-1.5 bg-indigo-100 dark:bg-indigo-950 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-700"
+              style={{ width: `${data.matches.total > 0 ? (data.matches.completed / data.matches.total) * 100 : 0}%` }}
+            />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+            {data.matches.inProgress > 0 && (
+              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                {data.matches.inProgress} live
+              </span>
+            )}
+            <span>{data.matches.ready} ready</span>
+            <span className="text-slate-400">{data.matches.pending} pending</span>
+          </div>
+        </div>
+      </div>
+
+      {/* By ring + Up next */}
+      {data.upNext && data.upNext.length > 0 && (
+        <div className="border-t border-slate-200 dark:border-slate-800 px-5 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Up next by ring</h3>
+            <Link
+              to={`/display/${tournamentId}`}
+              target="_blank"
+              className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+            >
+              Open public scoreboard <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {data.upNext.map((u: any) => (
+              <div key={u.ring} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Ring {u.ring}</span>
+                </div>
+                <div className="text-xs text-slate-600 dark:text-slate-300 truncate">{u.division}</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">Match #{u.matchNumber}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Weight mismatch alert list */}
+      {data.checkIn.weightMismatchDetails && data.checkIn.weightMismatchDetails.length > 0 && (
+        <div className="border-t border-slate-200 dark:border-slate-800 px-5 py-4 bg-red-50/30 dark:bg-red-950/10">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+            <h3 className="text-sm font-semibold text-red-700 dark:text-red-300">Weight mismatches to review</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            {data.checkIn.weightMismatchDetails.map((m: any) => (
+              <div key={m.registrationId} className="flex items-center justify-between px-3 py-2 rounded-md bg-white dark:bg-slate-900 border border-red-200/60 dark:border-red-900/40">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-slate-900 dark:text-white truncate">{m.name}</div>
+                  <div className="text-slate-500 truncate">{m.school || '—'}</div>
+                </div>
+                <div className="text-right tabular-nums ml-2">
+                  <div className="text-[11px] text-slate-500">
+                    <span className="line-through opacity-60">{m.weightAtRegistration}</span>
+                    {' → '}
+                    <span className="text-slate-900 dark:text-white">{m.checkInWeight}</span>
+                  </div>
+                  <div className={`text-[11px] font-semibold ${m.delta > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                    {m.delta > 0 ? '+' : ''}{m.delta.toFixed(1)} lbs
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

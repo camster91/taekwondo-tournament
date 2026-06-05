@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Trophy, Clock, Users, ChevronRight, Award, Zap } from 'lucide-react';
+import { Trophy, Clock, Users, ChevronRight, Award, Zap, Radio, MapPin } from 'lucide-react';
 
 interface Match {
   id: string;
   matchNumber: number;
   roundNumber: number;
   bracketType: string;
+  ringNumber?: number | null;
+  scheduledTime?: string | null;
   status: string;
   score1: string | null;
   score2: string | null;
@@ -42,8 +44,9 @@ interface Tournament {
 export default function PublicScoreboard() {
   const { tournamentId } = useParams();
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [activeDivisionIndex, setActiveDivisionIndex] = useState(0);
+  const [activeRing, setActiveRing] = useState<number | 'all'>('all');
   const [cycleEnabled, setCycleEnabled] = useState(true);
+  const [cycleIndex, setCycleIndex] = useState(0);
 
   // Update time every second
   useEffect(() => {
@@ -69,62 +72,63 @@ export default function PublicScoreboard() {
       if (!res.ok) throw new Error('Failed to fetch scoreboard');
       return res.json();
     },
-    refetchInterval: 5000, // Refresh every 5 seconds
+    refetchInterval: 3000, // TV mode: refresh every 3s
   });
 
-  // Filter to divisions with active matches
-  const activeDivisions =
-    divisions?.filter((d) => {
-      if (!d.bracket) return false;
-      const hasActiveMatches = d.bracket.matches.some(
-        (m) => m.status === 'in_progress' || m.status === 'ready'
-      );
-      return hasActiveMatches;
-    }) || [];
-
-  // Auto-cycle through divisions
-  useEffect(() => {
-    if (!cycleEnabled || activeDivisions.length <= 1) return;
-
-    const timer = setInterval(() => {
-      setActiveDivisionIndex((prev) => (prev + 1) % activeDivisions.length);
-    }, 15000); // 15 seconds per division
-
-    return () => clearInterval(timer);
-  }, [cycleEnabled, activeDivisions.length]);
-
-  // Keep index in bounds
-  useEffect(() => {
-    if (activeDivisionIndex >= activeDivisions.length) {
-      setActiveDivisionIndex(0);
+  // Group by ring
+  const matchesByRing = useMemo(() => {
+    const out: Record<number, Match[]> = { 1: [], 2: [], 3: [], 4: [] };
+    for (const d of divisions || []) {
+      for (const m of d.bracket?.matches || []) {
+        const ring = m.ringNumber || 1;
+        if (!out[ring]) out[ring] = [];
+        out[ring].push(m);
+      }
     }
-  }, [activeDivisions.length, activeDivisionIndex]);
+    return out;
+  }, [divisions]);
 
-  // Get all matches across all divisions
+  const ringNumbers = Object.keys(matchesByRing).filter((k) => matchesByRing[+k].length > 0).map(Number).sort();
+
+  // Auto-cycle: rotate through rings that have active matches
+  useEffect(() => {
+    if (!cycleEnabled || ringNumbers.length <= 1) return;
+    const timer = setInterval(() => {
+      setCycleIndex((i) => (i + 1) % ringNumbers.length);
+    }, 12000);
+    return () => clearInterval(timer);
+  }, [cycleEnabled, ringNumbers.length]);
+
+  useEffect(() => {
+    if (activeRing === 'all' && ringNumbers.length > 0) {
+      const next = ringNumbers[cycleIndex % ringNumbers.length];
+      if (next) setActiveRing(next);
+    }
+  }, [cycleIndex, ringNumbers.join(',')]);
+
+  // All matches across all rings
   const allMatches = divisions?.flatMap((d) => d.bracket?.matches || []) || [];
+  const matchesInActiveRing = activeRing === 'all'
+    ? allMatches
+    : matchesByRing[activeRing] || [];
 
-  // Current matches in progress
-  const inProgressMatches = allMatches.filter((m) => m.status === 'in_progress');
-
-  // Ready matches (up next)
-  const readyMatches = allMatches
+  const inProgressMatches = matchesInActiveRing.filter((m) => m.status === 'in_progress');
+  const readyMatches = matchesInActiveRing
     .filter((m) => m.status === 'ready')
-    .slice(0, 6);
-
-  // Recent completed matches
-  const recentResults = allMatches
+    .sort((a, b) => (a.scheduledTime || '').localeCompare(b.scheduledTime || ''))
+    .slice(0, 8);
+  const recentResults = matchesInActiveRing
     .filter((m) => m.status === 'completed' && m.winnerId)
-    .slice(-8)
+    .slice(-10)
     .reverse();
 
-  // Stats
   const stats = {
     totalMatches: allMatches.length,
     completed: allMatches.filter((m) => m.status === 'completed').length,
-    inProgress: inProgressMatches.length,
-    remaining: allMatches.filter((m) => m.status === 'pending' || m.status === 'ready').length,
+    inProgress: allMatches.filter((m) => m.status === 'in_progress').length,
   };
 
+  // Helpers used by both the TV hero and the right column.
   const getCompetitorName = (competitor: Match['competitor1']) => {
     if (!competitor) return 'TBD';
     return `${competitor.competitor.firstName} ${competitor.competitor.lastName}`;
@@ -140,80 +144,145 @@ export default function PublicScoreboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white overflow-hidden">
+    <div className="min-h-screen bg-[#0a0e1a] text-white overflow-hidden">
       {/* Header */}
-      <div className="bg-gradient-to-r from-red-900 via-gray-900 to-red-900 px-8 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <Trophy className="h-10 w-10 text-yellow-400 mr-4" />
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-b border-white/5">
+        <div className="px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-violet-500 blur-md opacity-50" />
+              <div className="relative h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg">
+                <Trophy className="h-6 w-6 text-white" strokeWidth={2.5} />
+              </div>
+            </div>
             <div>
-              <h1 className="text-3xl font-bold">{tournament?.name || 'Tournament'}</h1>
-              <p className="text-gray-400">
-                {tournament?.location && `${tournament.location} • `}
-                {tournament?.date && new Date(tournament.date).toLocaleDateString()}
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight">{tournament?.name || 'Tournament'}</h1>
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-300 text-[10px] font-semibold uppercase tracking-wider">
+                  <Radio className="h-2.5 w-2.5" /> Live
+                </span>
+              </div>
+              <p className="text-slate-400 text-sm flex items-center gap-1.5">
+                {tournament?.location && <><MapPin className="h-3 w-3" /> {tournament.location} ·</>}
+                {tournament?.date && new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-4xl font-mono font-bold text-yellow-400">
-              {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </div>
-            <div className="text-gray-400 text-sm">
-              {stats.completed} / {stats.totalMatches} matches complete
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <div className="text-3xl font-mono font-bold text-white tabular-nums">
+                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+              <div className="text-slate-400 text-xs">
+                {stats.completed} / {stats.totalMatches} matches complete
+              </div>
             </div>
           </div>
         </div>
 
+        {/* Ring tabs */}
+        <div className="px-8 pb-0 flex items-end justify-between border-t border-white/5 pt-2">
+          <div className="flex items-end gap-1">
+            <button
+              onClick={() => { setActiveRing('all'); setCycleEnabled(false); }}
+              className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
+                activeRing === 'all'
+                  ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              All rings
+            </button>
+            {ringNumbers.map((ring) => (
+              <button
+                key={ring}
+                onClick={() => { setActiveRing(ring); setCycleEnabled(false); }}
+                className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-2 ${
+                  activeRing === ring
+                    ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                Ring {ring}
+                <span className="text-xs opacity-60">
+                  ({matchesByRing[ring]?.filter((m) => m.status === 'in_progress').length || 0} live)
+                </span>
+              </button>
+            ))}
+            {activeRing !== 'all' && (
+              <button
+                onClick={() => { setActiveRing('all'); setCycleEnabled(true); }}
+                className="ml-2 px-3 py-2 text-xs text-slate-500 hover:text-white"
+              >
+                Resume auto-cycle
+              </button>
+            )}
+          </div>
+          <div className="text-xs text-slate-500 pb-3">
+            Auto-refresh every 3s · Last update {currentTime.toLocaleTimeString()}
+          </div>
+        </div>
+
         {/* Progress Bar */}
-        <div className="mt-4 h-2 bg-gray-800 rounded-full overflow-hidden">
+        <div className="h-1 bg-slate-800/60">
           <div
-            className="h-full bg-gradient-to-r from-yellow-500 to-green-500 transition-all duration-500"
+            className="h-full bg-gradient-to-r from-indigo-500 via-violet-500 to-pink-500 transition-all duration-500"
             style={{ width: `${stats.totalMatches > 0 ? (stats.completed / stats.totalMatches) * 100 : 0}%` }}
           />
         </div>
       </div>
 
-      <div className="flex h-[calc(100vh-140px)]">
-        {/* Left Column - Current Matches */}
-        <div className="w-1/2 p-6 border-r border-gray-800">
+      <div className="flex h-[calc(100vh-180px)]">
+        {/* Left Column - Current Matches (TV hero) */}
+        <div className="w-1/2 p-6 border-r border-white/5 overflow-hidden">
           <div className="flex items-center mb-6">
-            <Zap className="h-6 w-6 text-yellow-400 mr-2" />
-            <h2 className="text-2xl font-bold text-yellow-400">NOW COMPETING</h2>
+            <Zap className="h-6 w-6 text-amber-400 mr-2" />
+            <h2 className="text-2xl font-bold text-amber-400 uppercase tracking-wider">Now competing</h2>
           </div>
 
           {inProgressMatches.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-              <Clock className="h-16 w-16 mb-4" />
-              <p className="text-xl">No matches in progress</p>
+            <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+              <Clock className="h-20 w-20 mb-4 opacity-50" />
+              <p className="text-2xl">No matches in progress</p>
+              <p className="text-sm text-slate-600 mt-2">Stand by for the next match</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-280px)] pr-2">
               {inProgressMatches.map((match) => {
                 const division = getDivisionForMatch(match);
                 return (
                   <div
                     key={match.id}
-                    className="bg-gradient-to-r from-yellow-900/30 to-gray-900 rounded-xl p-6 border-2 border-yellow-500/50 animate-pulse"
+                    className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-900 border-2 border-amber-500/40 p-6"
                   >
-                    <div className="text-sm text-yellow-400 mb-3 font-semibold">
-                      {division?.name} • Match #{match.matchNumber}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="text-2xl font-bold">
-                          {getCompetitorName(match.competitor1)}
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
+                    <div className="relative">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="text-sm text-amber-300 font-semibold uppercase tracking-wider">
+                          {division?.name} · Match #{match.matchNumber}
                         </div>
-                        <div className="text-gray-400">
-                          {getCompetitorSchool(match.competitor1)}
+                        <div className="flex items-center gap-1.5 text-xs text-amber-300">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" /> LIVE
                         </div>
                       </div>
-                      <div className="px-6 text-3xl font-bold text-gray-500">VS</div>
-                      <div className="flex-1 text-right">
-                        <div className="text-2xl font-bold">
-                          {getCompetitorName(match.competitor2)}
+                      <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
+                        <div className="min-w-0">
+                          <div className="text-3xl lg:text-4xl font-bold tracking-tight truncate">
+                            {getCompetitorName(match.competitor1)}
+                          </div>
+                          <div className="text-slate-400 text-sm truncate mt-0.5">
+                            {getCompetitorSchool(match.competitor1) || '—'}
+                          </div>
                         </div>
-                        <div className="text-gray-400">
-                          {getCompetitorSchool(match.competitor2)}
+                        <div className="px-4 text-2xl font-black text-slate-600 tracking-widest">VS</div>
+                        <div className="min-w-0 text-right">
+                          <div className="text-3xl lg:text-4xl font-bold tracking-tight truncate">
+                            {getCompetitorName(match.competitor2)}
+                          </div>
+                          <div className="text-slate-400 text-sm truncate mt-0.5">
+                            {getCompetitorSchool(match.competitor2) || '—'}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -224,37 +293,36 @@ export default function PublicScoreboard() {
           )}
 
           {/* Up Next Queue */}
-          <div className="mt-8">
-            <div className="flex items-center mb-4">
-              <Clock className="h-5 w-5 text-blue-400 mr-2" />
-              <h3 className="text-xl font-semibold text-blue-400">UP NEXT</h3>
+          <div className="mt-6">
+            <div className="flex items-center mb-3">
+              <Clock className="h-4 w-4 text-sky-400 mr-2" />
+              <h3 className="text-sm font-semibold text-sky-400 uppercase tracking-wider">Up next</h3>
             </div>
             {readyMatches.length === 0 ? (
-              <p className="text-gray-500">No upcoming matches</p>
+              <p className="text-slate-500 text-sm">No upcoming matches</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
                 {readyMatches.map((match, index) => {
                   const division = getDivisionForMatch(match);
                   return (
                     <div
                       key={match.id}
-                      className={`bg-gray-900/50 rounded-lg p-3 flex items-center justify-between ${
-                        index === 0 ? 'ring-2 ring-blue-500/50' : ''
+                      className={`bg-slate-900/60 rounded-lg px-3 py-2 flex items-center justify-between transition-colors ${
+                        index === 0 ? 'ring-1 ring-sky-500/50 bg-sky-950/30' : ''
                       }`}
                     >
-                      <div className="flex items-center">
-                        <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-sm font-bold mr-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 flex-shrink-0">
                           {index + 1}
                         </div>
-                        <div>
-                          <div className="font-semibold">
-                            {getCompetitorName(match.competitor1)} vs{' '}
-                            {getCompetitorName(match.competitor2)}
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">
+                            {getCompetitorName(match.competitor1)} vs {getCompetitorName(match.competitor2)}
                           </div>
-                          <div className="text-sm text-gray-500">{division?.name}</div>
+                          <div className="text-xs text-slate-500 truncate">{division?.name}</div>
                         </div>
                       </div>
-                      <ChevronRight className="h-5 w-5 text-gray-600" />
+                      <ChevronRight className="h-4 w-4 text-slate-600 flex-shrink-0" />
                     </div>
                   );
                 })}
