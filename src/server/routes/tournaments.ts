@@ -437,4 +437,99 @@ router.get('/:id/schedule', authenticate, async (req: Request, res: Response) =>
   }
 });
 
+// Day-of operations: live stats for the running tournament
+router.get('/:id/day-of', authenticate, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = getParam(req.params.id);
+
+  const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId } });
+  if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+
+  // All registrations with check-in status
+  const [registrations, divisions, matches] = await Promise.all([
+    prisma.registration.findMany({
+      where: { tournamentId },
+      include: { competitor: { select: { firstName: true, lastName: true, schoolDojang: true, belt: true, weightLbs: true } } },
+    }),
+    prisma.division.findMany({
+      where: { tournamentId },
+      include: { _count: { select: { assignments: true } } },
+    }),
+    prisma.match.findMany({
+      where: { bracket: { division: { tournamentId } } },
+      include: { bracket: { select: { id: true, divisionId: true } } },
+    }),
+  ]);
+
+  // Check-in counts
+  const checkedIn = registrations.filter((r) => r.checkedIn);
+  const notCheckedIn = registrations.filter((r) => !r.checkedIn);
+
+  // Weight mismatches: registration weight at check-in differs from initial by > 2 lbs
+  // (kids grow; >2 lb difference is a re-weigh signal)
+  const weightMismatches = checkedIn
+    .filter((r) => r.checkInWeight != null && r.weightAtRegistration != null
+      && Math.abs(r.checkInWeight - r.weightAtRegistration) > 2)
+    .map((r) => ({
+      registrationId: r.id,
+      name: `${r.competitor.firstName} ${r.competitor.lastName}`,
+      school: r.competitor.schoolDojang,
+      weightAtRegistration: r.weightAtRegistration,
+      checkInWeight: r.checkInWeight,
+      delta: r.checkInWeight! - r.weightAtRegistration!,
+    }));
+
+  // Match status counts
+  const matchCounts = {
+    total: matches.length,
+    pending: matches.filter((m) => m.status === 'pending').length,
+    ready: matches.filter((m) => m.status === 'ready').length,
+    inProgress: matches.filter((m) => m.status === 'in_progress').length,
+    completed: matches.filter((m) => m.status === 'completed').length,
+  };
+
+  // By ring: how many matches are scheduled per ring, how many in-progress
+  const byRing: Record<number, { total: number; inProgress: number; completed: number }> = {};
+  for (const m of matches) {
+    const ring = m.ringNumber || 1;
+    if (!byRing[ring]) byRing[ring] = { total: 0, inProgress: 0, completed: 0 };
+    byRing[ring].total++;
+    if (m.status === 'in_progress') byRing[ring].inProgress++;
+    else if (m.status === 'completed') byRing[ring].completed++;
+  }
+
+  // Up next per ring: next ready match (smallest matchNumber per ring)
+  const upNext: Array<{ ring: number; matchId: string; matchNumber: number; division: string }> = [];
+  for (const ring of Object.keys(byRing).map(Number)) {
+    const nextMatch = matches
+      .filter((m) => m.ringNumber === ring && m.status === 'ready')
+      .sort((a, b) => a.matchNumber - b.matchNumber)[0];
+    if (nextMatch) {
+      const div = divisions.find((d) => d.id === nextMatch.bracket.divisionId);
+      upNext.push({
+        ring,
+        matchId: nextMatch.id,
+        matchNumber: nextMatch.matchNumber,
+        division: div?.name || 'Unknown',
+      });
+    }
+  }
+
+  return res.json({
+    tournament: { id: tournament.id, name: tournament.name, date: tournament.date, status: tournament.status },
+    checkIn: {
+      total: registrations.length,
+      checkedIn: checkedIn.length,
+      notCheckedIn: notCheckedIn.length,
+      percent: registrations.length > 0 ? Math.round((checkedIn.length / registrations.length) * 100) : 0,
+      weightMismatches: weightMismatches.length,
+      weightMismatchDetails: weightMismatches.slice(0, 10),
+    },
+    matches: matchCounts,
+    byRing,
+    upNext,
+    divisionCount: divisions.length,
+  });
+});
+
 export default router;
