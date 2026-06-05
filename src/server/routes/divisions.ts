@@ -241,12 +241,23 @@ router.post('/tournament/:tournamentId/auto-generate', authenticate, requireRole
     where: { tournamentId },
   });
 
+  // Load tournament rules from settings (with default fallback)
+  const { parseTournamentRules } = await import('../../shared/constants/tournament-rules.js');
+  const rules = parseTournamentRules(tournament.settings);
+
   // Run auto-categorization
   const categorizationConfig: CategorizationConfig = {
-    divisionThreshold: config?.divisionThreshold ?? 8,
-    ...config,
+    divisionThreshold: config?.divisionThreshold ?? rules.divisions.maxDivisionSize,
+    enableSmartSplitting: rules.divisions.splitBy !== 'age',
+    enableSmartMerging: rules.divisions.minDivisionSize > 1,
+    enableAgeBoundaryFlex: rules.divisions.ageFlexMonths > 0,
+    ageBoundaryTolerance: rules.divisions.ageFlexMonths,
+    useBlackBeltAgeGroups: rules.ageBands.preset === 'blackBelt',
+    customAgeGroups: rules.ageBands.customBands,
     eventTypeLabels,
     customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
+    // v2: pass the full rules object
+    rules,
   };
 
   const result = await autoCategorize(prisma, tournamentId, registrations, categorizationConfig);
