@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Routes, Route, Link, useLocation, useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Trophy,
   Users,
@@ -12,15 +12,17 @@ import {
   Sun,
   Moon,
   ChevronRight,
+  ChevronLeft,
   Sparkles,
   Calendar,
   LayoutGrid,
   Activity,
-  Search,
   Bell,
   Settings as SettingsIcon,
   ExternalLink,
   Trash2,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -64,25 +66,29 @@ const tournamentNav = [
   { name: 'Settings', icon: SettingsIcon, pathSuffix: '/settings', roles: ['admin', 'director'] },
 ];
 
-function classNames(...classes: any[]) {
+function classNames(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ');
 }
 
-function NavItem({ item, active, onClick, indent = false }: {
+function NavItem({ item, active, onClick, collapsed, indent = false }: {
   item: { name: string; href?: string; to?: string; icon: any; pathSuffix?: string };
   active: boolean;
   onClick?: () => void;
+  collapsed?: boolean;
   indent?: boolean;
 }) {
   const Icon = item.icon;
   const target = item.href || item.to || '#';
+
   return (
     <Link
       to={target}
       onClick={onClick}
+      title={collapsed ? item.name : undefined}
       className={classNames(
-        'group flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150',
+        'group flex items-center rounded-lg text-sm font-medium transition-all duration-150',
         indent ? 'pl-11 pr-3 py-1.5' : 'px-3 py-2',
+        collapsed ? 'justify-center' : 'gap-3',
         active
           ? 'bg-white/10 text-white shadow-sm'
           : 'text-white/60 hover:bg-white/5 hover:text-white'
@@ -92,67 +98,107 @@ function NavItem({ item, active, onClick, indent = false }: {
         'h-[18px] w-[18px] flex-shrink-0 transition-colors',
         active ? 'text-white' : 'text-white/50 group-hover:text-white/80'
       )} />
-      <span className="truncate">{item.name}</span>
-      {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-gradient-to-br from-indigo-400 to-violet-400" />}
+      {!collapsed && <span className="truncate">{item.name}</span>}
+      {active && !collapsed && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-gradient-to-br from-indigo-400 to-violet-400" />}
     </Link>
   );
 }
 
 function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  // Detect if we're inside a tournament view for breadcrumb
+  // Collapsed state persisted in localStorage for desktop
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      const stored = localStorage.getItem('sidebarCollapsed');
+      return stored !== null ? JSON.parse(stored) : true; // default to collapsed
+    } catch {
+      return true;
+    }
+  });
+
+  // Persist collapsed state
+  useEffect(() => {
+    try {
+      localStorage.setItem('sidebarCollapsed', JSON.stringify(sidebarCollapsed));
+    } catch {
+      // ignore storage errors
+    }
+  }, [sidebarCollapsed]);
+
+  // Detect if we're inside a tournament view
   const tournamentMatch = location.pathname.match(/^\/tournaments\/([^/]+)/);
   const tournamentId = tournamentMatch?.[1];
 
   const initials = user ? `${user.firstName[0] || ''}${user.lastName[0] || ''}`.toUpperCase() : '?';
   const userName = user ? `${user.firstName} ${user.lastName}` : '';
 
+  const toggleCollapsed = () => setSidebarCollapsed((v: boolean) => !v);
+  const closeMobile = () => setMobileOpen(false);
+
+  // Is this screen wide enough for desktop sidebar mode?
+  // We track this with a useEffect on resize, but for initial render use a CSS class approach
+  const sidebarWidth = sidebarCollapsed ? 'w-16' : 'w-64';
+
   return (
     <div className="min-h-screen bg-[#fafbfc] dark:bg-[#0a0e1a] flex">
       {/* ─── Sidebar ─── */}
       <aside
         className={classNames(
-          'fixed inset-y-0 left-0 z-40 w-64 flex flex-col',
+          'fixed inset-y-0 left-0 z-40 flex flex-col',
           'bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950',
-          'transition-transform duration-300 ease-out',
-          'lg:translate-x-0',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full',
-          'lg:static lg:z-auto lg:flex-shrink-0'
+          'transition-all duration-300 ease-out',
+          'lg:relative lg:flex-shrink-0',
+          sidebarCollapsed ? 'lg:w-16' : 'lg:w-64',
+          // Mobile: drawer
+          mobileOpen ? 'translate-x-0' : '-translate-x-full',
+          'lg:translate-x-0'
         )}
       >
         {/* Brand */}
-        <div className="flex h-16 items-center gap-2.5 px-5 border-b border-white/5">
-          <div className="relative">
+        <div className={classNames(
+          'flex items-center border-b border-white/5',
+          sidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-2.5 px-5 h-16'
+        )}>
+          <div className="relative flex-shrink-0">
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-violet-500 blur-md opacity-50" />
             <div className="relative h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg">
               <Trophy className="h-5 w-5 text-white" strokeWidth={2.5} />
             </div>
           </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold text-white tracking-tight">Martial Arts TM</span>
-            <span className="text-[10px] uppercase tracking-widest text-white/40 font-medium">Tournament OS</span>
-          </div>
+          {!sidebarCollapsed && (
+            <div className="flex flex-col leading-tight min-w-0">
+              <span className="text-sm font-semibold text-white tracking-tight truncate">Martial Arts TM</span>
+              <span className="text-[10px] uppercase tracking-widest text-white/40 font-medium">Tournament OS</span>
+            </div>
+          )}
+          {/* Close button on mobile */}
           <button
-            onClick={() => setSidebarOpen(false)}
-            className="ml-auto p-1.5 text-white/40 hover:text-white lg:hidden"
+            onClick={closeMobile}
+            className="ml-auto p-1.5 text-white/40 hover:text-white lg:hidden flex-shrink-0"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Nav scrollable area */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+        <nav className={classNames(
+          'flex-1 overflow-y-auto px-3 py-4 space-y-6',
+          sidebarCollapsed ? 'px-2' : 'px-3'
+        )}>
           {/* Workspace */}
           <div>
-            <div className="px-3 mb-2">
-              <span className="section-title text-white/40">Workspace</span>
-            </div>
-            <div className="space-y-0.5">
+            {!sidebarCollapsed && (
+              <div className="px-3 mb-2">
+                <span className="section-title text-white/40">Workspace</span>
+              </div>
+            )}
+            <div className={classNames('space-y-0.5', sidebarCollapsed && 'flex flex-col items-center')}>
               {primaryNav.map((item) => {
                 const isActive = item.href === '/'
                   ? location.pathname === '/'
@@ -162,7 +208,8 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                     key={item.name}
                     item={item}
                     active={isActive}
-                    onClick={() => setSidebarOpen(false)}
+                    onClick={closeMobile}
+                    collapsed={sidebarCollapsed}
                   />
                 );
               })}
@@ -172,11 +219,13 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           {/* Active tournament (if any) */}
           {tournamentId && tournamentId !== 'new' && (
             <div>
-              <div className="px-3 mb-2 flex items-center justify-between">
-                <span className="section-title text-white/40">Current Tournament</span>
-                <Link to="/tournaments" onClick={() => setSidebarOpen(false)} className="text-[10px] text-white/30 hover:text-white/60">switch</Link>
-              </div>
-              <div className="space-y-0.5">
+              {!sidebarCollapsed && (
+                <div className="px-3 mb-2 flex items-center justify-between">
+                  <span className="section-title text-white/40">Current Tournament</span>
+                  <Link to="/tournaments" onClick={closeMobile} className="text-[10px] text-white/30 hover:text-white/60">switch</Link>
+                </div>
+              )}
+              <div className={classNames('space-y-0.5', sidebarCollapsed && 'flex flex-col items-center')}>
                 {tournamentNav.map((item) => {
                   const target = `/tournaments/${tournamentId}${item.pathSuffix || ''}`;
                   const isActive = location.pathname === target;
@@ -185,8 +234,9 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                       key={item.name}
                       item={{ name: item.name, href: target, icon: item.icon }}
                       active={isActive}
-                      onClick={() => setSidebarOpen(false)}
-                      indent
+                      onClick={closeMobile}
+                      collapsed={sidebarCollapsed}
+                      indent={!sidebarCollapsed}
                     />
                   );
                 })}
@@ -197,14 +247,17 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           {/* Admin section */}
           {user?.role === 'admin' && (
             <div>
-              <div className="px-3 mb-2">
-                <span className="section-title text-white/40">Admin</span>
-              </div>
-              <div className="space-y-0.5">
+              {!sidebarCollapsed && (
+                <div className="px-3 mb-2">
+                  <span className="section-title text-white/40">Admin</span>
+                </div>
+              )}
+              <div className={classNames('space-y-0.5', sidebarCollapsed && 'flex flex-col items-center')}>
                 <NavItem
                   item={{ name: 'User Management', href: '/admin/users', icon: Shield }}
                   active={location.pathname === '/admin/users'}
-                  onClick={() => setSidebarOpen(false)}
+                  onClick={closeMobile}
+                  collapsed={sidebarCollapsed}
                 />
               </div>
             </div>
@@ -212,40 +265,58 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
 
           {/* Public */}
           <div>
-            <div className="px-3 mb-2">
-              <span className="section-title text-white/40">Public</span>
-            </div>
-            <div className="space-y-0.5">
+            {!sidebarCollapsed && (
+              <div className="px-3 mb-2">
+                <span className="section-title text-white/40">Public</span>
+              </div>
+            )}
+            <div className={classNames('space-y-0.5', sidebarCollapsed && 'flex flex-col items-center')}>
               <NavItem
                 item={{ name: 'Registration Portal', href: '/register', icon: UserPlus }}
                 active={false}
+                onClick={closeMobile}
+                collapsed={sidebarCollapsed}
               />
             </div>
           </div>
         </nav>
 
-        {/* Footer: theme toggle + user card */}
-        <div className="border-t border-white/5 p-3 space-y-2">
+        {/* Footer: user card */}
+        <div className={classNames(
+          'border-t border-white/5 p-3',
+          sidebarCollapsed ? 'flex flex-col items-center gap-2' : 'space-y-2'
+        )}>
           {user ? (
-            <div className="relative">
+            <div className={classNames('relative', sidebarCollapsed && 'w-full flex flex-col items-center')}>
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                className={classNames(
+                  'flex items-center gap-2.5 rounded-lg hover:bg-white/5 transition-colors',
+                  sidebarCollapsed ? 'flex-col py-1.5 w-full justify-center' : 'px-2 py-1.5 w-full'
+                )}
+                title={sidebarCollapsed ? userName : undefined}
               >
                 <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
                   {initials}
                 </div>
-                <div className="flex-1 text-left min-w-0">
-                  <div className="text-sm font-medium text-white truncate">{userName}</div>
-                  <div className="text-[11px] text-white/40 capitalize truncate">{user.role}{user.email.includes('demo') ? ' • shared demo' : ''}</div>
-                </div>
-                <ChevronRight className={classNames('h-3.5 w-3.5 text-white/40 transition-transform', userMenuOpen && 'rotate-90')} />
+                {!sidebarCollapsed && (
+                  <>
+                    <div className="flex-1 text-left min-w-0">
+                      <div className="text-sm font-medium text-white truncate">{userName}</div>
+                      <div className="text-[11px] text-white/40 capitalize truncate">{user.role}{user.email.includes('demo') ? ' • shared demo' : ''}</div>
+                    </div>
+                    <ChevronRight className={classNames('h-3.5 w-3.5 text-white/40 transition-transform', userMenuOpen && 'rotate-90')} />
+                  </>
+                )}
               </button>
               {userMenuOpen && (
-                <div className="absolute bottom-full left-0 right-0 mb-1 bg-slate-800 border border-white/10 rounded-lg p-1 shadow-2xl animate-slide-up">
+                <div className={classNames(
+                  'absolute bg-slate-800 border border-white/10 rounded-lg p-1 shadow-2xl animate-slide-up z-50',
+                  sidebarCollapsed ? 'bottom-full left-1/2 -translate-x-1/2 mb-1 min-w-[160px]' : 'bottom-full left-0 right-0 mb-1'
+                )}>
                   <Link
                     to="/profile"
-                    onClick={() => { setUserMenuOpen(false); setSidebarOpen(false); }}
+                    onClick={() => { setUserMenuOpen(false); closeMobile(); }}
                     className="flex items-center gap-2 px-2.5 py-1.5 text-sm text-white/80 hover:bg-white/5 rounded-md"
                   >
                     <SettingsIcon className="h-3.5 w-3.5" /> Profile
@@ -269,19 +340,23 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           ) : (
             <Link
               to="/login"
-              className="flex items-center gap-2 px-3 py-2 text-sm text-white/60 hover:text-white"
+              className={classNames(
+                'flex items-center text-sm text-white/60 hover:text-white',
+                sidebarCollapsed ? 'justify-center' : 'gap-2 px-3 py-2'
+              )}
             >
-              <LogOut className="h-4 w-4" /> Sign in
+              <LogOut className="h-4 w-4" />
+              {!sidebarCollapsed && 'Sign in'}
             </Link>
           )}
         </div>
       </aside>
 
       {/* Mobile overlay */}
-      {sidebarOpen && (
+      {mobileOpen && (
         <div
           className="fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm lg:hidden animate-fade-in"
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => setMobileOpen(false)}
         />
       )}
 
@@ -290,26 +365,30 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
         {/* Top bar — glass */}
         <header className="sticky top-0 z-20 surface-glass">
           <div className="flex items-center gap-3 h-14 px-4 lg:px-6">
+            {/* Sidebar toggle — chevron on desktop, hamburger on mobile */}
             <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-1.5 -ml-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md"
+              onClick={() => {
+                if (window.matchMedia('(min-width: 1024px)').matches) {
+                  toggleCollapsed();
+                } else {
+                  setMobileOpen(true);
+                }
+              }}
+              className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
+              title={window.matchMedia('(min-width: 1024px)').matches ? (sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar') : 'Open menu'}
             >
-              <Menu className="h-5 w-5" />
+              {window.matchMedia('(min-width: 1024px)').matches ? (
+                sidebarCollapsed
+                  ? <PanelLeft className="h-5 w-5" />
+                  : <PanelLeftClose className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
             </button>
-
-            {/* Breadcrumb */}
-            <Breadcrumbs path={location.pathname} />
 
             <div className="flex-1" />
 
-            {/* Quick search (decorative for now) */}
-            <div className="hidden md:flex items-center gap-2 px-3 h-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 text-sm text-slate-500 min-w-[240px] cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
-              <Search className="h-4 w-4" />
-              <span>Search competitors, divisions...</span>
-              <kbd className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-400">⌘K</kbd>
-            </div>
-
-            {/* Notification bell (decorative) */}
+            {/* Notification bell */}
             <button className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-800">
               <Bell className="h-4 w-4" />
             </button>
@@ -324,50 +403,6 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
-  );
-}
-
-function Breadcrumbs({ path }: { path: string }) {
-  const segments = path.split('/').filter(Boolean);
-  if (segments.length === 0) return null;
-
-  // Build a friendlier label for known paths
-  const labels: Record<string, string> = {
-    competitors: 'Competitors',
-    tournaments: 'Tournaments',
-    divisions: 'Divisions',
-    schedule: 'Schedule',
-    settings: 'Settings',
-    director: 'Director Dashboard',
-    results: 'Results',
-    bracket: 'Bracket',
-    admin: 'Admin',
-    users: 'Users',
-  };
-
-  const items = [
-    { label: 'Home', href: '/' },
-    ...segments.map((s, i) => ({
-      label: labels[s] || (s.length > 8 ? s.slice(0, 8) + '…' : s),
-      href: '/' + segments.slice(0, i + 1).join('/'),
-    })),
-  ];
-
-  return (
-    <nav className="flex items-center gap-1.5 text-sm min-w-0">
-      {items.map((item, i) => (
-        <span key={item.href} className="flex items-center gap-1.5 min-w-0">
-          {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600 flex-shrink-0" />}
-          {i === items.length - 1 ? (
-            <span className="font-semibold text-slate-900 dark:text-white truncate">{item.label}</span>
-          ) : (
-            <Link to={item.href} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white truncate transition-colors">
-              {item.label}
-            </Link>
-          )}
-        </span>
-      ))}
-    </nav>
   );
 }
 

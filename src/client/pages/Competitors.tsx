@@ -11,6 +11,7 @@ import {
   FileSpreadsheet,
   Users,
   Filter,
+  MoreHorizontal,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { TableSkeleton } from '../components/ui/Skeleton';
@@ -94,6 +95,7 @@ export default function Competitors() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Competitor | null>(null);
@@ -407,28 +409,14 @@ export default function Competitors() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex items-baseline gap-2">
           <h1>Competitors</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Manage your competitor registry · {filteredCompetitors?.length ?? data?.competitors?.length ?? 0} total
-          </p>
+          <span className="text-sm text-slate-500 dark:text-slate-400">
+            ({filteredCompetitors?.length ?? data?.competitors?.length ?? 0})
+          </span>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={handleExportExcel}
-            className="btn btn-secondary"
-          >
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Export
-          </button>
-          <button
-            onClick={handleDownloadTemplate}
-            className="btn btn-secondary"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Template
-          </button>
+        <div className="flex items-center gap-2">
           <button
             onClick={() => fileInputRef.current?.click()}
             className="btn btn-secondary"
@@ -454,6 +442,39 @@ export default function Competitors() {
             <Plus className="h-4 w-4 mr-2" />
             Add
           </button>
+          <div className="relative">
+            <button
+              onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+              className="btn btn-secondary px-2"
+              aria-label="More actions"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            {moreMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setMoreMenuOpen(false)}
+                />
+                <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg py-1 z-20">
+                  <button
+                    onClick={() => { handleExportExcel(); setMoreMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Export
+                  </button>
+                  <button
+                    onClick={() => { handleDownloadTemplate(); setMoreMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    Template
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -499,23 +520,25 @@ export default function Competitors() {
 
       {/* Faceted Search */}
       <div className="card overflow-hidden">
-        <div className="p-4 space-y-3">
-          {/* Search row */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by name, school…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="form-input pl-9 w-full"
-              />
-            </div>
+        <div className="p-3 space-y-2">
+          {/* Search row - full width */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by name, school…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="form-input pl-9 w-full"
+            />
+          </div>
+
+          {/* Gender + School + Belt row */}
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={genderFilter}
               onChange={(e) => setGenderFilter(e.target.value)}
-              className="form-input py-2 min-w-[120px]"
+              className="form-input py-1.5 min-w-[110px]"
             >
               <option value="">All genders</option>
               <option value="M">Male</option>
@@ -524,43 +547,44 @@ export default function Competitors() {
             <select
               value={schoolFilter}
               onChange={(e) => setSchoolFilter(e.target.value)}
-              className="form-input py-2 min-w-[180px] max-w-[280px]"
+              className="form-input py-1.5 min-w-[160px] max-w-[240px]"
             >
               <option value="">All schools</option>
               {aggregates && Object.entries(aggregates.bySchool || {}).map(([school, count]) => (
                 <option key={school} value={school}>{school} ({count})</option>
               ))}
             </select>
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap">Belt</span>
+              <div className="flex-1 overflow-x-auto flex-nowrap flex items-center gap-1">
+                {aggregates && Object.entries(aggregates.byBelt || {}).map(([belt, count]) => {
+                  const active = beltFilter.includes(belt);
+                  return (
+                    <button
+                      key={belt}
+                      type="button"
+                      onClick={() => setBeltFilter(active ? beltFilter.filter((b) => b !== belt) : [...beltFilter, belt])}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-all flex-shrink-0 ${
+                        active
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      {belt} <span className={`tabular-nums ${active ? 'opacity-80' : 'opacity-60'}`}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
-          {/* Facet chips: belt + age range */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mr-1">Belt</span>
-            {aggregates && Object.entries(aggregates.byBelt || {}).map(([belt, count]) => {
-              const active = beltFilter.includes(belt);
-              return (
-                <button
-                  key={belt}
-                  type="button"
-                  onClick={() => setBeltFilter(active ? beltFilter.filter((b) => b !== belt) : [...beltFilter, belt])}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
-                    active
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  {belt} <span className={`tabular-nums ${active ? 'opacity-80' : 'opacity-60'}`}>{count}</span>
-                </button>
-              );
-            })}
-
-            <span className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-2" />
-
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mr-1">Age</span>
+          {/* Age range row */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Age</span>
             <select
               value={ageMin}
               onChange={(e) => setAgeMin(e.target.value)}
-              className="form-input py-1 text-xs min-w-[80px]"
+              className="form-input py-1 text-xs min-w-[70px]"
             >
               <option value="">Any</option>
               <option value="4">4+</option>
@@ -576,7 +600,7 @@ export default function Competitors() {
             <select
               value={ageMax}
               onChange={(e) => setAgeMax(e.target.value)}
-              className="form-input py-1 text-xs min-w-[80px]"
+              className="form-input py-1 text-xs min-w-[70px]"
             >
               <option value="">Any</option>
               <option value="5">≤5</option>
