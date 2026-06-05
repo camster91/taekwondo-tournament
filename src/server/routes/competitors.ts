@@ -78,10 +78,11 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     search, belt, school, gender,
     age_min, age_max,
     weight_min, weight_max,
+    trash,  // ?trash=true returns soft-deleted items
     limit = '100', offset = '0',
   } = req.query as Record<string, string>;
 
-  const where: any = {};
+  const where: any = { deletedAt: trash === 'true' ? { not: null } : null };
 
   if (search) {
     where.OR = [
@@ -329,12 +330,35 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
 });
 
 // Delete competitor (requires authentication + admin/director role)
+// Soft-delete: sets deletedAt, row stays in DB for 7 days, manager can
+// restore via POST /:id/restore before the auto-purge cron runs.
 router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  await prisma.competitor.update({
+    where: { id: getParam(req.params.id) },
+    data: { deletedAt: new Date() },
+  });
+
+  res.status(204).send();
+});
+
+// Restore a soft-deleted competitor (admin/director only)
+router.post('/:id/restore', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const updated = await prisma.competitor.update({
+    where: { id: getParam(req.params.id) },
+    data: { deletedAt: null },
+  });
+  res.json(updated);
+});
+
+// Hard-delete a soft-deleted competitor (admin only) — used by the auto-purge
+// cron after 7 days. Manager can also call it from Trash if they're sure.
+router.delete('/:id/purge', authenticate, requireRole('admin'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   await prisma.competitor.delete({
     where: { id: getParam(req.params.id) },
   });
-
   res.status(204).send();
 });
 

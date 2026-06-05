@@ -31,6 +31,12 @@ model Competitor {
   region            String?   // Geographic region for regional diversity
   reachInches       Float?    // Arm reach for sparring matching
 
+  // Soft-delete: managers can accidentally delete a kid/division. We
+  // keep the row in the DB for 7 days with deletedAt set, then a
+  // cron could purge. The list endpoint filters these out by default;
+  // ?trash=true shows them; POST /:id/restore un-sets deletedAt.
+  deletedAt         DateTime?
+
   registrations      Registration[]
   competitorHistory  CompetitorHistory[]
   ratings            CompetitorRating[]
@@ -54,6 +60,9 @@ model Tournament {
   organizationId   String?
   sportProfileId   String?
   sportProfileSlug String?  @default("taekwondo")
+
+  // Soft-delete: see Competitor.deletedAt comment
+  deletedAt        DateTime?
 
   registrations Registration[]
   divisions     Division[]
@@ -117,6 +126,9 @@ model Division {
   danMax         Int?
   weightClass    String?  // Feather, Light, Middle, Heavy
   divisionNumber Int      @default(1) // DIV1, DIV2, DIV3
+
+  // Soft-delete: see Competitor.deletedAt comment
+  deletedAt      DateTime?
   isSpecialNeeds Boolean  @default(false)
   displayOrder   Int?
   createdAt      DateTime @default(now())
