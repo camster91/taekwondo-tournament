@@ -102,7 +102,7 @@ export default function Trash() {
       )}
 
       {/* Search */}
-      <div className="relative mb-4">
+      <div className="relative mb-4 w-full">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <input
           type="text"
@@ -136,12 +136,12 @@ export default function Trash() {
             const days = c.deletedAt ? daysAgo(c.deletedAt) : 0;
             const isOld = days >= 6;
             return (
-              <div key={c.id} className="p-4 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+              <div key={c.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+ <div className="h-10 w-10 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
                   {c.firstName[0]}{c.lastName[0]}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <div className="font-semibold text-gray-900 dark:text-white truncate">
                       {c.firstName} {c.lastName}
                     </div>
@@ -154,7 +154,7 @@ export default function Trash() {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                     {c.schoolDojang && <span>{c.schoolDojang}</span>}
                     {c._count?.registrations !== undefined && (
                       <span>{c._count.registrations} registration{c._count.registrations === 1 ? '' : 's'}</span>

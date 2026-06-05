@@ -251,9 +251,9 @@ export default function TournamentDetail() {
       </div>
 
       {/* Page Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col xs:flex-row xs:items-center gap-2 xs:gap-3">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{tournament.name}</h1>
             <StatusBadge status={tournament.status} />
           </div>
@@ -992,7 +992,7 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
         </span>
       </div>
 
-      <div className="p-5 grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {/* Check-in card with progress bar */}
         <div className="lg:col-span-2 p-4 rounded-xl bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-slate-900/20 border border-slate-200/60 dark:border-slate-800">
           <div className="flex items-center justify-between mb-3">
