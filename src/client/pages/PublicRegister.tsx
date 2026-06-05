@@ -73,6 +73,7 @@ export default function PublicRegister() {
     parentName: '',
     parentEmail: '',
     parentPhone: '',
+    competeWithOlder: false,
   });
 
   const selectedTournament = useMemo(
@@ -149,6 +150,8 @@ export default function PublicRegister() {
           heightInches: formData.heightInches ? parseFloat(formData.heightInches) : null,
           weightLbs: formData.weightLbs ? parseFloat(formData.weightLbs) : null,
           danRank: formData.belt === topLevelBeltName && sportProfile.beltConfig.hasDanRank ? formData.danRank : null,
+          // The public register endpoint creates a Registration with these fields
+          competeWithOlder: formData.competeWithOlder,
         }),
       });
 
@@ -256,6 +259,7 @@ export default function PublicRegister() {
                   parentName: '',
                   parentEmail: '',
                   parentPhone: '',
+                  competeWithOlder: false,
                 });
               }}
               className="btn btn-primary w-full"
@@ -532,6 +536,24 @@ export default function PublicRegister() {
                 placeholder="Any accommodations or medical information we should know"
                 className="form-input w-full"
               />
+            </div>
+
+            {/* v2: Compete with older — let parent opt into next age band */}
+            <div className="mt-4 flex items-start gap-2">
+              <input
+                type="checkbox"
+                name="competeWithOlder"
+                id="competeWithOlder"
+                checked={formData.competeWithOlder}
+                onChange={handleChange}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="competeWithOlder" className="text-sm text-gray-700 dark:text-gray-300">
+                <span className="font-medium">Compete in older age band</span>
+                <span className="block text-xs text-gray-500">
+                  Check this if your child is near the top of their age band and you'd like them considered for the next age group up (subject to the tournament's age-flex rules).
+                </span>
+              </label>
             </div>
           </div>
 

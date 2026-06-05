@@ -94,6 +94,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     parentName,
     parentEmail,
     parentPhone,
+    competeWithOlder,
   } = req.body;
 
   // Validation
@@ -198,6 +199,9 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         parentName: parentName?.trim() || null,
         parentEmail: parentEmail?.trim() || null,
         parentPhone: parentPhone?.trim() || null,
+        // v2: parent opt-in fields
+        competeWithOlder: competeWithOlder === true,
+        specialNeeds: specialNeeds?.trim() || null,
       },
       include: {
         competitor: true,
