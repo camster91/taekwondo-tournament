@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import {
@@ -14,6 +14,9 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
 import { DEFAULT_WEIGHT_CLASSES } from '../../shared/constants/weight-classes';
+import TournamentRulesEditor from '../components/TournamentRulesEditor';
+import { DEFAULT_TOURNAMENT_RULES, type TournamentRules, parseTournamentRules } from '../../shared/constants/tournament-rules';
+import { useToast } from '../context/ToastContext';
 
 interface Tournament {
   id: string;
@@ -430,6 +433,26 @@ export default function TournamentSettings() {
         )}
       </div>
 
+      {/* Tournament Rules (v2) */}
+      <div className="card mb-6">
+        <div className="card-header flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white">Tournament Rules</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              The full rules engine that drives division categorization, bracket generation, and merging.
+              Matches the workflow used in the Newton's Championship 2025 .xlsm (CB/BB tiers, 8 age bands, 3-4 weight classes).
+            </p>
+          </div>
+        </div>
+        <div className="card-body">
+          <RulesManager
+            tournamentId={id!}
+            tournamentSettings={tournament?.settings}
+            onRulesChange={setHasChanges}
+          />
+        </div>
+      </div>
+
       {/* Unsaved Changes Warning */}
       {hasChanges && (
         <div className="fixed bottom-4 right-4 bg-yellow-100 dark:bg-yellow-900/80 border border-yellow-400 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3">
@@ -456,3 +479,96 @@ export default function TournamentSettings() {
     </div>
   );
 }
+
+// ─── Rules Manager (sub-component) ─────────────────────────────────────
+function RulesManager({
+  tournamentId,
+  tournamentSettings,
+  onRulesChange,
+}: {
+  tournamentId: string;
+  tournamentSettings: string | null | undefined;
+  onRulesChange: (dirty: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const { addToast } = useToast();
+  const [rules, setRules] = useState<TournamentRules>(() => parseTournamentRules(tournamentSettings));
+  const [saving, setSaving] = useState(false);
+  const [showResetRulesConfirm, setShowResetRulesConfirm] = useState(false);
+
+  // Re-init when tournamentSettings changes (e.g. after save)
+  useEffect(() => {
+    setRules(parseTournamentRules(tournamentSettings));
+  }, [tournamentSettings]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (next: TournamentRules) => {
+      const res = await fetch(`/api/tournaments/${tournamentId}/rules`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ rules: next }),
+      });
+      if (!res.ok) throw new Error('Failed to save rules');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
+      onRulesChange(false);
+      addToast('Tournament rules saved', 'success');
+    },
+    onError: () => addToast('Failed to save rules', 'error'),
+  });
+
+  const resetRulesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/tournaments/${tournamentId}/rules/reset`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders() },
+      });
+      if (!res.ok) throw new Error('Failed to reset rules');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
+      onRulesChange(false);
+      addToast('Rules reset to defaults', 'success');
+    },
+  });
+
+  const handleChange = (next: TournamentRules) => {
+    setRules(next);
+    onRulesChange(true);
+  };
+
+  return (
+    <div>
+    <TournamentRulesEditor
+      rules={rules}
+      onChange={handleChange}
+      onReset={() => setShowResetRulesConfirm(true)}
+    />
+    <div className="mt-4 flex justify-end gap-2">
+      <button
+        onClick={() => saveMutation.mutate(rules)}
+        disabled={saving || saveMutation.isPending}
+        className="btn btn-primary"
+      >
+        {saveMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+        Save Rules
+      </button>
+    </div>
+    <ConfirmDialog
+      isOpen={showResetRulesConfirm}
+      onClose={() => setShowResetRulesConfirm(false)}
+      onConfirm={async () => {
+        setShowResetRulesConfirm(false);
+        await resetRulesMutation.mutateAsync();
+      }}
+      title="Reset Tournament Rules"
+      message="Are you sure you want to reset the tournament rules to defaults? This won't affect divisions you've already generated."
+      confirmText="Reset Rules"
+      variant="warning"
+    />
+    </div>
+    );
+    }
