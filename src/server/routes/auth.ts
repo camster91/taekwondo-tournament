@@ -251,6 +251,25 @@ router.get('/setup-status', async (req: Request, res: Response) => {
   res.json({ needsSetup: count === 0 });
 });
 
+// v2: dev-only token endpoint for seeding + testing without SMTP
+// Guarded by NODE_ENV !== 'production' so it can never be enabled on a live prod deploy
+if (process.env.NODE_ENV !== 'production') {
+  router.post('/dev-token', async (req: Request, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const { email } = req.body as { email?: string };
+    if (!email) return res.status(400).json({ error: 'email required' });
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return res.status(404).json({ error: 'user not found' });
+    const { createToken } = await import('../middleware/auth.js');
+    const token = createToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
+    res.json({ token, user: { id: user.id, email: user.email, role: user.role } });
+  });
+}
+
 // Get current user
 router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
