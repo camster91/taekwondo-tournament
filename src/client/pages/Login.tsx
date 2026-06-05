@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Trophy, Mail, AlertCircle, UserPlus, ArrowLeft, CheckCircle } from 'lucide-react';
+import { Trophy, Mail, AlertCircle, UserPlus, ArrowLeft, CheckCircle, Sparkles, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
 
@@ -18,6 +18,7 @@ export default function Login() {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
 
   // Setup state
@@ -111,6 +112,25 @@ export default function Login() {
     }
 
     setIsLoading(false);
+  };
+
+  // Demo mode: one-click guest login. Anyone can try the app without
+  // giving an email. Shares a single demo user across all visitors so
+  // they can see each other's changes (acts as a "live sandbox").
+  const handleDemoLogin = async () => {
+    setError('');
+    setDemoLoading(true);
+    try {
+      const res = await fetch('/api/auth/demo', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Demo login failed');
+      localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      navigate('/', { replace: true });
+    } catch (err: any) {
+      setError(err.message || 'Demo login failed. Please try again.');
+    }
+    setDemoLoading(false);
   };
 
   return (
@@ -293,25 +313,43 @@ export default function Login() {
           )}
 
           {!needsSetup && (
-            <div className="mt-6">
-              <div className="relative">
+            <div className="mt-6 space-y-3">
+              {/* Demo Mode — one-click login for visitors */}
+              <button
+                type="button"
+                onClick={handleDemoLogin}
+                disabled={demoLoading}
+                className="w-full py-3 px-4 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-medium text-sm flex items-center justify-center shadow-sm transition disabled:opacity-50"
+              >
+                {demoLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Loading demo...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Try the demo — no signup
+                  </>
+                )}
+              </button>
+
+              <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200 dark:border-gray-700" />
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">Or continue with</span>
+                  <span className="px-4 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">Or use a magic link</span>
                 </div>
               </div>
 
-              <div className="mt-6 space-y-3">
-                <Link
-                  to="/register"
-                  className="w-full btn btn-secondary py-2.5 flex items-center justify-center"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Register as Competitor
-                </Link>
-              </div>
+              <Link
+                to="/register"
+                className="w-full btn btn-secondary py-2.5 flex items-center justify-center"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Register as Competitor
+              </Link>
             </div>
           )}
         </div>
