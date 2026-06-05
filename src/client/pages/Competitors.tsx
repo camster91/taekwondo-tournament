@@ -635,7 +635,7 @@ export default function Competitors() {
           ) : filteredCompetitors?.length > 0 ? (
             <>
               {/* Mobile Card View */}
-              <div className="mobile-cards p-4 space-y-3">
+              <div className="md:hidden p-4 space-y-3">
                 {filteredCompetitors.map((c: Competitor) => (
                   <div key={c.id} className="mobile-card">
                     <div className="mobile-card-header">
