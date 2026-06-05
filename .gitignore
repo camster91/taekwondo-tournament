@@ -5,3 +5,4 @@ node_modules/
 prisma/tournament.db
 prisma/tournament.db-journal
 .DS_Store
+dist-server/

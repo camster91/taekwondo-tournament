@@ -6,6 +6,13 @@ import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
 import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import {
+  parseTournamentRules,
+  serializeTournamentRules,
+  DEFAULT_TOURNAMENT_RULES,
+  type TournamentRules,
+} from '../../shared/constants/tournament-rules.js';
+import { Errors } from '../utils/errors.js';
 
 const router = Router();
 
@@ -42,6 +49,11 @@ const registrationUpdateSchema = z.object({
   weightAtRegistration: z.number().positive().optional(),
   checkedIn: z.boolean().optional(),
   checkInWeight: z.number().positive().optional(),
+  // v2 fields
+  competeWithOlder: z.boolean().optional(),
+  specialNeeds: z.string().max(500).optional().nullable(),
+  manualDivisionId: z.string().optional().nullable(),
+  seeding: z.number().int().min(1).optional().nullable(),
 });
 
 const weightClassesSchema = z.object({
@@ -142,6 +154,44 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
   });
 
   res.json(tournament);
+});
+
+// ─── Tournament rules (v2) ──────────────────────────────────────────────
+// GET /api/tournaments/:id/rules — returns the rules JSON for this tournament
+router.get('/:id/rules', authenticate, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: getParam(req.params.id) },
+    select: { settings: true },
+  });
+  if (!tournament) throw Errors.tournamentNotFound(getParam(req.params.id));
+  const rules = parseTournamentRules(tournament.settings);
+  res.json(rules);
+});
+
+// PUT /api/tournaments/:id/rules — replaces the rules JSON
+router.put('/:id/rules', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { rules } = req.body as { rules: TournamentRules };
+  // Validate by round-tripping through parse (which merges with defaults)
+  const normalized = parseTournamentRules(JSON.stringify(rules));
+  const tournament = await prisma.tournament.update({
+    where: { id: getParam(req.params.id) },
+    data: { settings: serializeTournamentRules(normalized) },
+    select: { id: true, settings: true },
+  });
+  res.json({ rules: parseTournamentRules(tournament.settings) });
+});
+
+// POST /api/tournaments/:id/rules/reset — restore defaults
+router.post('/:id/rules/reset', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournament = await prisma.tournament.update({
+    where: { id: getParam(req.params.id) },
+    data: { settings: serializeTournamentRules(DEFAULT_TOURNAMENT_RULES) },
+    select: { id: true, settings: true },
+  });
+  res.json({ rules: parseTournamentRules(tournament.settings) });
 });
 
 // Delete tournament (requires authentication + admin/director role)
@@ -272,7 +322,7 @@ router.post('/:id/registrations/bulk', authenticate, requireRole('admin', 'direc
 // Update registration (requires authentication + admin/director role)
 router.put('/:id/registrations/:regId', authenticate, requireRole('admin', 'director'), validateRequest(registrationUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { patterns, sparring, weightAtRegistration, checkedIn, checkInWeight } = req.body;
+  const { patterns, sparring, weightAtRegistration, checkedIn, checkInWeight, competeWithOlder, specialNeeds, manualDivisionId, seeding } = req.body;
 
   // Verify registration belongs to this tournament
   const existing = await prisma.registration.findFirst({
@@ -291,6 +341,11 @@ router.put('/:id/registrations/:regId', authenticate, requireRole('admin', 'dire
     updateData.checkInTime = checkedIn ? new Date() : null;
   }
   if (checkInWeight !== undefined) updateData.checkInWeight = checkInWeight;
+  // v2 fields
+  if (competeWithOlder !== undefined) updateData.competeWithOlder = competeWithOlder;
+  if (specialNeeds !== undefined) updateData.specialNeeds = specialNeeds;
+  if (manualDivisionId !== undefined) updateData.manualDivisionId = manualDivisionId || null;
+  if (seeding !== undefined) updateData.seeding = seeding || null;
 
   const registration = await prisma.registration.update({
     where: { id: getParam(req.params.regId) },

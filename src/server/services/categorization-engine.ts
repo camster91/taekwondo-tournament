@@ -7,6 +7,13 @@ import {
   AGE_BOUNDARY_CONFIG,
   getInitialSkillEstimate,
 } from '../../shared/constants/fairness-config.js';
+import {
+  type TournamentRules,
+  DEFAULT_TOURNAMENT_RULES,
+  getBeltGroup,
+  getEffectiveAgeBand,
+  getWeightClasses,
+} from '../../shared/constants/tournament-rules.js';
 
 export interface CategorizationConfig {
   divisionThreshold: number;
@@ -23,6 +30,8 @@ export interface CategorizationConfig {
   ageBoundaryTolerance?: number;       // Months tolerance at boundaries
   preferWeightProximity?: boolean;     // Optimize weight matching in sparring
   balanceByExperience?: boolean;       // Consider experience in splits
+  // v2: full tournament rules (overrides the individual flags when present)
+  rules?: TournamentRules;
 }
 
 interface RegistrationWithCompetitor extends Registration {
@@ -74,9 +83,17 @@ export function previewCategorization(
 ): PreviewResult {
   const warnings: string[] = [];
 
+  // v2: skip registrations manually pinned to a specific division —
+  // they are managed via the move endpoint, not auto-categorization
+  const unpinned = registrations.filter((r) => !r.manualDivisionId);
+  const pinnedCount = registrations.length - unpinned.length;
+  if (pinnedCount > 0) {
+    warnings.push(`${pinnedCount} registration(s) are pinned to specific divisions and will be excluded from auto-categorization. Run "Restore pinned" to re-include them.`);
+  }
+
   // Separate into patterns and sparring registrations
-  const patternsRegs = registrations.filter((r) => r.patterns);
-  const sparringRegs = registrations.filter((r) => r.sparring);
+  const patternsRegs = unpinned.filter((r) => r.patterns);
+  const sparringRegs = unpinned.filter((r) => r.sparring);
 
   const allGroups: DivisionGroup[] = [];
 
@@ -164,9 +181,16 @@ export async function autoCategorize(
 ): Promise<CategorizationResult> {
   const warnings: string[] = [];
 
+  // v2: skip registrations manually pinned to a specific division
+  const unpinned = registrations.filter((r) => !r.manualDivisionId);
+  const pinnedCount = registrations.length - unpinned.length;
+  if (pinnedCount > 0) {
+    warnings.push(`${pinnedCount} registration(s) are pinned to specific divisions and were excluded from auto-categorization.`);
+  }
+
   // Separate into patterns and sparring registrations
-  const patternsRegs = registrations.filter((r) => r.patterns);
-  const sparringRegs = registrations.filter((r) => r.sparring);
+  const patternsRegs = unpinned.filter((r) => r.patterns);
+  const sparringRegs = unpinned.filter((r) => r.sparring);
 
   const allGroups: DivisionGroup[] = [];
 
@@ -289,6 +313,7 @@ function categorizeBeltLevel(
   eventTypeLabels?: { patterns: string; sparring: string }
 ): DivisionGroup[] {
   const groups: DivisionGroup[] = [];
+  const rules = config.rules ?? DEFAULT_TOURNAMENT_RULES;
 
   // Split by gender (support both 'M'/'F' and 'male'/'female' formats)
   const males = registrations.filter((r) => r.competitor.gender === 'male' || r.competitor.gender === 'M');
@@ -300,13 +325,30 @@ function categorizeBeltLevel(
   ] as const) {
     if (genderRegs.length === 0) continue;
 
-    // Split by age group
-    const ageGroups = beltLevel === 'BB' ? BB_AGE_GROUPS : DEFAULT_AGE_GROUPS;
+    // Determine age bands: rules > useBlackBeltAgeGroups flag > DEFAULT
+    const ageGroups: AgeGroup[] = (() => {
+      if (config.customAgeGroups) return config.customAgeGroups;
+      if (config.rules) {
+        return rules.ageBands.customBands ?? (rules.ageBands.preset === 'blackBelt' ? BB_AGE_GROUPS : DEFAULT_AGE_GROUPS);
+      }
+      return config.useBlackBeltAgeGroups ? BB_AGE_GROUPS : DEFAULT_AGE_GROUPS;
+    })();
 
     for (const ageGroup of ageGroups) {
       const ageRegs = genderRegs.filter((r) => {
         const age = r.ageAtTournament || 0;
-        return age >= ageGroup.min && age <= ageGroup.max;
+        // Standard age band match
+        if (age >= ageGroup.min && age <= ageGroup.max) return true;
+        // v2: "compete with older" opt-in — a competitor whose age is below
+        // the band's min (within ageFlexMonths) can be promoted up
+        if (r.competeWithOlder && config.enableAgeBoundaryFlex !== false) {
+          const toleranceMonths = config.ageBoundaryTolerance ?? 0;
+          if (toleranceMonths > 0) {
+            const ageWithFlex = age + toleranceMonths / 12;
+            if (ageWithFlex >= ageGroup.min && ageWithFlex <= ageGroup.max) return true;
+          }
+        }
+        return false;
       });
 
       if (ageRegs.length === 0) continue;
