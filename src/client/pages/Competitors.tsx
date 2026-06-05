@@ -86,7 +86,13 @@ export default function Competitors() {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [search, setSearch] = useState('');
-  const [beltFilter, setBeltFilter] = useState('');
+  const [beltFilter, setBeltFilter] = useState<string[]>([]);
+  const [genderFilter, setGenderFilter] = useState<string>('');
+  const [ageMin, setAgeMin] = useState('');
+  const [ageMax, setAgeMax] = useState('');
+  const [schoolFilter, setSchoolFilter] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
@@ -126,15 +132,31 @@ export default function Competitors() {
   }, [editingCompetitor]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['competitors', search, pageLimit],
+    queryKey: ['competitors', search, beltFilter.join(','), genderFilter, ageMin, ageMax, schoolFilter, pageLimit],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
+      if (beltFilter.length) params.set('belt', beltFilter.join(','));
+      if (genderFilter) params.set('gender', genderFilter);
+      if (ageMin) params.set('age_min', ageMin);
+      if (ageMax) params.set('age_max', ageMax);
+      if (schoolFilter) params.set('school', schoolFilter);
       params.set('limit', String(pageLimit));
       const res = await fetch(`/api/competitors?${params}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to fetch competitors');
       return res.json();
     },
+  });
+
+  // Faceted aggregates for the sidebar — refreshed every 60s
+  const { data: aggregates } = useQuery({
+    queryKey: ['competitors-aggregates'],
+    queryFn: async () => {
+      const res = await fetch('/api/competitors/meta/aggregates', { headers: getAuthHeaders() });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    staleTime: 60_000,
   });
 
   const createMutation = useMutation({
@@ -189,11 +211,38 @@ export default function Competitors() {
     },
   });
 
-  // Filter competitors by belt
-  const filteredCompetitors = data?.competitors?.filter((c: Competitor) => {
-    if (!beltFilter) return true;
-    return c.belt.toLowerCase() === beltFilter.toLowerCase();
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      // Sequential deletes — keeps the server happy and gives us per-item
+      // error feedback. For 1k+ items we'd batch this; for typical
+      // bulk-delete sizes (10-200) sequential is fine.
+      const results: { ok: string[]; failed: string[] } = { ok: [], failed: [] };
+      for (const id of ids) {
+        try {
+          const r = await fetch(`/api/competitors/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+          if (r.ok) results.ok.push(id);
+          else results.failed.push(id);
+        } catch {
+          results.failed.push(id);
+        }
+      }
+      return results;
+    },
+    onSuccess: (results) => {
+      queryClient.invalidateQueries({ queryKey: ['competitors'] });
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+      if (results.failed.length === 0) {
+        addToast(`${results.ok.length} competitor${results.ok.length === 1 ? '' : 's'} deleted`, 'success');
+      } else {
+        addToast(`${results.ok.length} deleted, ${results.failed.length} failed`, 'warning');
+      }
+    },
   });
+
+  // Server-side filter handles all filtering now. `data.competitors` is already filtered.
+  // We keep this variable name so the existing JSX below doesn't need to change.
+  const filteredCompetitors = data?.competitors;
 
   const importMutation = useMutation({
     mutationFn: async ({
@@ -408,39 +457,150 @@ export default function Competitors() {
         </div>
       </div>
 
-      {/* Search & Filter */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by name or school…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="form-input pl-9 w-full"
-          />
+      {/* Bulk action toolbar (slides in when something is selected) */}
+      {selectedIds.size > 0 && (
+        <div className="card overflow-hidden border-indigo-200 dark:border-indigo-800/60 bg-gradient-to-r from-indigo-50/80 via-white to-white dark:from-indigo-950/40 dark:via-slate-900 dark:to-slate-900 animate-slide-down">
+          <div className="px-4 py-3 flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
+              {selectedIds.size}
+            </div>
+            <div className="text-sm text-slate-700 dark:text-slate-200">
+              {selectedIds.size} selected
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(Array.from(selectedIds).join('\n'));
+                  addToast('Competitor IDs copied to clipboard', 'success');
+                }}
+                className="btn btn-ghost text-sm"
+                title="Copy competitor IDs as a list"
+              >
+                Copy IDs
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedIds(new Set());
+                }}
+                className="btn btn-ghost text-sm"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setBulkDeleteOpen(true)}
+                className="btn btn-danger text-sm"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete {selectedIds.size}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-slate-400 hidden sm:block" />
-          <select
-            value={beltFilter}
-            onChange={(e) => setBeltFilter(e.target.value)}
-            className="form-input py-2 min-w-[160px]"
-          >
-            <option value="">All belts</option>
-            {BELT_OPTIONS.map((belt) => (
-              <option key={belt} value={belt}>{belt}</option>
-            ))}
-          </select>
+      )}
+
+      {/* Faceted Search */}
+      <div className="card overflow-hidden">
+        <div className="p-4 space-y-3">
+          {/* Search row */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name, school…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="form-input pl-9 w-full"
+              />
+            </div>
+            <select
+              value={genderFilter}
+              onChange={(e) => setGenderFilter(e.target.value)}
+              className="form-input py-2 min-w-[120px]"
+            >
+              <option value="">All genders</option>
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+            </select>
+            <select
+              value={schoolFilter}
+              onChange={(e) => setSchoolFilter(e.target.value)}
+              className="form-input py-2 min-w-[180px] max-w-[280px]"
+            >
+              <option value="">All schools</option>
+              {aggregates && Object.entries(aggregates.bySchool || {}).map(([school, count]) => (
+                <option key={school} value={school}>{school} ({count})</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Facet chips: belt + age range */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mr-1">Belt</span>
+            {aggregates && Object.entries(aggregates.byBelt || {}).map(([belt, count]) => {
+              const active = beltFilter.includes(belt);
+              return (
+                <button
+                  key={belt}
+                  type="button"
+                  onClick={() => setBeltFilter(active ? beltFilter.filter((b) => b !== belt) : [...beltFilter, belt])}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                    active
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {belt} <span className={`tabular-nums ${active ? 'opacity-80' : 'opacity-60'}`}>{count}</span>
+                </button>
+              );
+            })}
+
+            <span className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-2" />
+
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mr-1">Age</span>
+            <select
+              value={ageMin}
+              onChange={(e) => setAgeMin(e.target.value)}
+              className="form-input py-1 text-xs min-w-[80px]"
+            >
+              <option value="">Any</option>
+              <option value="4">4+</option>
+              <option value="6">6+</option>
+              <option value="8">8+</option>
+              <option value="10">10+</option>
+              <option value="12">12+</option>
+              <option value="15">15+</option>
+              <option value="18">18+</option>
+              <option value="36">36+</option>
+            </select>
+            <span className="text-xs text-slate-400">–</span>
+            <select
+              value={ageMax}
+              onChange={(e) => setAgeMax(e.target.value)}
+              className="form-input py-1 text-xs min-w-[80px]"
+            >
+              <option value="">Any</option>
+              <option value="5">≤5</option>
+              <option value="7">≤7</option>
+              <option value="9">≤9</option>
+              <option value="11">≤11</option>
+              <option value="14">≤14</option>
+              <option value="17">≤17</option>
+              <option value="35">≤35</option>
+            </select>
+
+            {(search || beltFilter.length || genderFilter || ageMin || ageMax || schoolFilter) && (
+              <button
+                onClick={() => {
+                  setSearch(''); setBeltFilter([]); setGenderFilter('');
+                  setAgeMin(''); setAgeMax(''); setSchoolFilter('');
+                }}
+                className="ml-auto text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center gap-1"
+              >
+                <X className="h-3 w-3" /> Clear all
+              </button>
+            )}
+          </div>
         </div>
-        {(search || beltFilter) && (
-          <button
-            onClick={() => { setSearch(''); setBeltFilter(''); }}
-            className="btn btn-ghost text-sm"
-          >
-            Clear
-          </button>
-        )}
       </div>
 
       {/* Competitors List */}
@@ -510,7 +670,22 @@ export default function Competitors() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-slate-800">
-                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-5 py-3">Name</th>
+                      <th className="px-5 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          checked={filteredCompetitors?.length > 0 && selectedIds.size === filteredCompetitors.length}
+                          ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < (filteredCompetitors?.length || 0); }}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedIds(new Set(filteredCompetitors?.map((c: Competitor) => c.id) || []));
+                            } else {
+                              setSelectedIds(new Set());
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </th>
+                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-3 py-3">Name</th>
                       <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-3 py-3">Gender</th>
                       <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-3 py-3">Age</th>
                       <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-3 py-3">Belt</th>
@@ -521,8 +696,21 @@ export default function Competitors() {
                   </thead>
                   <tbody>
                     {filteredCompetitors.map((c: Competitor) => (
-                      <tr key={c.id} className="group border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                      <tr key={c.id} className={`group border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors ${selectedIds.has(c.id) ? 'row-selected' : ''}`}>
                         <td className="px-5 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(c.id)}
+                            onChange={(e) => {
+                              const next = new Set(selectedIds);
+                              if (e.target.checked) next.add(c.id);
+                              else next.delete(c.id);
+                              setSelectedIds(next);
+                            }}
+                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500/10 to-violet-500/10 border border-indigo-200/40 dark:border-indigo-800/40 flex items-center justify-center text-indigo-700 dark:text-indigo-300 text-xs font-semibold flex-shrink-0">
                               {c.firstName?.[0]}{c.lastName?.[0]}
@@ -606,7 +794,7 @@ export default function Competitors() {
         )}
       </div>
 
-      {/* Delete Confirmation */}
+      {/* Delete Confirmation (single) */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
@@ -615,6 +803,17 @@ export default function Competitors() {
         message={`Are you sure you want to delete ${deleteTarget?.firstName} ${deleteTarget?.lastName}? This will also remove them from any tournaments they're registered in.`}
         confirmText="Delete"
         isLoading={deleteMutation.isPending}
+      />
+
+      {/* Bulk Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={bulkDeleteOpen}
+        onClose={() => setBulkDeleteOpen(false)}
+        onConfirm={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+        title={`Delete ${selectedIds.size} competitor${selectedIds.size === 1 ? '' : 's'}?`}
+        message={`This will permanently delete ${selectedIds.size} competitor${selectedIds.size === 1 ? '' : 's'} and remove them from every tournament they're registered in. This action cannot be undone (well, you can re-import them — but their history is gone).`}
+        confirmText={`Delete ${selectedIds.size}`}
+        isLoading={bulkDeleteMutation.isPending}
       />
 
       {/* Add/Edit Competitor Modal */}
