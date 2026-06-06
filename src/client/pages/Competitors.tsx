@@ -865,17 +865,18 @@ export default function Competitors() {
             </div>
             <form
               onSubmit={handleFormSubmit}
-              onInvalid={(e) => {
-                // Fires when browser-native validation blocks a submit because
-                // of HTML5 `required` fields. The submit handler will not run,
-                // so we surface the first invalid field as a visible error.
-                e.preventDefault();
-                const firstInvalid = (e.target as HTMLFormElement).querySelector(':invalid') as HTMLElement | null;
-                if (firstInvalid) {
-                  const label = firstInvalid.closest('div')?.querySelector('label')?.textContent?.replace('*','').trim() || firstInvalid.name || 'A required field';
-                  setFormError(`${label} is required${firstInvalid.validationMessage ? ` — ${firstInvalid.validationMessage.toLowerCase()}` : ''}`);
-                  firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  firstInvalid.focus();
+              onInvalidCapture={(e) => {
+                // The `invalid` event fires on each invalid field, not the form.
+                // We use capture phase + a target check to grab the first one and
+                // surface a visible error banner. preventDefault stops the browser's
+                // native tooltip so our banner is the single source of truth.
+                const target = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+                if (target && target.willValidate && !target.validity.valid) {
+                  e.preventDefault();
+                  const label = target.closest('div')?.querySelector('label')?.textContent?.replace('*','').trim() || target.name || 'A required field';
+                  setFormError(`${label} is required`);
+                  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  setTimeout(() => target.focus(), 50);
                 }
               }}
             >
