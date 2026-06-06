@@ -2,6 +2,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Trophy, CheckCircle, AlertCircle, User, Calendar, Award } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
+import { Card, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
+import { Input } from '../components/ui';
+import { Label } from '../components/ui';
+import { Select } from '../components/ui';
+import { Textarea } from '../components/ui';
 import { getSportProfile } from '../../shared/constants/sport-profiles';
 
 interface Tournament {
@@ -202,74 +209,77 @@ export default function PublicRegister() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
         <div className="max-w-md mx-auto">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center">
-            <CheckCircle className="h-16 w-16 text-green-500 dark:text-green-400 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Registration Complete!</h1>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">{result.message}</p>
+          <Card>
+            <CardBody className="p-8 text-center">
+              <CheckCircle className="h-16 w-16 text-green-500 dark:text-green-400 mx-auto mb-4" />
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Registration Complete!</h1>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">{result.message}</p>
 
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 text-left mb-6">
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Registration Details</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Competitor:</span>
-                  <span className="font-medium text-gray-900 dark:text-white">{result.registration.competitorName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Tournament:</span>
-                  <span className="font-medium text-gray-900 dark:text-white">{result.registration.tournamentName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Date:</span>
-                  <span className="font-medium text-gray-900 dark:text-white">
-                    {new Date(result.registration.tournamentDate).toLocaleDateString()}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Age Group:</span>
-                  <span className="font-medium text-gray-900 dark:text-white">{result.registration.ageGroup}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-gray-400">Events:</span>
-                  <span className="font-medium text-gray-900 dark:text-white">
-                    {[
-                      result.registration.events.patterns && (sportProfile.eventTypes[0]?.name || 'Patterns'),
-                      result.registration.events.sparring && (sportProfile.eventTypes[1]?.name || 'Sparring'),
-                    ]
-                      .filter(Boolean)
-                      .join(', ')}
-                  </span>
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 text-left mb-6">
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Registration Details</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Competitor:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{result.registration.competitorName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Tournament:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{result.registration.tournamentName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Date:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {new Date(result.registration.tournamentDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Age Group:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{result.registration.ageGroup}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500 dark:text-gray-400">Events:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {[
+                        result.registration.events.patterns && (sportProfile.eventTypes[0]?.name || 'Patterns'),
+                        result.registration.events.sparring && (sportProfile.eventTypes[1]?.name || 'Sparring'),
+                      ]
+                        .filter(Boolean)
+                        .join(', ')}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <button
-              onClick={() => {
-                setResult(null);
-                setFormData({
-                  tournamentId: formData.tournamentId,
-                  firstName: '',
-                  lastName: '',
-                  gender: '',
-                  dateOfBirth: '',
-                  belt: '',
-                  danRank: 1,
-                  heightInches: '',
-                  weightLbs: '',
-                  schoolDojang: '',
-                  specialNeeds: '',
-                  patterns: false,
-                  sparring: false,
-                  parentName: '',
-                  parentEmail: '',
-                  parentPhone: '',
-                  competeWithOlder: false,
-                });
-              }}
-              className="btn btn-primary w-full"
-            >
-              Register Another Competitor
-            </button>
-          </div>
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={() => {
+                  setResult(null);
+                  setFormData({
+                    tournamentId: formData.tournamentId,
+                    firstName: '',
+                    lastName: '',
+                    gender: '',
+                    dateOfBirth: '',
+                    belt: '',
+                    danRank: 1,
+                    heightInches: '',
+                    weightLbs: '',
+                    schoolDojang: '',
+                    specialNeeds: '',
+                    patterns: false,
+                    sparring: false,
+                    parentName: '',
+                    parentEmail: '',
+                    parentPhone: '',
+                    competeWithOlder: false,
+                  });
+                }}
+              >
+                Register Another Competitor
+              </Button>
+            </CardBody>
+          </Card>
         </div>
       </div>
     );
@@ -321,413 +331,372 @@ export default function PublicRegister() {
         )}
 
         {/* Registration Form */}
-        <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 space-y-6">
-          {/* Step Indicator */}
-          <div className="flex items-center gap-2 mb-2 overflow-x-auto">
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px]">1</span>
-              Athlete
-            </div>
-            <div className={`h-px flex-1 min-w-[1rem] ${step >= 2 ? 'bg-indigo-400' : 'bg-gray-200 dark:bg-gray-700'}`} />
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 2 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
-              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-indigo-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
-              Parent & Consent
-            </div>
-          </div>
-
-          {step === 1 && (<>
-          {/* Tournament Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              <Trophy className="h-4 w-4 inline mr-1" />
-              Select Tournament *
-            </label>
-            <select
-              name="tournamentId"
-              value={formData.tournamentId}
-              onChange={handleChange}
-              className="form-select w-full"
-              required
-            >
-              <option value="">-- Select a Tournament --</option>
-              {tournaments.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} - {new Date(t.date).toLocaleDateString()}
-                  {t.location && ` (${t.location})`}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Competitor Information */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-              <User className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
-              Competitor Information
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  First Name *
-                </label>
-                <input
-                  type="text"
-                  name="firstName"
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  className="form-input w-full"
-                  required
-                />
+        <Card>
+          <CardBody className="p-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Step Indicator */}
+              <div className="flex items-center gap-2 mb-2 overflow-x-auto">
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px]">1</span>
+                  Athlete
+                </div>
+                <div className={`h-px flex-1 min-w-[1rem] ${step >= 2 ? 'bg-indigo-400' : 'bg-gray-200 dark:bg-gray-700'}`} />
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 2 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-indigo-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
+                  Parent & Consent
+                </div>
               </div>
 
+              {step === 1 && (<>
+              {/* Tournament Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Last Name *
-                </label>
-                <input
-                  type="text"
-                  name="lastName"
-                  value={formData.lastName}
+                <Label required>
+                  <Trophy className="h-4 w-4 inline mr-1" />
+                  Select Tournament
+                </Label>
+                <Select
+                  name="tournamentId"
+                  value={formData.tournamentId}
                   onChange={handleChange}
-                  className="form-input w-full"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Gender *
-                </label>
-                <select
-                  name="gender"
-                  value={formData.gender}
-                  onChange={handleChange}
-                  className="form-select w-full"
                   required
                 >
-                  <option value="">-- Select --</option>
-                  <option value="M">Male</option>
-                  <option value="F">Female</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  <Calendar className="h-4 w-4 inline mr-1" />
-                  Date of Birth *
-                </label>
-                <input
-                  type="date"
-                  name="dateOfBirth"
-                  value={formData.dateOfBirth}
-                  onChange={handleChange}
-                  className="form-input w-full"
-                  required
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Belt Information */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-              <Award className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
-              Belt Rank
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Belt Level *
-                </label>
-                <select
-                  name="belt"
-                  value={formData.belt}
-                  onChange={handleChange}
-                  className="form-select w-full"
-                  required
-                >
-                  <option value="">-- Select Belt --</option>
-                  {beltOptions.map((belt) => (
-                    <option key={belt} value={belt}>
-                      {belt}
+                  <option value="">-- Select a Tournament --</option>
+                  {tournaments.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} - {new Date(t.date).toLocaleDateString()}
+                      {t.location && ` (${t.location})`}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
 
-              {formData.belt === topLevelBeltName && sportProfile.beltConfig.hasDanRank && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Dan Rank *
-                  </label>
-                  <select
-                    name="danRank"
-                    value={formData.danRank}
-                    onChange={handleChange}
-                    className="form-select w-full"
-                    required
-                  >
-                    {[1, 2, 3, 4, 5, 6].map((dan) => (
-                      <option key={dan} value={dan}>
-                        {dan}
-                        {dan === 1 ? 'st' : dan === 2 ? 'nd' : dan === 3 ? 'rd' : 'th'} Dan
-                      </option>
-                    ))}
-                  </select>
+              {/* Competitor Information */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                  <User className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
+                  Competitor Information
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label required>First Name</Label>
+                    <Input
+                      type="text"
+                      name="firstName"
+                      value={formData.firstName}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <Label required>Last Name</Label>
+                    <Input
+                      type="text"
+                      name="lastName"
+                      value={formData.lastName}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <Label required>Gender</Label>
+                    <Select
+                      name="gender"
+                      value={formData.gender}
+                      onChange={handleChange}
+                      required
+                    >
+                      <option value="">-- Select --</option>
+                      <option value="M">Male</option>
+                      <option value="F">Female</option>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label required>
+                      <Calendar className="h-4 w-4 inline mr-1" />
+                      Date of Birth
+                    </Label>
+                    <Input
+                      type="date"
+                      name="dateOfBirth"
+                      value={formData.dateOfBirth}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
                 </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  School / Dojang
-                </label>
-                <input
-                  type="text"
-                  name="schoolDojang"
-                  value={formData.schoolDojang}
-                  onChange={handleChange}
-                  placeholder="e.g., Downtown Martial Arts Academy"
-                  className="form-input w-full"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Physical Info */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Physical Information
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Height (inches)
-                </label>
-                <input
-                  type="number"
-                  name="heightInches"
-                  value={formData.heightInches}
-                  onChange={handleChange}
-                  placeholder="e.g., 60"
-                  className="form-input w-full"
-                  min="30"
-                  max="84"
-                />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Weight (lbs) {formData.sparring && '*'}
-                </label>
-                <input
-                  type="number"
-                  name="weightLbs"
-                  value={formData.weightLbs}
-                  onChange={handleChange}
-                  placeholder="e.g., 100"
-                  className="form-input w-full"
-                  min="30"
-                  max="400"
-                  required={formData.sparring}
-                />
-                {formData.sparring && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Required for {eventType1?.name ?? 'combat'} events
-                  </p>
-                )}
-              </div>
-            </div>
+              {/* Belt Information */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                  <Award className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
+                  Belt Rank
+                </h3>
 
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Special Needs / Medical Notes
-              </label>
-              <textarea
-                name="specialNeeds"
-                value={formData.specialNeeds}
-                onChange={handleChange}
-                rows={2}
-                placeholder="Any accommodations or medical information we should know"
-                className="form-input w-full"
-              />
-            </div>
-
-            {/* v2: Compete with older — let parent opt into next age band */}
-            <div className="mt-4 flex items-start gap-2">
-              <input
-                type="checkbox"
-                name="competeWithOlder"
-                id="competeWithOlder"
-                checked={formData.competeWithOlder}
-                onChange={handleChange}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="competeWithOlder" className="text-sm text-gray-700 dark:text-gray-300">
-                <span className="font-medium">Compete in older age band</span>
-                <span className="block text-xs text-gray-500">
-                  Check this if your child is near the top of their age band and you'd like them considered for the next age group up (subject to the tournament's age-flex rules).
-                </span>
-              </label>
-            </div>
-          </div>
-
-          {/* Event Selection */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Event Selection *
-            </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              Select at least one event to compete in
-            </p>
-
-            <div className="space-y-3">
-              {eventType0 && (
-                <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                  <input
-                    type="checkbox"
-                    name="patterns"
-                    checked={formData.patterns}
-                    onChange={handleChange}
-                    className="h-5 w-5 text-primary-600 rounded"
-                  />
-                  <div className="ml-3">
-                    <span className="font-medium text-gray-900 dark:text-white">{eventType0.name}</span>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {eventType0.description}
-                    </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label required>Belt Level</Label>
+                    <Select
+                      name="belt"
+                      value={formData.belt}
+                      onChange={handleChange}
+                      required
+                    >
+                      <option value="">-- Select Belt --</option>
+                      {beltOptions.map((belt) => (
+                        <option key={belt} value={belt}>
+                          {belt}
+                        </option>
+                      ))}
+                    </Select>
                   </div>
-                </label>
-              )}
 
-              {eventType1 && (
-                <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  {formData.belt === topLevelBeltName && sportProfile.beltConfig.hasDanRank && (
+                    <div>
+                      <Label required>Dan Rank</Label>
+                      <Select
+                        name="danRank"
+                        value={formData.danRank}
+                        onChange={handleChange}
+                        required
+                      >
+                        {[1, 2, 3, 4, 5, 6].map((dan) => (
+                          <option key={dan} value={dan}>
+                            {dan}
+                            {dan === 1 ? 'st' : dan === 2 ? 'nd' : dan === 3 ? 'rd' : 'th'} Dan
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  )}
+
+                  <div>
+                    <Label>School / Dojang</Label>
+                    <Input
+                      type="text"
+                      name="schoolDojang"
+                      value={formData.schoolDojang}
+                      onChange={handleChange}
+                      placeholder="e.g., Downtown Martial Arts Academy"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Physical Info */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  Physical Information
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Height (inches)</Label>
+                    <Input
+                      type="number"
+                      name="heightInches"
+                      value={formData.heightInches}
+                      onChange={handleChange}
+                      placeholder="e.g., 60"
+                      min={30}
+                      max={84}
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Weight (lbs) {formData.sparring && '*'}</Label>
+                    <Input
+                      type="number"
+                      name="weightLbs"
+                      value={formData.weightLbs}
+                      onChange={handleChange}
+                      placeholder="e.g., 100"
+                      min={30}
+                      max={400}
+                      required={formData.sparring}
+                    />
+                    {formData.sparring && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Required for {eventType1?.name ?? 'combat'} events
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <Label>Special Needs / Medical Notes</Label>
+                  <Textarea
+                    name="specialNeeds"
+                    value={formData.specialNeeds}
+                    onChange={handleChange}
+                    rows={2}
+                    placeholder="Any accommodations or medical information we should know"
+                  />
+                </div>
+
+                {/* v2: Compete with older */}
+                <div className="mt-4 flex items-start gap-2">
                   <input
                     type="checkbox"
-                    name="sparring"
-                    checked={formData.sparring}
+                    name="competeWithOlder"
+                    id="competeWithOlder"
+                    checked={formData.competeWithOlder}
                     onChange={handleChange}
-                    className="h-5 w-5 text-primary-600 rounded"
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
-                  <div className="ml-3">
-                    <span className="font-medium text-gray-900 dark:text-white">
-                      {eventType1.name}
-                      {eventType1.hasWeightClasses && ' (requires weight)'}
+                  <Label htmlFor="competeWithOlder" className="text-sm text-gray-700 dark:text-gray-300 mb-0">
+                    <span className="font-medium">Compete in older age band</span>
+                    <span className="block text-xs text-gray-500">
+                      Check this if your child is near the top of their age band and you'd like them considered for the next age group up (subject to the tournament's age-flex rules).
                     </span>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {eventType1.description}
-                    </p>
+                  </Label>
+                </div>
+              </div>
+
+              {/* Event Selection */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  Event Selection *
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  Select at least one event to compete in
+                </p>
+
+                <div className="space-y-3">
+                  {eventType0 && (
+                    <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <input
+                        type="checkbox"
+                        name="patterns"
+                        checked={formData.patterns}
+                        onChange={handleChange}
+                        className="h-5 w-5 text-primary-600 rounded"
+                      />
+                      <div className="ml-3">
+                        <span className="font-medium text-gray-900 dark:text-white">{eventType0.name}</span>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {eventType0.description}
+                        </p>
+                      </div>
+                    </label>
+                  )}
+
+                  {eventType1 && (
+                    <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <input
+                        type="checkbox"
+                        name="sparring"
+                        checked={formData.sparring}
+                        onChange={handleChange}
+                        className="h-5 w-5 text-primary-600 rounded"
+                      />
+                      <div className="ml-3">
+                        <span className="font-medium text-gray-900 dark:text-white">
+                          {eventType1.name}
+                          {eventType1.hasWeightClasses && ' (requires weight)'}
+                        </span>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {eventType1.description}
+                        </p>
+                      </div>
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 1 → Step 2 navigation */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex flex-col sm:flex-row justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => {
+                    const form = document.querySelector('form');
+                    if (form && !form.checkValidity()) {
+                      form.reportValidity();
+                      return;
+                    }
+                    setStep(2);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="w-full sm:w-auto flex items-center justify-center"
+                >
+                  Next: Parent & Consent →
+                </Button>
+              </div>
+              </>)}
+
+              {step === 2 && (<>
+              {/* Parent/Guardian Info */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                  {isMinor ? 'Parent/Guardian Contact (Required for minors)' : 'Parent/Guardian Contact (Optional)'}
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label required={isMinor}>Parent/Guardian Name</Label>
+                    <Input
+                      type="text"
+                      name="parentName"
+                      value={formData.parentName}
+                      onChange={handleChange}
+                      required={isMinor}
+                    />
                   </div>
-                </label>
-              )}
-            </div>
-          </div>
 
-          {/* Step 1 → Step 2 navigation */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex flex-col sm:flex-row justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                // Light client-side gate: if the browser-native required
-                // attributes are satisfied, advance. Otherwise let the
-                // browser surface the missing fields with tooltips.
-                const form = document.querySelector('form');
-                if (form && !form.checkValidity()) {
-                  form.reportValidity();
-                  return;
-                }
-                setStep(2);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="btn btn-primary px-6 py-2.5 w-full sm:w-auto flex items-center justify-center"
-            >
-              Next: Parent & Consent →
-            </button>
-          </div>
-          </>)}
+                  <div>
+                    <Label required={isMinor}>Email</Label>
+                    <Input
+                      type="email"
+                      name="parentEmail"
+                      value={formData.parentEmail}
+                      onChange={handleChange}
+                      required={isMinor}
+                    />
+                  </div>
 
-          {step === 2 && (<>
-          {/* Parent/Guardian Info */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              {isMinor ? 'Parent/Guardian Contact (Required for minors)' : 'Parent/Guardian Contact (Optional)'}
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Parent/Guardian Name {isMinor && '*'}
-                </label>
-                <input
-                  type="text"
-                  name="parentName"
-                  value={formData.parentName}
-                  onChange={handleChange}
-                  className="form-input w-full"
-                  required={isMinor}
-                />
+                  <div>
+                    <Label>Phone</Label>
+                    <Input
+                      type="tel"
+                      name="parentPhone"
+                      value={formData.parentPhone}
+                      onChange={handleChange}
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Email {isMinor && '*'}
-                </label>
-                <input
-                  type="email"
-                  name="parentEmail"
-                  value={formData.parentEmail}
-                  onChange={handleChange}
-                  className="form-input w-full"
-                  required={isMinor}
-                />
+              {/* Submit Button */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  className="w-full sm:w-auto flex items-center justify-center"
+                >
+                  ← Back to Athlete
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  loading={submitting}
+                  className="text-lg w-full sm:w-auto flex items-center justify-center"
+                >
+                  {submitting ? 'Submitting...' : 'Complete Registration'}
+                </Button>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  name="parentPhone"
-                  value={formData.parentPhone}
-                  onChange={handleChange}
-                  className="form-input w-full"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center">
-            <button
-              type="button"
-              onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-              className="btn btn-secondary px-6 py-2.5 w-full sm:w-auto flex items-center justify-center"
-            >
-              ← Back to Athlete
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="btn btn-primary px-6 py-3 text-lg flex items-center justify-center w-full sm:w-auto"
-            >
-              {submitting ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  Submitting...
-                </>
-              ) : (
-                'Complete Registration'
-              )}
-            </button>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-3">
-            By registering, you agree to follow all tournament rules and regulations.
-          </p>
-          </>)}
-        </form>
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-3">
+                By registering, you agree to follow all tournament rules and regulations.
+              </p>
+              </>)}
+            </form>
+          </CardBody>
+        </Card>
       </div>
     </div>
   );

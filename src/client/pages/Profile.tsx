@@ -12,6 +12,11 @@ import {
 import { useAuth, getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import Spinner from '../components/ui/Spinner';
+import { Card, CardHeader, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
+import { Input } from '../components/ui';
+import { Label } from '../components/ui';
 
 export default function Profile() {
   const { user, refreshUser } = useAuth();
@@ -66,7 +71,10 @@ export default function Profile() {
   return (
     <div className="max-w-2xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
+      <PageHeader
+        title="Profile Settings"
+        description="Manage your account information"
+      >
         <Link
           to="/"
           className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
@@ -74,18 +82,12 @@ export default function Profile() {
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Dashboard
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">
-          <User className="h-6 w-6 mr-2 text-primary-600 dark:text-primary-400" />
-          Profile Settings
-        </h1>
-      </div>
+      </PageHeader>
 
       {/* Account Info */}
-      <div className="card mb-6">
-        <div className="card-header">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white">Account Information</h2>
-        </div>
-        <div className="card-body">
+      <Card className="mb-6">
+        <CardHeader title="Account Information" />
+        <CardBody>
           <div className="space-y-4">
             <div className="flex items-center">
               <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg mr-3">
@@ -119,47 +121,44 @@ export default function Profile() {
               </div>
             </div>
           </div>
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
       {/* Profile Form */}
-      <div className="card">
-        <div className="card-header">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white">Edit Profile</h2>
-        </div>
-        <div className="card-body">
+      <Card>
+        <CardHeader title="Edit Profile" />
+        <CardBody>
           <form onSubmit={handleProfileSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="form-label">First Name</label>
-                <input
+                <Label>First Name</Label>
+                <Input
                   type="text"
                   required
                   value={profileData.firstName}
                   onChange={(e) =>
                     setProfileData({ ...profileData, firstName: e.target.value })
                   }
-                  className="form-input w-full"
                 />
               </div>
               <div>
-                <label className="form-label">Last Name</label>
-                <input
+                <Label>Last Name</Label>
+                <Input
                   type="text"
                   required
                   value={profileData.lastName}
                   onChange={(e) =>
                     setProfileData({ ...profileData, lastName: e.target.value })
                   }
-                  className="form-input w-full"
                 />
               </div>
             </div>
             <div className="flex justify-end">
-              <button
+              <Button
                 type="submit"
+                variant="primary"
                 disabled={updateProfileMutation.isPending}
-                className="btn btn-primary flex items-center"
+                loading={updateProfileMutation.isPending}
               >
                 {updateProfileMutation.isPending ? (
                   <>
@@ -172,11 +171,11 @@ export default function Profile() {
                     Save Changes
                   </>
                 )}
-              </button>
+              </Button>
             </div>
           </form>
-        </div>
-      </div>
+        </CardBody>
+      </Card>
     </div>
   );
 }

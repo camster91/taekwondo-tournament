@@ -24,6 +24,13 @@ import EmptyState from '../components/ui/EmptyState';
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { getSportProfile } from '../../shared/constants/sport-profiles';
+import { Card, CardHeader, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
+import { Input } from '../components/ui';
+import { Label } from '../components/ui';
+import { Select } from '../components/ui';
+import { StatTile } from '../components/ui';
 
 interface Division {
   id: string;
@@ -99,7 +106,6 @@ export default function Divisions() {
   }, [tournament]);
 
   const getEventLabel = (eventType: string) => {
-    // Map internal event keys (patterns/sparring) to sport-specific names
     const idx = eventType === 'patterns' ? 0 : 1;
     return sportProfile.eventTypes[idx]?.name ?? eventType;
   };
@@ -202,7 +208,6 @@ export default function Divisions() {
     },
   });
 
-  // Preview divisions before generating
   const fetchPreview = async () => {
     setPreviewLoading(true);
     try {
@@ -233,7 +238,6 @@ export default function Divisions() {
     return true;
   });
 
-  // Calculate stats
   const stats = {
     total: divisions?.length || 0,
     withBrackets: divisions?.filter((d) => d.bracket).length || 0,
@@ -242,7 +246,6 @@ export default function Divisions() {
     emptyDivisions: divisions?.filter((d) => d._count.assignments === 0).length || 0,
   };
 
-  // Group divisions by category
   const groupedDivisions = filteredDivisions?.reduce(
     (acc, div) => {
       const key = `${div.beltLevel} ${div.gender === 'M' ? 'Males' : 'Females'} ${getEventLabel(div.eventType)}`;
@@ -253,7 +256,6 @@ export default function Divisions() {
     {} as Record<string, Division[]>
   );
 
-  // Export all brackets as PDFs using the server endpoint
   const exportAllPDFs = async () => {
     if (!divisions || divisions.length === 0) return;
 
@@ -268,7 +270,6 @@ export default function Divisions() {
         return;
       }
 
-      // Use the server-side batch PDF endpoint
       const res = await fetch(`/api/brackets/tournament/${id}/pdf`);
       if (!res.ok) {
         throw new Error('Failed to generate PDF');
@@ -294,125 +295,120 @@ export default function Divisions() {
   return (
     <div>
       {/* Page Header */}
-      <div className="page-header mb-6">
-        <div>
-          <Link
-            to={`/tournaments/${id}`}
-            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Tournament
-          </Link>
-          <h1 className="page-title">
-            Divisions - {tournament?.name}
-          </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {divisions?.length || 0} divisions total
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 sm:gap-3">
-          <button
-            onClick={fetchPreview}
-            disabled={previewLoading || autoGenerateMutation.isPending}
-            className="btn btn-secondary"
-          >
-            {previewLoading ? <Spinner size="sm" className="mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
-            <span className="hidden sm:inline">{previewLoading ? 'Loading...' : 'Preview'}</span>
-          </button>
-          <button
-            onClick={() => {
-              if (divisions?.length) {
-                setRegenerateConfirm(true);
-              } else {
-                autoGenerateMutation.mutate();
-              }
-            }}
-            disabled={autoGenerateMutation.isPending}
-            className="btn btn-secondary"
-          >
-            {autoGenerateMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <Wand2 className="h-4 w-4 mr-2" />}
-            <span className="hidden sm:inline">{autoGenerateMutation.isPending ? 'Generating...' : 'Auto-Generate'}</span>
-          </button>
-          <button
-            onClick={() => generateAllBracketsMutation.mutate()}
-            disabled={generateAllBracketsMutation.isPending || !divisions?.length}
-            className="btn btn-secondary"
-          >
-            {generateAllBracketsMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <PlayCircle className="h-4 w-4 mr-2" />}
-            <span className="hidden sm:inline">{generateAllBracketsMutation.isPending ? 'Generating...' : 'Brackets'}</span>
-          </button>
-          <button
-            onClick={exportAllPDFs}
-            disabled={exportingAll || !divisions?.some((d) => d.bracket)}
-            className="btn btn-primary"
-          >
-            {exportingAll ? <Spinner size="sm" className="mr-2" /> : <Download className="h-4 w-4 mr-2" />}
-            <span className="hidden sm:inline">{exportingAll ? 'Exporting...' : 'Export PDFs'}</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title={`Divisions - ${tournament?.name || ''}`}
+        description={`${divisions?.length || 0} divisions total`}
+        actions={
+          <div className="flex flex-wrap gap-2 sm:gap-3">
+            <Button
+              variant="secondary"
+              onClick={fetchPreview}
+              disabled={previewLoading || autoGenerateMutation.isPending}
+            >
+              {previewLoading ? <Spinner size="sm" className="mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+              <span className="hidden sm:inline">{previewLoading ? 'Loading...' : 'Preview'}</span>
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (divisions?.length) {
+                  setRegenerateConfirm(true);
+                } else {
+                  autoGenerateMutation.mutate();
+                }
+              }}
+              disabled={autoGenerateMutation.isPending}
+            >
+              {autoGenerateMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <Wand2 className="h-4 w-4 mr-2" />}
+              <span className="hidden sm:inline">{autoGenerateMutation.isPending ? 'Generating...' : 'Auto-Generate'}</span>
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => generateAllBracketsMutation.mutate()}
+              disabled={generateAllBracketsMutation.isPending || !divisions?.length}
+            >
+              {generateAllBracketsMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <PlayCircle className="h-4 w-4 mr-2" />}
+              <span className="hidden sm:inline">{generateAllBracketsMutation.isPending ? 'Generating...' : 'Brackets'}</span>
+            </Button>
+            <Button
+              variant="primary"
+              onClick={exportAllPDFs}
+              disabled={exportingAll || !divisions?.some((d) => d.bracket)}
+            >
+              {exportingAll ? <Spinner size="sm" className="mr-2" /> : <Download className="h-4 w-4 mr-2" />}
+              <span className="hidden sm:inline">{exportingAll ? 'Exporting...' : 'Export PDFs'}</span>
+            </Button>
+          </div>
+        }
+      >
+        <Link
+          to={`/tournaments/${id}`}
+          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back to Tournament
+        </Link>
+      </PageHeader>
 
       {/* Filters */}
-      <div className="card mb-6">
-        <div className="card-body">
+      <Card className="mb-6">
+        <CardBody>
           <div className="flex flex-wrap gap-4 items-end">
             <div>
-              <label className="form-label">Belt Level</label>
-              <select
+              <Label>Belt Level</Label>
+              <Select
                 value={filter.beltLevel}
                 onChange={(e) =>
                   setFilter({ ...filter, beltLevel: e.target.value })
                 }
-                className="form-input"
               >
                 <option value="">All</option>
                 <option value="BB">Black Belt</option>
                 <option value="CB">Colored Belt</option>
-              </select>
+              </Select>
             </div>
             <div>
-              <label className="form-label">Gender</label>
-              <select
+              <Label>Gender</Label>
+              <Select
                 value={filter.gender}
                 onChange={(e) =>
                   setFilter({ ...filter, gender: e.target.value })
                 }
-                className="form-input"
               >
                 <option value="">All</option>
                 <option value="M">Males</option>
                 <option value="F">Females</option>
-              </select>
+              </Select>
             </div>
             <div>
-              <label className="form-label">Event</label>
-              <select
+              <Label>Event</Label>
+              <Select
                 value={filter.eventType}
                 onChange={(e) =>
                   setFilter({ ...filter, eventType: e.target.value })
                 }
-                className="form-input"
               >
                 <option value="">All</option>
                 {sportProfile.eventTypes.map((et, i) => (
                   <option key={et.id} value={i === 0 ? 'patterns' : 'sparring'}>{et.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             {divisions?.length ? (
               <div className="ml-auto">
-                <button
+                <Button
+                  variant="secondary"
                   onClick={() => setClearConfirm(true)}
-                  className="btn btn-secondary text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Clear All
-                </button>
+                </Button>
               </div>
             ) : null}
           </div>
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
       {/* Warnings */}
       {(stats.smallDivisions > 0 || stats.largeDivisions > 0 || stats.emptyDivisions > 0) && (
@@ -440,30 +436,31 @@ export default function Divisions() {
       {/* Stats Summary */}
       {divisions && divisions.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">Total Divisions</div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.withBrackets}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">With Brackets</div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
-            <div className="text-2xl font-bold text-gray-400 dark:text-gray-500">{stats.total - stats.withBrackets}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">Without Brackets</div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
-            <div className={`text-2xl font-bold ${stats.smallDivisions > 0 ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-400 dark:text-gray-500'}`}>
-              {stats.smallDivisions}
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">Small (&lt;3)</div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
-            <div className={`text-2xl font-bold ${stats.largeDivisions > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400 dark:text-gray-500'}`}>
-              {stats.largeDivisions}
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">Large (&gt;8)</div>
-          </div>
+          <StatTile
+            label="Total Divisions"
+            value={stats.total}
+            accent="default"
+          />
+          <StatTile
+            label="With Brackets"
+            value={stats.withBrackets}
+            accent="success"
+          />
+          <StatTile
+            label="Without Brackets"
+            value={stats.total - stats.withBrackets}
+            accent="default"
+          />
+          <StatTile
+            label="Small (<3)"
+            value={stats.smallDivisions}
+            accent={stats.smallDivisions > 0 ? 'warning' : 'default'}
+          />
+          <StatTile
+            label="Large (>8)"
+            value={stats.largeDivisions}
+            accent={stats.largeDivisions > 0 ? 'warning' : 'default'}
+          />
         </div>
       )}
 
@@ -477,15 +474,17 @@ export default function Divisions() {
       ) : divisions && divisions.length > 0 ? (
         <div className="space-y-6">
           {Object.entries(groupedDivisions || {}).map(([category, divs]) => (
-            <div key={category} className="card">
-              <div className="card-header flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white">{category}</h3>
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {divs.length} division{divs.length !== 1 ? 's' : ''}
-                  </span>
+            <Card key={category}>
+              <CardHeader>
+                <div className="flex items-center justify-between w-full">
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">{category}</h3>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                      {divs.length} division{divs.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              </CardHeader>
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {divs.map((div) => (
                   <div
@@ -555,24 +554,26 @@ export default function Divisions() {
                   </div>
                 ))}
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       ) : (
-        <div className="card">
-          <EmptyState
-            icon={LayoutGrid}
-            title="No divisions yet"
-            description="Auto-generate divisions based on tournament rules."
-            action={{
-              label: 'Auto-Generate Divisions',
-              onClick: () => autoGenerateMutation.mutate(),
-            }}
-          />
-        </div>
+        <Card>
+          <CardBody className="p-0">
+            <EmptyState
+              icon={LayoutGrid}
+              title="No divisions yet"
+              description="Auto-generate divisions based on tournament rules."
+              action={{
+                label: 'Auto-Generate Divisions',
+                onClick: () => autoGenerateMutation.mutate(),
+              }}
+            />
+          </CardBody>
+        </Card>
       )}
 
-      {/* Preview Modal */}
+      {/* preview Modal */}
       {showPreview && previewData && (
         <div className="modal-container flex items-center justify-center p-4">
           <div className="modal-backdrop" onClick={() => setShowPreview(false)} />
@@ -589,7 +590,6 @@ export default function Divisions() {
               </button>
             </div>
 
-            {/* Preview Warnings */}
             {previewData.warnings.length > 0 && (
               <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800">
                 <div className="flex items-start">
@@ -606,7 +606,6 @@ export default function Divisions() {
               </div>
             )}
 
-            {/* Preview Stats */}
             <div className="p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
               <div>
                 <div className="text-xl font-bold text-gray-900 dark:text-white">{previewData.divisions.length}</div>
@@ -632,7 +631,6 @@ export default function Divisions() {
               </div>
             </div>
 
-            {/* Division List */}
             <div className="flex-1 overflow-y-auto p-4">
               <div className="space-y-3">
                 {previewData.divisions.map((div, index) => (
@@ -685,15 +683,15 @@ export default function Divisions() {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="modal-footer">
-              <button onClick={() => setShowPreview(false)} className="btn btn-secondary w-full sm:w-auto">
+              <Button variant="secondary" onClick={() => setShowPreview(false)} className="w-full sm:w-auto">
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
                 onClick={confirmGenerate}
                 disabled={autoGenerateMutation.isPending}
-                className="btn btn-primary w-full sm:w-auto flex items-center justify-center"
+                className="w-full sm:w-auto flex items-center justify-center"
               >
                 {autoGenerateMutation.isPending ? (
                   <>
@@ -706,7 +704,7 @@ export default function Divisions() {
                     Confirm & Generate
                   </>
                 )}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -776,9 +774,9 @@ export default function Divisions() {
               <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{resultMessage.message}</p>
             </div>
             <div className="modal-footer">
-              <button onClick={() => setResultMessage(null)} className="btn btn-primary w-full">
+              <Button variant="primary" onClick={() => setResultMessage(null)} className="w-full">
                 OK
-              </button>
+              </Button>
             </div>
           </div>
         </div>
