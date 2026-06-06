@@ -1,10 +1,11 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, ComponentType } from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 interface StatTileProps {
   label: string;
   value: string | number;
-  icon?: ReactNode;
+  // Accept a Lucide icon component (e.g. Users) or any pre-instantiated element
+  icon?: ComponentType<{ className?: string }> | ReactNode;
   trend?: {
     value: string;
     direction: 'up' | 'down' | 'flat';
@@ -67,7 +68,12 @@ export default function StatTile({
               accentIconBgClasses[accent],
             ].join(' ')}
           >
-            {icon}
+            {/* If icon is a component (function), instantiate it; if it's already
+                an element, render as-is. This lets consumers pass either Users (the
+                component) or <Users /> (the element) and both work. */}
+            {typeof icon === 'function'
+              ? (icon as ComponentType<{ className?: string }>)({ className: 'h-5 w-5' })
+              : icon}
           </div>
         )}
       </div>
