@@ -110,7 +110,7 @@ export default function Scorekeeper() {
   const readyMatches =
     divisions
       ?.find((d) => d.id === selectedDivision)
-      ?.bracket?.matches.filter((m) => m.status === 'ready' || m.status === 'in_progress')
+      ?.bracket?.matches?.filter((m) => m.status === 'ready' || m.status === 'in_progress')
       .sort((a, b) => a.matchNumber - b.matchNumber) || [];
 
   const currentMatch = readyMatches[currentMatchIndex];

@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { getAuthHeaders } from '../context/AuthContext';
 import {
   LayoutDashboard,
   ArrowLeft,
@@ -82,8 +83,8 @@ export default function DirectorDashboard() {
     queryFn: async () => {
       // Fetch tournament data
       const [tournamentRes, divisionsRes] = await Promise.all([
-        fetch(`/api/tournaments/${tournamentId}`),
-        fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`),
+        fetch(`/api/tournaments/${tournamentId}`, { headers: getAuthHeaders() }),
+        fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`, { headers: getAuthHeaders() }),
       ]);
 
       if (!tournamentRes.ok) throw new Error('Failed to fetch tournament');
