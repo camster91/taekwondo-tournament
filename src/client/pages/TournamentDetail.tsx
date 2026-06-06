@@ -49,7 +49,7 @@ function getBeltColor(belt: string) {
 }
 
 export default function TournamentDetail() {
-  const { tournamentId } = useParams<{ tournamentId: string }>();
+  const { id: tournamentId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { addToast } = useToast();
