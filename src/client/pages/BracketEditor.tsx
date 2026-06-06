@@ -14,6 +14,9 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { Card, CardHeader, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
 
 interface Competitor {
   id: string;
@@ -168,8 +171,8 @@ export default function BracketEditor() {
 
   if (!division) {
     return (
-      <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-        Division not found
+      <div className="text-center py-12">
+        <div className="text-gray-500 dark:text-gray-400">Division not found</div>
       </div>
     );
   }
@@ -193,73 +196,45 @@ export default function BracketEditor() {
   };
 
   return (
-    <div>
+    <div className="space-y-6">
       {/* Page Header */}
-      <div className="page-header mb-6">
-        <div>
-          <Link
-            to={`/tournaments/${tournamentId}/divisions`}
-            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Divisions
-          </Link>
-          <h1 className="page-title">{division.name}</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {division.assignments.length} competitors
-          </p>
-        </div>
-        <div className="flex gap-2 sm:gap-3">
-          {division.bracket ? (
-            <>
-              <button
-                onClick={() => setShowReseedConfirm(true)}
-                disabled={generateBracketMutation.isPending}
-                className="btn btn-secondary"
-              >
-                {generateBracketMutation.isPending ? (
-                  <Spinner size="sm" className="mr-2" />
-                ) : (
+      <PageHeader
+        title={division.name}
+        description={`${division.assignments.length} competitors`}
+        actions={
+          <div className="flex gap-2 sm:gap-3">
+            {division.bracket ? (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => setShowReseedConfirm(true)} loading={generateBracketMutation.isPending}>
                   <Shuffle className="h-4 w-4 mr-2" />
-                )}
-                <span className="hidden sm:inline">Reseed</span>
-              </button>
-              <button onClick={exportPDF} className="btn btn-secondary">
-                <Download className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Export PDF</span>
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => generateBracketMutation.mutate()}
-              disabled={generateBracketMutation.isPending}
-              className="btn btn-primary"
-            >
-              {generateBracketMutation.isPending ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Generate Bracket
-                </>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
+                  <span className="hidden sm:inline">Reseed</span>
+                </Button>
+                <Button variant="secondary" size="sm" onClick={exportPDF}>
+                  <Download className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">Export PDF</span>
+                </Button>
+              </>
+            ) : (
+              <Button variant="primary" size="sm" onClick={() => generateBracketMutation.mutate()} loading={generateBracketMutation.isPending}>
+                <RefreshCw className="h-4 w-4 mr-2" /> Generate Bracket
+              </Button>
+            )}
+          </div>
+        }
+      />
+
+      {/* Back link */}
+      <Link
+        to={`/tournaments/${tournamentId}/divisions`}
+        className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center"
+      >
+        <ArrowLeft className="h-4 w-4 mr-1" /> Back to Divisions
+      </Link>
 
       {/* Competitors List */}
-      <div className="card mb-6">
-        <div className="card-header">
-          <h3 className="font-medium text-gray-900 dark:text-white flex items-center">
-            <Users className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
-            Competitors ({division.assignments.length})
-          </h3>
-        </div>
-        <div className="card-body">
+      <Card>
+        <CardHeader title={`Competitors (${division.assignments.length})`} action={<Users className="h-5 w-5 text-primary-600 dark:text-primary-400" />} />
+        <CardBody>
           <div className="flex flex-wrap gap-2">
             {division.assignments.map((a, i) => (
               <span
@@ -277,19 +252,14 @@ export default function BracketEditor() {
               </span>
             ))}
           </div>
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
       {/* Bracket Visualization */}
       {division.bracket ? (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="font-medium text-gray-900 dark:text-white flex items-center">
-              <Trophy className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
-              Bracket
-            </h3>
-          </div>
-          <div className="card-body overflow-x-auto">
+        <Card>
+          <CardHeader title="Bracket" action={<Trophy className="h-5 w-5 text-primary-600 dark:text-primary-400" />} />
+          <CardBody className="overflow-x-auto">
             {/* Winners Bracket */}
             <div className="mb-8">
               <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
@@ -366,11 +336,11 @@ export default function BracketEditor() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
+          </CardBody>
+        </Card>
       ) : (
-        <div className="card">
-          <div className="card-body text-center py-12">
+        <Card>
+          <CardBody className="text-center py-12">
             <Trophy className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
             <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
               No bracket generated
@@ -378,22 +348,16 @@ export default function BracketEditor() {
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Generate a bracket to start the competition.
             </p>
-            <button
+            <Button
+              variant="primary"
+              className="mt-4"
               onClick={() => generateBracketMutation.mutate()}
-              disabled={generateBracketMutation.isPending}
-              className="mt-4 btn btn-primary"
+              loading={generateBracketMutation.isPending}
             >
-              {generateBracketMutation.isPending ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  Generating...
-                </>
-              ) : (
-                'Generate Bracket'
-              )}
-            </button>
-          </div>
-        </div>
+              Generate Bracket
+            </Button>
+          </CardBody>
+        </Card>
       )}
 
       {/* Reseed Confirmation Dialog */}

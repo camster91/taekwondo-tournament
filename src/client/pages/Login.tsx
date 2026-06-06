@@ -20,6 +20,10 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
+import { Card, CardBody } from '../components/ui';
+import { Button } from '../components/ui';
+import { Input } from '../components/ui';
+import { Label } from '../components/ui';
 
 const TOKEN_KEY = 'tkd_auth_token';
 const USER_KEY = 'tkd_auth_user';
@@ -331,10 +335,8 @@ function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: 
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-            Email address
-          </label>
-          <input
+          <Label htmlFor="email">Email address</Label>
+          <Input
             id="email"
             name="email"
             type="email"
@@ -342,26 +344,13 @@ function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: 
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="form-input"
             placeholder="you@yourschool.com"
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="btn btn-primary w-full py-3 text-sm"
-        >
-          {loading ? (
-            <>
-              <Spinner size="sm" className="mr-2" /> Sending...
-            </>
-          ) : (
-            <>
-              <Mail className="h-4 w-4 mr-2" /> Send sign-in link
-            </>
-          )}
-        </button>
+        <Button type="submit" variant="primary" loading={loading} className="w-full">
+          <Mail className="h-4 w-4 mr-2" /> Send sign-in link
+        </Button>
       </form>
 
       <div className="relative">
@@ -391,9 +380,7 @@ function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRe
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label htmlFor="code" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-            6-digit code
-          </label>
+          <Label htmlFor="code">6-digit code</Label>
           <input
             ref={codeInputRef}
             id="code"
@@ -410,19 +397,9 @@ function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRe
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={loading || code.length !== 6}
-          className="btn btn-primary w-full py-3 text-sm"
-        >
-          {loading ? (
-            <>
-              <Spinner size="sm" className="mr-2" /> Verifying...
-            </>
-          ) : (
-            'Verify code'
-          )}
-        </button>
+        <Button type="submit" variant="primary" loading={loading} disabled={code.length !== 6} className="w-full">
+          {loading ? <><Spinner size="sm" className="mr-2" /> Verifying...</> : 'Verify code'}
+        </Button>
       </form>
 
       <button
@@ -453,21 +430,21 @@ function SetupForm({ email, setEmail, firstName, setFirstName, lastName, setLast
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">First name</label>
-            <input type="text" required value={firstName} onChange={(e) => setFirstName(e.target.value)} className="form-input" placeholder="Jane" />
+            <Label>First name</Label>
+            <Input type="text" required value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Jane" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Last name</label>
-            <input type="text" required value={lastName} onChange={(e) => setLastName(e.target.value)} className="form-input" placeholder="Smith" />
+            <Label>Last name</Label>
+            <Input type="text" required value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Smith" />
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email</label>
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="form-input" placeholder="you@yourschool.com" />
+          <Label>Email</Label>
+          <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@yourschool.com" />
         </div>
-        <button type="submit" disabled={loading} className="btn btn-primary w-full py-3">
+        <Button type="submit" variant="primary" loading={loading} className="w-full">
           {loading ? <><Spinner size="sm" className="mr-2" /> Creating...</> : 'Create admin account'}
-        </button>
+        </Button>
       </form>
     </div>
   );

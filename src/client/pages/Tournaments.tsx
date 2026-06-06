@@ -9,6 +9,11 @@ import { StatusBadge } from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
 import { SPORT_PROFILES } from '../../shared/constants/sport-profiles';
+import { Card, CardHeader, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
+import { Input } from '../components/ui';
+import { Label } from '../components/ui';
 
 interface Tournament {
   id: string;
@@ -83,37 +88,29 @@ export default function Tournaments() {
   );
 
   return (
-    <div>
+    <div className="space-y-6">
       {/* Page Header */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Tournaments</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Create and manage your tournaments
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="btn btn-primary"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          New Tournament
-        </button>
-      </div>
+      <PageHeader
+        title="Tournaments"
+        description="Create and manage your tournaments"
+        actions={
+          <Button variant="primary" onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4 mr-2" /> New Tournament
+          </Button>
+        }
+      />
 
       {/* Search Bar */}
       {tournaments && tournaments.length > 0 && (
-        <div className="mb-6">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search tournaments..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="form-input pl-10 w-full"
-            />
-          </div>
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            type="text"
+            placeholder="Search tournaments..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 w-full"
+          />
         </div>
       )}
 
@@ -163,29 +160,23 @@ export default function Tournaments() {
           )}
         </div>
       ) : tournaments && tournaments.length > 0 ? (
-        <div className="card">
+        <Card>
           <EmptyState
             icon={Search}
             title="No tournaments found"
             description={`No tournaments match "${searchQuery}"`}
-            action={{
-              label: 'Clear Search',
-              onClick: () => setSearchQuery(''),
-            }}
+            action={{ label: 'Clear Search', onClick: () => setSearchQuery('') }}
           />
-        </div>
+        </Card>
       ) : (
-        <div className="card">
+        <Card>
           <EmptyState
             icon={Trophy}
             title="No tournaments yet"
             description="Get started by creating your first tournament. You can add competitors and generate brackets."
-            action={{
-              label: 'Create Tournament',
-              onClick: () => setShowCreateModal(true),
-            }}
+            action={{ label: 'Create Tournament', onClick: () => setShowCreateModal(true) }}
           />
-        </div>
+        </Card>
       )}
 
       {/* Create Modal */}
@@ -210,7 +201,7 @@ export default function Tournaments() {
             >
               <div className="modal-body space-y-4">
                 <div>
-                  <label className="form-label">Sport</label>
+                  <Label>Sport</Label>
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                     {SPORT_PROFILES.map((sport) => (
                       <button
@@ -230,67 +221,58 @@ export default function Tournaments() {
                   </div>
                 </div>
                 <div>
-                  <label className="form-label">Tournament Name *</label>
-                  <input
+                  <Label>Tournament Name *</Label>
+                  <Input
                     type="text"
                     value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="e.g., Newton's Championship 2025"
-                    className="form-input w-full"
                     required
                     autoFocus
                   />
                 </div>
                 <div>
-                  <label className="form-label">Date *</label>
-                  <input
+                  <Label>Date *</Label>
+                  <Input
                     type="date"
                     value={formData.date}
-                    onChange={(e) =>
-                      setFormData({ ...formData, date: e.target.value })
-                    }
-                    className="form-input w-full"
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                     required
                   />
                 </div>
                 <div>
-                  <label className="form-label">Location</label>
-                  <input
+                  <Label>Location</Label>
+                  <Input
                     type="text"
                     value={formData.location}
-                    onChange={(e) =>
-                      setFormData({ ...formData, location: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                     placeholder="e.g., Downtown Martial Arts Center"
-                    className="form-input w-full"
                   />
                   <p className="mt-1 text-xs text-gray-500">Optional</p>
                 </div>
               </div>
               <div className="modal-footer">
-                <button
+                <Button
+                  variant="secondary"
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="btn btn-secondary w-full sm:w-auto"
+                  className="w-full sm:w-auto"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
                   type="submit"
-                  disabled={createMutation.isPending || !formData.name || !formData.date}
-                  className="btn btn-primary w-full sm:w-auto flex items-center justify-center"
+                  loading={createMutation.isPending}
+                  disabled={!formData.name || !formData.date}
+                  className="w-full sm:w-auto flex items-center justify-center"
                 >
                   {createMutation.isPending ? (
-                    <>
-                      <Spinner size="sm" className="mr-2" />
-                      Creating...
-                    </>
+                    <><Spinner size="sm" className="mr-2" /> Creating...</>
                   ) : (
                     'Create Tournament'
                   )}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -321,64 +303,59 @@ function TournamentCard({
   const isCompleted = tournament.status === 'completed';
 
   return (
-    <div
-      className={`card hover:shadow-lg transition-all duration-200 ${
-        isCompleted ? 'opacity-75' : 'border-l-4 border-l-primary-500'
-      }`}
-    >
-      <Link
-        to={`/tournaments/${tournament.id}`}
-        className="card-body block hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center min-w-0">
-            <div className={`p-2 rounded-lg ${isCompleted ? 'bg-gray-100 dark:bg-gray-700' : 'bg-primary-100 dark:bg-primary-900/30'}`}>
-              <Trophy className={`h-6 w-6 ${isCompleted ? 'text-gray-500' : 'text-primary-600 dark:text-primary-400'}`} />
-            </div>
-            <div className="ml-3 min-w-0">
-              <h3 className="font-semibold text-gray-900 dark:text-white truncate">
-                {tournament.name}
-              </h3>
-              <StatusBadge status={tournament.status} />
-              {tournament.sportProfileSlug && (
-                <span className="text-xs text-gray-500 mt-0.5">
-                  {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.icon}{' '}
-                  {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.name}
-                </span>
-              )}
+    <Card interactive={!isCompleted} className={isCompleted ? 'opacity-75' : 'border-l-4 border-l-primary-500'}>
+      <Link to={`/tournaments/${tournament.id}`} className="block hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+        <CardBody>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center min-w-0">
+              <div className={`p-2 rounded-lg ${isCompleted ? 'bg-gray-100 dark:bg-gray-700' : 'bg-primary-100 dark:bg-primary-900/30'}`}>
+                <Trophy className={`h-6 w-6 ${isCompleted ? 'text-gray-500' : 'text-primary-600 dark:text-primary-400'}`} />
+              </div>
+              <div className="ml-3 min-w-0">
+                <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                  {tournament.name}
+                </h3>
+                <StatusBadge status={tournament.status} />
+                {tournament.sportProfileSlug && (
+                  <span className="text-xs text-gray-500 mt-0.5">
+                    {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.icon}{' '}
+                    {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.name}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="mt-4 space-y-2 text-sm">
-          <div className="flex items-center text-gray-600 dark:text-gray-400">
-            <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-            <span>{new Date(tournament.date).toLocaleDateString('en-US', {
-              weekday: 'short',
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-            })}</span>
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex items-center text-gray-600 dark:text-gray-400">
+              <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+              <span>{new Date(tournament.date).toLocaleDateString('en-US', {
+                weekday: 'short',
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              })}</span>
+            </div>
+            {tournament.location && (
+              <div className="flex items-center text-gray-600 dark:text-gray-400">
+                <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
+                <span className="truncate">{tournament.location}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-4 pt-1">
+              <div className="flex items-center text-gray-600 dark:text-gray-400">
+                <Users className="h-4 w-4 mr-1.5" />
+                <span className="font-medium">{tournament._count.registrations}</span>
+                <span className="ml-1 text-gray-400">competitors</span>
+              </div>
+              <div className="flex items-center text-gray-600 dark:text-gray-400">
+                <LayoutGrid className="h-4 w-4 mr-1.5" />
+                <span className="font-medium">{tournament._count.divisions}</span>
+                <span className="ml-1 text-gray-400">divisions</span>
+              </div>
+            </div>
           </div>
-          {tournament.location && (
-            <div className="flex items-center text-gray-600 dark:text-gray-400">
-              <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
-              <span className="truncate">{tournament.location}</span>
-            </div>
-          )}
-          <div className="flex items-center gap-4 pt-1">
-            <div className="flex items-center text-gray-600 dark:text-gray-400">
-              <Users className="h-4 w-4 mr-1.5" />
-              <span className="font-medium">{tournament._count.registrations}</span>
-              <span className="ml-1 text-gray-400">competitors</span>
-            </div>
-            <div className="flex items-center text-gray-600 dark:text-gray-400">
-              <LayoutGrid className="h-4 w-4 mr-1.5" />
-              <span className="font-medium">{tournament._count.divisions}</span>
-              <span className="ml-1 text-gray-400">divisions</span>
-            </div>
-          </div>
-        </div>
+        </CardBody>
       </Link>
       <div className="px-4 pb-4 pt-0 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row gap-2">
         <Link
@@ -394,6 +371,6 @@ function TournamentCard({
           Delete
         </button>
       </div>
-    </div>
+    </Card>
   );
 }
