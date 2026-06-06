@@ -326,7 +326,10 @@ function TournamentCard({
         isCompleted ? 'opacity-75' : 'border-l-4 border-l-primary-500'
       }`}
     >
-      <div className="card-body">
+      <Link
+        to={`/tournaments/${tournament.id}`}
+        className="card-body block hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center min-w-0">
             <div className={`p-2 rounded-lg ${isCompleted ? 'bg-gray-100 dark:bg-gray-700' : 'bg-primary-100 dark:bg-primary-900/30'}`}>
@@ -376,21 +379,20 @@ function TournamentCard({
             </div>
           </div>
         </div>
-
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row gap-2">
-          <Link
-            to={`/tournaments/${tournament.id}`}
-            className="btn btn-primary flex-1 text-center"
-          >
-            {isCompleted ? 'View Results' : 'Manage'}
-          </Link>
-          <button
-            onClick={onDelete}
-            className="btn btn-secondary text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-1"
-          >
-            Delete
-          </button>
-        </div>
+      </Link>
+      <div className="px-4 pb-4 pt-0 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row gap-2">
+        <Link
+          to={`/tournaments/${tournament.id}`}
+          className="btn btn-primary flex-1 text-center"
+        >
+          {isCompleted ? 'View Results' : 'Manage'}
+        </Link>
+        <button
+          onClick={onDelete}
+          className="btn btn-secondary text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-1"
+        >
+          Delete
+        </button>
       </div>
     </div>
   );
