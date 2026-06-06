@@ -175,11 +175,11 @@ export default function BracketEditor() {
   }
 
   const winnersMatches =
-    division.bracket?.matches.filter((m) => m.bracketType === 'winners') || [];
+    division.bracket?.matches?.filter((m) => m.bracketType === 'winners') || [];
   const losersMatches =
-    division.bracket?.matches.filter((m) => m.bracketType === 'losers') || [];
+    division.bracket?.matches?.filter((m) => m.bracketType === 'losers') || [];
   const finalsMatches =
-    division.bracket?.matches.filter((m) => m.bracketType === 'finals') || [];
+    division.bracket?.matches?.filter((m) => m.bracketType === 'finals') || [];
 
   const winnersRounds = [...new Set(winnersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
   const losersRounds = [...new Set(losersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);

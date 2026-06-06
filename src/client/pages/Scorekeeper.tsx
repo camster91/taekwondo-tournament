@@ -341,11 +341,11 @@ export default function Scorekeeper() {
                   ?.filter((d) => d.bracket && (!divisionSearch || d.name.toLowerCase().includes(divisionSearch.toLowerCase())))
                   .map((division) => {
                     const readyCount =
-                      division.bracket?.matches.filter(
+                      division.bracket?.matches?.filter(
                         (m) => m.status === 'ready' || m.status === 'in_progress'
                       ).length || 0;
                     const completedCount =
-                      division.bracket?.matches.filter((m) => m.status === 'completed').length || 0;
+                      division.bracket?.matches?.filter((m) => m.status === 'completed').length || 0;
                     const totalCount = division.bracket?.matches.length || 0;
 
                     return (
@@ -679,7 +679,7 @@ export default function Scorekeeper() {
       {(() => {
         const completedMatches = divisions
           ?.find((d) => d.id === selectedDivision)
-          ?.bracket?.matches.filter((m) => m.status === 'completed')
+          ?.bracket?.matches?.filter((m) => m.status === 'completed')
           .slice(-5)
           .reverse() || [];
 

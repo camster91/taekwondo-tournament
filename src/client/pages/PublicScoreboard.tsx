@@ -393,7 +393,7 @@ export default function PublicScoreboard() {
                 ?.filter((d) => d.bracket)
                 .map((division) => {
                   const completed =
-                    division.bracket?.matches.filter((m) => m.status === 'completed').length || 0;
+                    division.bracket?.matches?.filter((m) => m.status === 'completed').length || 0;
                   const total = division.bracket?.matches.length || 0;
                   const isActive = division.bracket?.matches.some(
                     (m) => m.status === 'in_progress'
