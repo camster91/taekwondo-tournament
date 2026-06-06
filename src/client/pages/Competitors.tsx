@@ -20,6 +20,13 @@ import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { Card, CardHeader, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
+import { Input } from '../components/ui';
+import { Label } from '../components/ui';
+import { Select } from '../components/ui';
+import { Toolbar } from '../components/ui';
 
 interface Competitor {
   id: string;
@@ -215,9 +222,6 @@ export default function Competitors() {
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      // Sequential deletes — keeps the server happy and gives us per-item
-      // error feedback. For 1k+ items we'd batch this; for typical
-      // bulk-delete sizes (10-200) sequential is fine.
       const results: { ok: string[]; failed: string[] } = { ok: [], failed: [] };
       for (const id of ids) {
         try {
@@ -242,18 +246,10 @@ export default function Competitors() {
     },
   });
 
-  // Server-side filter handles all filtering now. `data.competitors` is already filtered.
-  // We keep this variable name so the existing JSX below doesn't need to change.
   const filteredCompetitors = data?.competitors;
 
   const importMutation = useMutation({
-    mutationFn: async ({
-      data,
-      mapping,
-    }: {
-      data: any[];
-      mapping: ImportMapping;
-    }) => {
+    mutationFn: async ({ data, mapping }: { data: any[]; mapping: ImportMapping }) => {
       const res = await fetch('/api/competitors/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -364,7 +360,6 @@ export default function Competitors() {
   };
 
   const handleExportExcel = async () => {
-    // Fetch all competitors (no limit) for export
     const res = await fetch('/api/competitors?limit=10000', { headers: getAuthHeaders() });
     const result = await res.json();
     const all: Competitor[] = result.competitors || [];
@@ -413,79 +408,56 @@ export default function Competitors() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex items-baseline gap-2">
-          <h1>Competitors</h1>
-          <span className="text-sm text-slate-500 dark:text-slate-400">
-            ({filteredCompetitors?.length ?? data?.competitors?.length ?? 0})
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="btn btn-secondary"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Import
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls,.xlsm"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <button
-            onClick={() => {
-              setEditingCompetitor(null);
-              setFormData(emptyForm);
-              setShowFormModal(true);
-            }}
-            className="btn btn-primary"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add
-          </button>
-          <div className="relative">
-            <button
-              onClick={() => setMoreMenuOpen(!moreMenuOpen)}
-              className="btn btn-secondary px-2"
-              aria-label="More actions"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-            {moreMenuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setMoreMenuOpen(false)}
-                />
-                <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg py-1 z-20">
-                  <button
-                    onClick={() => { handleExportExcel(); setMoreMenuOpen(false); }}
-                    className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
-                  >
-                    <FileSpreadsheet className="h-4 w-4" />
-                    Export
-                  </button>
-                  <button
-                    onClick={() => { handleDownloadTemplate(); setMoreMenuOpen(false); }}
-                    className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
-                  >
-                    <Download className="h-4 w-4" />
-                    Template
-                  </button>
-                </div>
-              </>
-            )}
+      <PageHeader
+        title="Competitors"
+        count={filteredCompetitors?.length ?? data?.competitors?.length ?? 0}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="h-4 w-4 mr-2" /> Import
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.xlsm"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <Button variant="primary" size="sm" onClick={() => { setEditingCompetitor(null); setFormData(emptyForm); setShowFormModal(true); }}>
+              <Plus className="h-4 w-4 mr-2" /> Add
+            </Button>
+            <div className="relative">
+              <Button variant="secondary" size="sm" onClick={() => setMoreMenuOpen(!moreMenuOpen)} className="px-2">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+              {moreMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(false)} />
+                  <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg py-1 z-20">
+                    <button
+                      onClick={() => { handleExportExcel(); setMoreMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" /> Export
+                    </button>
+                    <button
+                      onClick={() => { handleDownloadTemplate(); setMoreMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                    >
+                      <Download className="h-4 w-4" /> Template
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Bulk action toolbar (slides in when something is selected) */}
       {selectedIds.size > 0 && (
-        <div className="card overflow-hidden border-indigo-200 dark:border-indigo-800/60 bg-gradient-to-r from-indigo-50/80 via-white to-white dark:from-indigo-950/40 dark:via-slate-900 dark:to-slate-900 animate-slide-down">
-          <div className="px-4 py-3 flex items-center gap-3">
+        <Toolbar slideIn className="border-indigo-200 dark:border-indigo-800/60 bg-gradient-to-r from-indigo-50/80 via-white to-white dark:from-indigo-950/40 dark:via-slate-900 dark:to-slate-900">
+          <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
               {selectedIds.size}
             </div>
@@ -493,71 +465,63 @@ export default function Competitors() {
               {selectedIds.size} selected
             </div>
             <div className="ml-auto flex items-center gap-2">
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   navigator.clipboard?.writeText(Array.from(selectedIds).join('\n'));
                   addToast('Competitor IDs copied to clipboard', 'success');
                 }}
-                className="btn btn-ghost text-sm"
-                title="Copy competitor IDs as a list"
               >
                 Copy IDs
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedIds(new Set());
-                }}
-                className="btn btn-ghost text-sm"
-              >
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
                 Clear
-              </button>
-              <button
-                onClick={() => setBulkDeleteOpen(true)}
-                className="btn btn-danger text-sm"
-              >
+              </Button>
+              <Button variant="danger" size="sm" onClick={() => setBulkDeleteOpen(true)}>
                 <Trash2 className="h-3.5 w-3.5" /> Delete {selectedIds.size}
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
+        </Toolbar>
       )}
 
       {/* Faceted Search */}
-      <div className="card overflow-hidden">
+      <Card padded={false}>
         <div className="p-3 space-y-2">
           {/* Search row - full width */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
+            <Input
               type="text"
               placeholder="Search by name, school…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="form-input pl-9 w-full"
+              className="pl-9 w-full"
             />
           </div>
 
           {/* Gender + School + Belt row */}
           <div className="flex flex-wrap items-center gap-2">
-            <select
+            <Select
               value={genderFilter}
               onChange={(e) => setGenderFilter(e.target.value)}
-              className="form-input py-1.5 min-w-[110px]"
+              className="py-1.5 min-w-[110px]"
             >
               <option value="">All genders</option>
               <option value="M">Male</option>
               <option value="F">Female</option>
-            </select>
-            <select
+            </Select>
+            <Select
               value={schoolFilter}
               onChange={(e) => setSchoolFilter(e.target.value)}
-              className="form-input py-1.5 min-w-[160px] max-w-[240px]"
+              className="py-1.5 min-w-[160px] max-w-[240px]"
             >
               <option value="">All schools</option>
               {aggregates && Object.entries(aggregates.bySchool || {}).map(([school, count]) => (
                 <option key={school} value={school}>{school} ({count})</option>
               ))}
-            </select>
+            </Select>
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap">Belt</span>
               <div className="flex-1 overflow-x-auto flex-nowrap flex items-center gap-1">
@@ -585,10 +549,10 @@ export default function Competitors() {
           {/* Age range row */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Age</span>
-            <select
+            <Select
               value={ageMin}
               onChange={(e) => setAgeMin(e.target.value)}
-              className="form-input py-1 text-xs min-w-[70px]"
+              className="py-1 text-xs min-w-[70px]"
             >
               <option value="">Any</option>
               <option value="4">4+</option>
@@ -599,12 +563,12 @@ export default function Competitors() {
               <option value="15">15+</option>
               <option value="18">18+</option>
               <option value="36">36+</option>
-            </select>
+            </Select>
             <span className="text-xs text-slate-400">–</span>
-            <select
+            <Select
               value={ageMax}
               onChange={(e) => setAgeMax(e.target.value)}
-              className="form-input py-1 text-xs min-w-[70px]"
+              className="py-1 text-xs min-w-[70px]"
             >
               <option value="">Any</option>
               <option value="5">≤5</option>
@@ -614,7 +578,7 @@ export default function Competitors() {
               <option value="14">≤14</option>
               <option value="17">≤17</option>
               <option value="35">≤35</option>
-            </select>
+            </Select>
 
             {(search || beltFilter.length || genderFilter || ageMin || ageMax || schoolFilter) && (
               <button
@@ -629,11 +593,11 @@ export default function Competitors() {
             )}
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Competitors List */}
-      <div className="card">
-        <div className="card-body p-0">
+      <Card padded={false}>
+        <CardBody className="p-0">
           {isLoading ? (
             <TableSkeleton rows={8} />
           ) : filteredCompetitors?.length > 0 ? (
@@ -648,9 +612,7 @@ export default function Competitors() {
                           {c.firstName} {c.lastName}
                         </div>
                         <span
-                          className={`inline-flex px-2 py-0.5 rounded text-xs font-medium mt-1 ${getBeltColor(
-                            c.belt
-                          )}`}
+                          className={`inline-flex px-2 py-0.5 rounded text-xs font-medium mt-1 ${getBeltColor(c.belt)}`}
                         >
                           {c.belt}
                           {c.danRank && ` ${c.danRank}D`}
@@ -799,7 +761,7 @@ export default function Competitors() {
               secondaryAction={{ label: 'Add Manually', onClick: () => { setEditingCompetitor(null); setFormData(emptyForm); setShowFormModal(true); } }}
             />
           )}
-        </div>
+        </CardBody>
         {data?.total > 0 && (
           <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 flex items-center justify-between">
             <span>
@@ -815,9 +777,9 @@ export default function Competitors() {
             )}
           </div>
         )}
-      </div>
+      </Card>
 
-      {/* Delete Confirmation (single) — soft-delete to Trash */}
+      {/* Delete Confirmation (single) */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
@@ -827,12 +789,12 @@ export default function Competitors() {
           <>
             <span className="font-semibold">{deleteTarget?.firstName} {deleteTarget?.lastName}</span> will be removed from any tournaments they're registered in. They go to the <span className="font-semibold text-indigo-600 dark:text-indigo-400">Trash</span> for 7 days, then are permanently purged.
           </>
-        } as any
+        }
         confirmText="Send to Trash"
         isLoading={deleteMutation.isPending}
       />
 
-      {/* Bulk Delete Confirmation — soft-delete: send to Trash, recoverable for 7 days */}
+      {/* Bulk Delete Confirmation */}
       <ConfirmDialog
         isOpen={bulkDeleteOpen}
         onClose={() => setBulkDeleteOpen(false)}
@@ -842,7 +804,7 @@ export default function Competitors() {
           <>
             {selectedIds.size} competitor{selectedIds.size === 1 ? '' : 's'} will be removed from every tournament they're registered in. They go to the <span className="font-semibold text-indigo-600 dark:text-indigo-400">Trash</span> and can be restored within 7 days. After 7 days they're permanently purged.
           </>
-        } as any
+        }
         confirmText={`Send ${selectedIds.size} to Trash`}
         isLoading={bulkDeleteMutation.isPending}
       />
@@ -866,10 +828,6 @@ export default function Competitors() {
             <form
               onSubmit={handleFormSubmit}
               onInvalidCapture={(e) => {
-                // The `invalid` event fires on each invalid field, not the form.
-                // We use capture phase + a target check to grab the first one and
-                // surface a visible error banner. preventDefault stops the browser's
-                // native tooltip so our banner is the single source of truth.
                 const target = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
                 if (target && target.willValidate && !target.validity.valid) {
                   e.preventDefault();
@@ -889,30 +847,24 @@ export default function Competitors() {
                 )}
                 <div className="form-grid">
                   <div>
-                    <label className="form-label">
+                    <Label>
                       First Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
+                    </Label>
+                    <Input
                       type="text"
                       value={formData.firstName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, firstName: e.target.value })
-                      }
-                      className="form-input w-full"
+                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                       required
                     />
                   </div>
                   <div>
-                    <label className="form-label">
+                    <Label>
                       Last Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
+                    </Label>
+                    <Input
                       type="text"
                       value={formData.lastName}
-                      onChange={(e) =>
-                        setFormData({ ...formData, lastName: e.target.value })
-                      }
-                      className="form-input w-full"
+                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                       required
                     />
                   </div>
@@ -920,32 +872,26 @@ export default function Competitors() {
 
                 <div className="form-grid">
                   <div>
-                    <label className="form-label">
+                    <Label>
                       Gender <span className="text-red-500">*</span>
-                    </label>
-                    <select
+                    </Label>
+                    <Select
                       value={formData.gender}
-                      onChange={(e) =>
-                        setFormData({ ...formData, gender: e.target.value })
-                      }
-                      className="form-input w-full"
+                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                       required
                     >
                       <option value="M">Male</option>
                       <option value="F">Female</option>
-                    </select>
+                    </Select>
                   </div>
                   <div>
-                    <label className="form-label">
+                    <Label>
                       Date of Birth <span className="text-red-500">*</span>
-                    </label>
-                    <input
+                    </Label>
+                    <Input
                       type="date"
                       value={formData.dateOfBirth}
-                      onChange={(e) =>
-                        setFormData({ ...formData, dateOfBirth: e.target.value })
-                      }
-                      className="form-input w-full"
+                      onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
                       required
                     />
                   </div>
@@ -953,15 +899,12 @@ export default function Competitors() {
 
                 <div className="form-grid">
                   <div>
-                    <label className="form-label">
+                    <Label>
                       Belt <span className="text-red-500">*</span>
-                    </label>
-                    <select
+                    </Label>
+                    <Select
                       value={formData.belt}
-                      onChange={(e) =>
-                        setFormData({ ...formData, belt: e.target.value })
-                      }
-                      className="form-input w-full"
+                      onChange={(e) => setFormData({ ...formData, belt: e.target.value })}
                       required
                     >
                       {BELT_OPTIONS.map((belt) => (
@@ -969,16 +912,13 @@ export default function Competitors() {
                           {belt}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                   <div>
-                    <label className="form-label">Dan Rank</label>
-                    <select
+                    <Label>Dan Rank</Label>
+                    <Select
                       value={formData.danRank}
-                      onChange={(e) =>
-                        setFormData({ ...formData, danRank: e.target.value })
-                      }
-                      className="form-input w-full"
+                      onChange={(e) => setFormData({ ...formData, danRank: e.target.value })}
                       disabled={formData.belt !== 'Black'}
                     >
                       <option value="">N/A</option>
@@ -988,90 +928,72 @@ export default function Competitors() {
                       <option value="4">4th Dan</option>
                       <option value="5">5th Dan</option>
                       <option value="6">6th Dan</option>
-                    </select>
+                    </Select>
                   </div>
                 </div>
 
                 <div className="form-grid">
                   <div>
-                    <label className="form-label">
+                    <Label>
                       Weight (lbs) <span className="text-red-500">*</span>
-                    </label>
-                    <input
+                    </Label>
+                    <Input
                       type="number"
                       step="0.1"
                       value={formData.weightLbs}
-                      onChange={(e) =>
-                        setFormData({ ...formData, weightLbs: e.target.value })
-                      }
-                      className="form-input w-full"
+                      onChange={(e) => setFormData({ ...formData, weightLbs: e.target.value })}
                       required
                     />
                   </div>
                   <div>
-                    <label className="form-label">Height (inches)</label>
-                    <input
+                    <Label>Height (inches)</Label>
+                    <Input
                       type="number"
                       step="0.1"
                       value={formData.heightInches}
-                      onChange={(e) =>
-                        setFormData({ ...formData, heightInches: e.target.value })
-                      }
-                      className="form-input w-full"
+                      onChange={(e) => setFormData({ ...formData, heightInches: e.target.value })}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="form-label">School/Dojang</label>
-                  <input
+                  <Label>School/Dojang</Label>
+                  <Input
                     type="text"
                     value={formData.schoolDojang}
-                    onChange={(e) =>
-                      setFormData({ ...formData, schoolDojang: e.target.value })
-                    }
-                    className="form-input w-full"
+                    onChange={(e) => setFormData({ ...formData, schoolDojang: e.target.value })}
                   />
                 </div>
 
                 <div>
-                  <label className="form-label">Special Needs</label>
-                  <input
+                  <Label>Special Needs</Label>
+                  <Input
                     type="text"
                     value={formData.specialNeeds}
-                    onChange={(e) =>
-                      setFormData({ ...formData, specialNeeds: e.target.value })
-                    }
-                    className="form-input w-full"
+                    onChange={(e) => setFormData({ ...formData, specialNeeds: e.target.value })}
                     placeholder="Leave blank if none"
                   />
                 </div>
               </div>
 
               <div className="modal-footer">
-                <button
-                  type="button"
-                  onClick={closeFormModal}
-                  className="btn btn-secondary w-full sm:w-auto"
-                >
+                <Button variant="secondary" type="button" onClick={closeFormModal} className="w-full sm:w-auto">
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
                   type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  className="btn btn-primary w-full sm:w-auto flex items-center justify-center"
+                  loading={createMutation.isPending || updateMutation.isPending}
+                  className="w-full sm:w-auto flex items-center justify-center"
                 >
                   {(createMutation.isPending || updateMutation.isPending) ? (
-                    <>
-                      <Spinner size="sm" className="mr-2" />
-                      Saving...
-                    </>
+                    <><Spinner size="sm" className="mr-2" /> Saving...</>
                   ) : editingCompetitor ? (
                     'Update Competitor'
                   ) : (
                     'Add Competitor'
                   )}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -1127,19 +1049,16 @@ export default function Competitors() {
                   { key: 'sparring', label: 'Sparring (Y/N)' },
                 ].map(({ key, label, required }) => (
                   <div key={key}>
-                    <label className="form-label text-xs sm:text-sm">
+                    <Label className="text-xs sm:text-sm">
                       {label}
                       {required && <span className="text-red-500">*</span>}
-                    </label>
-                    <select
+                    </Label>
+                    <Select
                       value={(columnMapping as any)[key] || ''}
                       onChange={(e) =>
-                        setColumnMapping({
-                          ...columnMapping,
-                          [key]: e.target.value,
-                        })
+                        setColumnMapping({ ...columnMapping, [key]: e.target.value })
                       }
-                      className="form-input w-full text-sm"
+                      className="w-full text-sm"
                     >
                       <option value="">-- Select --</option>
                       {importColumns.map((col) => (
@@ -1147,7 +1066,7 @@ export default function Competitors() {
                           {col}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                 ))}
               </div>
@@ -1185,34 +1104,22 @@ export default function Competitors() {
               )}
             </div>
             <div className="modal-footer">
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="btn btn-secondary w-full sm:w-auto"
-              >
+              <Button variant="secondary" onClick={() => setShowImportModal(false)} className="w-full sm:w-auto">
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="success"
                 onClick={handleImport}
-                disabled={
-                  importMutation.isPending ||
-                  !columnMapping.firstName ||
-                  !columnMapping.gender ||
-                  !columnMapping.belt
-                }
-                className="btn btn-success w-full sm:w-auto flex items-center justify-center"
+                loading={importMutation.isPending}
+                disabled={importMutation.isPending || !columnMapping.firstName || !columnMapping.gender || !columnMapping.belt}
+                className="w-full sm:w-auto flex items-center justify-center"
               >
                 {importMutation.isPending ? (
-                  <>
-                    <Spinner size="sm" className="mr-2" />
-                    Importing {importData?.length} rows...
-                  </>
+                  <><Spinner size="sm" className="mr-2" /> Importing {importData?.length} rows...</>
                 ) : (
-                  <>
-                    <Upload className="h-4 w-4 mr-2" />
-                    Import {importData?.length} Competitors
-                  </>
+                  <><Upload className="h-4 w-4 mr-2" /> Import {importData?.length} Competitors</>
                 )}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

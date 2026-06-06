@@ -23,6 +23,10 @@ import { StatsSkeleton, CardSkeleton } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
 import { getAuthHeaders } from '../context/AuthContext';
+import { Card, CardHeader, CardBody } from '../components/ui';
+import { StatTile } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
 
 interface Tournament {
   id: string;
@@ -144,30 +148,10 @@ export default function Dashboard() {
             <StatsSkeleton />
           ) : (
             <>
-              <HeroStat
-                label="Competitors"
-                value={totalCompetitors}
-                icon={Users}
-                trend="+12 this week"
-              />
-              <HeroStat
-                label="Active tournaments"
-                value={upcomingTournaments.length}
-                icon={Trophy}
-                trend={upcomingTournaments.length > 0 ? 'In progress' : 'Ready to start'}
-              />
-              <HeroStat
-                label="Divisions"
-                value={totalDivisions}
-                icon={LayoutGrid}
-                trend="auto-categorized"
-              />
-              <HeroStat
-                label="Matches"
-                value={totalMatches}
-                icon={Activity}
-                trend={`${analytics?.totals.completedMatches || 0} completed`}
-              />
+              <StatTile label="Competitors" value={totalCompetitors} trend="+12 this week" />
+              <StatTile label="Active tournaments" value={upcomingTournaments.length} trend={upcomingTournaments.length > 0 ? 'In progress' : 'Ready to start'} />
+              <StatTile label="Divisions" value={totalDivisions} trend="auto-categorized" />
+              <StatTile label="Matches" value={totalMatches} trend={`${analytics?.totals.completedMatches || 0} completed`} />
             </>
           )}
         </div>
@@ -178,78 +162,77 @@ export default function Dashboard() {
         {/* Tournaments (2/3) */}
         <div className="lg:col-span-2 space-y-6">
           {/* Recent tournaments */}
-          <div className="card">
-            <div className="flex items-center justify-between p-5 pb-3">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900 dark:text-white">Recent tournaments</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Click a tournament to view divisions, brackets, and results</p>
-              </div>
-              <Link to="/tournaments" className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 flex items-center gap-1">
-                All tournaments <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-
-            {tournamentsLoading ? (
-              <div className="px-5 pb-5 space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)}
-              </div>
-            ) : tournaments && tournaments.length > 0 ? (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800 border-t border-slate-100 dark:border-slate-800">
-                {tournaments.slice(0, 5).map((t, i) => (
-                  <Link
-                    key={t.id}
-                    to={`/tournaments/${t.id}`}
-                    className="group flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors animate-slide-up"
-                    style={{ animationDelay: `${i * 40}ms` }}
-                  >
-                    <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center flex-shrink-0">
-                      <Trophy className="h-4.5 w-4.5 text-slate-500 dark:text-slate-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{t.name}</div>
-                      <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
-                        <span>{new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                        {t.location && <><span className="text-slate-300 dark:text-slate-600">·</span><span className="truncate">{t.location}</span></>}
+          <Card>
+            <CardHeader
+              title="Recent tournaments"
+              description="Click a tournament to view divisions, brackets, and results"
+              action={
+                <Link to="/tournaments" className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 flex items-center gap-1">
+                  All tournaments <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              }
+            />
+            <CardBody className="p-0">
+              {tournamentsLoading ? (
+                <div className="px-5 pb-5 space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)}
+                </div>
+              ) : tournaments && tournaments.length > 0 ? (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 border-t border-slate-100 dark:border-slate-800">
+                  {tournaments.slice(0, 5).map((t, i) => (
+                    <Link
+                      key={t.id}
+                      to={`/tournaments/${t.id}`}
+                      className="group flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors animate-slide-up"
+                      style={{ animationDelay: `${i * 40}ms` }}
+                    >
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center flex-shrink-0">
+                        <Trophy className="h-4.5 w-4.5 text-slate-500 dark:text-slate-400" />
                       </div>
-                    </div>
-                    <div className="hidden sm:flex items-center gap-5 text-xs text-slate-500 flex-shrink-0">
-                      <div className="text-right">
-                        <div className="font-semibold text-slate-900 dark:text-white">{t._count.registrations}</div>
-                        <div className="text-[10px] uppercase tracking-wider">kids</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{t.name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span>{new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                          {t.location && <><span className="text-slate-300 dark:text-slate-600">·</span><span className="truncate">{t.location}</span></>}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-slate-900 dark:text-white">{t._count.divisions}</div>
-                        <div className="text-[10px] uppercase tracking-wider">divisions</div>
+                      <div className="hidden sm:flex items-center gap-5 text-xs text-slate-500 flex-shrink-0">
+                        <div className="text-right">
+                          <div className="font-semibold text-slate-900 dark:text-white">{t._count.registrations}</div>
+                          <div className="text-[10px] uppercase tracking-wider">kids</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold text-slate-900 dark:text-white">{t._count.divisions}</div>
+                          <div className="text-[10px] uppercase tracking-wider">divisions</div>
+                        </div>
                       </div>
-                    </div>
-                    <StatusBadge status={t.status} />
-                    <ArrowUpRight className="h-4 w-4 text-slate-300 dark:text-slate-600 group-hover:text-indigo-500 transition-colors" />
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="p-5 pt-0">
-                <EmptyState
-                  icon={Trophy}
-                  title="No tournaments yet"
-                  description="Get started by creating your first tournament — or try the demo to see how it works."
-                  action={{ label: 'Create Tournament', onClick: () => navigate('/tournaments') }}
-                />
-              </div>
-            )}
-          </div>
+                      <StatusBadge status={t.status} />
+                      <ArrowUpRight className="h-4 w-4 text-slate-300 dark:text-slate-600 group-hover:text-indigo-500 transition-colors" />
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-5 pt-0">
+                  <EmptyState
+                    icon={Trophy}
+                    title="No tournaments yet"
+                    description="Get started by creating your first tournament — or try the demo to see how it works."
+                    action={{ label: 'Create Tournament', onClick: () => navigate('/tournaments') }}
+                  />
+                </div>
+              )}
+            </CardBody>
+          </Card>
 
           {/* Belt distribution */}
           {analytics && analytics.beltDistribution.length > 0 && (
-            <div className="card">
-              <div className="p-5 pb-3 flex items-center justify-between">
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900 dark:text-white">Belt distribution</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Across your {totalCompetitors.toLocaleString()} competitors</p>
-                </div>
-                <Target className="h-4 w-4 text-slate-400" />
-              </div>
-              <div className="px-5 pb-5 space-y-2.5">
+            <Card>
+              <CardHeader
+                title="Belt distribution"
+                description={`Across your ${totalCompetitors.toLocaleString()} competitors`}
+                action={<Target className="h-4 w-4 text-slate-400" />}
+              />
+              <CardBody className="px-5 pb-5 space-y-2.5">
                 {(() => {
                   // Group by main belt color (White / Yellow / Green / Blue / Red / Black) for cleaner display
                   const grouped: Record<string, number> = {};
@@ -275,19 +258,17 @@ export default function Dashboard() {
                     </div>
                   ));
                 })()}
-              </div>
-            </div>
+              </CardBody>
+            </Card>
           )}
         </div>
 
         {/* Right column: Top schools + Quick actions + Getting started */}
         <div className="space-y-6">
           {/* Quick actions */}
-          <div className="card">
-            <div className="p-5 pb-3">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Quick actions</h2>
-            </div>
-            <div className="px-3 pb-3 space-y-1">
+          <Card>
+            <CardHeader title="Quick actions" />
+            <CardBody className="px-3 pb-3 space-y-1">
               {[
                 { label: 'Import competitors', sub: 'Excel file', icon: FileSpreadsheet, to: '/competitors', tone: 'from-emerald-500 to-teal-500' },
                 { label: 'Create tournament', sub: 'New event', icon: Trophy, to: '/tournaments', tone: 'from-indigo-500 to-violet-500' },
@@ -308,20 +289,18 @@ export default function Dashboard() {
                   <ArrowRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all" />
                 </Link>
               ))}
-            </div>
-          </div>
+            </CardBody>
+          </Card>
 
           {/* Top schools */}
           {analytics && analytics.topSchools.length > 0 && (
-            <div className="card">
-              <div className="p-5 pb-3 flex items-center justify-between">
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900 dark:text-white">Top schools</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Most represented dojangs</p>
-                </div>
-                <School className="h-4 w-4 text-slate-400" />
-              </div>
-              <div className="px-5 pb-5 space-y-2.5">
+            <Card>
+              <CardHeader
+                title="Top schools"
+                description="Most represented dojangs"
+                action={<School className="h-4 w-4 text-slate-400" />}
+              />
+              <CardBody className="px-5 pb-5 space-y-2.5">
                 {analytics.topSchools.slice(0, 6).map((school, index) => {
                   const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`;
                   return (
@@ -332,16 +311,14 @@ export default function Dashboard() {
                     </div>
                   );
                 })}
-              </div>
-            </div>
+              </CardBody>
+            </Card>
           )}
 
           {/* Getting started */}
-          <div className="card">
-            <div className="p-5 pb-3">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Getting started</h2>
-            </div>
-            <div className="px-5 pb-5">
+          <Card>
+            <CardHeader title="Getting started" />
+            <CardBody className="px-5 pb-5">
               <ol className="space-y-3">
                 {[
                   { text: 'Import competitors from Excel', done: totalCompetitors > 0 },
@@ -357,26 +334,9 @@ export default function Dashboard() {
                   </li>
                 ))}
               </ol>
-            </div>
-          </div>
+            </CardBody>
+          </Card>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function HeroStat({ label, value, icon: Icon, trend }: { label: string; value: number; icon: any; trend: string }) {
-  return (
-    <div className="relative rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 p-4">
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="text-xs font-medium text-white/60 uppercase tracking-wider">{label}</div>
-        <Icon className="h-3.5 w-3.5 text-white/40" />
-      </div>
-      <div className="text-2xl font-bold text-white tabular-nums tracking-tight">
-        {typeof value === 'number' ? value.toLocaleString() : value}
-      </div>
-      <div className="text-[11px] text-white/50 mt-0.5 flex items-center gap-1">
-        <TrendingUp className="h-2.5 w-2.5" /> {trend}
       </div>
     </div>
   );

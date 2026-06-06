@@ -5,17 +5,19 @@ import {
   ChevronLeft,
   Search,
   CheckCircle,
-  XCircle,
   AlertTriangle,
   Scale,
-  User,
   Users,
-  Filter,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { Card, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
+import { StatTile } from '../components/ui';
+import { Select } from '../components/ui';
 
 interface Registration {
   id: string;
@@ -70,7 +72,6 @@ export default function CheckIn() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Fetch tournament
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['tournament', tournamentId],
     queryFn: async () => {
@@ -80,14 +81,12 @@ export default function CheckIn() {
     },
   });
 
-  // Fetch registrations
   const { data: registrations, isLoading } = useQuery<Registration[]>({
     queryKey: ['checkin-registrations', tournamentId],
     queryFn: async () => {
       const res = await fetch(`/api/tournaments/${tournamentId}/registrations`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to fetch registrations');
       const data = await res.json();
-      // Add checkedIn field if not present (simulated for now)
       return data.map((r: any) => ({
         ...r,
         checkedIn: r.checkedIn || false,
@@ -98,7 +97,6 @@ export default function CheckIn() {
     refetchInterval: 5000,
   });
 
-  // Check-in mutation
   const checkInMutation = useMutation({
     mutationFn: async (data: { registrationId: string; weight?: number }) => {
       const res = await fetch(`/api/tournaments/${tournamentId}/registrations/${data.registrationId}`, {
@@ -120,7 +118,6 @@ export default function CheckIn() {
     },
   });
 
-  // Undo check-in mutation
   const undoCheckInMutation = useMutation({
     mutationFn: async (registrationId: string) => {
       const res = await fetch(`/api/tournaments/${tournamentId}/registrations/${registrationId}`, {
@@ -140,12 +137,10 @@ export default function CheckIn() {
     },
   });
 
-  // Extract unique schools for the filter dropdown
   const uniqueSchools = registrations
     ? [...new Set(registrations.map((r) => r.competitor.schoolDojang).filter(Boolean))].sort() as string[]
     : [];
 
-  // Filter registrations
   const filteredRegistrations = registrations?.filter((r) => {
     const matchesSearch =
       searchTerm === '' ||
@@ -170,7 +165,6 @@ export default function CheckIn() {
     return matchesSearch && matchesStatus && matchesEvent && matchesSchool;
   });
 
-  // Sort filtered registrations
   const sortedRegistrations = filteredRegistrations
     ? [...filteredRegistrations].sort((a, b) => {
         if (sortBy === 'name')
@@ -186,11 +180,9 @@ export default function CheckIn() {
       })
     : [];
 
-  // Unchecked-in registrations from the current filtered view (for bulk check-in)
   const uncheckedFiltered = sortedRegistrations.filter((r) => !r.checkedIn);
   const hasActiveFilter = searchTerm !== '' || schoolFilter !== '';
 
-  // Stats
   const stats = {
     total: registrations?.length || 0,
     checkedIn: registrations?.filter((r) => r.checkedIn).length || 0,
@@ -200,17 +192,14 @@ export default function CheckIn() {
 
   const handleQuickCheckIn = (registration: Registration) => {
     if (registration.sparring) {
-      // Need weight for sparring - show modal
       setSelectedRegistration(registration);
       setCheckInWeight(registration.weightAtRegistration?.toString() || '');
     } else {
-      // Patterns only - quick check in
       checkInMutation.mutate({ registrationId: registration.id });
     }
   };
 
   const handleBulkCheckIn = async () => {
-    // Only bulk check-in non-sparring registrations (sparring needs weight)
     const eligibleForBulk = uncheckedFiltered.filter((r) => !r.sparring);
     if (eligibleForBulk.length === 0) {
       toast.warning('All filtered unchecked competitors require weigh-in (sparring). Check them in individually.');
@@ -263,26 +252,10 @@ export default function CheckIn() {
 
         {/* Stats Bar */}
         <div className="px-4 pb-2 grid grid-cols-4 gap-2">
-          <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.total}</div>
-            <div className="text-xs text-blue-600 dark:text-blue-400">Registered</div>
-          </div>
-          <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.checkedIn}</div>
-            <div className="text-xs text-green-600 dark:text-green-400">Checked In</div>
-          </div>
-          <div className="bg-yellow-50 dark:bg-yellow-900/30 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-              {stats.total - stats.checkedIn}
-            </div>
-            <div className="text-xs text-yellow-600 dark:text-yellow-400">Missing</div>
-          </div>
-          <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3 text-center">
-            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-              {Math.round((stats.checkedIn / stats.total) * 100) || 0}%
-            </div>
-            <div className="text-xs text-purple-600 dark:text-purple-400">Complete</div>
-          </div>
+          <StatTile label="Registered" value={stats.total} accent="blue" />
+          <StatTile label="Checked In" value={stats.checkedIn} accent="green" />
+          <StatTile label="Missing" value={stats.total - stats.checkedIn} accent="yellow" />
+          <StatTile label="Complete" value={`${Math.round((stats.checkedIn / stats.total) * 100) || 0}%`} accent="purple" />
         </div>
         {/* Progress Bar */}
         <div className="px-4 pb-4">
@@ -299,8 +272,8 @@ export default function CheckIn() {
       </div>
 
       {/* Search and Filters */}
-      <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-        <div className="relative mb-3">
+      <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10 space-y-3">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
           <input
             ref={searchRef}
@@ -313,30 +286,30 @@ export default function CheckIn() {
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-1 flex-wrap">
-          <select
+          <Select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="form-select text-sm"
+            className="text-sm"
           >
             <option value="all">All Status</option>
             <option value="unchecked">Not Checked In</option>
             <option value="checked">Checked In</option>
-          </select>
+          </Select>
 
-          <select
+          <Select
             value={filterEvent}
             onChange={(e) => setFilterEvent(e.target.value as any)}
-            className="form-select text-sm"
+            className="text-sm"
           >
             <option value="all">All Events</option>
             <option value="patterns">Patterns Only</option>
             <option value="sparring">Sparring Only</option>
-          </select>
+          </Select>
 
-          <select
+          <Select
             value={schoolFilter}
             onChange={(e) => setSchoolFilter(e.target.value)}
-            className="form-select text-sm"
+            className="text-sm"
           >
             <option value="">All Schools</option>
             {uniqueSchools.map((school) => (
@@ -344,40 +317,25 @@ export default function CheckIn() {
                 {school}
               </option>
             ))}
-          </select>
+          </Select>
 
-          <select
+          <Select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as 'name' | 'school' | 'status')}
-            className="form-select text-sm"
+            className="text-sm"
           >
             <option value="name">Name (A-Z)</option>
             <option value="school">School</option>
             <option value="status">Status</option>
-          </select>
+          </Select>
         </div>
 
         {/* Bulk Check-In Button */}
         {hasActiveFilter && uncheckedFiltered.length > 0 && (
-          <div className="mt-3">
-            <button
-              onClick={handleBulkCheckIn}
-              disabled={isBulkCheckingIn}
-              className="w-full px-4 py-2 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg text-sm flex items-center justify-center gap-2"
-            >
-              {isBulkCheckingIn ? (
-                <>
-                  <Spinner size="sm" />
-                  Checking in...
-                </>
-              ) : (
-                <>
-                  <Users className="h-4 w-4" />
-                  Check In All Filtered ({uncheckedFiltered.length})
-                </>
-              )}
-            </button>
-          </div>
+          <Button variant="success" className="w-full" loading={isBulkCheckingIn} onClick={handleBulkCheckIn}>
+            <Users className="h-4 w-4 mr-2" />
+            Check In All Filtered ({uncheckedFiltered.length})
+          </Button>
         )}
       </div>
 
@@ -426,8 +384,7 @@ export default function CheckIn() {
                       {registration.sparring && (
                         <span className="text-xs px-2 py-1 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded">
                           Sparring
-                          {registration.weightAtRegistration &&
-                            ` (${registration.weightAtRegistration} lbs)`}
+                          {registration.weightAtRegistration && ` (${registration.weightAtRegistration} lbs)`}
                         </span>
                       )}
                     </div>
@@ -435,21 +392,23 @@ export default function CheckIn() {
 
                   <div className="ml-4">
                     {registration.checkedIn ? (
-                      <button
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={() => undoCheckInMutation.mutate(registration.id)}
-                        disabled={undoCheckInMutation.isPending}
-                        className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg touch-target"
+                        loading={undoCheckInMutation.isPending}
                       >
-                        {undoCheckInMutation.isPending ? <Spinner size="sm" /> : 'Undo'}
-                      </button>
+                        Undo
+                      </Button>
                     ) : (
-                      <button
+                      <Button
+                        variant="success"
+                        size="md"
                         onClick={() => handleQuickCheckIn(registration)}
-                        disabled={checkInMutation.isPending}
-                        className="px-6 py-3 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg touch-target"
+                        loading={checkInMutation.isPending}
                       >
                         Check In
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -526,47 +485,44 @@ export default function CheckIn() {
 
               {checkInWeight &&
                 selectedRegistration.weightAtRegistration &&
-                Math.abs(parseFloat(checkInWeight) - selectedRegistration.weightAtRegistration) >
-                  2 && (
+                Math.abs(parseFloat(checkInWeight) - selectedRegistration.weightAtRegistration) > 2 && (
                   <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start">
                     <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-800 dark:text-yellow-200">
-                      Weight differs by more than 2 lbs from registration. Consider verifying weight
-                      class eligibility.
+                      Weight differs by more than 2 lbs from registration. Consider verifying weight class eligibility.
                     </div>
                   </div>
                 )}
             </div>
 
             <div className="modal-footer">
-              <button
+              <Button
+                variant="secondary"
+                className="flex-1"
                 onClick={() => {
                   setSelectedRegistration(null);
                   setCheckInWeight('');
                 }}
-                className="btn btn-secondary flex-1"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="success"
+                className="flex-1"
+                loading={checkInMutation.isPending}
                 onClick={() =>
                   checkInMutation.mutate({
                     registrationId: selectedRegistration.id,
                     weight: parseFloat(checkInWeight) || undefined,
                   })
                 }
-                disabled={checkInMutation.isPending}
-                className="btn btn-primary flex-1"
               >
                 {checkInMutation.isPending ? (
-                  <>
-                    <Spinner size="sm" className="mr-2" />
-                    Saving...
-                  </>
+                  <><Spinner size="sm" className="mr-2" /> Saving...</>
                 ) : (
                   'Confirm Check-In'
                 )}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
