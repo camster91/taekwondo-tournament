@@ -16,11 +16,7 @@ class ErrorBoundary extends React.Component<
     super(props);
     this.state = { error: null };
   }
-  static getDerivedStateFromError(error: Error) {
-    // Surface the FULL error message (not the URL-encoded minified version)
-    console.error('[ErrorBoundary] Full error:', error, error.message, error.stack);
-    return { error };
-  }
+  static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     // Surface to the console with full stack for devtools inspection
     console.error('[ErrorBoundary]', error, info.componentStack);
