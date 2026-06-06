@@ -17,6 +17,10 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
+import { Card, CardHeader, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
+import { StatTile } from '../components/ui';
 
 interface DivisionStats {
   id: string;
@@ -81,7 +85,6 @@ export default function DirectorDashboard() {
   const { data: progress, isLoading } = useQuery<TournamentProgress>({
     queryKey: ['director-dashboard', tournamentId],
     queryFn: async () => {
-      // Fetch tournament data
       const [tournamentRes, divisionsRes] = await Promise.all([
         fetch(`/api/tournaments/${tournamentId}`, { headers: getAuthHeaders() }),
         fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`, { headers: getAuthHeaders() }),
@@ -92,7 +95,6 @@ export default function DirectorDashboard() {
       const tournament = await tournamentRes.json();
       const divisions: any[] = divisionsRes.ok ? await divisionsRes.json() : [];
 
-      // Flatten all matches from brackets, annotated with divisionId and divisionName
       const matches = divisions.flatMap((d: any) =>
         (d.bracket?.matches ?? []).map((m: any) => ({
           ...m,
@@ -101,7 +103,6 @@ export default function DirectorDashboard() {
         }))
       );
 
-      // A division is "completed" when all its matches are done, "in_progress" when any match is active
       const completedDivisions = divisions.filter((d: any) => {
         const dm = matches.filter((m: any) => m._divisionId === d.id);
         return dm.length > 0 && dm.every((m: any) => m.status === 'completed' || m.status === 'bye');
@@ -114,11 +115,10 @@ export default function DirectorDashboard() {
       const inProgressMatches = matches.filter((m: any) => m.status === 'in_progress').length;
       const scheduledMatches = matches.filter((m: any) => m.status === 'ready' || m.status === 'pending').length;
 
-      // Group matches by ring number for ring status
       const ringMap = new Map<string, any[]>();
       matches.forEach((m: any) => {
         const ring = m.ringNumber != null ? `Ring ${m.ringNumber}` : null;
-        if (!ring) return; // skip unassigned
+        if (!ring) return;
         if (!ringMap.has(ring)) ringMap.set(ring, []);
         ringMap.get(ring)!.push(m);
       });
@@ -148,7 +148,6 @@ export default function DirectorDashboard() {
         });
       });
 
-      // Calculate division details
       const divisionDetails: DivisionStats[] = divisions.map((d: any) => {
         const divMatches = matches.filter((m: any) => m._divisionId === d.id);
         const completed = divMatches.filter((m: any) => m.status === 'completed').length;
@@ -171,23 +170,19 @@ export default function DirectorDashboard() {
         };
       });
 
-      // Generate warnings
       const warnings: string[] = [];
 
-      // Divisions with no bracket
       const noBracket = divisions.filter((d: any) => !d.bracket);
       if (noBracket.length > 0) {
         warnings.push(`${noBracket.length} division(s) have no bracket generated`);
       }
 
-      // Idle rings with pending matches
       rings.forEach((r) => {
         if (r.status === 'idle' && r.upcomingMatches > 0) {
           warnings.push(`Ring ${r.ring} is idle with ${r.upcomingMatches} pending matches`);
         }
       });
 
-      // Long running matches (>10 min)
       const longMatches = matches.filter((m: any) => {
         if (m.status !== 'in_progress') return false;
         const startTime = new Date(m.updatedAt).getTime();
@@ -222,14 +217,13 @@ export default function DirectorDashboard() {
         },
         competitors: {
           total: tournament._count?.registrations || 0,
-          checkedIn: 0, // Would need registration checkin data
+          checkedIn: 0,
           competing: inProgressMatches * 2,
-          eliminated: completedMatches, // Rough estimate
+          eliminated: completedMatches,
         },
         estimatedTimeRemaining,
         rings: rings.sort((a, b) => a.ring.localeCompare(b.ring)),
         divisionDetails: divisionDetails.sort((a, b) => {
-          // Sort by status (in_progress first), then by name
           if (a.status === 'in_progress' && b.status !== 'in_progress') return -1;
           if (b.status === 'in_progress' && a.status !== 'in_progress') return 1;
           return a.name.localeCompare(b.name);
@@ -237,7 +231,7 @@ export default function DirectorDashboard() {
         warnings,
       };
     },
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: 10000,
   });
 
   if (isLoading) {
@@ -273,26 +267,24 @@ export default function DirectorDashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="page-header">
-        <div>
-          <Link
-            to={`/tournaments/${tournamentId}`}
-            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Tournament
-          </Link>
-          <h1 className="page-title flex items-center">
-            <LayoutDashboard className="h-6 w-6 mr-2" />
-            Director Dashboard
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">{progress.tournament.name}</p>
-        </div>
-        <div className="text-right">
-          <div className="text-sm text-gray-500 dark:text-gray-400">Last updated</div>
-          <div className="text-lg font-medium text-gray-900 dark:text-white">{new Date().toLocaleTimeString()}</div>
-        </div>
-      </div>
+      <PageHeader
+        title="Director Dashboard"
+        description={progress.tournament.name}
+        actions={
+          <div className="text-right">
+            <div className="text-sm text-gray-500 dark:text-gray-400">Last updated</div>
+            <div className="text-lg font-medium text-gray-900 dark:text-white">{new Date().toLocaleTimeString()}</div>
+          </div>
+        }
+      >
+        <Link
+          to={`/tournaments/${tournamentId}`}
+          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back to Tournament
+        </Link>
+      </PageHeader>
 
       {/* Warnings */}
       {progress.warnings.length > 0 && (
@@ -314,98 +306,44 @@ export default function DirectorDashboard() {
 
       {/* Overview Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="card">
-          <div className="card-body">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Divisions</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {progress.divisions.completed}/{progress.divisions.total}
-                </p>
-                <p className="text-sm text-gray-400 dark:text-gray-500">{divisionProgress}% complete</p>
-              </div>
-              <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                <Target className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-            </div>
-            <div className="mt-3 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-600 transition-all duration-500"
-                style={{ width: `${divisionProgress}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-body">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Matches</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {progress.matches.completed}/{progress.matches.total}
-                </p>
-                <p className="text-sm text-gray-400 dark:text-gray-500">{matchProgress}% complete</p>
-              </div>
-              <div className="h-12 w-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                <Trophy className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-            </div>
-            <div className="mt-3 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-green-600 transition-all duration-500"
-                style={{ width: `${matchProgress}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-body">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Active Matches</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">{progress.matches.inProgress}</p>
-                <p className="text-sm text-gray-400 dark:text-gray-500">
-                  {progress.matches.scheduled} scheduled
-                </p>
-              </div>
-              <div className="h-12 w-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
-                <Activity className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-body">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Est. Time Remaining</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {progress.estimatedTimeRemaining > 60
-                    ? `${Math.floor(progress.estimatedTimeRemaining / 60)}h ${progress.estimatedTimeRemaining % 60}m`
-                    : `${progress.estimatedTimeRemaining}m`}
-                </p>
-                <p className="text-sm text-gray-400 dark:text-gray-500">~5 min/match</p>
-              </div>
-              <div className="h-12 w-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
-                <Timer className="h-6 w-6 text-orange-600 dark:text-orange-400" />
-              </div>
-            </div>
-          </div>
-        </div>
+        <StatTile
+          label="Divisions"
+          value={`${progress.divisions.completed}/${progress.divisions.total}`}
+          icon={<Target className="h-6 w-6" />}
+          trend={{ value: `${divisionProgress}% complete`, direction: 'flat' }}
+          accent="indigo"
+        />
+        <StatTile
+          label="Matches"
+          value={`${progress.matches.completed}/${progress.matches.total}`}
+          icon={<Trophy className="h-6 w-6" />}
+          trend={{ value: `${matchProgress}% complete`, direction: 'flat' }}
+          accent="success"
+        />
+        <StatTile
+          label="Active Matches"
+          value={progress.matches.inProgress}
+          icon={<Activity className="h-6 w-6" />}
+          trend={{ value: `${progress.matches.scheduled} scheduled`, direction: 'flat' }}
+          accent="warning"
+        />
+        <StatTile
+          label="Est. Time Remaining"
+          value={
+            progress.estimatedTimeRemaining > 60
+              ? `${Math.floor(progress.estimatedTimeRemaining / 60)}h ${progress.estimatedTimeRemaining % 60}m`
+              : `${progress.estimatedTimeRemaining}m`
+          }
+          icon={<Timer className="h-6 w-6" />}
+          trend={{ value: '~5 min/match', direction: 'flat' }}
+          accent="default"
+        />
       </div>
 
       {/* Ring Status */}
-      <div className="card">
-        <div className="card-header">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
-            <TrendingUp className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
-            Ring Status
-          </h2>
-        </div>
-        <div className="card-body">
+      <Card>
+        <CardHeader title="Ring Status" />
+        <CardBody>
           {progress.rings.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400 text-center py-4">
               No rings assigned yet. Assign rings in the schedule page.
@@ -469,18 +407,13 @@ export default function DirectorDashboard() {
               ))}
             </div>
           )}
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
       {/* Division Progress */}
-      <div className="card">
-        <div className="card-header">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
-            <Users className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
-            Division Progress
-          </h2>
-        </div>
-        <div className="card-body">
+      <Card>
+        <CardHeader title="Division Progress" />
+        <CardBody>
           {progress.divisionDetails.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400 text-center py-4">
               No divisions created yet.
@@ -541,8 +474,8 @@ export default function DirectorDashboard() {
               })}
             </div>
           )}
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

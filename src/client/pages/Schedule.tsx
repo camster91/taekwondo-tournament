@@ -14,6 +14,12 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
+import { Card, CardHeader, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
+import { Input } from '../components/ui';
+import { Label } from '../components/ui';
+import { DataTable, TableHead, TableBody } from '../components/ui';
 
 interface ScheduledDivision {
   divisionId: string;
@@ -92,7 +98,6 @@ export default function Schedule() {
     const doc = new jsPDF('portrait', 'pt', 'letter');
     const pageWidth = doc.internal.pageSize.getWidth();
 
-    // Title
     doc.setFontSize(18);
     doc.text(schedule.tournamentName, pageWidth / 2, 40, { align: 'center' });
 
@@ -107,7 +112,6 @@ export default function Schedule() {
       { align: 'center' }
     );
 
-    // Group by ring
     const byRing: Record<number, ScheduledDivision[]> = {};
     schedule.schedule.forEach((div) => {
       if (!byRing[div.ring]) byRing[div.ring] = [];
@@ -118,7 +122,6 @@ export default function Schedule() {
     const leftMargin = 50;
     const colWidths = [60, 200, 80, 60, 60];
 
-    // Table header
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.text('Time', leftMargin, y);
@@ -137,7 +140,6 @@ export default function Schedule() {
     Object.keys(byRing)
       .sort((a, b) => Number(a) - Number(b))
       .forEach((ring) => {
-        // Ring header
         doc.setFont('helvetica', 'bold');
         doc.setFillColor(240, 240, 240);
         doc.rect(leftMargin - 5, y - 10, pageWidth - 2 * leftMargin + 10, 15, 'F');
@@ -175,7 +177,6 @@ export default function Schedule() {
         y += 10;
       });
 
-    // Warnings
     if (schedule.warnings.length > 0) {
       y += 10;
       doc.setFont('helvetica', 'bold');
@@ -192,7 +193,7 @@ export default function Schedule() {
     doc.save(fileName);
   };
 
-  const getRingColor = (ring: number, dark = false) => {
+  const getRingColor = (ring: number) => {
     const colors = [
       { light: 'bg-blue-100 border-blue-300', dark: 'dark:bg-blue-900/30 dark:border-blue-700', text: 'text-blue-900 dark:text-blue-200' },
       { light: 'bg-green-100 border-green-300', dark: 'dark:bg-green-900/30 dark:border-green-700', text: 'text-green-900 dark:text-green-200' },
@@ -201,8 +202,7 @@ export default function Schedule() {
       { light: 'bg-pink-100 border-pink-300', dark: 'dark:bg-pink-900/30 dark:border-pink-700', text: 'text-pink-900 dark:text-pink-200' },
       { light: 'bg-orange-100 border-orange-300', dark: 'dark:bg-orange-900/30 dark:border-orange-700', text: 'text-orange-900 dark:text-orange-200' },
     ];
-    const color = colors[(ring - 1) % colors.length];
-    return `${color.light} ${color.dark} ${color.text}`;
+    return colors[(ring - 1) % colors.length];
   };
 
   // Group schedule by ring for display
@@ -215,93 +215,82 @@ export default function Schedule() {
   return (
     <div>
       {/* Page Header */}
-      <div className="page-header mb-6">
-        <div>
-          <Link
-            to={`/tournaments/${id}`}
-            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Tournament
-          </Link>
-          <h1 className="page-title">
-            Schedule - {schedule?.tournamentName}
-          </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {schedule?.schedule.length || 0} divisions scheduled
-          </p>
-        </div>
-        <div className="flex gap-2 sm:gap-3">
-          <button
-            onClick={() => regenerateMutation.mutate()}
-            disabled={regenerateMutation.isPending}
-            className="btn btn-secondary"
-          >
-            {regenerateMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            <span className="hidden sm:inline">{regenerateMutation.isPending ? 'Generating...' : 'Regenerate'}</span>
-          </button>
-          <button
-            onClick={exportPDF}
-            disabled={!schedule?.schedule.length}
-            className="btn btn-primary"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Export PDF</span>
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title={`Schedule - ${schedule?.tournamentName || ''}`}
+        description={`${schedule?.schedule.length || 0} divisions scheduled`}
+        actions={
+          <div className="flex gap-2 sm:gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => regenerateMutation.mutate()}
+              disabled={regenerateMutation.isPending}
+            >
+              {regenerateMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              <span className="hidden sm:inline">{regenerateMutation.isPending ? 'Generating...' : 'Regenerate'}</span>
+            </Button>
+            <Button
+              variant="primary"
+              onClick={exportPDF}
+              disabled={!schedule?.schedule.length}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Export PDF</span>
+            </Button>
+          </div>
+        }
+      >
+        <Link
+          to={`/tournaments/${id}`}
+          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back to Tournament
+        </Link>
+      </PageHeader>
 
       {/* Configuration */}
-      <div className="card mb-6">
-        <div className="card-header">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
-            <Clock className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
-            Schedule Configuration
-          </h2>
-        </div>
-        <div className="card-body">
+      <Card className="mb-6">
+        <CardHeader title="Schedule Configuration" />
+        <CardBody>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <label className="form-label">Start Time</label>
-              <input
+              <Label>Start Time</Label>
+              <Input
                 type="time"
                 value={config.startTime}
                 onChange={(e) =>
                   setConfig({ ...config, startTime: e.target.value })
                 }
-                className="form-input"
               />
             </div>
             <div>
-              <label className="form-label">End Time</label>
-              <input
+              <Label>End Time</Label>
+              <Input
                 type="time"
                 value={config.endTime}
                 onChange={(e) =>
                   setConfig({ ...config, endTime: e.target.value })
                 }
-                className="form-input"
               />
             </div>
             <div>
-              <label className="form-label">Number of Rings</label>
-              <input
+              <Label>Number of Rings</Label>
+              <Input
                 type="number"
-                min="1"
-                max="10"
+                min={1}
+                max={10}
                 value={config.ringCount}
                 onChange={(e) =>
                   setConfig({ ...config, ringCount: parseInt(e.target.value) || 4 })
                 }
-                className="form-input"
               />
             </div>
             <div>
-              <label className="form-label">Break Between (min)</label>
-              <input
+              <Label>Break Between (min)</Label>
+              <Input
                 type="number"
-                min="0"
-                max="30"
+                min={0}
+                max={30}
                 value={config.breakBetweenDivisions}
                 onChange={(e) =>
                   setConfig({
@@ -309,17 +298,16 @@ export default function Schedule() {
                     breakBetweenDivisions: parseInt(e.target.value) || 5,
                   })
                 }
-                className="form-input"
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div>
-              <label className="form-label">Patterns Match Duration (min)</label>
-              <input
+              <Label>Patterns Match Duration (min)</Label>
+              <Input
                 type="number"
-                min="1"
-                max="15"
+                min={1}
+                max={15}
                 value={config.matchDurationMinutes?.patterns}
                 onChange={(e) =>
                   setConfig({
@@ -330,15 +318,14 @@ export default function Schedule() {
                     },
                   })
                 }
-                className="form-input"
               />
             </div>
             <div>
-              <label className="form-label">Sparring Match Duration (min)</label>
-              <input
+              <Label>Sparring Match Duration (min)</Label>
+              <Input
                 type="number"
-                min="1"
-                max="15"
+                min={1}
+                max={15}
                 value={config.matchDurationMinutes?.sparring}
                 onChange={(e) =>
                   setConfig({
@@ -349,12 +336,11 @@ export default function Schedule() {
                     },
                   })
                 }
-                className="form-input"
               />
             </div>
           </div>
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
       {/* Warnings */}
       {schedule?.warnings && schedule.warnings.length > 0 && (
@@ -384,94 +370,89 @@ export default function Schedule() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {Object.keys(scheduleByRing)
             .sort((a, b) => Number(a) - Number(b))
-            .map((ring) => (
-              <div key={ring} className="card overflow-hidden">
-                <div
-                  className={`card-header ${getRingColor(Number(ring))} border-b-2`}
-                >
-                  <h3 className="font-semibold">Ring {ring}</h3>
-                  <p className="text-sm opacity-75">
-                    {scheduleByRing[Number(ring)].length} divisions
-                  </p>
-                </div>
-                <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {scheduleByRing[Number(ring)].map((div) => (
-                    <div key={div.divisionId} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                          {div.startTime} - {div.endTime}
-                        </span>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded ${
-                            div.eventType === 'patterns'
-                              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
-                              : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
-                          }`}
-                        >
-                          {div.eventType === 'patterns' ? 'Patterns' : 'Sparring'}
-                        </span>
+            .map((ring) => {
+              const color = getRingColor(Number(ring));
+              return (
+                <Card key={ring} className="overflow-hidden">
+                  <div className={`card-header ${color.light} ${color.dark} ${color.text} border-b-2`}>
+                    <h3 className="font-semibold">Ring {ring}</h3>
+                    <p className="text-sm opacity-75">
+                      {scheduleByRing[Number(ring)].length} divisions
+                    </p>
+                  </div>
+                  <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {scheduleByRing[Number(ring)].map((div) => (
+                      <div key={div.divisionId} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                            {div.startTime} - {div.endTime}
+                          </span>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded ${
+                              div.eventType === 'patterns'
+                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
+                                : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+                            }`}
+                          >
+                            {div.eventType === 'patterns' ? 'Patterns' : 'Sparring'}
+                          </span>
+                        </div>
+                        <p className="font-medium text-gray-900 dark:text-white text-sm">
+                          {div.divisionName}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {div.competitorCount} competitors •{' '}
+                          {div.estimatedDurationMinutes} min
+                        </p>
                       </div>
-                      <p className="font-medium text-gray-900 dark:text-white text-sm">
-                        {div.divisionName}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {div.competitorCount} competitors •{' '}
-                        {div.estimatedDurationMinutes} min
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+                    ))}
+                  </div>
+                </Card>
+              );
+            })}
         </div>
       ) : (
-        <div className="card">
-          <EmptyState
-            icon={Calendar}
-            title="No schedule generated"
-            description="Generate divisions first, then create a schedule."
-            action={{
-              label: 'Generate Schedule',
-              onClick: () => regenerateMutation.mutate(),
-            }}
-            secondaryAction={{
-              label: 'Manage Divisions',
-              onClick: () => navigate(`/tournaments/${id}/divisions`),
-            }}
-          />
-        </div>
+        <Card>
+          <CardBody className="p-0">
+            <EmptyState
+              icon={Calendar}
+              title="No schedule generated"
+              description="Generate divisions first, then create a schedule."
+              action={{
+                label: 'Generate Schedule',
+                onClick: () => regenerateMutation.mutate(),
+              }}
+              secondaryAction={{
+                label: 'Manage Divisions',
+                onClick: () => navigate(`/tournaments/${id}/divisions`),
+              }}
+            />
+          </CardBody>
+        </Card>
       )}
 
       {/* Timeline View */}
       {schedule?.schedule && schedule.schedule.length > 0 && (
-        <div className="card mt-6">
-          <div className="card-header">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white">Timeline View</h2>
-          </div>
-          <div className="card-body p-0 overflow-x-auto">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Ring</th>
-                  <th>Division</th>
-                  <th>Event</th>
-                  <th>Competitors</th>
-                  <th>Duration</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+        <Card className="mt-6">
+          <CardHeader title="Timeline View" />
+          <CardBody className="p-0 overflow-x-auto">
+            <DataTable>
+              <TableHead>
+                <th>Time</th>
+                <th>Ring</th>
+                <th>Division</th>
+                <th>Event</th>
+                <th>Competitors</th>
+                <th>Duration</th>
+              </TableHead>
+              <TableBody>
                 {schedule.schedule.map((div) => (
                   <tr key={div.divisionId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="font-medium text-gray-900 dark:text-white">
                       {div.startTime} - {div.endTime}
                     </td>
                     <td>
-                      <span
-                        className={`inline-flex px-2 py-1 rounded text-sm font-medium ${getRingColor(
-                          div.ring
-                        )}`}
-                      >
+                      <span className={`inline-flex px-2 py-1 rounded text-sm font-medium ${getRingColor(div.ring)}`}>
                         Ring {div.ring}
                       </span>
                     </td>
@@ -498,10 +479,10 @@ export default function Schedule() {
                     <td className="text-gray-600 dark:text-gray-400">{div.estimatedDurationMinutes} min</td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </TableBody>
+            </DataTable>
+          </CardBody>
+        </Card>
       )}
     </div>
   );

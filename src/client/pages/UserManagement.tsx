@@ -22,6 +22,14 @@ import { useAuth, getAuthHeaders } from '../context/AuthContext';
 import { TableSkeleton } from '../components/ui/Skeleton';
 import Spinner from '../components/ui/Spinner';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import EmptyState from '../components/ui/EmptyState';
+import { Card, CardHeader, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
+import { Input } from '../components/ui';
+import { Label } from '../components/ui';
+import { Select } from '../components/ui';
+import { DataTable, TableHead, TableBody } from '../components/ui';
 
 interface User {
   id: string;
@@ -250,30 +258,24 @@ export default function UserManagement() {
   return (
     <div>
       {/* Header */}
-      <div className="page-header mb-6">
-        <div>
-          <Link
-            to="/"
-            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Dashboard
-          </Link>
-          <h1 className="page-title flex items-center">
-            <Users className="h-6 w-6 mr-2 text-primary-600 dark:text-primary-400" />
-            User Management
-          </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Manage system users and their roles
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setShowInviteModal(true)} className="btn btn-primary">
+      <PageHeader
+        title="User Management"
+        description="Manage system users and their roles"
+        actions={
+          <Button variant="primary" onClick={() => setShowInviteModal(true)}>
             <Send className="h-4 w-4 mr-2" />
             <span className="hidden sm:inline">Invite User</span>
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      >
+        <Link
+          to="/"
+          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back to Dashboard
+        </Link>
+      </PageHeader>
 
       {/* Notifications */}
       {error && (
@@ -294,143 +296,151 @@ export default function UserManagement() {
       )}
 
       {/* Users Table */}
-      <div className="card">
-        {isLoading ? (
-          <TableSkeleton rows={5} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead>
-                <tr>
+      <Card>
+        <CardBody className="p-0">
+          {isLoading ? (
+            <TableSkeleton rows={5} />
+          ) : (
+            <div className="overflow-x-auto">
+              <DataTable>
+                <TableHead>
                   <th>User</th>
                   <th>Role</th>
                   <th>Status</th>
                   <th>Last Login</th>
                   <th>Created</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
-                {users?.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                      No users found
-                    </td>
-                  </tr>
-                ) : (
-                  users?.map((user) => (
-                    <tr key={user.id} className={`${!user.isActive ? 'bg-gray-50 dark:bg-gray-900/50' : ''} hover:bg-gray-50 dark:hover:bg-gray-700/50`}>
-                      <td className="whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
-                            <span className="text-lg font-medium text-primary-600 dark:text-primary-400">
-                              {user.firstName[0]}
-                              {user.lastName[0]}
-                            </span>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900 dark:text-white">
-                              {user.firstName} {user.lastName}
-                              {user.id === currentUser?.id && (
-                                <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(you)</span>
-                              )}
-                            </div>
-                            <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
-                              <Mail className="h-3 w-3 mr-1" />
-                              {user.email}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap">
-                        {editingRole === user.id ? (
-                          <select
-                            value={user.role}
-                            onChange={(e) => {
-                              updateRoleMutation.mutate({
-                                userId: user.id,
-                                role: e.target.value,
-                              });
-                            }}
-                            onBlur={() => setEditingRole(null)}
-                            autoFocus
-                            className="form-input text-sm py-1"
-                          >
-                            {ROLES.map((role) => (
-                              <option key={role.value} value={role.value}>
-                                {role.label}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <button
-                            onClick={() => setEditingRole(user.id)}
-                            disabled={user.id === currentUser?.id}
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(
-                              user.role
-                            )} ${user.id !== currentUser?.id ? 'cursor-pointer hover:opacity-80' : ''}`}
-                          >
-                            <Shield className="h-3 w-3 mr-1" />
-                            {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                          </button>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap">
-                        <button
-                          onClick={() =>
-                            setPendingToggle({
-                              userId: user.id,
-                              userName: `${user.firstName} ${user.lastName}`,
-                              isActive: !user.isActive,
-                            })
-                          }
-                          disabled={user.id === currentUser?.id}
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            user.isActive
-                              ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-                              : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
-                          } ${user.id !== currentUser?.id ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        >
-                          {user.isActive ? (
-                            <>
-                              <ShieldCheck className="h-3 w-3 mr-1" />
-                              Active
-                            </>
-                          ) : (
-                            <>
-                              <ShieldX className="h-3 w-3 mr-1" />
-                              Disabled
-                            </>
-                          )}
-                        </button>
-                      </td>
-                      <td className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {user.lastLogin ? (
-                          <div className="flex items-center">
-                            <Calendar className="h-3 w-3 mr-1" />
-                            {new Date(user.lastLogin).toLocaleDateString()}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 dark:text-gray-500">Never</span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap text-sm text-gray-400 dark:text-gray-500">
-                        {new Date(user.createdAt).toLocaleDateString()}
+                </TableHead>
+                <TableBody>
+                  {users?.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                        <EmptyState
+                          icon={Users}
+                          title="No users found"
+                          description="Invite users to get started"
+                          action={{
+                            label: 'Invite User',
+                            onClick: () => setShowInviteModal(true),
+                          }}
+                        />
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                  ) : (
+                    users?.map((user) => (
+                      <tr key={user.id} className={`${!user.isActive ? 'bg-gray-50 dark:bg-gray-900/50' : ''} hover:bg-gray-50 dark:hover:bg-gray-700/50`}>
+                        <td className="whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
+                              <span className="text-lg font-medium text-primary-600 dark:text-primary-400">
+                                {user.firstName[0]}
+                                {user.lastName[0]}
+                              </span>
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                {user.firstName} {user.lastName}
+                                {user.id === currentUser?.id && (
+                                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(you)</span>
+                                )}
+                              </div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+                                <Mail className="h-3 w-3 mr-1" />
+                                {user.email}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap">
+                          {editingRole === user.id ? (
+                            <Select
+                              value={user.role}
+                              onChange={(e) => {
+                                updateRoleMutation.mutate({
+                                  userId: user.id,
+                                  role: e.target.value,
+                                });
+                              }}
+                              onBlur={() => setEditingRole(null)}
+                              autoFocus
+                              className="text-sm py-1"
+                            >
+                              {ROLES.map((role) => (
+                                <option key={role.value} value={role.value}>
+                                  {role.label}
+                                </option>
+                              ))}
+                            </Select>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingRole(user.id)}
+                              disabled={user.id === currentUser?.id}
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(user.role)} ${user.id !== currentUser?.id ? 'cursor-pointer hover:opacity-80' : ''}`}
+                            >
+                              <Shield className="h-3 w-3 mr-1" />
+                              {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                            </Button>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setPendingToggle({
+                                userId: user.id,
+                                userName: `${user.firstName} ${user.lastName}`,
+                                isActive: !user.isActive,
+                              })
+                            }
+                            disabled={user.id === currentUser?.id}
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              user.isActive
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                                : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+                            } ${user.id !== currentUser?.id ? 'cursor-pointer hover:opacity-80' : ''}`}
+                          >
+                            {user.isActive ? (
+                              <>
+                                <ShieldCheck className="h-3 w-3 mr-1" />
+                                Active
+                              </>
+                            ) : (
+                              <>
+                                <ShieldX className="h-3 w-3 mr-1" />
+                                Disabled
+                              </>
+                            )}
+                          </Button>
+                        </td>
+                        <td className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {user.lastLogin ? (
+                            <div className="flex items-center">
+                              <Calendar className="h-3 w-3 mr-1" />
+                              {new Date(user.lastLogin).toLocaleDateString()}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 dark:text-gray-500">Never</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap text-sm text-gray-400 dark:text-gray-500">
+                          {new Date(user.createdAt).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </TableBody>
+              </DataTable>
+            </div>
+          )}
+        </CardBody>
+      </Card>
 
       {/* Roles Legend */}
-      <div className="mt-6 card">
-        <div className="card-header">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">Role Permissions</h3>
-        </div>
-        <div className="card-body">
+      <Card className="mt-6">
+        <CardHeader title="Role Permissions" />
+        <CardBody>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {ROLES.map((role) => (
               <div key={role.value} className="flex items-start">
@@ -445,104 +455,102 @@ export default function UserManagement() {
               </div>
             ))}
           </div>
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
       {/* Pending Invitations */}
       {invitations && invitations.length > 0 && (
-        <div className="mt-6 card">
-          <div className="card-header">
-            <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center">
-              <Mail className="h-4 w-4 mr-2" />
-              Invitations
-            </h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="data-table">
-              <thead>
-                <tr>
+        <Card className="mt-6">
+          <CardHeader
+            title="Invitations"
+            action={<Mail className="h-4 w-4 text-gray-400" />}
+          />
+          <CardBody className="p-0">
+            <div className="overflow-x-auto">
+              <DataTable>
+                <TableHead>
                   <th>Email</th>
                   <th>Role</th>
                   <th>Status</th>
                   <th>Sent</th>
                   <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
-                {invitations.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td className="whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {inv.firstName || inv.lastName
-                            ? `${inv.firstName || ''} ${inv.lastName || ''}`.trim()
-                            : inv.email}
+                </TableHead>
+                <TableBody>
+                  {invitations.map((inv) => (
+                    <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <td className="whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {inv.firstName || inv.lastName
+                              ? `${inv.firstName || ''} ${inv.lastName || ''}`.trim()
+                              : inv.email}
+                          </div>
+                          {(inv.firstName || inv.lastName) && (
+                            <div className="text-sm text-gray-500 dark:text-gray-400">{inv.email}</div>
+                          )}
                         </div>
-                        {(inv.firstName || inv.lastName) && (
-                          <div className="text-sm text-gray-500 dark:text-gray-400">{inv.email}</div>
+                      </td>
+                      <td className="whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(inv.role)}`}>
+                          {inv.role.charAt(0).toUpperCase() + inv.role.slice(1)}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            inv.status === 'pending'
+                              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300'
+                              : inv.status === 'accepted'
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
+                          }`}
+                        >
+                          <Clock className="h-3 w-3 mr-1" />
+                          {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {new Date(inv.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="whitespace-nowrap">
+                        {inv.status === 'pending' && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => resendInviteMutation.mutate(inv.id)}
+                              disabled={resendInviteMutation.isPending}
+                              className="text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
+                              title="Resend"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => cancelInviteMutation.mutate(inv.id)}
+                              disabled={cancelInviteMutation.isPending}
+                              className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
+                              title="Cancel"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         )}
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(inv.role)}`}>
-                        {inv.role.charAt(0).toUpperCase() + inv.role.slice(1)}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          inv.status === 'pending'
-                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300'
-                            : inv.status === 'accepted'
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
-                        }`}
-                      >
-                        <Clock className="h-3 w-3 mr-1" />
-                        {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(inv.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="whitespace-nowrap">
-                      {inv.status === 'pending' && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => resendInviteMutation.mutate(inv.id)}
-                            disabled={resendInviteMutation.isPending}
-                            className="text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
-                            title="Resend"
-                          >
-                            <RefreshCw className="h-4 w-4" />
-                          </button>
+                        {inv.status !== 'pending' && (
                           <button
                             onClick={() => cancelInviteMutation.mutate(inv.id)}
                             disabled={cancelInviteMutation.isPending}
-                            className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
-                            title="Cancel"
+                            className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400"
+                            title="Remove"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
-                        </div>
-                      )}
-                      {inv.status !== 'pending' && (
-                        <button
-                          onClick={() => cancelInviteMutation.mutate(inv.id)}
-                          disabled={cancelInviteMutation.isPending}
-                          className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400"
-                          title="Remove"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </TableBody>
+              </DataTable>
+            </div>
+          </CardBody>
+        </Card>
       )}
 
       {/* Toggle User Status Confirmation */}
@@ -594,70 +602,73 @@ export default function UserManagement() {
             <form onSubmit={handleSendInvite}>
               <div className="modal-body space-y-4">
                 <div>
-                  <label className="form-label">Email <span className="text-red-500">*</span></label>
-                  <input
+                  <Label required>Email</Label>
+                  <Input
                     type="email"
                     required
                     value={inviteData.email}
                     onChange={(e) => setInviteData({ ...inviteData, email: e.target.value })}
-                    className="form-input w-full"
                     placeholder="user@example.com"
+                    className="w-full"
                   />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="form-label">First Name</label>
-                    <input
+                    <Label>First Name</Label>
+                    <Input
                       type="text"
                       value={inviteData.firstName}
                       onChange={(e) => setInviteData({ ...inviteData, firstName: e.target.value })}
-                      className="form-input w-full"
+                      className="w-full"
                     />
                   </div>
                   <div>
-                    <label className="form-label">Last Name</label>
-                    <input
+                    <Label>Last Name</Label>
+                    <Input
                       type="text"
                       value={inviteData.lastName}
                       onChange={(e) => setInviteData({ ...inviteData, lastName: e.target.value })}
-                      className="form-input w-full"
+                      className="w-full"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="form-label">Role</label>
-                  <select
+                  <Label>Role</Label>
+                  <Select
                     value={inviteData.role}
                     onChange={(e) => setInviteData({ ...inviteData, role: e.target.value })}
-                    className="form-input w-full"
+                    className="w-full"
                   >
                     {ROLES.map((role) => (
                       <option key={role.value} value={role.value}>
                         {role.label} — {role.description}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   An email will be sent with a link to set up their account. The invitation expires in 72 hours.
                 </p>
               </div>
               <div className="modal-footer">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={() => {
                     setShowInviteModal(false);
                     setInviteData({ email: '', firstName: '', lastName: '', role: 'viewer' });
                     setError(null);
                   }}
-                  className="btn btn-secondary w-full sm:w-auto"
+                  className="w-full sm:w-auto"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
                   disabled={sendInviteMutation.isPending}
-                  className="btn btn-primary w-full sm:w-auto flex items-center justify-center"
+                  loading={sendInviteMutation.isPending}
+                  className="w-full sm:w-auto flex items-center justify-center"
                 >
                   {sendInviteMutation.isPending ? (
                     <>
@@ -670,13 +681,12 @@ export default function UserManagement() {
                       Send Invitation
                     </>
                   )}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         </div>
       )}
-
     </div>
   );
 }

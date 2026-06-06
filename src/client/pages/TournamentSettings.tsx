@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import {
@@ -17,6 +17,13 @@ import { DEFAULT_WEIGHT_CLASSES } from '../../shared/constants/weight-classes';
 import TournamentRulesEditor from '../components/TournamentRulesEditor';
 import { DEFAULT_TOURNAMENT_RULES, type TournamentRules, parseTournamentRules } from '../../shared/constants/tournament-rules';
 import { useToast } from '../context/ToastContext';
+import { Card, CardHeader, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
+import { Input } from '../components/ui';
+import { Label } from '../components/ui';
+import { Select } from '../components/ui';
+import { DataTable, TableHead, TableBody } from '../components/ui';
 
 interface Tournament {
   id: string;
@@ -203,46 +210,35 @@ export default function TournamentSettings() {
   return (
     <div>
       {/* Page Header */}
-      <div className="page-header mb-6">
-        <div>
-          <Link
-            to={`/tournaments/${id}`}
-            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Tournament
-          </Link>
-          <h1 className="page-title">
-            Settings - {tournament?.name}
-          </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Configure tournament rules and categorization
-          </p>
-        </div>
-        <div className="flex gap-2 sm:gap-3">
-          <button onClick={() => setShowResetConfirm(true)} className="btn btn-secondary">
-            <RotateCcw className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Reset</span>
-          </button>
-          <button
-            onClick={() => saveMutation.mutate(settings)}
-            disabled={!hasChanges || saveMutation.isPending}
-            className="btn btn-primary flex items-center"
-          >
-            {saveMutation.isPending ? (
-              <>
-                <Spinner size="sm" className="mr-2" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Save Settings</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title={`Settings - ${tournament?.name}`}
+        description="Configure tournament rules and categorization"
+        actions={
+          <div className="flex gap-2 sm:gap-3">
+            <Button variant="secondary" onClick={() => setShowResetConfirm(true)}>
+              <RotateCcw className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Reset</span>
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => saveMutation.mutate(settings)}
+              disabled={!hasChanges || saveMutation.isPending}
+              loading={saveMutation.isPending}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Save Settings</span>
+            </Button>
+          </div>
+        }
+      >
+        <Link
+          to={`/tournaments/${id}`}
+          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back to Tournament
+        </Link>
+      </PageHeader>
 
       {/* Success Message */}
       {showSaveSuccess && (
@@ -252,22 +248,20 @@ export default function TournamentSettings() {
       )}
 
       {/* General Settings */}
-      <div className="card mb-6">
-        <div className="card-header">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
-            <Settings className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
-            General Settings
-          </h2>
-        </div>
-        <div className="card-body">
+      <Card className="mb-6">
+        <CardHeader
+          title="General Settings"
+          icon={Settings}
+        />
+        <CardBody>
           <div className="max-w-md">
-            <label className="form-label">
+            <Label>
               Division Split Threshold
               <span className="text-gray-500 dark:text-gray-400 font-normal ml-2">
                 (max competitors per division)
               </span>
-            </label>
-            <input
+            </Label>
+            <Input
               type="number"
               min="2"
               max="16"
@@ -275,112 +269,113 @@ export default function TournamentSettings() {
               onChange={(e) =>
                 updateSettings({ divisionThreshold: parseInt(e.target.value) || 8 })
               }
-              className="form-input w-32"
+              className="w-32"
             />
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Divisions with more competitors will be split (e.g., DIV1, DIV2)
             </p>
           </div>
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
       {/* Age Groups */}
-      <div className="card mb-6">
-        <div className="card-header flex items-center justify-between">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white">Age Groups</h2>
-          <button onClick={addAgeGroup} className="btn btn-secondary text-sm">
-            <Plus className="h-4 w-4 mr-1" />
-            Add
-          </button>
-        </div>
-        <div className="card-body p-0 overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
+      <Card className="mb-6">
+        <CardHeader
+          title="Age Groups"
+          action={
+            <Button variant="secondary" size="sm" onClick={addAgeGroup}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
+          }
+        />
+        <CardBody className="p-0">
+          <div className="overflow-x-auto">
+            <DataTable>
+              <TableHead>
                 <th>Label</th>
                 <th>Min Age</th>
                 <th>Max Age</th>
                 <th></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
-              {settings.ageGroups.map((group, index) => (
-                <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <td>
-                    <input
-                      type="text"
-                      value={group.label}
-                      onChange={(e) =>
-                        updateAgeGroup(index, { label: e.target.value })
-                      }
-                      className="form-input w-24"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min="0"
-                      max="99"
-                      value={group.min}
-                      onChange={(e) =>
-                        updateAgeGroup(index, { min: parseInt(e.target.value) || 0 })
-                      }
-                      className="form-input w-20"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min="0"
-                      max="99"
-                      value={group.max}
-                      onChange={(e) =>
-                        updateAgeGroup(index, { max: parseInt(e.target.value) || 99 })
-                      }
-                      className="form-input w-20"
-                    />
-                  </td>
-                  <td>
-                    <button
-                      onClick={() => removeAgeGroup(index)}
-                      className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 touch-target"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              </TableHead>
+              <TableBody>
+                {settings.ageGroups.map((group, index) => (
+                  <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td>
+                      <Input
+                        type="text"
+                        value={group.label}
+                        onChange={(e) =>
+                          updateAgeGroup(index, { label: e.target.value })
+                        }
+                        className="w-24"
+                      />
+                    </td>
+                    <td>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="99"
+                        value={group.min}
+                        onChange={(e) =>
+                          updateAgeGroup(index, { min: parseInt(e.target.value) || 0 })
+                        }
+                        className="w-20"
+                      />
+                    </td>
+                    <td>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="99"
+                        value={group.max}
+                        onChange={(e) =>
+                          updateAgeGroup(index, { max: parseInt(e.target.value) || 99 })
+                        }
+                        className="w-20"
+                      />
+                    </td>
+                    <td>
+                      <button
+                        onClick={() => removeAgeGroup(index)}
+                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 touch-target"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </TableBody>
+            </DataTable>
+          </div>
+        </CardBody>
+      </Card>
 
       {/* Weight Classes */}
-      <div className="card">
-        <div className="card-header flex items-center justify-between">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white">Weight Classes</h2>
-          <button onClick={addWeightClass} className="btn btn-secondary text-sm">
-            <Plus className="h-4 w-4 mr-1" />
-            Add
-          </button>
-        </div>
+      <Card>
+        <CardHeader
+          title="Weight Classes"
+          action={
+            <Button variant="secondary" size="sm" onClick={addWeightClass}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
+          }
+        />
         {settings.weightClasses.length === 0 ? (
-          <div className="card-body">
+          <CardBody>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
               No custom weight classes. Using system defaults.
             </p>
-            <button
-              onClick={loadDefaultWeightClasses}
-              className="btn btn-secondary text-sm"
-            >
+            <Button variant="secondary" size="sm" onClick={loadDefaultWeightClasses}>
               Load Defaults
-            </button>
-          </div>
+            </Button>
+          </CardBody>
         ) : (
-          <div className="card-body p-0 overflow-x-auto">
-            <table className="data-table">
-              <thead>
-                <tr>
+          <CardBody className="p-0">
+            <div className="overflow-x-auto">
+              <DataTable>
+                <TableHead>
                   <th>Name</th>
                   <th>Gender</th>
                   <th>Age Min</th>
@@ -388,81 +383,110 @@ export default function TournamentSettings() {
                   <th>Min (lbs)</th>
                   <th>Max (lbs)</th>
                   <th></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
-                {settings.weightClasses.map((wc, index) => (
-                  <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td>
-                      <input type="text" value={wc.name}
-                        onChange={(e) => updateWeightClass(index, { name: e.target.value })}
-                        className="form-input w-24" />
-                    </td>
-                    <td>
-                      <select value={wc.gender}
-                        onChange={(e) => updateWeightClass(index, { gender: e.target.value as 'M' | 'F' | 'all' })}
-                        className="form-input w-20">
-                        <option value="all">Both</option>
-                        <option value="M">Male</option>
-                        <option value="F">Female</option>
-                      </select>
-                    </td>
-                    <td><input type="number" min="0" max="99" value={wc.ageMin}
-                      onChange={(e) => updateWeightClass(index, { ageMin: parseInt(e.target.value) || 0 })}
-                      className="form-input w-16" /></td>
-                    <td><input type="number" min="0" max="99" value={wc.ageMax}
-                      onChange={(e) => updateWeightClass(index, { ageMax: parseInt(e.target.value) || 99 })}
-                      className="form-input w-16" /></td>
-                    <td><input type="number" min="0" value={wc.weightMinLbs}
-                      onChange={(e) => updateWeightClass(index, { weightMinLbs: parseInt(e.target.value) || 0 })}
-                      className="form-input w-20" /></td>
-                    <td><input type="number" min="0" value={wc.weightMaxLbs}
-                      onChange={(e) => updateWeightClass(index, { weightMaxLbs: parseInt(e.target.value) || 999 })}
-                      className="form-input w-20" /></td>
-                    <td>
-                      <button onClick={() => removeWeightClass(index)}
-                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 touch-target">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </TableHead>
+                <TableBody>
+                  {settings.weightClasses.map((wc, index) => (
+                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <td>
+                        <Input
+                          type="text"
+                          value={wc.name}
+                          onChange={(e) => updateWeightClass(index, { name: e.target.value })}
+                          className="w-24"
+                        />
+                      </td>
+                      <td>
+                        <Select
+                          value={wc.gender}
+                          onChange={(e) => updateWeightClass(index, { gender: e.target.value as 'M' | 'F' | 'all' })}
+                          className="w-20"
+                        >
+                          <option value="all">Both</option>
+                          <option value="M">Male</option>
+                          <option value="F">Female</option>
+                        </Select>
+                      </td>
+                      <td>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="99"
+                          value={wc.ageMin}
+                          onChange={(e) => updateWeightClass(index, { ageMin: parseInt(e.target.value) || 0 })}
+                          className="w-16"
+                        />
+                      </td>
+                      <td>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="99"
+                          value={wc.ageMax}
+                          onChange={(e) => updateWeightClass(index, { ageMax: parseInt(e.target.value) || 99 })}
+                          className="w-16"
+                        />
+                      </td>
+                      <td>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={wc.weightMinLbs}
+                          onChange={(e) => updateWeightClass(index, { weightMinLbs: parseInt(e.target.value) || 0 })}
+                          className="w-20"
+                        />
+                      </td>
+                      <td>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={wc.weightMaxLbs}
+                          onChange={(e) => updateWeightClass(index, { weightMaxLbs: parseInt(e.target.value) || 999 })}
+                          className="w-20"
+                        />
+                      </td>
+                      <td>
+                        <button
+                          onClick={() => removeWeightClass(index)}
+                          className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 touch-target"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </TableBody>
+              </DataTable>
+            </div>
+          </CardBody>
         )}
-      </div>
+      </Card>
 
       {/* Tournament Rules (v2) */}
-      <div className="card mb-6">
-        <div className="card-header flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white">Tournament Rules</h2>
-            <p className="text-xs text-gray-500 mt-1">
-              The full rules engine that drives division categorization, bracket generation, and merging.
-              Matches the workflow used in the Newton's Championship 2025 .xlsm (CB/BB tiers, 8 age bands, 3-4 weight classes).
-            </p>
-          </div>
-        </div>
-        <div className="card-body">
+      <Card className="mt-6">
+        <CardHeader
+          title="Tournament Rules"
+          description="The full rules engine that drives division categorization, bracket generation, and merging. Matches the workflow used in the Newton's Championship 2025 .xlsm (CB/BB tiers, 8 age bands, 3-4 weight classes)."
+        />
+        <CardBody>
           <RulesManager
             tournamentId={id!}
             tournamentSettings={tournament?.settings}
             onRulesChange={setHasChanges}
           />
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
       {/* Unsaved Changes Warning */}
       {hasChanges && (
         <div className="fixed bottom-4 right-4 bg-yellow-100 dark:bg-yellow-900/80 border border-yellow-400 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3">
           <span className="text-sm">You have unsaved changes</span>
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => saveMutation.mutate(settings)}
-            className="btn btn-primary text-sm py-1.5 px-3"
           >
             Save
-          </button>
+          </Button>
         </div>
       )}
 
@@ -542,33 +566,34 @@ function RulesManager({
 
   return (
     <div>
-    <TournamentRulesEditor
-      rules={rules}
-      onChange={handleChange}
-      onReset={() => setShowResetRulesConfirm(true)}
-    />
-    <div className="mt-4 flex justify-end gap-2">
-      <button
-        onClick={() => saveMutation.mutate(rules)}
-        disabled={saving || saveMutation.isPending}
-        className="btn btn-primary"
-      >
-        {saveMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-        Save Rules
-      </button>
+      <TournamentRulesEditor
+        rules={rules}
+        onChange={handleChange}
+        onReset={() => setShowResetRulesConfirm(true)}
+      />
+      <div className="mt-4 flex justify-end gap-2">
+        <Button
+          variant="primary"
+          onClick={() => saveMutation.mutate(rules)}
+          disabled={saving || saveMutation.isPending}
+          loading={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+          Save Rules
+        </Button>
+      </div>
+      <ConfirmDialog
+        isOpen={showResetRulesConfirm}
+        onClose={() => setShowResetRulesConfirm(false)}
+        onConfirm={async () => {
+          setShowResetRulesConfirm(false);
+          await resetRulesMutation.mutateAsync();
+        }}
+        title="Reset Tournament Rules"
+        message="Are you sure you want to reset the tournament rules to defaults? This won't affect divisions you've already generated."
+        confirmText="Reset Rules"
+        variant="warning"
+      />
     </div>
-    <ConfirmDialog
-      isOpen={showResetRulesConfirm}
-      onClose={() => setShowResetRulesConfirm(false)}
-      onConfirm={async () => {
-        setShowResetRulesConfirm(false);
-        await resetRulesMutation.mutateAsync();
-      }}
-      title="Reset Tournament Rules"
-      message="Are you sure you want to reset the tournament rules to defaults? This won't affect divisions you've already generated."
-      confirmText="Reset Rules"
-      variant="warning"
-    />
-    </div>
-    );
-    }
+  );
+}

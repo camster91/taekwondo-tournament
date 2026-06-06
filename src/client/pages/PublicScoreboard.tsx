@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Trophy, Clock, Users, ChevronRight, Award, Zap, Radio, MapPin } from 'lucide-react';
+import { Card, CardBody } from '../components/ui';
+import { StatTile } from '../components/ui';
+import { Button } from '../components/ui';
 
 interface Match {
   id: string;
@@ -180,43 +183,41 @@ export default function PublicScoreboard() {
           </div>
         </div>
 
-        {/* Ring tabs */}
+        {/* Ring tabs — using Button components */}
         <div className="px-4 md:px-8 pb-0 flex items-end justify-between border-t border-white/5 pt-2 overflow-x-auto">
           <div className="flex items-end gap-1">
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => { setActiveRing('all'); setCycleEnabled(false); }}
-              className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
-                activeRing === 'all'
-                  ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10'
-                  : 'text-slate-400 hover:text-white'
-              }`}
+              className={`rounded-t-lg ${activeRing === 'all' ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10' : 'text-slate-400 hover:text-white'}`}
             >
               All rings
-            </button>
+            </Button>
             {ringNumbers.map((ring) => (
-              <button
+              <Button
                 key={ring}
+                variant="ghost"
+                size="sm"
                 onClick={() => { setActiveRing(ring); setCycleEnabled(false); }}
-                className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-2 ${
-                  activeRing === ring
-                    ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10'
-                    : 'text-slate-400 hover:text-white'
-                }`}
+                className={`rounded-t-lg flex items-center gap-2 ${activeRing === ring ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10' : 'text-slate-400 hover:text-white'}`}
               >
                 <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                 Ring {ring}
                 <span className="text-xs opacity-60">
                   ({matchesByRing[ring]?.filter((m) => m.status === 'in_progress').length || 0} live)
                 </span>
-              </button>
+              </Button>
             ))}
             {activeRing !== 'all' && (
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => { setActiveRing('all'); setCycleEnabled(true); }}
-                className="ml-2 px-3 py-2 text-xs text-slate-500 hover:text-white"
+                className="ml-2 text-xs text-slate-500 hover:text-white"
               >
                 Resume auto-cycle
-              </button>
+              </Button>
             )}
           </div>
           <div className="text-xs text-slate-500 pb-3">
@@ -252,41 +253,42 @@ export default function PublicScoreboard() {
               {inProgressMatches.map((match) => {
                 const division = getDivisionForMatch(match);
                 return (
-                  <div
-                    key={match.id}
-                    className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-900 border-2 border-amber-500/40 p-6"
-                  >
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
-                    <div className="relative">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="text-sm text-amber-300 font-semibold uppercase tracking-wider">
-                          {division?.name} · Match #{match.matchNumber}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs text-amber-300">
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" /> LIVE
+                  <Card key={match.id} className="overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-900 border-2 border-amber-500/40">
+                    <CardBody className="p-6">
+                      <div className="relative">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
+                        <div className="relative">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="text-sm text-amber-300 font-semibold uppercase tracking-wider">
+                              {division?.name} · Match #{match.matchNumber}
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-amber-300">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" /> LIVE
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
+                            <div className="min-w-0">
+                              <div className="text-xl md:text-3xl lg:text-4xl font-bold tracking-tight">
+                                {getCompetitorName(match.competitor1)}
+                              </div>
+                              <div className="text-slate-400 text-sm mt-0.5">
+                                {getCompetitorSchool(match.competitor1) || '—'}
+                              </div>
+                            </div>
+                            <div className="px-2 md:px-4 text-xl md:text-2xl font-black text-slate-600 tracking-widest">VS</div>
+                            <div className="min-w-0 text-right">
+                              <div className="text-xl md:text-3xl lg:text-4xl font-bold tracking-tight">
+                                {getCompetitorName(match.competitor2)}
+                              </div>
+                              <div className="text-slate-400 text-sm mt-0.5">
+                                {getCompetitorSchool(match.competitor2) || '—'}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
-                        <div className="min-w-0">
-                          <div className="text-xl md:text-3xl lg:text-4xl font-bold tracking-tight">
-                            {getCompetitorName(match.competitor1)}
-                          </div>
-                          <div className="text-slate-400 text-sm mt-0.5">
-                            {getCompetitorSchool(match.competitor1) || '—'}
-                          </div>
-                        </div>
-                        <div className="px-2 md:px-4 text-xl md:text-2xl font-black text-slate-600 tracking-widest">VS</div>
-                        <div className="min-w-0 text-right">
-                          <div className="text-xl md:text-3xl lg:text-4xl font-bold tracking-tight">
-                            {getCompetitorName(match.competitor2)}
-                          </div>
-                          <div className="text-slate-400 text-sm mt-0.5">
-                            {getCompetitorSchool(match.competitor2) || '—'}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    </CardBody>
+                  </Card>
                 );
               })}
             </div>
@@ -331,7 +333,7 @@ export default function PublicScoreboard() {
           </div>
         </div>
 
-        {/* Right Column - Recent Results& Stats */}
+        {/* Right Column - Recent Results & Stats */}
         <div className="w-full md:w-1/2 p-4 md:p-6">
           <div className="flex items-center mb-6">
             <Award className="h-6 w-6 text-green-400 mr-2" />
@@ -357,26 +359,28 @@ export default function PublicScoreboard() {
                     : match.competitor1;
 
                 return (
-                  <div key={match.id} className="bg-gray-900/50 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="text-sm text-gray-500 mb-1">{division?.name}</div>
-                        <div className="flex items-center">
-                          <Award className="h-5 w-5 text-yellow-400 mr-2" />
-                          <span className="font-bold text-green-400">
-                            {getCompetitorName(winner)}
-                          </span>
-                          <span className="mx-2 text-gray-600">defeated</span>
-                          <span className="text-gray-400">{getCompetitorName(loser)}</span>
+                  <Card key={match.id} className="bg-gray-900/50">
+                    <CardBody className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="text-sm text-gray-500 mb-1">{division?.name}</div>
+                          <div className="flex items-center">
+                            <Award className="h-5 w-5 text-yellow-400 mr-2" />
+                            <span className="font-bold text-green-400">
+                              {getCompetitorName(winner)}
+                            </span>
+                            <span className="mx-2 text-gray-600">defeated</span>
+                            <span className="text-gray-400">{getCompetitorName(loser)}</span>
+                          </div>
                         </div>
+                        {(match.score1 || match.score2) && (
+                          <div className="text-lg font-mono font-bold text-gray-400">
+                            {match.score1 || '0'} - {match.score2 || '0'}
+                          </div>
+                        )}
                       </div>
-                      {(match.score1 || match.score2) && (
-                        <div className="text-lg font-mono font-bold text-gray-400">
-                          {match.score1 || '0'} - {match.score2 || '0'}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                    </CardBody>
+                  </Card>
                 );
               })}
             </div>
