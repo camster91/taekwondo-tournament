@@ -79,8 +79,24 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
       where: { email: normalizedEmail },
     });
 
-    // Always return success to prevent email enumeration
-    if (!user || !user.isActive) {
+    // Dev mode (no email configured): auto-create the user so the magic link
+    // sign-in flow works for any email a real user types. In production with
+    // email configured, only existing users get a real link.
+    const inDevMode = !isEmailConfigured();
+    if (!user && inDevMode) {
+      await prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          firstName: normalizedEmail.split('@')[0],
+          lastName: '(dev)',
+          role: 'admin',
+          isActive: true,
+        },
+      });
+    }
+
+    // Always return success to prevent email enumeration (in production)
+    if ((!user && !inDevMode) || (user && !user.isActive)) {
       return res.json({ message: 'If an account exists, a sign-in link has been sent' });
     }
 
