@@ -17,6 +17,9 @@ import {
   Shield,
   ChevronRight,
   Check,
+  Copy,
+  ExternalLink,
+  Terminal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
@@ -276,8 +279,9 @@ export default function Login() {
                   <CodeForm
                     email={email} code={code} setCode={setCode}
                     onSubmit={handleCodeSubmit} loading={isLoading}
-                    onBack={() => { setStep('email'); setCode(''); setError(''); }}
+                    onBack={() => { setStep('email'); setCode(''); setError(''); setDevModeData(null); }}
                     codeInputRef={codeInputRef}
+                    devModeData={devModeData}
                   />
                 )}
 
@@ -374,15 +378,90 @@ function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: 
   );
 }
 
-function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRef }: any) {
+function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRef, devModeData }: any) {
+  const [copied, setCopied] = useState<'url' | 'code' | null>(null);
+
+  const handleCopy = async (type: 'url' | 'code', value: string) => {
+    await navigator.clipboard.writeText(value);
+    setCopied(type);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
   return (
     <div className="space-y-5 animate-slide-up">
+      {/* Dev mode: show magic link directly */}
+      {devModeData && (
+        <div className="relative overflow-hidden rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-gradient-to-br from-indigo-50 via-violet-50 to-fuchsia-50 dark:from-indigo-950/40 dark:via-violet-950/40 dark:to-fuchsia-950/40 p-5">
+          {/* Decorative glow */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-400/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+          
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/50">
+                <Terminal className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Dev Mode — Email Not Configured</span>
+            </div>
+
+            <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+              Email is not set up in this environment. Copy the link below and open it to sign in.
+            </p>
+
+            {/* Magic URL row */}
+            <div className="mb-3">
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">Magic link</div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={devModeData.magicUrl}
+                  className="flex-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-200 font-mono truncate"
+                />
+                <button
+                  onClick={() => handleCopy('url', devModeData.magicUrl)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copied === 'url' ? 'Copied!' : 'Copy link'}
+                </button>
+                <a
+                  href={devModeData.magicUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open
+                </a>
+              </div>
+            </div>
+
+            {/* 6-digit code row */}
+            <div>
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">6-digit code</div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 text-center text-2xl font-mono font-bold tracking-[0.3em] text-indigo-700 dark:text-indigo-300 py-2">
+                  {devModeData.code}
+                </div>
+                <button
+                  onClick={() => handleCopy('code', devModeData.code)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copied === 'code' ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-4 flex items-start">
         <CheckCircle className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0 mt-0.5" />
         <div className="text-sm">
           <div className="font-medium text-emerald-900 dark:text-emerald-200">Sign-in link sent</div>
           <p className="mt-1 text-emerald-700 dark:text-emerald-300/80">
-            We sent a link to <strong>{email}</strong>. Or enter the 6-digit code below.
+            We sent a link to <strong>{email}</strong>.{devModeData ? ' Or use the magic link above.' : ' Or enter the 6-digit code below.'}
           </p>
         </div>
       </div>
