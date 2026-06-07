@@ -446,7 +446,8 @@ export default function CheckIn() {
 
       {/* Weight Entry Modal */}
       {selectedRegistration && (
-        <div className="modal-backdrop">
+        <div className="modal-container flex items-center justify-center p-4">
+          <div className="modal-backdrop" onClick={() => { setSelectedRegistration(null); setCheckInWeight(''); }} />
           <div className="modal-panel max-w-md">
             <div className="modal-header">
               <h3 className="text-xl font-bold text-gray-900 dark:text-white">
