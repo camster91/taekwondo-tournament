@@ -1,5 +1,5 @@
 import { LucideIcon } from 'lucide-react';
-import { ReactNode, createElement } from 'react';
+import { ReactNode, createElement, isValidElement } from 'react';
 
 interface EmptyStateProps {
   icon: LucideIcon | ReactNode;
@@ -26,9 +26,9 @@ export default function EmptyState({
     <div className="text-center py-12 px-6">
       <div className="mx-auto w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
         <span className="[&>svg]:h-8 [&>svg]:w-8 [&>svg]:text-gray-400 [&>svg]:dark:text-gray-500">
-          {typeof icon === 'function'
-            ? createElement(icon as React.ComponentType<{ className?: string }>, { className: 'h-8 w-8 text-gray-400 dark:text-gray-500' })
-            : icon}
+          {isValidElement(icon)
+            ? icon
+            : createElement(icon as React.ComponentType<{ className?: string }>, { className: 'h-8 w-8 text-gray-400 dark:text-gray-500' })}
         </span>
       </div>
       <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">
