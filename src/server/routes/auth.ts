@@ -83,8 +83,9 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
     // sign-in flow works for any email a real user types. In production with
     // email configured, only existing users get a real link.
     const inDevMode = !isEmailConfigured();
+    let activeUser = user;
     if (!user && inDevMode) {
-      await prisma.user.create({
+      activeUser = await prisma.user.create({
         data: {
           email: normalizedEmail,
           firstName: normalizedEmail.split('@')[0],
@@ -119,12 +120,12 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
     const magicUrl = `${baseUrl}/verify?token=${token}`;
 
     const template = magicLinkEmail({
-      recipientName: user.firstName,
+      recipientName: activeUser.firstName,
       magicUrl,
       code,
     });
 
-    const emailResult = await sendEmail(user.email, template.subject, template.html);
+    const emailResult = await sendEmail(activeUser.email, template.subject, template.html);
 
     // Dev mode: email not configured — return magic link directly in response
     if (!emailResult.success && !isEmailConfigured()) {
