@@ -1,11 +1,12 @@
 import { AlertTriangle, X } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
   title: string;
-  message: string;
+  message: ReactNode;
   confirmText?: string;
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'info';
