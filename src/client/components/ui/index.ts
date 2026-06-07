@@ -11,7 +11,7 @@ export { default as Input } from './Input';
 export { default as Label } from './Label';
 export { default as PageHeader } from './PageHeader';
 export { default as Select } from './Select';
-export { default as Skeleton } from './Skeleton';
+export { CardSkeleton, TableSkeleton, StatsSkeleton, Skeleton as default } from './Skeleton';
 export { default as Spinner, LoadingOverlay, PageLoader } from './Spinner';
 export { default as StatTile } from './StatTile';
 export { default as Textarea } from './Textarea';

@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 
 interface PageHeaderProps {
-  title: string;
+  title?: string;
   description?: string;
   count?: number | string;
   actions?: ReactNode;
+  children?: ReactNode;
   className?: string;
 }
 
@@ -13,6 +14,7 @@ export default function PageHeader({
   description,
   count,
   actions,
+  children,
   className = '',
 }: PageHeaderProps) {
   return (
@@ -39,6 +41,7 @@ export default function PageHeader({
           {actions}
         </div>
       )}
+      {children}
     </div>
   );
 }

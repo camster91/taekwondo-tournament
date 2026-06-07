@@ -9,8 +9,8 @@ interface StatTileProps {
   trend?: {
     value: string;
     direction: 'up' | 'down' | 'flat';
-  };
-  accent?: 'default' | 'success' | 'warning' | 'danger' | 'indigo';
+  } | string;
+  accent?: 'default' | 'success' | 'warning' | 'danger' | 'indigo' | 'blue' | 'green' | 'yellow' | 'purple' | 'red';
   className?: string;
 }
 
@@ -20,6 +20,11 @@ const accentValueClasses: Record<NonNullable<StatTileProps['accent']>, string> =
   warning: 'text-amber-600 dark:text-amber-400',
   danger: 'text-red-600 dark:text-red-400',
   indigo: 'text-indigo-600 dark:text-indigo-400',
+  blue: 'text-blue-600 dark:text-blue-400',
+  green: 'text-emerald-600 dark:text-emerald-400',
+  yellow: 'text-amber-600 dark:text-amber-400',
+  purple: 'text-violet-600 dark:text-violet-400',
+  red: 'text-red-600 dark:text-red-400',
 };
 
 const accentIconBgClasses: Record<NonNullable<StatTileProps['accent']>, string> = {
@@ -28,6 +33,11 @@ const accentIconBgClasses: Record<NonNullable<StatTileProps['accent']>, string> 
   warning: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
   danger: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
   indigo: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400',
+  blue: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
+  green: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
+  yellow: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
+  purple: 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400',
+  red: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
 };
 
 export default function StatTile({
@@ -81,6 +91,11 @@ export default function StatTile({
         )}
       </div>
       {trend && (
+        typeof trend === 'string' ? (
+          <div className="mt-3 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+            {trend}
+          </div>
+        ) : (
         <div className="mt-3 flex items-center gap-1">
           {trend.direction === 'up' && (
             <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -102,6 +117,7 @@ export default function StatTile({
             {trend.value}
           </span>
         </div>
+        )
       )}
     </div>
   );
