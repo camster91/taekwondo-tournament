@@ -1,4 +1,4 @@
-import type { ReactNode, ComponentType } from 'react';
+import { createElement, isValidElement, type ReactNode, type ComponentType } from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 interface StatTileProps {
@@ -68,12 +68,15 @@ export default function StatTile({
               accentIconBgClasses[accent],
             ].join(' ')}
           >
-            {/* If icon is a component (function), instantiate it; if it's already
-                an element, render as-is. This lets consumers pass either Users (the
-                component) or <Users /> (the element) and both work. */}
-            {typeof icon === 'function'
-              ? (icon as ComponentType<{ className?: string }>)({ className: 'h-5 w-5' })
-              : icon}
+            {/* Render the icon. Lucide icons are forwardRef objects (not
+                plain functions), so `typeof === 'function'` misses them. Use
+                `isValidElement` to detect pre-built elements, otherwise treat
+                the value as a component reference and instantiate it via
+                createElement. This lets consumers pass either `Users` (the
+                component) or `<Users />` (the element) and both work. */}
+            {isValidElement(icon)
+              ? icon
+              : createElement(icon as ComponentType<{ className?: string }>, { className: 'h-5 w-5' })}
           </div>
         )}
       </div>
