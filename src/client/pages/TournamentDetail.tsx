@@ -49,7 +49,9 @@ function getBeltColor(belt: string) {
 }
 
 export default function TournamentDetail() {
-  const { tournamentId } = useParams<{ tournamentId: string }>();
+  // Route is /tournaments/:id so the param key is 'id'. useParams<{ id }>()
+  // returns the right value, and we alias it locally as tournamentId.
+  const { id: tournamentId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { addToast } = useToast();
