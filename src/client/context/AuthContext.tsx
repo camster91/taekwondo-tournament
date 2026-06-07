@@ -14,7 +14,7 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  requestMagicLink: (email: string) => Promise<{ success: boolean; error?: string }>;
+  requestMagicLink: (email: string) => Promise<{ success: boolean; error?: string; devMode?: boolean; magicUrl?: string; code?: string }>;
   verifyCode: (email: string, code: string) => Promise<{ success: boolean; error?: string }>;
   verifyToken: (token: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -158,6 +158,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!res.ok) {
         return { success: false, error: data.error || 'Failed to send sign-in link' };
+      }
+
+      // Return devMode data if present (email not configured)
+      if (data.devMode) {
+        return {
+          success: true,
+          devMode: true,
+          magicUrl: data.magicUrl,
+          code: data.code,
+        };
       }
 
       return { success: true };

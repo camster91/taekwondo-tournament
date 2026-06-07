@@ -725,14 +725,14 @@ export default function Competitors() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => setEditingCompetitor(c)}
-                              className="h-7 w-7 rounded-md text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 flex items-center justify-center transition-colors"
+                              className="h-10 w-10 sm:h-7 sm:w-7 rounded-md text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 flex items-center justify-center transition-colors"
                               title="Edit"
                             >
                               <Edit className="h-3.5 w-3.5" />
                             </button>
                             <button
                               onClick={() => setDeleteTarget(c)}
-                              className="h-7 w-7 rounded-md text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 flex items-center justify-center transition-colors"
+                              className="h-10 w-10 sm:h-7 sm:w-7 rounded-md text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 flex items-center justify-center transition-colors"
                               title="Delete"
                             >
                               <Trash2 className="h-3.5 w-3.5" />

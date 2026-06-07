@@ -6,7 +6,7 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { createToken, authenticate, type AuthenticatedRequest } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
-import { sendEmail } from '../services/email.js';
+import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
 
 const router = Router();
@@ -109,10 +109,19 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
     });
 
     const emailResult = await sendEmail(user.email, template.subject, template.html);
+
+    // Dev mode: email not configured — return magic link directly in response
+    if (!emailResult.success && !isEmailConfigured()) {
+      return res.json({
+        message: 'If an account exists, a sign-in link has been sent',
+        devMode: true,
+        magicUrl,
+        code,
+      });
+    }
+
     if (!emailResult.success) {
-      console.log(`Magic link requested for ${email} — email not sent: ${emailResult.error}`);
-      console.log(`Magic URL: ${magicUrl}`);
-      console.log(`Code: ${code}`);
+      console.error(`Magic link requested for ${email} — email failed: ${emailResult.error}`);
     }
 
     res.json({ message: 'If an account exists, a sign-in link has been sent' });
