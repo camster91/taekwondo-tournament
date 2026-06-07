@@ -323,6 +323,47 @@ export async function getBracketPlacements(
 }
 
 /**
+ * Enriched placements: returns { place, registrationId, registration: { competitor: {...} } }
+ * shaped like the Prisma Placement model the Results page expects.
+ */
+export async function getBracketPlacementsEnriched(
+  prisma: PrismaClient,
+  bracketId: string
+): Promise<Array<{ place: number; registrationId: string; registration: { id: string; competitor: { id: string; firstName: string; lastName: string; schoolDojang: string | null; belt: string } } }>> {
+  const base = await getBracketPlacements(prisma, bracketId);
+  if (base.length === 0) return [];
+
+  // Bulk-load the registrations+competitors for these placements
+  const regIds = base.map(p => p.competitorId);
+  const registrations = await prisma.registration.findMany({
+    where: { id: { in: regIds } },
+    include: { competitor: true },
+  });
+  const regById = new Map(registrations.map(r => [r.id, r]));
+
+  return base
+    .map((p) => {
+      const reg = regById.get(p.competitorId);
+      if (!reg) return null;
+      return {
+        place: p.place,
+        registrationId: reg.id,
+        registration: {
+          id: reg.id,
+          competitor: {
+            id: reg.competitor.id,
+            firstName: reg.competitor.firstName,
+            lastName: reg.competitor.lastName,
+            schoolDojang: reg.competitor.schoolDojang,
+            belt: reg.competitor.belt,
+          },
+        },
+      };
+    })
+    .filter((p): p is NonNullable<typeof p> => p !== null);
+}
+
+/**
  * Checks if a bracket is complete
  */
 export function isBracketComplete(

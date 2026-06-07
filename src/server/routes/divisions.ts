@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { autoCategorize, previewCategorization, type CategorizationConfig } from '../services/categorization-engine.js';
+import { getBracketPlacementsEnriched } from '../services/match-advancement.js';
 import { getSportProfile } from '../../shared/constants/sport-profiles.js';
 import { Errors } from '../utils/errors.js';
 import {
@@ -89,6 +90,20 @@ router.get('/tournament/:tournamentId', authenticate, async (req: Request, res: 
     ],
   });
 
+  // The Results page reads bracket.placements. Placements are computed from
+  // the bracket's match results (winnerId of finals), not stored on the
+  // bracket model. Compute them here so the response shape matches the
+  // client's expectations.
+  if (withMatches) {
+    await Promise.all(
+      divisions.map(async (d: any) => {
+        if (d.bracket?.id) {
+          d.bracket.placements = await getBracketPlacementsEnriched(prisma, d.bracket.id);
+        }
+      })
+    );
+  }
+
   res.json(divisions);
 });
 
@@ -112,6 +127,10 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
       bracket: {
         include: {
           matches: {
+            include: {
+              competitor1: { include: { competitor: true } },
+              competitor2: { include: { competitor: true } },
+            },
             orderBy: [{ roundNumber: 'asc' }, { matchNumber: 'asc' }],
           },
         },

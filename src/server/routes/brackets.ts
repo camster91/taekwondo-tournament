@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
-import { generateBracket, type BracketStructure } from '../services/bracket-generator.js';
+import { generateBracket, generateSingleElimination, type BracketStructure } from '../services/bracket-generator.js';
 import { generateRoundRobin, generatePoolPlay } from '../services/bracket-formats.js';
 import { advanceWinner, handleByeMatches, getBracketPlacements } from '../services/match-advancement.js';
 import {
@@ -81,9 +81,10 @@ router.post('/division/:divisionId/generate', authenticate, requireRole('admin',
       poolCount,
       advancePerPool,
     });
+  } else if (format === 'single_elim') {
+    bracketStructure = generateSingleElimination(competitors, seedingStrategy);
   } else {
-    // double_elim and single_elim both use the existing double-elim generator
-    // (single_elim is a single-elim variant but we ship double-elim for the common case)
+    // double_elim (default)
     bracketStructure = generateBracket(competitors, seedingStrategy);
   }
 
@@ -363,7 +364,14 @@ router.post('/division/:divisionId/reset', authenticate, async (req: Request, re
 // Generate brackets for all divisions in tournament (requires authentication + admin/director role)
 router.post('/tournament/:tournamentId/generate-all', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { seedingStrategy = 'school_spread' } = req.body;
+  // format defaults to double_elim (matches the historical behavior of this route).
+  // Per-division format can also come from req.body.formats[divisionId] for callers
+  // that want to specify per-division.
+  const {
+    seedingStrategy = 'school_spread',
+    format: defaultFormat = 'double_elim',
+    formats = {},
+  } = req.body;
 
   const divisions = await prisma.division.findMany({
     where: { tournamentId: getParam(req.params.tournamentId) },
@@ -399,12 +407,23 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireRole(
       seedPosition: a.seedPosition,
     }));
 
-    const bracketStructure = generateBracket(competitors, seedingStrategy);
+    const format = formats[division.id] || defaultFormat;
+    let bracketStructure: BracketStructure;
+    if (format === 'single_elim') {
+      bracketStructure = generateSingleElimination(competitors, seedingStrategy);
+    } else if (format === 'round_robin') {
+      bracketStructure = generateRoundRobin(competitors, { seedingStrategy: seedingStrategy as any });
+    } else if (format === 'pool_play') {
+      bracketStructure = generatePoolPlay(competitors, { seedingStrategy: seedingStrategy as any });
+    } else {
+      bracketStructure = generateBracket(competitors, seedingStrategy);
+    }
 
     const bracket = await prisma.bracket.create({
       data: {
         divisionId: division.id,
         structure: JSON.stringify(bracketStructure),
+        format,
       },
     });
 

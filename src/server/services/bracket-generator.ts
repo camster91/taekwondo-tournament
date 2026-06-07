@@ -774,3 +774,94 @@ function generateDoubleEliminationBracket(competitors: (CompetitorSeed | null)[]
 
   return { winners, losers, finals, competitorCount: count };
 }
+
+/**
+ * Single-elimination bracket: no losers bracket, one grand final.
+ * Same seeding/padding logic as the double-elim generator; downstream
+ * code treats the single final as a 1-match finals array.
+ */
+function generateSingleEliminationBracket(padded: (CompetitorSeed | null)[]): BracketStructure {
+  const count = padded.length;
+  const rounds = Math.log2(count);
+  const winners: MatchData[] = [];
+  const roundMatches: number[][] = [];
+  let matchNumber = 1;
+
+  // Round 1: pair seeded competitors (with byes for padded slots).
+  const firstRoundMatchNumbers: number[] = [];
+  for (let i = 0; i < count; i += 2) {
+    const m: MatchData = {
+      matchNumber,
+      round: 1,
+      competitor1Id: padded[i]?.registrationId || null,
+      competitor2Id: padded[i + 1]?.registrationId || null,
+    };
+    firstRoundMatchNumbers.push(matchNumber);
+    winners.push(m);
+    matchNumber++;
+  }
+  roundMatches.push(firstRoundMatchNumbers);
+
+  // Rounds 2..N: link to winners of previous round.
+  for (let round = 2; round <= rounds; round++) {
+    const prevRound = roundMatches[round - 2];
+    const thisRoundMatchNumbers: number[] = [];
+    for (let i = 0; i < prevRound.length; i += 2) {
+      const m: MatchData = {
+        matchNumber,
+        round,
+        competitor1Id: null,
+        competitor2Id: null,
+      };
+      thisRoundMatchNumbers.push(matchNumber);
+      const m1 = winners.find(w => w.matchNumber === prevRound[i])!;
+      const m2 = winners.find(w => w.matchNumber === prevRound[i + 1])!;
+      m1.nextWinnerMatch = matchNumber;
+      m2.nextWinnerMatch = matchNumber;
+      winners.push(m);
+      matchNumber++;
+    }
+    roundMatches.push(thisRoundMatchNumbers);
+  }
+
+  // Promote the last winners match into `finals` so the existing
+  // match-advancement / PDF / display code paths handle it the same
+  // way they handle the double-elim grand finals.
+  const lastWinnerMatch = winners[winners.length - 1];
+  lastWinnerMatch.nextWinnerMatch = undefined;
+  const finals: MatchData[] = [lastWinnerMatch];
+  winners.pop();
+
+  return { winners, losers: [], finals, competitorCount: count };
+}
+
+export function generateSingleElimination(
+  competitors: CompetitorSeed[],
+  strategy: SeedingStrategy = 'school_spread',
+  config?: Partial<SeedingConfig>
+): BracketStructure {
+  const count = competitors.length;
+  if (count === 0) {
+    return { winners: [], losers: [], finals: [], competitorCount: 0 };
+  }
+  if (count === 1) {
+    return {
+      winners: [],
+      losers: [],
+      finals: [{
+        matchNumber: 1,
+        round: 1,
+        competitor1Id: competitors[0].registrationId,
+        competitor2Id: null,
+      }],
+      competitorCount: 1,
+    };
+  }
+  const seeded = applySeedingStrategy(competitors, strategy, config);
+  const bracketSize = nextPowerOf2(count);
+  const padded = padWithByes(seeded, bracketSize);
+  const seedingInfo = calculateSeedingMetrics(seeded, strategy);
+  const bracket = generateSingleEliminationBracket(padded);
+  bracket.seedingInfo = seedingInfo;
+  return bracket;
+}
