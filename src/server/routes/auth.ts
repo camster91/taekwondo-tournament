@@ -96,6 +96,11 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
       });
     }
 
+    if (!activeUser) {
+      // Production path: user not found, email enumeration-safe response.
+      return res.json({ message: 'If an account exists, a sign-in link has been sent' });
+    }
+
     // Always return success to prevent email enumeration (in production)
     if ((!user && !inDevMode) || (user && !user.isActive)) {
       return res.json({ message: 'If an account exists, a sign-in link has been sent' });

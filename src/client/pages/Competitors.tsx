@@ -519,7 +519,7 @@ export default function Competitors() {
             >
               <option value="">All schools</option>
               {aggregates && Object.entries(aggregates.bySchool || {}).map(([school, count]) => (
-                <option key={school} value={school}>{school} ({count})</option>
+                <option key={school} value={school}>{school} ({String(count)})</option>
               ))}
             </Select>
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -538,7 +538,7 @@ export default function Competitors() {
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                       }`}
                     >
-                      {belt} <span className={`tabular-nums ${active ? 'opacity-80' : 'opacity-60'}`}>{count}</span>
+                      {belt} <span className={`tabular-nums ${active ? 'opacity-80' : 'opacity-60'}`}>{String(count)}</span>
                     </button>
                   );
                 })}
