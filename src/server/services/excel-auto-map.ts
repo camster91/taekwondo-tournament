@@ -175,7 +175,7 @@ export function autoDetectMapping(buffer: Buffer): AutoMapResult {
     }
   }
 
-  const rawHeaders: string[] = (allRows[headerRowIdx] || []).map((c) => String(c || '').trim());
+  const rawHeaders: string[] = (allRows[headerRowIdx] || []).map((c: unknown) => String(c || '').trim());
   const dataRows = allRows.slice(headerRowIdx + 1);
   const sampleRow: Record<string, any> = {};
   for (let i = 0; i < dataRows.length; i++) {
