@@ -115,8 +115,14 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
       },
     });
 
-    // Build magic link URL
-    const baseUrl = process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:5173';
+    // Build magic link URL. Prefer the explicit public app URL, then any
+    // allowed origin, then fall back to localhost for local dev.
+    const publicAppUrl = process.env.PUBLIC_APP_URL;
+    const baseUrl = publicAppUrl
+      || (process.env.ALLOWED_ORIGINS && process.env.ALLOWED_ORIGINS !== '*'
+          ? process.env.ALLOWED_ORIGINS.split(',')[0]
+          : null)
+      || 'http://localhost:5173';
     const magicUrl = `${baseUrl}/verify?token=${token}`;
 
     const template = magicLinkEmail({
