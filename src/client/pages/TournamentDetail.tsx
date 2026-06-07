@@ -1,114 +1,174 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
-  Trophy, Users, LayoutGrid, Plus, ClipboardCheck, Settings, Flag,
-  Globe, Lock, Copy, Check, ArrowRight, Trash2, Search, ExternalLink,
-  Activity, AlertTriangle, X, Calendar, MapPin, Edit,
+  Users,
+  LayoutGrid,
+  Settings,
+  Plus,
+  Trash2,
+  Check,
+  ArrowRight,
+  Calendar,
+  ClipboardCheck,
+  Timer,
+  FileDown,
+  Monitor,
+  Medal,
+  LayoutDashboard,
+  Search,
+  X,
+  ChevronLeft,
+  Globe,
+  Lock,
+  Copy,
+  Flag,
+  Activity,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
-import { CardSkeleton } from '../components/ui/Skeleton';
+import { getAuthHeaders } from '../context/AuthContext';
+import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
-import Spinner from '../components/ui/Spinner';
-import { getAuthHeaders } from '../context/AuthContext';
-import { useToast } from '../context/ToastContext';
-import { Card, CardHeader, CardBody } from '../components/ui';
-import { PageHeader } from '../components/ui';
-import { Button } from '../components/ui';
-import { StatTile } from '../components/ui';
+import { PageLoader } from '../components/ui/Spinner';
 
-const BELT_COLORS: Record<string, string> = {
-  'White': 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  'White / Single Yellow Stripe': 'bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400',
-  'White / Double Yellow Stripe': 'bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400',
-  'Yellow': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-  'Yellow / Single Green Stripe': 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300',
-  'Yellow / Double Green Stripe': 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300',
-  'Green': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
-  'Green / Single Blue Stripe': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
-  'Green / Double Blue Stripe': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
-  'Blue': 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300',
-  'Blue / Single Red Stripe': 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300',
-  'Blue / Double Red Stripe': 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300',
-  'Red': 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300',
-  'Red / Single Black Stripe': 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300',
-  'Red / Double Black Stripe': 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300',
-  'Black': 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900',
-};
+interface Tournament {
+  id: string;
+  name: string;
+  date: string;
+  location: string | null;
+  status: string;
+  _count: {
+    registrations: number;
+    divisions: number;
+  };
+}
 
-function getBeltColor(belt: string) {
-  const lower = belt.toLowerCase();
-  if (lower.includes('black')) return 'bg-gray-900 text-white';
-  if (lower.includes('red')) return 'bg-red-500 text-white';
-  if (lower.includes('blue')) return 'bg-blue-500 text-white';
-  if (lower.includes('green')) return 'bg-green-500 text-white';
-  if (lower.includes('yellow')) return 'bg-yellow-400 text-gray-900';
-  if (lower.includes('white')) return 'bg-white text-gray-900 border';
-  return 'bg-gray-200';
+interface Competitor {
+  id: string;
+  firstName: string;
+  lastName: string;
+  gender: string;
+  belt: string;
+  danRank: number | null;
+  weightLbs: number | null;
+  schoolDojang: string | null;
+}
+
+interface Registration {
+  id: string;
+  competitorId: string;
+  patterns: boolean;
+  sparring: boolean;
+  checkedIn: boolean;
+  ageAtTournament: number | null;
+  competitor: Competitor;
 }
 
 export default function TournamentDetail() {
-  // Route is /tournaments/:id so the param key is 'id'. useParams<{ id }>()
-  // returns the right value, and we alias it locally as tournamentId.
-  const { id: tournamentId } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const { addToast } = useToast();
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
-  const [showCloseRegistrationConfirm, setShowCloseRegistrationConfirm] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
   const [registerPatterns, setRegisterPatterns] = useState(true);
   const [registerSparring, setRegisterSparring] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const [modalSearch, setModalSearch] = useState('');
-
-  const registrationUrl = `${window.location.origin}/register?tournament=${tournamentId}`;
+  const [deleteTarget, setDeleteTarget] = useState<Registration | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [showCloseRegistrationConfirm, setShowCloseRegistrationConfirm] = useState(false);
 
-  const copyRegistrationLink = async () => {
-    try {
-      await navigator.clipboard.writeText(registrationUrl);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
-    } catch {
-      addToast('Failed to copy link', 'error');
-    }
-  };
-
-  const { data: tournament, isLoading: tLoading } = useQuery({
-    queryKey: ['tournament', tournamentId],
+  const { data: tournament, isLoading: tournamentLoading } = useQuery<Tournament>({
+    queryKey: ['tournament', id],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${tournamentId}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/tournaments/${id}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to fetch tournament');
       return res.json();
     },
   });
 
-  const { data: registrations, isLoading: regsLoading } = useQuery({
-    queryKey: ['tournament-registrations', tournamentId],
+  const { data: registrations, isLoading: regsLoading } = useQuery<Registration[]>({
+    queryKey: ['registrations', id],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${tournamentId}/registrations`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/tournaments/${id}/registrations`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to fetch registrations');
       return res.json();
     },
   });
 
-  const { data: availableCompetitors } = useQuery({
-    queryKey: ['competitors', 'available', tournamentId],
+  const { data: allCompetitors } = useQuery({
+    queryKey: ['competitors', 'all'],
     queryFn: async () => {
-      const res = await fetch(`/api/competitors?limit=10000`, { headers: getAuthHeaders() });
-      const data = await res.json();
-      const registeredIds = new Set((registrations || []).map((r: any) => r.competitorId));
-      return (data.competitors || []).filter((c: any) => !registeredIds.has(c.id));
+      const res = await fetch('/api/competitors?limit=1000', { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch competitors');
+      return res.json();
     },
-    enabled: !!registrations,
+    enabled: showAddModal,
+  });
+
+  const bulkRegisterMutation = useMutation({
+    mutationFn: async (data: {
+      competitorIds: string[];
+      patterns: boolean;
+      sparring: boolean;
+    }) => {
+      const res = await fetch(`/api/tournaments/${id}/registrations/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to register competitors');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['registrations', id] });
+      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+      setShowAddModal(false);
+      setSelectedCompetitors([]);
+    },
+  });
+
+  const removeRegistrationMutation = useMutation({
+    mutationFn: async (regId: string) => {
+      await fetch(`/api/tournaments/${id}/registrations/${regId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['registrations', id] });
+      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+    },
+  });
+
+  const updateRegistrationMutation = useMutation({
+    mutationFn: async ({
+      regId,
+      patterns,
+      sparring,
+    }: {
+      regId: string;
+      patterns: boolean;
+      sparring: boolean;
+    }) => {
+      const res = await fetch(`/api/tournaments/${id}/registrations/${regId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ patterns, sparring }),
+      });
+      if (!res.ok) throw new Error('Failed to update registration');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['registrations', id] });
+    },
   });
 
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
-      const res = await fetch(`/api/tournaments/${tournamentId}`, {
+      const res = await fetch(`/api/tournaments/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status }),
@@ -117,127 +177,267 @@ export default function TournamentDetail() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
-      addToast('Status updated', 'success');
+      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
     },
   });
 
-  const updateRegistrationMutation = useMutation({
-    mutationFn: async ({ regId, patterns, sparring }: { regId: string; patterns: boolean; sparring: boolean }) => {
-      const res = await fetch(`/api/tournaments/${tournamentId}/registrations/${regId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ patterns, sparring }),
-      });
-      if (!res.ok) throw new Error('Failed to update');
-      return res.json();
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tournament-registrations', tournamentId] }),
+  const registrationUrl = `${window.location.origin}/register?tournament=${id}`;
+
+  const copyRegistrationLink = () => {
+    navigator.clipboard.writeText(registrationUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const registeredIds = new Set(registrations?.map((r) => r.competitorId) || []);
+  const availableCompetitors =
+    allCompetitors?.competitors?.filter(
+      (c: Competitor) => !registeredIds.has(c.id)
+    ) || [];
+
+  const getBeltColor = (belt: string) => {
+    const lower = belt.toLowerCase();
+    if (lower.includes('black')) return 'bg-gray-900 text-white';
+    if (lower.includes('red')) return 'bg-red-500 text-white';
+    if (lower.includes('blue')) return 'bg-blue-500 text-white';
+    if (lower.includes('green')) return 'bg-green-500 text-white';
+    if (lower.includes('yellow')) return 'bg-yellow-400 text-gray-900';
+    if (lower.includes('white')) return 'bg-white text-gray-900 border';
+    return 'bg-gray-200';
+  };
+
+  const filteredRegistrations = registrations?.filter((r) => {
+    const name = `${r.competitor.firstName} ${r.competitor.lastName}`.toLowerCase();
+    const school = r.competitor.schoolDojang?.toLowerCase() || '';
+    const query = searchQuery.toLowerCase();
+    return name.includes(query) || school.includes(query);
   });
 
-  const removeRegistrationMutation = useMutation({
-    mutationFn: async (regId: string) => {
-      await fetch(`/api/tournaments/${tournamentId}/registrations/${regId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tournament-registrations', tournamentId] }),
+  const filteredAvailable = availableCompetitors.filter((c: Competitor) => {
+    const name = `${c.firstName} ${c.lastName}`.toLowerCase();
+    const school = c.schoolDojang?.toLowerCase() || '';
+    const query = modalSearch.toLowerCase();
+    return name.includes(query) || school.includes(query);
   });
 
-  const bulkRegisterMutation = useMutation({
-    mutationFn: async ({ competitorIds, patterns, sparring }: { competitorIds: string[]; patterns: boolean; sparring: boolean }) => {
-      const res = await fetch(`/api/tournaments/${tournamentId}/registrations/bulk`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ competitorIds, patterns, sparring }),
-      });
-      if (!res.ok) throw new Error('Failed to register');
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tournament-registrations', tournamentId] });
-      queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
-      setShowAddModal(false);
-      setSelectedCompetitors([]);
-      setModalSearch('');
-      addToast(`${selectedCompetitors.length} competitors added`, 'success');
-    },
-  });
-
-  const filteredRegistrations = registrations?.filter((r: any) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      r.competitor.firstName.toLowerCase().includes(q) ||
-      r.competitor.lastName.toLowerCase().includes(q) ||
-      (r.competitor.schoolDojang || '').toLowerCase().includes(q)
-    );
-  });
-
-  const filteredAvailable = (availableCompetitors || []).filter((c: any) => {
-    if (!modalSearch) return true;
-    const q = modalSearch.toLowerCase();
-    return (
-      c.firstName.toLowerCase().includes(q) ||
-      c.lastName.toLowerCase().includes(q) ||
-      (c.schoolDojang || '').toLowerCase().includes(q)
-    );
-  });
-
-  if (tLoading) {
-    return (
-      <div className="space-y-6">
-        <CardSkeleton />
-        <CardSkeleton />
-        <CardSkeleton />
-      </div>
-    );
+  if (tournamentLoading) {
+    return <PageLoader />;
   }
 
   if (!tournament) {
     return (
-      <div className="text-center py-12">
+      <div className="card">
         <EmptyState
-          icon={Trophy}
+          icon={Users}
           title="Tournament not found"
-          description="This tournament may have been deleted or you don't have access."
-          action={{ label: 'Back to Tournaments', onClick: () => navigate('/tournaments') }}
+          description="This tournament may have been deleted."
+          action={{ label: 'Back to Tournaments', onClick: () => window.history.back() }}
         />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <PageHeader
-        title={tournament.name}
-        description={tournament.location ? `${new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · ${tournament.location}` : new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-        actions={
-          <div className="flex gap-2">
-            <Link to={`/tournaments/${tournamentId}/divisions`} className="btn btn-secondary">
-              <LayoutGrid className="h-4 w-4 mr-2" /> Divisions
-            </Link>
-            <Link to={`/tournaments/${tournamentId}/check-in`} className="btn btn-secondary">
-              <ClipboardCheck className="h-4 w-4 mr-2" /> Check-in
-            </Link>
-            <Link to={`/tournaments/${tournamentId}/schedule`} className="btn btn-secondary">
-              <Calendar className="h-4 w-4 mr-2" /> Schedule
-            </Link>
-          </div>
-        }
-      />
-
-      {/* Stat tiles */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile label="Competitors" value={tournament._count.registrations} icon={Users} />
-        <StatTile label="Checked In" value={`${registrations?.filter((r: any) => r.checkedIn).length || 0} / ${registrations?.length || 0}`} icon={ClipboardCheck} />
-        <StatTile label="Divisions" value={tournament._count.divisions} icon={LayoutGrid} />
-        <StatTile label="Status" value={tournament.status} icon={Settings} />
+    <div>
+      {/* Breadcrumb */}
+      <div className="mb-4">
+        <Link
+          to="/tournaments"
+          className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+        >
+          <ChevronLeft className="h-4 w-4 mr-1" />
+          Back to Tournaments
+        </Link>
       </div>
 
-      {/* Day-Of Operations Panel */}
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+        <div>
+          <div className="flex flex-col xs:flex-row xs:items-center gap-2 xs:gap-3">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{tournament.name}</h1>
+            <StatusBadge status={tournament.status} />
+          </div>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            {new Date(tournament.date).toLocaleDateString('en-US', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}
+            {tournament.location && <span>• {tournament.location}</span>}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link to={`/tournaments/${id}/settings`} className="btn btn-secondary">
+            <Settings className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Settings</span>
+          </Link>
+          <Link to={`/tournaments/${id}/schedule`} className="btn btn-secondary">
+            <Calendar className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Schedule</span>
+          </Link>
+          <Link to={`/tournaments/${id}/divisions`} className="btn btn-primary">
+            <LayoutGrid className="h-4 w-4 mr-2" />
+            Manage Divisions
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Link>
+        </div>
+      </div>
+
+      {/* Tournament Day Actions */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+        <Link
+          to={`/tournaments/${id}/director`}
+          className="card hover:shadow-lg transition-shadow border-2 border-primary-200"
+        >
+          <div className="card-body flex items-center">
+            <div className="bg-primary-600 p-3 rounded-lg">
+              <LayoutDashboard className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4 flex-1">
+              <p className="font-semibold text-gray-900">Director Dashboard</p>
+              <p className="text-sm text-gray-500">Tournament control center</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-gray-400" />
+          </div>
+        </Link>
+
+        <Link
+          to={`/checkin/${id}`}
+          className="card hover:shadow-lg transition-shadow"
+        >
+          <div className="card-body flex items-center">
+            <div className="bg-blue-500 p-3 rounded-lg">
+              <ClipboardCheck className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4 flex-1">
+              <p className="font-semibold text-gray-900">Check-In</p>
+              <p className="text-sm text-gray-500">Verify competitor attendance</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-gray-400" />
+          </div>
+        </Link>
+
+        <Link
+          to={`/scorekeeper/${id}`}
+          className="card hover:shadow-lg transition-shadow"
+        >
+          <div className="card-body flex items-center">
+            <div className="bg-green-500 p-3 rounded-lg">
+              <Timer className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4 flex-1">
+              <p className="font-semibold text-gray-900">Scorekeeper</p>
+              <p className="text-sm text-gray-500">Record match results</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-gray-400" />
+          </div>
+        </Link>
+
+        <a
+          href={`/api/brackets/tournament/${id}/pdf`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="card hover:shadow-lg transition-shadow"
+        >
+          <div className="card-body flex items-center">
+            <div className="bg-purple-500 p-3 rounded-lg">
+              <FileDown className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4 flex-1">
+              <p className="font-semibold text-gray-900">Export Brackets</p>
+              <p className="text-sm text-gray-500">Download all bracket PDFs</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-gray-400" />
+          </div>
+        </a>
+
+        <Link
+          to={`/display/${id}`}
+          target="_blank"
+          className="card hover:shadow-lg transition-shadow"
+        >
+          <div className="card-body flex items-center">
+            <div className="bg-yellow-500 p-3 rounded-lg">
+              <Monitor className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4 flex-1">
+              <p className="font-semibold text-gray-900">Live Scoreboard</p>
+              <p className="text-sm text-gray-500">Public display for spectators</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-gray-400" />
+          </div>
+        </Link>
+
+        <Link
+          to={`/tournaments/${id}/results`}
+          className="card hover:shadow-lg transition-shadow"
+        >
+          <div className="card-body flex items-center">
+            <div className="bg-red-500 p-3 rounded-lg">
+              <Medal className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4 flex-1">
+              <p className="font-semibold text-gray-900">Results</p>
+              <p className="text-sm text-gray-500">View standings and medals</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-gray-400" />
+          </div>
+        </Link>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div className="card">
+          <div className="card-body flex items-center">
+            <div className="bg-blue-500 p-3 rounded-lg">
+              <Users className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm text-gray-500">Registered</p>
+              <p className="text-2xl font-semibold">{registrations?.length || 0}</p>
+            </div>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-body flex items-center">
+            <div className="bg-teal-500 p-3 rounded-lg">
+              <ClipboardCheck className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm text-gray-500">Checked In</p>
+              <p className="text-2xl font-semibold">
+                {registrations?.filter(r => r.checkedIn).length || 0} / {registrations?.length || 0}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-body flex items-center">
+            <div className="bg-green-500 p-3 rounded-lg">
+              <LayoutGrid className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm text-gray-500">Divisions</p>
+              <p className="text-2xl font-semibold">{tournament._count.divisions}</p>
+            </div>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-body flex items-center">
+            <div className="bg-purple-500 p-3 rounded-lg">
+              <Settings className="h-6 w-6 text-white" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm text-gray-500">Status</p>
+              <p className="text-2xl font-semibold capitalize">{tournament.status}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Day-Of Operations Panel — live stats for the running tournament */}
       {tournament.status !== 'draft' && (
         <DayOfPanel tournamentId={tournament.id} />
       )}
@@ -252,19 +452,18 @@ export default function TournamentDetail() {
               <span className="text-sm truncate hidden sm:block">{registrationUrl}</span>
             </div>
             <div className="flex gap-2 flex-shrink-0">
-              <Button variant="secondary" size="sm" onClick={copyRegistrationLink}>
-                <Copy className="h-3.5 w-3.5 mr-1" />
+              <button onClick={copyRegistrationLink} className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1">
+                <Copy className="h-3.5 w-3.5" />
                 {copiedLink ? 'Copied!' : 'Copy Link'}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
+              </button>
+              <button
                 onClick={() => setShowCloseRegistrationConfirm(true)}
-                loading={updateStatusMutation.isPending}
-                className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                disabled={updateStatusMutation.isPending}
+                className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
               >
-                <Lock className="h-3.5 w-3.5 mr-1" /> Close Registration
-              </Button>
+                <Lock className="h-3.5 w-3.5" />
+                Close Registration
+              </button>
             </div>
           </div>
         </div>
@@ -274,12 +473,22 @@ export default function TournamentDetail() {
             Tournament is active. Mark as completed when all divisions are finished.
           </p>
           <div className="flex gap-2 flex-shrink-0">
-            <Button variant="secondary" size="sm" onClick={() => updateStatusMutation.mutate('registration')} loading={updateStatusMutation.isPending}>
-              <Globe className="h-3.5 w-3.5 mr-1" /> Reopen Registration
-            </Button>
-            <Button variant="primary" size="sm" onClick={() => updateStatusMutation.mutate('completed')} loading={updateStatusMutation.isPending}>
-              <Flag className="h-3.5 w-3.5 mr-1" /> Mark Completed
-            </Button>
+            <button
+              onClick={() => updateStatusMutation.mutate('registration')}
+              disabled={updateStatusMutation.isPending}
+              className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1"
+            >
+              <Globe className="h-3.5 w-3.5 mr-1" />
+              Reopen Registration
+            </button>
+            <button
+              onClick={() => updateStatusMutation.mutate('completed')}
+              disabled={updateStatusMutation.isPending}
+              className="btn btn-primary text-sm py-1.5 px-3 flex items-center gap-1"
+            >
+              <Flag className="h-3.5 w-3.5 mr-1" />
+              Mark Completed
+            </button>
           </div>
         </div>
       ) : tournament.status === 'completed' ? (
@@ -287,27 +496,42 @@ export default function TournamentDetail() {
           <p className="text-sm text-gray-600 dark:text-gray-400 flex-1">
             This tournament is completed.
           </p>
-          <Button variant="secondary" size="sm" onClick={() => updateStatusMutation.mutate('active')} loading={updateStatusMutation.isPending}>
+          <button
+            onClick={() => updateStatusMutation.mutate('active')}
+            disabled={updateStatusMutation.isPending}
+            className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1 flex-shrink-0"
+          >
             Reopen Tournament
-          </Button>
+          </button>
         </div>
       ) : (
         <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
           <p className="text-sm text-gray-600 dark:text-gray-400 flex-1">
             Open this tournament for public self-registration to share a signup link with competitors.
           </p>
-          <Button variant="secondary" size="sm" onClick={() => updateStatusMutation.mutate('registration')} loading={updateStatusMutation.isPending}>
-            <Globe className="h-3.5 w-3.5 mr-1" /> Open for Registration
-          </Button>
+          <button
+            onClick={() => updateStatusMutation.mutate('registration')}
+            disabled={updateStatusMutation.isPending}
+            className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1 flex-shrink-0"
+          >
+            <Globe className="h-3.5 w-3.5 mr-1" />
+            Open for Registration
+          </button>
         </div>
       )}
 
       {/* Registrations */}
-      <Card>
-        <CardHeader
-          title="Registered Competitors"
-          count={registrations?.length}
-          actions={
+      <div className="card">
+        <div className="card-header">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+              Registered Competitors
+              {registrations && (
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  ({registrations.length})
+                </span>
+              )}
+            </h2>
             <div className="flex flex-col sm:flex-row gap-3">
               {registrations && registrations.length > 0 && (
                 <div className="relative">
@@ -321,32 +545,40 @@ export default function TournamentDetail() {
                   />
                 </div>
               )}
-              <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
-                <Plus className="h-4 w-4 mr-2" /> Add Competitors
-              </Button>
+              <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Competitors
+              </button>
             </div>
-          }
-        />
-        <CardBody className="p-0">
+          </div>
+        </div>
+        <div className="card-body p-0">
           {regsLoading ? (
-            <div className="p-8 text-center"><Spinner /></div>
+            <TableSkeleton rows={5} />
           ) : filteredRegistrations && filteredRegistrations.length > 0 ? (
             <>
               {/* Mobile View */}
               <div className="mobile-cards p-4 space-y-3">
-                {filteredRegistrations.map((reg: any) => (
+                {filteredRegistrations.map((reg) => (
                   <div key={reg.id} className="mobile-card">
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <div className="font-semibold text-gray-900 dark:text-white">
                           {reg.competitor.firstName} {reg.competitor.lastName}
                         </div>
-                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium mt-1 ${getBeltColor(reg.competitor.belt)}`}>
+                        <span
+                          className={`inline-flex px-2 py-0.5 rounded text-xs font-medium mt-1 ${getBeltColor(
+                            reg.competitor.belt
+                          )}`}
+                        >
                           {reg.competitor.belt}
                           {reg.competitor.danRank && ` ${reg.competitor.danRank}D`}
                         </span>
                       </div>
-                      <button onClick={() => setDeleteTarget(reg)} className="text-gray-400 hover:text-red-600 p-2 -mr-2">
+                      <button
+                        onClick={() => setDeleteTarget(reg)}
+                        className="text-gray-400 hover:text-red-600 p-2 -mr-2"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -370,14 +602,34 @@ export default function TournamentDetail() {
                     </div>
                     <div className="flex gap-4 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                       <button
-                        onClick={() => updateRegistrationMutation.mutate({ regId: reg.id, patterns: !reg.patterns, sparring: reg.sparring })}
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${reg.patterns ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}
+                        onClick={() =>
+                          updateRegistrationMutation.mutate({
+                            regId: reg.id,
+                            patterns: !reg.patterns,
+                            sparring: reg.sparring,
+                          })
+                        }
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          reg.patterns
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                        }`}
                       >
                         {reg.patterns ? '✓ ' : ''}Patterns
                       </button>
                       <button
-                        onClick={() => updateRegistrationMutation.mutate({ regId: reg.id, patterns: reg.patterns, sparring: !reg.sparring })}
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${reg.sparring ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}
+                        onClick={() =>
+                          updateRegistrationMutation.mutate({
+                            regId: reg.id,
+                            patterns: reg.patterns,
+                            sparring: !reg.sparring,
+                          })
+                        }
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          reg.sparring
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                        }`}
                       >
                         {reg.sparring ? '✓ ' : ''}Sparring
                       </button>
@@ -402,38 +654,69 @@ export default function TournamentDetail() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
-                    {filteredRegistrations.map((reg: any) => (
+                    {filteredRegistrations.map((reg) => (
                       <tr key={reg.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <td className="font-medium text-gray-900 dark:text-white">
                           {reg.competitor.firstName} {reg.competitor.lastName}
                         </td>
                         <td>{reg.ageAtTournament || '-'}</td>
                         <td>
-                          <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getBeltColor(reg.competitor.belt)}`}>
+                          <span
+                            className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getBeltColor(
+                              reg.competitor.belt
+                            )}`}
+                          >
                             {reg.competitor.belt}
                             {reg.competitor.danRank && ` ${reg.competitor.danRank}D`}
                           </span>
                         </td>
-                        <td>{reg.competitor.weightLbs ? `${reg.competitor.weightLbs} lbs` : '-'}</td>
+                        <td>
+                          {reg.competitor.weightLbs
+                            ? `${reg.competitor.weightLbs} lbs`
+                            : '-'}
+                        </td>
                         <td className="max-w-[150px] truncate">{reg.competitor.schoolDojang || '-'}</td>
                         <td className="text-center">
                           <button
-                            onClick={() => updateRegistrationMutation.mutate({ regId: reg.id, patterns: !reg.patterns, sparring: reg.sparring })}
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${reg.patterns ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-500'}`}
+                            onClick={() =>
+                              updateRegistrationMutation.mutate({
+                                regId: reg.id,
+                                patterns: !reg.patterns,
+                                sparring: reg.sparring,
+                              })
+                            }
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                              reg.patterns
+                                ? 'bg-green-500 text-white hover:bg-green-600'
+                                : 'bg-gray-200 dark:bg-gray-600 text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-500'
+                            }`}
                           >
                             {reg.patterns && <Check className="h-4 w-4" />}
                           </button>
                         </td>
                         <td className="text-center">
                           <button
-                            onClick={() => updateRegistrationMutation.mutate({ regId: reg.id, patterns: reg.patterns, sparring: !reg.sparring })}
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${reg.sparring ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-gray-200 dark:bg-gray-600 text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-500'}`}
+                            onClick={() =>
+                              updateRegistrationMutation.mutate({
+                                regId: reg.id,
+                                patterns: reg.patterns,
+                                sparring: !reg.sparring,
+                              })
+                            }
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                              reg.sparring
+                                ? 'bg-green-500 text-white hover:bg-green-600'
+                                : 'bg-gray-200 dark:bg-gray-600 text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-500'
+                            }`}
                           >
                             {reg.sparring && <Check className="h-4 w-4" />}
                           </button>
                         </td>
                         <td>
-                          <button onClick={() => setDeleteTarget(reg)} className="text-gray-400 hover:text-red-600 p-1 rounded transition-colors">
+                          <button
+                            onClick={() => setDeleteTarget(reg)}
+                            className="text-gray-400 hover:text-red-600 p-1 rounded transition-colors"
+                          >
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </td>
@@ -458,8 +741,8 @@ export default function TournamentDetail() {
               action={{ label: 'Add Competitors', onClick: () => setShowAddModal(true) }}
             />
           )}
-        </CardBody>
-      </Card>
+        </div>
+      </div>
 
       {/* Delete Confirmation */}
       <ConfirmDialog
@@ -496,27 +779,58 @@ export default function TournamentDetail() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => { setShowAddModal(false); setSelectedCompetitors([]); setModalSearch(''); }} />
+            <div
+              className="fixed inset-0 bg-black/50 transition-opacity"
+              onClick={() => {
+                setShowAddModal(false);
+                setSelectedCompetitors([]);
+                setModalSearch('');
+              }}
+            />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
               <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Competitors</h2>
-                  <button onClick={() => { setShowAddModal(false); setSelectedCompetitors([]); setModalSearch(''); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                  <button
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setSelectedCompetitors([]);
+                      setModalSearch('');
+                    }}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
                     <X className="h-5 w-5" />
                   </button>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input type="text" placeholder="Search competitors..." value={modalSearch} onChange={(e) => setModalSearch(e.target.value)} className="form-input pl-9 w-full" autoFocus />
+                    <input
+                      type="text"
+                      placeholder="Search competitors..."
+                      value={modalSearch}
+                      onChange={(e) => setModalSearch(e.target.value)}
+                      className="form-input pl-9 w-full"
+                      autoFocus
+                    />
                   </div>
                   <div className="flex gap-4">
                     <label className="flex items-center cursor-pointer">
-                      <input type="checkbox" checked={registerPatterns} onChange={(e) => setRegisterPatterns(e.target.checked)} className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                      <input
+                        type="checkbox"
+                        checked={registerPatterns}
+                        onChange={(e) => setRegisterPatterns(e.target.checked)}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
                       <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Patterns</span>
                     </label>
                     <label className="flex items-center cursor-pointer">
-                      <input type="checkbox" checked={registerSparring} onChange={(e) => setRegisterSparring(e.target.checked)} className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                      <input
+                        type="checkbox"
+                        checked={registerSparring}
+                        onChange={(e) => setRegisterSparring(e.target.checked)}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
                       <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Sparring</span>
                     </label>
                   </div>
@@ -527,40 +841,112 @@ export default function TournamentDetail() {
                   <div className="space-y-1">
                     <div className="flex items-center justify-between mb-3">
                       <button
-                        onClick={() => setSelectedCompetitors(selectedCompetitors.length === filteredAvailable.length ? [] : filteredAvailable.map((c: any) => c.id))}
+                        onClick={() =>
+                          setSelectedCompetitors(
+                            selectedCompetitors.length === filteredAvailable.length
+                              ? []
+                              : filteredAvailable.map((c: Competitor) => c.id)
+                          )
+                        }
                         className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
                       >
-                        {selectedCompetitors.length === filteredAvailable.length ? 'Deselect All' : `Select All (${filteredAvailable.length})`}
+                        {selectedCompetitors.length === filteredAvailable.length
+                          ? 'Deselect All'
+                          : `Select All (${filteredAvailable.length})`}
                       </button>
                       {modalSearch && (
-                        <span className="text-xs text-gray-500">Showing {filteredAvailable.length} of {availableCompetitors.length}</span>
+                        <span className="text-xs text-gray-500">
+                          Showing {filteredAvailable.length} of {availableCompetitors.length}
+                        </span>
                       )}
                     </div>
-                    {filteredAvailable.map((c: any) => (
+                    {filteredAvailable.map((c: Competitor) => (
                       <label
                         key={c.id}
-                        className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${selectedCompetitors.includes(c.id) ? 'bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'}`}
+                        className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${
+                          selectedCompetitors.includes(c.id)
+                            ? 'bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800'
+                            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
+                        }`}
                       >
-                        <input type="checkbox" checked={selectedCompetitors.includes(c.id)} onChange={(e) => setSelectedCompetitors(e.target.checked ? [...selectedCompetitors, c.id] : selectedCompetitors.filter((id) => id !== c.id))} className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                        <span className="ml-3 flex-1 font-medium text-gray-900 dark:text-white">{c.firstName} {c.lastName}</span>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${getBeltColor(c.belt)}`}>{c.belt}</span>
-                        {c.schoolDojang && <span className="ml-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:inline truncate max-w-[120px]">{c.schoolDojang}</span>}
+                        <input
+                          type="checkbox"
+                          checked={selectedCompetitors.includes(c.id)}
+                          onChange={(e) =>
+                            setSelectedCompetitors(
+                              e.target.checked
+                                ? [...selectedCompetitors, c.id]
+                                : selectedCompetitors.filter((id) => id !== c.id)
+                            )
+                          }
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="ml-3 flex-1 font-medium text-gray-900 dark:text-white">
+                          {c.firstName} {c.lastName}
+                        </span>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${getBeltColor(
+                            c.belt
+                          )}`}
+                        >
+                          {c.belt}
+                        </span>
+                        {c.schoolDojang && (
+                          <span className="ml-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:inline truncate max-w-[120px]">
+                            {c.schoolDojang}
+                          </span>
+                        )}
                       </label>
                     ))}
                   </div>
                 ) : availableCompetitors.length > 0 ? (
-                  <EmptyState icon={Search} title="No matches" description={`No competitors match "${modalSearch}"`} action={{ label: 'Clear Search', onClick: () => setModalSearch('') }} />
+                  <EmptyState
+                    icon={Search}
+                    title="No matches"
+                    description={`No competitors match "${modalSearch}"`}
+                    action={{ label: 'Clear Search', onClick: () => setModalSearch('') }}
+                  />
                 ) : (
-                  <EmptyState icon={Users} title="No available competitors" description="Import competitors first, or all have been registered." />
+                  <EmptyState
+                    icon={Users}
+                    title="No available competitors"
+                    description="Import competitors first, or all have been registered."
+                  />
                 )}
               </div>
               <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <span className="text-sm text-gray-600 dark:text-gray-400"><span className="font-semibold text-gray-900 dark:text-white">{selectedCompetitors.length}</span> competitors selected</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="font-semibold text-gray-900 dark:text-white">{selectedCompetitors.length}</span> competitors selected
+                </span>
                 <div className="flex gap-3 w-full sm:w-auto">
-                  <Button variant="secondary" className="flex-1 sm:flex-none" onClick={() => { setShowAddModal(false); setSelectedCompetitors([]); setModalSearch(''); }}>Cancel</Button>
-                  <Button variant="primary" className="flex-1 sm:flex-none" loading={bulkRegisterMutation.isPending} disabled={selectedCompetitors.length === 0} onClick={() => bulkRegisterMutation.mutate({ competitorIds: selectedCompetitors, patterns: registerPatterns, sparring: registerSparring })}>
-                    {bulkRegisterMutation.isPending ? 'Adding...' : `Add ${selectedCompetitors.length} Competitors`}
-                  </Button>
+                  <button
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setSelectedCompetitors([]);
+                      setModalSearch('');
+                    }}
+                    className="btn btn-secondary flex-1 sm:flex-none"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() =>
+                      bulkRegisterMutation.mutate({
+                        competitorIds: selectedCompetitors,
+                        patterns: registerPatterns,
+                        sparring: registerSparring,
+                      })
+                    }
+                    disabled={
+                      bulkRegisterMutation.isPending ||
+                      selectedCompetitors.length === 0
+                    }
+                    className="btn btn-primary flex-1 sm:flex-none"
+                  >
+                    {bulkRegisterMutation.isPending
+                      ? 'Adding...'
+                      : `Add ${selectedCompetitors.length} Competitors`}
+                  </button>
                 </div>
               </div>
             </div>
@@ -572,6 +958,8 @@ export default function TournamentDetail() {
 }
 
 // ─── Day-Of Operations Panel ───────────────────────────────────────────────
+// Real-time operational view: who's checked in, what rings are running,
+// what's coming up, weight-mismatch alerts. Auto-refreshes every 10s.
 function DayOfPanel({ tournamentId }: { tournamentId: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ['day-of', tournamentId],
@@ -588,18 +976,24 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
   const checkInPct = data.checkIn.percent;
 
   return (
-    <Card className="overflow-hidden mb-6">
-      <CardHeader
-        title="Tournament day"
-        description="Live operational view · auto-refreshes every 10s"
-        actions={
-          <span className="flex items-center gap-1.5 text-xs text-slate-500">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
-          </span>
-        }
-      />
-      <CardBody className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {/* Check-in card */}
+    <div className="card overflow-hidden mb-6">
+      <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-slate-900">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+            <Activity className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">Tournament day</h2>
+            <p className="text-xs text-slate-500">Live operational view · auto-refreshes every 10s</p>
+          </div>
+        </div>
+        <span className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+        </span>
+      </div>
+
+      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {/* Check-in card with progress bar */}
         <div className="lg:col-span-2 p-4 rounded-xl bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-slate-900/20 border border-slate-200/60 dark:border-slate-800">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -610,19 +1004,30 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-3xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{checkInPct}%</div>
+              <div className="text-3xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {checkInPct}%
+              </div>
               <div className="text-[10px] text-slate-500 uppercase tracking-wider">complete</div>
             </div>
           </div>
           <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-700" style={{ width: `${checkInPct}%` }} />
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-700"
+              style={{ width: `${checkInPct}%` }}
+            />
           </div>
           <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
             <span><strong className="text-slate-900 dark:text-white tabular-nums">{data.checkIn.checkedIn}</strong> checked in</span>
             <span className="text-slate-300">·</span>
             <span><strong className="text-amber-600 dark:text-amber-400 tabular-nums">{data.checkIn.notCheckedIn}</strong> not yet</span>
             {data.checkIn.weightMismatches > 0 && (
-              <><span className="text-slate-300">·</span><span className="text-red-600 dark:text-red-400 font-medium"><AlertTriangle className="inline h-3 w-3 mr-0.5" />{data.checkIn.weightMismatches} weight {data.checkIn.weightMismatches === 1 ? 'mismatch' : 'mismatches'}</span></>
+              <>
+                <span className="text-slate-300">·</span>
+                <span className="text-red-600 dark:text-red-400 font-medium">
+                  <AlertTriangle className="inline h-3 w-3 mr-0.5" />
+                  {data.checkIn.weightMismatches} weight {data.checkIn.weightMismatches === 1 ? 'mismatch' : 'mismatches'}
+                </span>
+              </>
             )}
           </div>
         </div>
@@ -635,22 +1040,33 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
             <span className="text-slate-400"> / {data.matches.total}</span>
           </div>
           <div className="mt-2 h-1.5 bg-indigo-100 dark:bg-indigo-950 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-700" style={{ width: `${data.matches.total > 0 ? (data.matches.completed / data.matches.total) * 100 : 0}%` }} />
+            <div
+              className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-700"
+              style={{ width: `${data.matches.total > 0 ? (data.matches.completed / data.matches.total) * 100 : 0}%` }}
+            />
           </div>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-            {data.matches.inProgress > 0 && <span className="text-amber-600 dark:text-amber-400 font-medium">{data.matches.inProgress} live</span>}
+            {data.matches.inProgress > 0 && (
+              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                {data.matches.inProgress} live
+              </span>
+            )}
             <span>{data.matches.ready} ready</span>
             <span className="text-slate-400">{data.matches.pending} pending</span>
           </div>
         </div>
-      </CardBody>
+      </div>
 
       {/* By ring + Up next */}
       {data.upNext && data.upNext.length > 0 && (
         <div className="border-t border-slate-200 dark:border-slate-800 px-5 py-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Up next by ring</h3>
-            <Link to={`/display/${tournamentId}`} target="_blank" className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1">
+            <Link
+              to={`/display/${tournamentId}`}
+              target="_blank"
+              className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+            >
               Open public scoreboard <ExternalLink className="h-3 w-3" />
             </Link>
           </div>
@@ -698,6 +1114,6 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
           </div>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
