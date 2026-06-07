@@ -26,6 +26,7 @@ import {
   Activity,
   AlertTriangle,
   ExternalLink,
+  Trophy,
 } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
 import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
@@ -33,6 +34,10 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
 import { PageLoader } from '../components/ui/Spinner';
+import { Card, CardHeader, CardBody } from '../components/ui';
+import { PageHeader } from '../components/ui';
+import { Button } from '../components/ui';
+import { StatTile } from '../components/ui';
 
 interface Tournament {
   id: string;
@@ -226,21 +231,21 @@ export default function TournamentDetail() {
 
   if (!tournament) {
     return (
-      <div className="card">
+      <Card>
         <EmptyState
-          icon={Users}
+          icon={Trophy}
           title="Tournament not found"
           description="This tournament may have been deleted."
           action={{ label: 'Back to Tournaments', onClick: () => window.history.back() }}
         />
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div>
+    <div className="space-y-6">
       {/* Breadcrumb */}
-      <div className="mb-4">
+      <div>
         <Link
           to="/tournaments"
           className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
@@ -251,42 +256,32 @@ export default function TournamentDetail() {
       </div>
 
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-        <div>
-          <div className="flex flex-col xs:flex-row xs:items-center gap-2 xs:gap-3">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{tournament.name}</h1>
-            <StatusBadge status={tournament.status} />
+      <PageHeader
+        title={tournament.name}
+        description={tournament.location
+          ? `${new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · ${tournament.location}`
+          : new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Link to={`/tournaments/${id}/settings`} className="btn btn-secondary">
+              <Settings className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Settings</span>
+            </Link>
+            <Link to={`/tournaments/${id}/schedule`} className="btn btn-secondary">
+              <Calendar className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Schedule</span>
+            </Link>
+            <Link to={`/tournaments/${id}/divisions`} className="btn btn-primary">
+              <LayoutGrid className="h-4 w-4 mr-2" />
+              Manage Divisions
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Link>
           </div>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            {new Date(tournament.date).toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
-            {tournament.location && <span>• {tournament.location}</span>}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link to={`/tournaments/${id}/settings`} className="btn btn-secondary">
-            <Settings className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Settings</span>
-          </Link>
-          <Link to={`/tournaments/${id}/schedule`} className="btn btn-secondary">
-            <Calendar className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Schedule</span>
-          </Link>
-          <Link to={`/tournaments/${id}/divisions`} className="btn btn-primary">
-            <LayoutGrid className="h-4 w-4 mr-2" />
-            Manage Divisions
-            <ArrowRight className="h-4 w-4 ml-2" />
-          </Link>
-        </div>
-      </div>
+        }
+      />
 
       {/* Tournament Day Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <Link
           to={`/tournaments/${id}/director`}
           className="card hover:shadow-lg transition-shadow border-2 border-primary-200"
@@ -388,53 +383,15 @@ export default function TournamentDetail() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div className="card">
-          <div className="card-body flex items-center">
-            <div className="bg-blue-500 p-3 rounded-lg">
-              <Users className="h-6 w-6 text-white" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-500">Registered</p>
-              <p className="text-2xl font-semibold">{registrations?.length || 0}</p>
-            </div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="card-body flex items-center">
-            <div className="bg-teal-500 p-3 rounded-lg">
-              <ClipboardCheck className="h-6 w-6 text-white" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-500">Checked In</p>
-              <p className="text-2xl font-semibold">
-                {registrations?.filter(r => r.checkedIn).length || 0} / {registrations?.length || 0}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="card-body flex items-center">
-            <div className="bg-green-500 p-3 rounded-lg">
-              <LayoutGrid className="h-6 w-6 text-white" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-500">Divisions</p>
-              <p className="text-2xl font-semibold">{tournament._count.divisions}</p>
-            </div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="card-body flex items-center">
-            <div className="bg-purple-500 p-3 rounded-lg">
-              <Settings className="h-6 w-6 text-white" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-500">Status</p>
-              <p className="text-2xl font-semibold capitalize">{tournament.status}</p>
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <StatTile label="Registered" value={registrations?.length || 0} icon={Users} />
+        <StatTile
+          label="Checked In"
+          value={`${registrations?.filter((r) => r.checkedIn).length || 0} / ${registrations?.length || 0}`}
+          icon={ClipboardCheck}
+        />
+        <StatTile label="Divisions" value={tournament._count.divisions} icon={LayoutGrid} />
+        <StatTile label="Status" value={tournament.status} icon={Settings} />
       </div>
 
       {/* Day-Of Operations Panel — live stats for the running tournament */}
@@ -444,7 +401,7 @@ export default function TournamentDetail() {
 
       {/* Tournament Status Controls */}
       {tournament.status === 'registration' ? (
-        <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+        <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex items-center gap-2 text-green-700 dark:text-green-300 flex-1 min-w-0">
               <Globe className="h-5 w-5 flex-shrink-0" />
@@ -452,86 +409,85 @@ export default function TournamentDetail() {
               <span className="text-sm truncate hidden sm:block">{registrationUrl}</span>
             </div>
             <div className="flex gap-2 flex-shrink-0">
-              <button onClick={copyRegistrationLink} className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1">
+              <Button variant="secondary" size="sm" onClick={copyRegistrationLink}>
                 <Copy className="h-3.5 w-3.5" />
                 {copiedLink ? 'Copied!' : 'Copy Link'}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => setShowCloseRegistrationConfirm(true)}
-                disabled={updateStatusMutation.isPending}
-                className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                loading={updateStatusMutation.isPending}
+                className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
               >
                 <Lock className="h-3.5 w-3.5" />
                 Close Registration
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       ) : tournament.status === 'active' || tournament.status === 'in_progress' || tournament.status === 'brackets' ? (
-        <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
           <p className="text-sm text-yellow-800 dark:text-yellow-300 flex-1">
             Tournament is active. Mark as completed when all divisions are finished.
           </p>
           <div className="flex gap-2 flex-shrink-0">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => updateStatusMutation.mutate('registration')}
-              disabled={updateStatusMutation.isPending}
-              className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1"
+              loading={updateStatusMutation.isPending}
             >
               <Globe className="h-3.5 w-3.5 mr-1" />
               Reopen Registration
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => updateStatusMutation.mutate('completed')}
-              disabled={updateStatusMutation.isPending}
-              className="btn btn-primary text-sm py-1.5 px-3 flex items-center gap-1"
+              loading={updateStatusMutation.isPending}
             >
               <Flag className="h-3.5 w-3.5 mr-1" />
               Mark Completed
-            </button>
+            </Button>
           </div>
         </div>
       ) : tournament.status === 'completed' ? (
-        <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
           <p className="text-sm text-gray-600 dark:text-gray-400 flex-1">
             This tournament is completed.
           </p>
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => updateStatusMutation.mutate('active')}
-            disabled={updateStatusMutation.isPending}
-            className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1 flex-shrink-0"
+            loading={updateStatusMutation.isPending}
           >
             Reopen Tournament
-          </button>
+          </Button>
         </div>
       ) : (
-        <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
           <p className="text-sm text-gray-600 dark:text-gray-400 flex-1">
             Open this tournament for public self-registration to share a signup link with competitors.
           </p>
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => updateStatusMutation.mutate('registration')}
-            disabled={updateStatusMutation.isPending}
-            className="btn btn-secondary text-sm py-1.5 px-3 flex items-center gap-1 flex-shrink-0"
+            loading={updateStatusMutation.isPending}
           >
             <Globe className="h-3.5 w-3.5 mr-1" />
             Open for Registration
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Registrations */}
-      <div className="card">
-        <div className="card-header">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white">
-              Registered Competitors
-              {registrations && (
-                <span className="ml-2 text-sm font-normal text-gray-500">
-                  ({registrations.length})
-                </span>
-              )}
-            </h2>
+      <Card>
+        <CardHeader
+          title="Registered Competitors"
+          action={
             <div className="flex flex-col sm:flex-row gap-3">
               {registrations && registrations.length > 0 && (
                 <div className="relative">
@@ -545,14 +501,14 @@ export default function TournamentDetail() {
                   />
                 </div>
               )}
-              <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
+              <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Competitors
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
-        <div className="card-body p-0">
+          }
+        />
+        <CardBody className="p-0">
           {regsLoading ? (
             <TableSkeleton rows={5} />
           ) : filteredRegistrations && filteredRegistrations.length > 0 ? (
@@ -741,8 +697,8 @@ export default function TournamentDetail() {
               action={{ label: 'Add Competitors', onClick: () => setShowAddModal(true) }}
             />
           )}
-        </div>
-      </div>
+        </CardBody>
+      </Card>
 
       {/* Delete Confirmation */}
       <ConfirmDialog
@@ -919,17 +875,22 @@ export default function TournamentDetail() {
                   <span className="font-semibold text-gray-900 dark:text-white">{selectedCompetitors.length}</span> competitors selected
                 </span>
                 <div className="flex gap-3 w-full sm:w-auto">
-                  <button
+                  <Button
+                    variant="secondary"
+                    className="flex-1 sm:flex-none"
                     onClick={() => {
                       setShowAddModal(false);
                       setSelectedCompetitors([]);
                       setModalSearch('');
                     }}
-                    className="btn btn-secondary flex-1 sm:flex-none"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="flex-1 sm:flex-none"
+                    loading={bulkRegisterMutation.isPending}
+                    disabled={selectedCompetitors.length === 0}
                     onClick={() =>
                       bulkRegisterMutation.mutate({
                         competitorIds: selectedCompetitors,
@@ -937,16 +898,11 @@ export default function TournamentDetail() {
                         sparring: registerSparring,
                       })
                     }
-                    disabled={
-                      bulkRegisterMutation.isPending ||
-                      selectedCompetitors.length === 0
-                    }
-                    className="btn btn-primary flex-1 sm:flex-none"
                   >
                     {bulkRegisterMutation.isPending
                       ? 'Adding...'
                       : `Add ${selectedCompetitors.length} Competitors`}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -976,23 +932,17 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
   const checkInPct = data.checkIn.percent;
 
   return (
-    <div className="card overflow-hidden mb-6">
-      <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-slate-900">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
-            <Activity className="h-4 w-4 text-white" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-white">Tournament day</h2>
-            <p className="text-xs text-slate-500">Live operational view · auto-refreshes every 10s</p>
-          </div>
-        </div>
-        <span className="flex items-center gap-1.5 text-xs text-slate-500">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
-        </span>
-      </div>
-
-      <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+    <Card className="overflow-hidden">
+      <CardHeader
+        title="Tournament day"
+        description="Live operational view · auto-refreshes every 10s"
+        action={
+          <span className="flex items-center gap-1.5 text-xs text-slate-500">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+          </span>
+        }
+      />
+      <CardBody className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {/* Check-in card with progress bar */}
         <div className="lg:col-span-2 p-4 rounded-xl bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-slate-900/20 border border-slate-200/60 dark:border-slate-800">
           <div className="flex items-center justify-between mb-3">
@@ -1055,7 +1005,7 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
             <span className="text-slate-400">{data.matches.pending} pending</span>
           </div>
         </div>
-      </div>
+      </CardBody>
 
       {/* By ring + Up next */}
       {data.upNext && data.upNext.length > 0 && (
@@ -1114,6 +1064,6 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

@@ -147,6 +147,14 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[#fafbfc] dark:bg-[#0a0e1a] flex">
+      {/* Skip to main content — a11y */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-indigo-600 focus:text-white focus:rounded-lg"
+      >
+        Skip to main content
+      </a>
+
       {/* ─── Sidebar ─── */}
       <aside
         className={classNames(
@@ -396,7 +404,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Content */}
-        <main className="flex-1 min-w-0">
+        <main id="main-content" className="flex-1 min-w-0">
           <div className="page-enter max-w-[1400px] mx-auto px-4 lg:px-6 py-6 lg:py-8">
             {children}
           </div>

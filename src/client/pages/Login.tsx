@@ -41,6 +41,9 @@ export default function Login() {
   const [demoLoading, setDemoLoading] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
 
+  // Dev mode magic link data
+  const [devModeData, setDevModeData] = useState<{ magicUrl: string; code: string; email: string } | null>(null);
+
   // Setup state
   const [setupFirstName, setSetupFirstName] = useState('');
   const [setupLastName, setSetupLastName] = useState('');
@@ -108,7 +111,13 @@ export default function Login() {
     const result = await requestMagicLink(email);
 
     if (result.success) {
-      setStep('code');
+      if (result.devMode && result.magicUrl && result.code) {
+        // Dev mode: show the magic link directly in UI
+        setDevModeData({ magicUrl: result.magicUrl, code: result.code, email });
+        setStep('code');
+      } else {
+        setStep('code');
+      }
     } else {
       setError(result.error || 'Failed to send sign-in link');
     }
@@ -178,7 +187,7 @@ export default function Login() {
 
       <main className="flex-1 grid lg:grid-cols-[1.1fr_0.9fr]">
         {/* ─── Left: Hero ─── */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white">
+        <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white hidden lg:block">
           {/* Decorative gradients */}
           <div className="absolute top-0 left-0 w-[600px] h-[600px] bg-indigo-500/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
           <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-violet-500/20 rounded-full blur-3xl translate-x-1/3 translate-y-1/3" />
