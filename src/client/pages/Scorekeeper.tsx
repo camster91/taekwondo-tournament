@@ -141,6 +141,8 @@ export default function Scorekeeper() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
+      queryClient.invalidateQueries({ queryKey: ['director-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['divisions'] });
       resetForm();
       setShowConfirm(false);
       if (currentMatchIndex < readyMatches.length - 1) {
@@ -163,6 +165,8 @@ export default function Scorekeeper() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
+      queryClient.invalidateQueries({ queryKey: ['director-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['divisions'] });
       addToast('Match result undone', 'success');
     },
     onError: (error: Error) => {
