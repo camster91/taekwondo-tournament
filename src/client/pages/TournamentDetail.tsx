@@ -722,15 +722,15 @@ export default function TournamentDetail() {
       {/* Add Competitors Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-black/50 transition-opacity"
+            onClick={() => {
+              setShowAddModal(false);
+              setSelectedCompetitors([]);
+              setModalSearch('');
+            }}
+          />
           <div className="flex min-h-full items-center justify-center p-4">
-            <div
-              className="fixed inset-0 bg-black/50 transition-opacity"
-              onClick={() => {
-                setShowAddModal(false);
-                setSelectedCompetitors([]);
-                setModalSearch('');
-              }}
-            />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
               <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between mb-4">
