@@ -594,7 +594,7 @@ export default function TournamentDetail() {
                       <th>School</th>
                       <th className="text-center">Patterns</th>
                       <th className="text-center">Sparring</th>
-                      <th></th>
+                      <th className="w-10"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">

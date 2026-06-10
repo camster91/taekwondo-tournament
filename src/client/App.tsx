@@ -158,7 +158,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       {/* ─── Sidebar ─── */}
       <aside
         className={classNames(
-          'fixed inset-y-0 left-0 z-40 flex flex-col',
+          'fixed inset-y-0 left-0 z-40 flex flex-col w-64',
           'bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950',
           'transition-all duration-300 ease-out',
           'lg:relative lg:flex-shrink-0',
