@@ -100,7 +100,7 @@ export default function Results() {
   const { data: divisions, isLoading } = useQuery<Division[]>({
     queryKey: ['results-divisions', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/divisions/tournament/${tournamentId}`, { headers: getAuthHeaders() });
+      const res = await fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to fetch divisions');
       return res.json();
     },

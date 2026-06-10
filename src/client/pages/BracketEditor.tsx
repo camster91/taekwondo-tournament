@@ -144,7 +144,7 @@ export default function BracketEditor() {
   const exportPDF = async () => {
     if (!division) return;
     try {
-      const res = await fetch(`/api/brackets/division/${divisionId}/pdf`);
+      const res = await fetch(`/api/brackets/division/${divisionId}/pdf`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to generate PDF');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

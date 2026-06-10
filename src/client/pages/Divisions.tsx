@@ -153,6 +153,8 @@ export default function Divisions() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+      queryClient.invalidateQueries({ queryKey: ['director-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
       setResultMessage({
         title: 'Brackets Generated',
         message: `Generated ${result.generated} brackets (${result.skipped} skipped)`,
