@@ -280,105 +280,93 @@ export default function TournamentDetail() {
         }
       />
 
-      {/* Tournament Day Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* Tournament Day Actions — 3-col grid with vertical icon-above-text cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link
           to={`/tournaments/${id}/director`}
-          className="card hover:shadow-lg transition-shadow border-2 border-primary-200"
+          className="group flex items-start gap-4 p-4 rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="card-body flex items-center">
-            <div className="bg-primary-600 p-3 rounded-lg">
-              <LayoutDashboard className="h-6 w-6 text-white" />
-            </div>
-            <div className="ml-4 flex-1">
-              <p className="font-semibold text-gray-900">Director Dashboard</p>
-              <p className="text-sm text-gray-500">Tournament control center</p>
-            </div>
-            <ArrowRight className="h-5 w-5 text-gray-400" />
+          <div className="flex-shrink-0 bg-indigo-600 p-3 rounded-lg">
+            <LayoutDashboard className="h-6 w-6 text-white" />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-slate-900 dark:text-slate-100">Director Dashboard</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Tournament control center</p>
+          </div>
+          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-indigo-600 transition-colors flex-shrink-0" />
         </Link>
 
         <Link
           to={`/checkin/${id}`}
-          className="card hover:shadow-lg transition-shadow"
+          className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="card-body flex items-center">
-            <div className="bg-blue-500 p-3 rounded-lg">
-              <ClipboardCheck className="h-6 w-6 text-white" />
-            </div>
-            <div className="ml-4 flex-1">
-              <p className="font-semibold text-gray-900">Check-In</p>
-              <p className="text-sm text-gray-500">Verify competitor attendance</p>
-            </div>
-            <ArrowRight className="h-5 w-5 text-gray-400" />
+          <div className="flex-shrink-0 bg-blue-500 p-3 rounded-lg">
+            <ClipboardCheck className="h-6 w-6 text-white" />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-slate-900 dark:text-slate-100">Check-In</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Verify competitor attendance</p>
+          </div>
+          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600 transition-colors flex-shrink-0" />
         </Link>
 
         <Link
           to={`/scorekeeper/${id}`}
-          className="card hover:shadow-lg transition-shadow"
+          className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="card-body flex items-center">
-            <div className="bg-green-500 p-3 rounded-lg">
-              <Timer className="h-6 w-6 text-white" />
-            </div>
-            <div className="ml-4 flex-1">
-              <p className="font-semibold text-gray-900">Scorekeeper</p>
-              <p className="text-sm text-gray-500">Record match results</p>
-            </div>
-            <ArrowRight className="h-5 w-5 text-gray-400" />
+          <div className="flex-shrink-0 bg-green-500 p-3 rounded-lg">
+            <Timer className="h-6 w-6 text-white" />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-slate-900 dark:text-slate-100">Scorekeeper</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Record match results</p>
+          </div>
+          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-green-600 transition-colors flex-shrink-0" />
         </Link>
 
         <a
           href={`/api/brackets/tournament/${id}/pdf`}
           target="_blank"
           rel="noopener noreferrer"
-          className="card hover:shadow-lg transition-shadow"
+          className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="card-body flex items-center">
-            <div className="bg-purple-500 p-3 rounded-lg">
-              <FileDown className="h-6 w-6 text-white" />
-            </div>
-            <div className="ml-4 flex-1">
-              <p className="font-semibold text-gray-900">Export Brackets</p>
-              <p className="text-sm text-gray-500">Download all bracket PDFs</p>
-            </div>
-            <ArrowRight className="h-5 w-5 text-gray-400" />
+          <div className="flex-shrink-0 bg-purple-500 p-3 rounded-lg">
+            <FileDown className="h-6 w-6 text-white" />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-slate-900 dark:text-slate-100">Export Brackets</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Download all bracket PDFs</p>
+          </div>
+          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-purple-600 transition-colors flex-shrink-0" />
         </a>
 
         <Link
           to={`/display/${id}`}
           target="_blank"
-          className="card hover:shadow-lg transition-shadow"
+          className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="card-body flex items-center">
-            <div className="bg-yellow-500 p-3 rounded-lg">
-              <Monitor className="h-6 w-6 text-white" />
-            </div>
-            <div className="ml-4 flex-1">
-              <p className="font-semibold text-gray-900">Live Scoreboard</p>
-              <p className="text-sm text-gray-500">Public display for spectators</p>
-            </div>
-            <ArrowRight className="h-5 w-5 text-gray-400" />
+          <div className="flex-shrink-0 bg-yellow-500 p-3 rounded-lg">
+            <Monitor className="h-6 w-6 text-white" />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-slate-900 dark:text-slate-100">Live Scoreboard</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Public display for spectators</p>
+          </div>
+          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-yellow-600 transition-colors flex-shrink-0" />
         </Link>
 
         <Link
           to={`/tournaments/${id}/results`}
-          className="card hover:shadow-lg transition-shadow"
+          className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="card-body flex items-center">
-            <div className="bg-red-500 p-3 rounded-lg">
-              <Medal className="h-6 w-6 text-white" />
-            </div>
-            <div className="ml-4 flex-1">
-              <p className="font-semibold text-gray-900">Results</p>
-              <p className="text-sm text-gray-500">View standings and medals</p>
-            </div>
-            <ArrowRight className="h-5 w-5 text-gray-400" />
+          <div className="flex-shrink-0 bg-red-500 p-3 rounded-lg">
+            <Medal className="h-6 w-6 text-white" />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-slate-900 dark:text-slate-100">Results</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">View standings and medals</p>
+          </div>
+          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-red-600 transition-colors flex-shrink-0" />
         </Link>
       </div>
 
