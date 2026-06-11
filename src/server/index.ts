@@ -5,6 +5,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import 'express-async-errors';
 import { PrismaClient } from '@prisma/client';
+
+// Prisma 7: lazy proxy to defer PrismaClient construction
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
+const buildPrisma = () => new PrismaClient();
 import competitorsRouter from './routes/competitors.js';
 import tournamentsRouter from './routes/tournaments.js';
 import divisionsRouter from './routes/divisions.js';
@@ -23,7 +27,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const prisma = new PrismaClient();
+const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = (globalForPrisma.prisma ??= buildPrisma());
+    const value = (client as unknown as Record<string | symbol, unknown>)[prop];
+    return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(client) : value;
+  },
+});
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
 
