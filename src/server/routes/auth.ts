@@ -11,21 +11,25 @@ import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
 
 const router = Router();
 
-// Rate limiting for auth routes
+// Rate limiting for auth routes. In dev/test, set RATE_LIMIT_DISABLED=1 to
+// bypass entirely (the limiter is in-memory so test suites that hit the
+// endpoint multiple times in quick succession would otherwise hit the cap).
+const rateLimitDisabled = process.env.RATE_LIMIT_DISABLED === '1';
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 attempts per window
   message: { error: 'Too many attempts, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => rateLimitDisabled,
 });
-
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 3, // 3 registrations per hour per IP
   message: { error: 'Too many accounts created, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => rateLimitDisabled,
 });
 
 // Validation schemas
