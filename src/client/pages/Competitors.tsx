@@ -25,6 +25,7 @@ import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
+import { Modal } from '../components/ui';
 import { Select } from '../components/ui';
 import { Toolbar } from '../components/ui';
 
@@ -490,16 +491,13 @@ export default function Competitors() {
       <Card padded={false}>
         <div className="p-3 space-y-2">
           {/* Search row - full width */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              type="text"
-              placeholder="Search by name, school…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 w-full"
-            />
-          </div>
+          <Input
+            type="text"
+            placeholder="Search by name, school…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            leftIcon={<Search className="h-4 w-4" />}
+          />
 
           {/* Gender + School + Belt row */}
           <div className="flex flex-wrap items-center gap-2">
@@ -811,299 +809,204 @@ export default function Competitors() {
 
       {/* Add/Edit Competitor Modal */}
       {showFormModal && (
-        <div className="modal-container flex items-center justify-center p-4">
-          <div className="modal-backdrop" onClick={closeFormModal} />
-          <div className="modal-panel max-w-lg">
-            <div className="modal-header">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {editingCompetitor ? 'Edit Competitor' : 'Add Competitor'}
-              </h2>
-              <button
-                onClick={closeFormModal}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        <Modal
+          isOpen={showFormModal}
+          onClose={closeFormModal}
+          title={editingCompetitor ? 'Edit Competitor' : 'Add Competitor'}
+          size="lg"
+          footer={
+            <>
+              <Button variant="secondary" type="button" onClick={closeFormModal} className="w-full sm:w-auto">
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                form="competitor-form"
+                loading={createMutation.isPending || updateMutation.isPending}
+                className="w-full sm:w-auto flex items-center justify-center"
               >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <form
-              onSubmit={handleFormSubmit}
-              onInvalidCapture={(e) => {
-                const target = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-                if (target && target.willValidate && !target.validity.valid) {
-                  e.preventDefault();
-                  const label = target.closest('div')?.querySelector('label')?.textContent?.replace('*','').trim() || target.name || 'A required field';
-                  setFormError(`${label} is required`);
-                  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  setTimeout(() => target.focus(), 50);
-                }
-              }}
-            >
-              <div className="modal-body space-y-4">
-                {formError && (
-                  <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
-                    <span className="font-semibold">⚠</span>
-                    <span>{formError}</span>
-                  </div>
+                {(createMutation.isPending || updateMutation.isPending) ? (
+                  <><Spinner size="sm" className="mr-2" /> Saving...</>
+                ) : editingCompetitor ? (
+                  'Update Competitor'
+                ) : (
+                  'Add Competitor'
                 )}
-                <div className="form-grid">
-                  <div>
-                    <Label>
-                      First Name <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      type="text"
-                      value={formData.firstName}
-                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label>
-                      Last Name <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      type="text"
-                      value={formData.lastName}
-                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="form-grid">
-                  <div>
-                    <Label>
-                      Gender <span className="text-red-500">*</span>
-                    </Label>
-                    <Select
-                      value={formData.gender}
-                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                      required
-                    >
-                      <option value="M">Male</option>
-                      <option value="F">Female</option>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>
-                      Date of Birth <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      type="date"
-                      value={formData.dateOfBirth}
-                      onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="form-grid">
-                  <div>
-                    <Label>
-                      Belt <span className="text-red-500">*</span>
-                    </Label>
-                    <Select
-                      value={formData.belt}
-                      onChange={(e) => setFormData({ ...formData, belt: e.target.value })}
-                      required
-                    >
-                      {BELT_OPTIONS.map((belt) => (
-                        <option key={belt} value={belt}>
-                          {belt}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Dan Rank</Label>
-                    <Select
-                      value={formData.danRank}
-                      onChange={(e) => setFormData({ ...formData, danRank: e.target.value })}
-                      disabled={formData.belt !== 'Black'}
-                    >
-                      <option value="">N/A</option>
-                      <option value="1">1st Dan</option>
-                      <option value="2">2nd Dan</option>
-                      <option value="3">3rd Dan</option>
-                      <option value="4">4th Dan</option>
-                      <option value="5">5th Dan</option>
-                      <option value="6">6th Dan</option>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="form-grid">
-                  <div>
-                    <Label>
-                      Weight (lbs) <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      value={formData.weightLbs}
-                      onChange={(e) => setFormData({ ...formData, weightLbs: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label>Height (inches)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      value={formData.heightInches}
-                      onChange={(e) => setFormData({ ...formData, heightInches: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label>School/Dojang</Label>
-                  <Input
-                    type="text"
-                    value={formData.schoolDojang}
-                    onChange={(e) => setFormData({ ...formData, schoolDojang: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <Label>Special Needs</Label>
-                  <Input
-                    type="text"
-                    value={formData.specialNeeds}
-                    onChange={(e) => setFormData({ ...formData, specialNeeds: e.target.value })}
-                    placeholder="Leave blank if none"
-                  />
-                </div>
+              </Button>
+            </>
+          }
+        >
+          <form
+            id="competitor-form"
+            onSubmit={handleFormSubmit}
+            onInvalidCapture={(e) => {
+              const target = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+              if (target && target.willValidate && !target.validity.valid) {
+                e.preventDefault();
+                const label = target.closest('div')?.querySelector('label')?.textContent?.replace('*','').trim() || target.name || 'A required field';
+                setFormError(`${label} is required`);
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setTimeout(() => target.focus(), 50);
+              }
+            }}
+            className="space-y-4"
+          >
+            {formError && (
+              <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
+                <span className="font-semibold">⚠</span>
+                <span>{formError}</span>
               </div>
+            )}
+            <div className="form-grid">
+              <div>
+                <Label>
+                  First Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="text"
+                  value={formData.firstName}
+                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label>
+                  Last Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="text"
+                  value={formData.lastName}
+                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
 
-              <div className="modal-footer">
-                <Button variant="secondary" type="button" onClick={closeFormModal} className="w-full sm:w-auto">
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  type="submit"
-                  loading={createMutation.isPending || updateMutation.isPending}
-                  className="w-full sm:w-auto flex items-center justify-center"
+            <div className="form-grid">
+              <div>
+                <Label>
+                  Gender <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={formData.gender}
+                  onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                  required
                 >
-                  {(createMutation.isPending || updateMutation.isPending) ? (
-                    <><Spinner size="sm" className="mr-2" /> Saving...</>
-                  ) : editingCompetitor ? (
-                    'Update Competitor'
-                  ) : (
-                    'Add Competitor'
-                  )}
-                </Button>
+                  <option value="M">Male</option>
+                  <option value="F">Female</option>
+                </Select>
               </div>
-            </form>
-          </div>
-        </div>
+              <div>
+                <Label>
+                  Date of Birth <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={formData.dateOfBirth}
+                  onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div>
+                <Label>
+                  Belt <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={formData.belt}
+                  onChange={(e) => setFormData({ ...formData, belt: e.target.value })}
+                  required
+                >
+                  {BELT_OPTIONS.map((belt) => (
+                    <option key={belt} value={belt}>
+                      {belt}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>Dan Rank</Label>
+                <Select
+                  value={formData.danRank}
+                  onChange={(e) => setFormData({ ...formData, danRank: e.target.value })}
+                  disabled={formData.belt !== 'Black'}
+                >
+                  <option value="">N/A</option>
+                  <option value="1">1st Dan</option>
+                  <option value="2">2nd Dan</option>
+                  <option value="3">3rd Dan</option>
+                  <option value="4">4th Dan</option>
+                  <option value="5">5th Dan</option>
+                  <option value="6">6th Dan</option>
+                </Select>
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div>
+                <Label>
+                  Weight (lbs) <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={formData.weightLbs}
+                  onChange={(e) => setFormData({ ...formData, weightLbs: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label>Height (inches)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={formData.heightInches}
+                  onChange={(e) => setFormData({ ...formData, heightInches: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>School/Dojang</Label>
+              <Input
+                type="text"
+                value={formData.schoolDojang}
+                onChange={(e) => setFormData({ ...formData, schoolDojang: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label>Special Needs</Label>
+              <Input
+                type="text"
+                value={formData.specialNeeds}
+                onChange={(e) => setFormData({ ...formData, specialNeeds: e.target.value })}
+                placeholder="Leave blank if none"
+              />
+            </div>
+          </form>
+        </Modal>
       )}
 
       {/* Import Modal */}
       {showImportModal && (
-        <div className="modal-container flex items-center justify-center p-4">
-          <div className="modal-backdrop" onClick={() => setShowImportModal(false)} />
-          <div className="modal-panel max-w-2xl">
-            <div className="modal-header">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                  <FileSpreadsheet className="h-5 w-5 text-green-600 dark:text-green-400" />
-                </div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Import Competitors</h2>
+        <Modal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          title={
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <FileSpreadsheet className="h-5 w-5 text-green-600 dark:text-green-400" />
               </div>
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <span>Import Competitors</span>
             </div>
-            <div className="modal-body">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-sm text-gray-600">
-                  Found {importData?.length} rows. Map the columns below:
-                </p>
-                <button
-                  onClick={handleDownloadTemplate}
-                  className="text-sm text-primary-600 hover:text-primary-700 flex items-center"
-                >
-                  <Download className="h-4 w-4 mr-1" />
-                  Get Template
-                </button>
-              </div>
-
-              <div className="form-grid">
-                {[
-                  { key: 'firstName', label: 'First Name', required: true },
-                  { key: 'lastName', label: 'Last Name', required: true },
-                  { key: 'gender', label: 'Gender', required: true },
-                  { key: 'dateOfBirth', label: 'Date of Birth' },
-                  { key: 'age', label: 'Age (if no DOB)' },
-                  { key: 'belt', label: 'Belt', required: true },
-                  { key: 'danRank', label: 'Dan Rank' },
-                  { key: 'weight', label: 'Weight', required: true },
-                  { key: 'height', label: 'Height' },
-                  { key: 'school', label: 'School/Dojang' },
-                  { key: 'patterns', label: 'Patterns (Y/N)' },
-                  { key: 'sparring', label: 'Sparring (Y/N)' },
-                ].map(({ key, label, required }) => (
-                  <div key={key}>
-                    <Label className="text-xs sm:text-sm">
-                      {label}
-                      {required && <span className="text-red-500">*</span>}
-                    </Label>
-                    <Select
-                      value={(columnMapping as any)[key] || ''}
-                      onChange={(e) =>
-                        setColumnMapping({ ...columnMapping, [key]: e.target.value })
-                      }
-                      className="w-full text-sm"
-                    >
-                      <option value="">-- Select --</option>
-                      {importColumns.map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                ))}
-              </div>
-
-              {importData && importData.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="text-sm font-medium text-gray-700 mb-2">
-                    Preview (first 3 rows):
-                  </h3>
-                  <div className="overflow-x-auto scroll-hint -mx-4 px-4 sm:mx-0 sm:px-0">
-                    <table className="min-w-full text-xs">
-                      <thead>
-                        <tr className="bg-gray-50">
-                          {Object.keys(importData[0]).slice(0, 4).map((key) => (
-                            <th key={key} className="px-2 py-1 text-left whitespace-nowrap">
-                              {key.length > 12 ? key.substring(0, 12) + '...' : key}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {importData.slice(0, 3).map((row, i) => (
-                          <tr key={i}>
-                            {Object.values(row).slice(0, 4).map((val: any, j) => (
-                              <td key={j} className="px-2 py-1 border-t whitespace-nowrap">
-                                {String(val).substring(0, 15)}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
+          }
+          size="xl"
+          footer={
+            <>
               <Button variant="secondary" onClick={() => setShowImportModal(false)} className="w-full sm:w-auto">
                 Cancel
               </Button>
@@ -1120,9 +1023,92 @@ export default function Competitors() {
                   <><Upload className="h-4 w-4 mr-2" /> Import {importData?.length} Competitors</>
                 )}
               </Button>
-            </div>
+            </>
+          }
+        >
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-gray-600">
+              Found {importData?.length} rows. Map the columns below:
+            </p>
+            <button
+              onClick={handleDownloadTemplate}
+              className="text-sm text-primary-600 hover:text-primary-700 flex items-center"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Get Template
+            </button>
           </div>
-        </div>
+
+          <div className="form-grid">
+            {[
+              { key: 'firstName', label: 'First Name', required: true },
+              { key: 'lastName', label: 'Last Name', required: true },
+              { key: 'gender', label: 'Gender', required: true },
+              { key: 'dateOfBirth', label: 'Date of Birth' },
+              { key: 'age', label: 'Age (if no DOB)' },
+              { key: 'belt', label: 'Belt', required: true },
+              { key: 'danRank', label: 'Dan Rank' },
+              { key: 'weight', label: 'Weight', required: true },
+              { key: 'height', label: 'Height' },
+              { key: 'school', label: 'School/Dojang' },
+              { key: 'patterns', label: 'Patterns (Y/N)' },
+              { key: 'sparring', label: 'Sparring (Y/N)' },
+            ].map(({ key, label, required }) => (
+              <div key={key}>
+                <Label className="text-xs sm:text-sm">
+                  {label}
+                  {required && <span className="text-red-500">*</span>}
+                </Label>
+                <Select
+                  value={(columnMapping as any)[key] || ''}
+                  onChange={(e) =>
+                    setColumnMapping({ ...columnMapping, [key]: e.target.value })
+                  }
+                  className="w-full text-sm"
+                >
+                  <option value="">-- Select --</option>
+                  {importColumns.map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ))}
+          </div>
+
+          {importData && importData.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">
+                Preview (first 3 rows):
+              </h3>
+              <div className="overflow-x-auto scroll-hint -mx-4 px-4 sm:mx-0 sm:px-0">
+                <table className="min-w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      {Object.keys(importData[0]).slice(0, 4).map((key) => (
+                        <th key={key} className="px-2 py-1 text-left whitespace-nowrap">
+                          {key.length > 12 ? key.substring(0, 12) + '...' : key}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importData.slice(0, 3).map((row, i) => (
+                      <tr key={i}>
+                        {Object.values(row).slice(0, 4).map((val: any, j) => (
+                          <td key={j} className="px-2 py-1 border-t whitespace-nowrap">
+                            {String(val).substring(0, 15)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </Modal>
       )}
     </div>
   );
