@@ -18,6 +18,7 @@ import { TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
+import { DataTable, TableHead, TableBody, TableRow, TableCell } from '../components/ui';
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui';
@@ -654,11 +655,11 @@ export default function Competitors() {
               </div>
 
               {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800">
-                      <th className="px-4 py-2.5 w-10">
+              <div className="hidden md:block">
+                <DataTable>
+                  <TableHead>
+                    <tr>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left w-10">
                         <input
                           type="checkbox"
                           checked={filteredCompetitors?.length > 0 && selectedIds.size === filteredCompetitors.length}
@@ -673,21 +674,21 @@ export default function Competitors() {
                           className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                         />
                       </th>
-                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-2 py-2.5">Name</th>
-                      <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-2 py-2.5 hidden lg:table-cell">School</th>
-                      <th className="text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-2 py-2.5 w-12">Age</th>
-                      <th className="text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-2 py-2.5 w-16">Weight</th>
-                      <th className="w-16 px-2 py-2.5"></th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Name</th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left hidden lg:table-cell">School</th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right w-12">Age</th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right w-16">Weight</th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right w-16"></th>
                     </tr>
-                  </thead>
-                  <tbody>
+                  </TableHead>
+                  <TableBody>
                     {filteredCompetitors.map((c: Competitor) => (
-                      <tr
+                      <TableRow
                         key={c.id}
                         onClick={() => setEditingCompetitor(c)}
-                        className={`group border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer ${selectedIds.has(c.id) ? 'row-selected' : ''}`}
+                        className={`border-b border-slate-100 dark:border-slate-800/60 cursor-pointer ${selectedIds.has(c.id) ? 'row-selected' : ''}`}
                       >
-                        <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             checked={selectedIds.has(c.id)}
@@ -699,8 +700,8 @@ export default function Competitors() {
                             }}
                             className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                           />
-                        </td>
-                        <td className="px-2 py-2">
+                        </TableCell>
+                        <TableCell className="px-2 py-2">
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className="h-7 w-7 rounded-full bg-gradient-to-br from-indigo-500/10 to-violet-500/10 border border-indigo-200/40 dark:border-indigo-800/40 flex items-center justify-center text-indigo-700 dark:text-indigo-300 text-xs font-semibold flex-shrink-0">
                               {c.firstName?.[0]}{c.lastName?.[0]}
@@ -715,11 +716,11 @@ export default function Competitors() {
                               </div>
                             </div>
                           </div>
-                        </td>
-                        <td className="px-2 py-2 text-sm text-slate-500 dark:text-slate-400 max-w-[160px] truncate hidden lg:table-cell">{c.schoolDojang || '—'}</td>
-                        <td className="px-2 py-2 text-sm text-slate-600 dark:text-slate-300 tabular-nums text-right">{calculateAge(c.dateOfBirth)}</td>
-                        <td className="px-2 py-2 text-sm text-slate-600 dark:text-slate-300 tabular-nums text-right">{c.weightLbs ? `${c.weightLbs}` : <span className="text-slate-300">—</span>}</td>
-                        <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                        </TableCell>
+                        <TableCell className="px-2 py-2 text-sm text-slate-500 dark:text-slate-400 max-w-[160px] truncate hidden lg:table-cell">{c.schoolDojang || '—'}</TableCell>
+                        <TableCell className="px-2 py-2 text-sm text-slate-600 dark:text-slate-300 tabular-nums text-right">{calculateAge(c.dateOfBirth)}</TableCell>
+                        <TableCell className="px-2 py-2 text-sm text-slate-600 dark:text-slate-300 tabular-nums text-right">{c.weightLbs ? `${c.weightLbs}` : <span className="text-slate-300">—</span>}</TableCell>
+                        <TableCell className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => setEditingCompetitor(c)}
@@ -736,11 +737,11 @@ export default function Competitors() {
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </DataTable>
               </div>
             </>
           ) : data?.competitors?.length > 0 ? (
@@ -1083,28 +1084,28 @@ export default function Competitors() {
                 Preview (first 3 rows):
               </h3>
               <div className="overflow-x-auto scroll-hint -mx-4 px-4 sm:mx-0 sm:px-0">
-                <table className="min-w-full text-xs">
-                  <thead>
-                    <tr className="bg-gray-50">
+                <DataTable density="compact">
+                  <TableHead>
+                    <tr>
                       {Object.keys(importData[0]).slice(0, 4).map((key) => (
-                        <th key={key} className="px-2 py-1 text-left whitespace-nowrap">
+                        <th key={key} className="px-2 py-1 text-left whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           {key.length > 12 ? key.substring(0, 12) + '...' : key}
                         </th>
                       ))}
                     </tr>
-                  </thead>
-                  <tbody>
+                  </TableHead>
+                  <TableBody>
                     {importData.slice(0, 3).map((row, i) => (
-                      <tr key={i}>
+                      <TableRow key={i}>
                         {Object.values(row).slice(0, 4).map((val: any, j) => (
-                          <td key={j} className="px-2 py-1 border-t whitespace-nowrap">
+                          <TableCell key={j} density="compact" className="px-2 py-1 border-t whitespace-nowrap">
                             {String(val).substring(0, 15)}
-                          </td>
+                          </TableCell>
                         ))}
-                      </tr>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </DataTable>
               </div>
             </div>
           )}

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from 'react';
 
 interface DataTableProps {
   children: ReactNode;
@@ -20,19 +20,29 @@ export default function DataTable({
   );
 }
 
+type ThProps = ThHTMLAttributes<HTMLTableCellElement> & {
+  density?: 'comfortable' | 'compact';
+};
+
 export function TableHead({
   children,
   density = 'comfortable',
-}: {
-  children: ReactNode;
-  density?: 'comfortable' | 'compact';
-}) {
+  className = '',
+  ...rest
+}: ThProps) {
   const spacing = density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-2.5';
   return (
-    <thead className="bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-800">
-      <tr>
-        {Array.isArray(children)
-          ? children.map((child, i) =>
+    <thead
+      {...rest}
+      className={[
+        'bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-800',
+        className,
+      ].filter(Boolean).join(' ')}
+    >
+      {Array.isArray(children)
+        ? (
+          <tr>
+            {children.map((child, i) =>
               child ? (
                 <th
                   key={i}
@@ -44,23 +54,33 @@ export function TableHead({
                   {child}
                 </th>
               ) : null,
-            )
-          : <th className={['px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left'].join(' ')}>{children}</th>}
-      </tr>
+            )}
+          </tr>
+        )
+        : children}
     </thead>
   );
 }
 
+type TbodyProps = HTMLAttributes<HTMLTableSectionElement> & {
+  density?: 'comfortable' | 'compact';
+};
+
 export function TableBody({
   children,
   density = 'comfortable',
-}: {
-  children: ReactNode;
-  density?: 'comfortable' | 'compact';
-}) {
+  className = '',
+  ...rest
+}: TbodyProps) {
   const spacing = density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-2.5';
   return (
-    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+    <tbody
+      {...rest}
+      className={[
+        'divide-y divide-slate-100 dark:divide-slate-800/60',
+        className,
+      ].filter(Boolean).join(' ')}
+    >
       {Array.isArray(children)
         ? children.map((row, i) =>
             row ? (
@@ -85,5 +105,46 @@ export function TableBody({
           )
         : children}
     </tbody>
+  );
+}
+
+type TrProps = HTMLAttributes<HTMLTableRowElement>;
+
+export function TableRow({ children, className = '', ...rest }: TrProps) {
+  return (
+    <tr
+      {...rest}
+      className={[
+        'hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors last:border-b-0',
+        className,
+      ].filter(Boolean).join(' ')}
+    >
+      {children}
+    </tr>
+  );
+}
+
+type TdProps = TdHTMLAttributes<HTMLTableCellElement> & {
+  density?: 'comfortable' | 'compact';
+};
+
+export function TableCell({
+  children,
+  density = 'comfortable',
+  className = '',
+  ...rest
+}: TdProps) {
+  const spacing = density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-2.5';
+  return (
+    <td
+      {...rest}
+      className={[
+        spacing,
+        'text-sm text-slate-700 dark:text-slate-300',
+        className,
+      ].filter(Boolean).join(' ')}
+    >
+      {children}
+    </td>
   );
 }
