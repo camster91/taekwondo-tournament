@@ -16,6 +16,7 @@ import { useToast } from '../context/ToastContext';
 import { Card, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
+import { Input } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { Select } from '../components/ui';
 
@@ -273,17 +274,15 @@ export default function CheckIn() {
 
       {/* Search and Filters */}
       <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10 space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
-          <input
-            ref={searchRef}
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder='Search by name or school... (press "/" to focus)'
-            className="form-input w-full pl-10 pr-4 py-3 text-lg"
-          />
-        </div>
+        <Input
+          ref={searchRef}
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder='Search by name or school... (press "/" to focus)'
+          inputClassName="pl-10 pr-4 py-3 text-lg"
+          leftIcon={<Search className="h-5 w-5" />}
+        />
 
         <div className="flex gap-2 overflow-x-auto pb-1 flex-wrap">
           <Select
@@ -469,13 +468,13 @@ export default function CheckIn() {
                   <Scale className="h-4 w-4 inline mr-1" />
                   Weigh-In Weight (lbs)
                 </label>
-                <input
+                <Input
                   type="number"
                   value={checkInWeight}
                   onChange={(e) => setCheckInWeight(e.target.value)}
                   min={20}
                   max={400}
-                  className="form-input w-full p-3 text-lg"
+                  inputClassName="p-3 text-lg"
                   placeholder="Enter weight"
                   autoFocus
                 />
