@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Plus, Trophy, Calendar, Users, LayoutGrid, X, MapPin, Search } from 'lucide-react';
+import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
@@ -14,6 +14,7 @@ import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
+import { Modal } from '../components/ui';
 
 interface Tournament {
   id: string;
@@ -102,16 +103,14 @@ export default function Tournaments() {
 
       {/* Search Bar */}
       {tournaments && tournaments.length > 0 && (
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="Search tournaments..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 w-full"
-          />
-        </div>
+        <Input
+          type="text"
+          placeholder="Search tournaments..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="max-w-md"
+          leftIcon={<Search className="h-4 w-4" />}
+        />
       )}
 
       {isLoading ? (
@@ -181,102 +180,97 @@ export default function Tournaments() {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="modal-container flex items-center justify-center p-4">
-          <div className="modal-backdrop" onClick={() => setShowCreateModal(false)} />
-          <div className="modal-panel">
-            <div className="modal-header">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Create Tournament</h2>
-              <button
+        <Modal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          title="Create Tournament"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 touch-target flex items-center justify-center"
+                className="w-full sm:w-auto"
               >
-                <X className="h-5 w-5" />
-              </button>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                form="create-tournament-form"
+                loading={createMutation.isPending}
+                disabled={!formData.name || !formData.date}
+                className="w-full sm:w-auto flex items-center justify-center"
+              >
+                {createMutation.isPending ? (
+                  <><Spinner size="sm" className="mr-2" /> Creating...</>
+                ) : (
+                  'Create Tournament'
+                )}
+              </Button>
+            </>
+          }
+        >
+          <form
+            id="create-tournament-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              createMutation.mutate(formData);
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <Label>Sport</Label>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {SPORT_PROFILES.map((sport) => (
+                  <button
+                    key={sport.slug}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, sportProfileSlug: sport.slug })}
+                    className={`flex flex-col items-center p-2 rounded-lg border-2 text-xs font-medium transition-colors ${
+                      formData.sportProfileSlug === sport.slug
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 text-gray-600 dark:text-gray-400'
+                    }`}
+                  >
+                    <span className="text-2xl mb-1">{sport.icon}</span>
+                    <span>{sport.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                createMutation.mutate(formData);
-              }}
-            >
-              <div className="modal-body space-y-4">
-                <div>
-                  <Label>Sport</Label>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                    {SPORT_PROFILES.map((sport) => (
-                      <button
-                        key={sport.slug}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, sportProfileSlug: sport.slug })}
-                        className={`flex flex-col items-center p-2 rounded-lg border-2 text-xs font-medium transition-colors ${
-                          formData.sportProfileSlug === sport.slug
-                            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-                            : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 text-gray-600 dark:text-gray-400'
-                        }`}
-                      >
-                        <span className="text-2xl mb-1">{sport.icon}</span>
-                        <span>{sport.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label>Tournament Name *</Label>
-                  <Input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Newton's Championship 2025"
-                    required
-                    autoFocus
-                  />
-                </div>
-                <div>
-                  <Label>Date *</Label>
-                  <Input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label>Location</Label>
-                  <Input
-                    type="text"
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    placeholder="e.g., Downtown Martial Arts Center"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">Optional</p>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="w-full sm:w-auto"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  type="submit"
-                  loading={createMutation.isPending}
-                  disabled={!formData.name || !formData.date}
-                  className="w-full sm:w-auto flex items-center justify-center"
-                >
-                  {createMutation.isPending ? (
-                    <><Spinner size="sm" className="mr-2" /> Creating...</>
-                  ) : (
-                    'Create Tournament'
-                  )}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div>
+              <Label>Tournament Name *</Label>
+              <Input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g., Newton's Championship 2025"
+                required
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label>Date *</Label>
+              <Input
+                type="date"
+                value={formData.date}
+                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <Label>Location</Label>
+              <Input
+                type="text"
+                value={formData.location}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                placeholder="e.g., Downtown Martial Arts Center"
+              />
+              <p className="mt-1 text-xs text-gray-500">Optional</p>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {/* Delete Confirmation */}
