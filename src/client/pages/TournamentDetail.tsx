@@ -37,6 +37,7 @@ import { PageLoader } from '../components/ui/Spinner';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
+import { Input } from '../components/ui';
 import { StatTile } from '../components/ui';
 
 interface Tournament {
@@ -478,16 +479,15 @@ export default function TournamentDetail() {
           action={
             <div className="flex flex-col sm:flex-row gap-3">
               {registrations && registrations.length > 0 && (
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="form-input pl-9 py-1.5 w-full sm:w-48"
-                  />
-                </div>
+                <Input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full sm:w-48"
+                  inputClassName="h-8 py-1.5"
+                  leftIcon={<Search className="h-4 w-4" />}
+                />
               )}
               <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -747,17 +747,14 @@ export default function TournamentDetail() {
                   </button>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search competitors..."
-                      value={modalSearch}
-                      onChange={(e) => setModalSearch(e.target.value)}
-                      className="form-input pl-9 w-full"
-                      autoFocus
-                    />
-                  </div>
+                  <Input
+                    type="text"
+                    placeholder="Search competitors..."
+                    value={modalSearch}
+                    onChange={(e) => setModalSearch(e.target.value)}
+                    leftIcon={<Search className="h-4 w-4" />}
+                    autoFocus
+                  />
                   <div className="flex gap-4">
                     <label className="flex items-center cursor-pointer">
                       <input
