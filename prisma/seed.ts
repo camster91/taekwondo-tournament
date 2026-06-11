@@ -1,7 +1,12 @@
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { randomUUID } from 'crypto';
 
-const prisma = new PrismaClient({ log: ['warn', 'error'] });
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+  log: ['warn', 'error'],
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────
 

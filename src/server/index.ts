@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import 'express-async-errors';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import competitorsRouter from './routes/competitors.js';
 import tournamentsRouter from './routes/tournaments.js';
 import divisionsRouter from './routes/divisions.js';
@@ -23,9 +24,14 @@ import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Prisma 7: lazy proxy to defer PrismaClient construction
+// Prisma 7: lazy proxy to defer PrismaClient construction.
+// v7 requires a driver adapter — using PrismaPg so the client engine can connect to PostgreSQL.
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
-const buildPrisma = () => new PrismaClient({ log: ['warn', 'error'] });
+const buildPrisma = () =>
+  new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    log: ['warn', 'error'],
+  });
 
 const app = express();
 const prisma: PrismaClient = new Proxy({} as PrismaClient, {

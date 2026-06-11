@@ -1,5 +1,7 @@
 import { execSync } from 'node:child_process';
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
 const PROJECT_ROOT = process.cwd();
 
@@ -24,7 +26,10 @@ export default async function globalSetup() {
   //    - The seeded "Spring Championship 2026" is status=in_progress with a past date;
   //      we add a sibling "E2E Open 2026" for the public-register test instead of
   //      mutating the demo data, and reset one registration's checkedIn flag.
-  const prisma = new PrismaClient({ log: ['warn', 'error'] });
+  const prisma = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    log: ['warn', 'error'],
+  });
 
   try {
     // 3a. Find the seeded tournament so we can copy weight classes for the new one.
