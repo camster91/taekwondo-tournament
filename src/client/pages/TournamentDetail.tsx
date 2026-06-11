@@ -17,7 +17,6 @@ import {
   Medal,
   LayoutDashboard,
   Search,
-  X,
   ChevronLeft,
   Globe,
   Lock,
@@ -29,10 +28,12 @@ import {
   Trophy,
 } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
+import CloseButton from '../components/ui/CloseButton';
 import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
+import { DataTable, TableHead, TableBody, TableRow, TableCell } from '../components/ui';
 import { PageLoader } from '../components/ui/Spinner';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
@@ -584,27 +585,27 @@ export default function TournamentDetail() {
 
               {/* Desktop Table */}
               <div className="desktop-table">
-                <table className="data-table">
-                  <thead>
+                <DataTable>
+                  <TableHead>
                     <tr>
-                      <th>Name</th>
-                      <th>Age</th>
-                      <th>Belt</th>
-                      <th>Weight</th>
-                      <th>School</th>
-                      <th className="text-center">Patterns</th>
-                      <th className="text-center">Sparring</th>
-                      <th className="w-10"></th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Name</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Age</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Belt</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Weight</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">School</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-center">Patterns</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-center">Sparring</th>
+                      <th className="px-4 py-2.5 w-10"></th>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                  </TableHead>
+                  <TableBody className="bg-white dark:bg-slate-800">
                     {filteredRegistrations.map((reg) => (
-                      <tr key={reg.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <td className="font-medium text-gray-900 dark:text-white">
+                      <TableRow key={reg.id}>
+                        <TableCell className="font-medium text-slate-900 dark:text-white">
                           {reg.competitor.firstName} {reg.competitor.lastName}
-                        </td>
-                        <td>{reg.ageAtTournament || '-'}</td>
-                        <td>
+                        </TableCell>
+                        <TableCell>{reg.ageAtTournament || '-'}</TableCell>
+                        <TableCell>
                           <span
                             className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getBeltColor(
                               reg.competitor.belt
@@ -613,14 +614,14 @@ export default function TournamentDetail() {
                             {reg.competitor.belt}
                             {reg.competitor.danRank && ` ${reg.competitor.danRank}D`}
                           </span>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           {reg.competitor.weightLbs
                             ? `${reg.competitor.weightLbs} lbs`
                             : '-'}
-                        </td>
-                        <td className="max-w-[150px] truncate">{reg.competitor.schoolDojang || '-'}</td>
-                        <td className="text-center">
+                        </TableCell>
+                        <TableCell className="max-w-[150px] truncate">{reg.competitor.schoolDojang || '-'}</TableCell>
+                        <TableCell className="text-center">
                           <button
                             onClick={() =>
                               updateRegistrationMutation.mutate({
@@ -637,8 +638,8 @@ export default function TournamentDetail() {
                           >
                             {reg.patterns && <Check className="h-4 w-4" />}
                           </button>
-                        </td>
-                        <td className="text-center">
+                        </TableCell>
+                        <TableCell className="text-center">
                           <button
                             onClick={() =>
                               updateRegistrationMutation.mutate({
@@ -655,19 +656,19 @@ export default function TournamentDetail() {
                           >
                             {reg.sparring && <Check className="h-4 w-4" />}
                           </button>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <button
                             onClick={() => setDeleteTarget(reg)}
                             className="text-gray-400 hover:text-red-600 p-1 rounded transition-colors"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </DataTable>
               </div>
             </>
           ) : registrations && registrations.length > 0 ? (
@@ -735,16 +736,14 @@ export default function TournamentDetail() {
               <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Competitors</h2>
-                  <button
-                    onClick={() => {
+                  <CloseButton
+                    onClose={() => {
                       setShowAddModal(false);
                       setSelectedCompetitors([]);
                       setModalSearch('');
                     }}
-                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
+                    label="Close add competitors"
+                  />
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Input
