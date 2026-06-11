@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Trophy, UserPlus, AlertCircle } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
 import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
 
 export default function AcceptInvite() {
   const navigate = useNavigate();
@@ -149,11 +150,11 @@ export default function AcceptInvite() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Email address
               </label>
-              <input
+              <Input
                 type="email"
                 value={inviteData?.email || ''}
                 readOnly
-                className="form-input w-full bg-gray-50 dark:bg-gray-700 cursor-not-allowed"
+                className="bg-gray-50 dark:bg-gray-700"
               />
             </div>
 
@@ -162,26 +163,24 @@ export default function AcceptInvite() {
                 <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   First Name
                 </label>
-                <input
+                <Input
                   id="firstName"
                   type="text"
                   required
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="form-input w-full"
                 />
               </div>
               <div>
                 <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Last Name
                 </label>
-                <input
+                <Input
                   id="lastName"
                   type="text"
                   required
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="form-input w-full"
                 />
               </div>
             </div>
