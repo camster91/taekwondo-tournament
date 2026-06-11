@@ -62,3 +62,5 @@ jobs:
           # CI-safe defaults so the build doesn't depend on real env vars
           NODE_ENV: production
           CI: true
+          # Placeholder for prisma generate schema validation (no DB connection is made)
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder

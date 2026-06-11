@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "nodemon --exec \"node --loader ts-node/esm\" src/server/index.ts",
     "dev:client": "vite",
-    "build": "prisma generate && prisma db push && vite build && tsc -p tsconfig.server.json",
+    "build": "prisma generate && vite build && tsc -p tsconfig.server.json",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "start": "NODE_ENV=production node server.js",
@@ -19,7 +19,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "seed": "node --loader ts-node/esm prisma/seed.ts"
+    "seed": "node --loader ts-node/esm prisma/seed.ts",
+    "build:full": "prisma generate && prisma db push && vite build && tsc -p tsconfig.server.json"
   },
   "keywords": [
     "martial-arts",
