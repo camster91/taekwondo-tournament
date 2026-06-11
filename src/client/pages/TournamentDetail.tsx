@@ -263,19 +263,19 @@ export default function TournamentDetail() {
           : new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link to={`/tournaments/${id}/settings`} className="btn btn-secondary">
+            <Button as={Link} to={`/tournaments/${id}/settings`} variant="secondary">
               <Settings className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Settings</span>
-            </Link>
-            <Link to={`/tournaments/${id}/schedule`} className="btn btn-secondary">
+            </Button>
+            <Button as={Link} to={`/tournaments/${id}/schedule`} variant="secondary">
               <Calendar className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Schedule</span>
-            </Link>
-            <Link to={`/tournaments/${id}/divisions`} className="btn btn-primary">
+            </Button>
+            <Button as={Link} to={`/tournaments/${id}/divisions`} variant="primary">
               <LayoutGrid className="h-4 w-4 mr-2" />
               Manage Divisions
               <ArrowRight className="h-4 w-4 ml-2" />
-            </Link>
+            </Button>
           </div>
         }
       />
