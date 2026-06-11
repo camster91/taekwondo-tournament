@@ -9,6 +9,7 @@ export { default as DataTable, TableHead, TableBody } from './DataTable';
 export { default as EmptyState } from './EmptyState';
 export { default as Input } from './Input';
 export { default as Label } from './Label';
+export { default as Modal } from './Modal';
 export { default as PageHeader } from './PageHeader';
 export { default as Select } from './Select';
 export { CardSkeleton, TableSkeleton, StatsSkeleton, Skeleton as default } from './Skeleton';
