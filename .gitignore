@@ -7,3 +7,5 @@ prisma/tournament.db-journal
 .DS_Store
 dist/
 dist-server/
+test-results/
+playwright-report/
