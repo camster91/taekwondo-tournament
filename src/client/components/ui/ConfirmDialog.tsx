@@ -1,5 +1,6 @@
 import { AlertTriangle, X } from 'lucide-react';
 import type { ReactNode } from 'react';
+import Button from './Button';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -26,22 +27,14 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   if (!isOpen) return null;
 
-  const variantStyles = {
-    danger: {
-      icon: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
-      button: 'btn-danger',
-    },
-    warning: {
-      icon: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400',
-      button: 'bg-yellow-600 text-white hover:bg-yellow-700',
-    },
-    info: {
-      icon: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
-      button: 'btn-primary',
-    },
-  };
-
-  const styles = variantStyles[variant];
+  // Maps the dialog variant to a Button variant for the confirm action.
+  // Cancel always uses secondary.
+  const confirmVariant =
+    variant === 'danger'
+      ? 'danger'
+      : variant === 'warning'
+        ? 'primary'
+        : 'primary';
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -53,7 +46,15 @@ export default function ConfirmDialog({
         <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full transform transition-all">
           <div className="p-6">
             <div className="flex items-start gap-4">
-              <div className={`p-3 rounded-full ${styles.icon}`}>
+              <div
+                className={`p-3 rounded-full ${
+                  variant === 'danger'
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                    : variant === 'warning'
+                      ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
+                      : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                }`}
+              >
                 <AlertTriangle className="h-6 w-6" />
               </div>
               <div className="flex-1 pt-1">
@@ -67,48 +68,29 @@ export default function ConfirmDialog({
               <button
                 onClick={onClose}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                aria-label="Close"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
           </div>
           <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 rounded-b-lg flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-            <button
+            <Button
+              variant="secondary"
               onClick={onClose}
               disabled={isLoading}
-              className="btn btn-secondary w-full sm:w-auto"
+              className="w-full sm:w-auto"
             >
               {cancelText}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant={confirmVariant}
               onClick={onConfirm}
-              disabled={isLoading}
-              className={`btn ${styles.button} w-full sm:w-auto flex items-center justify-center`}
+              loading={isLoading}
+              className="w-full sm:w-auto"
             >
-              {isLoading ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="none"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  Processing...
-                </span>
-              ) : (
-                confirmText
-              )}
-            </button>
+              {isLoading ? 'Processing...' : confirmText}
+            </Button>
           </div>
         </div>
       </div>
