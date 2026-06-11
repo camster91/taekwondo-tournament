@@ -479,36 +479,44 @@ export default function DirectorDashboard() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Link
+        <Button
+          as={Link}
           to={`/tournaments/${tournamentId}/divisions`}
-          className="btn btn-secondary justify-center"
+          variant="secondary"
+          className="justify-center"
         >
           <Target className="h-4 w-4 mr-2" />
           Manage Divisions
-        </Link>
-        <Link
+        </Button>
+        <Button
+          as={Link}
           to={`/tournaments/${tournamentId}/schedule`}
-          className="btn btn-secondary justify-center"
+          variant="secondary"
+          className="justify-center"
         >
           <Clock className="h-4 w-4 mr-2" />
           View Schedule
-        </Link>
-        <Link
+        </Button>
+        <Button
+          as={Link}
           to={`/scorekeeper/${tournamentId}`}
           target="_blank"
-          className="btn btn-secondary justify-center"
+          variant="secondary"
+          className="justify-center"
         >
           <Activity className="h-4 w-4 mr-2" />
           Scorekeeper
-        </Link>
-        <Link
+        </Button>
+        <Button
+          as={Link}
           to={`/display/${tournamentId}`}
           target="_blank"
-          className="btn btn-secondary justify-center"
+          variant="secondary"
+          className="justify-center"
         >
           <Trophy className="h-4 w-4 mr-2" />
           Public Display
-        </Link>
+        </Button>
       </div>
     </div>
   );
