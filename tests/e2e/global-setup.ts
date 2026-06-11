@@ -11,7 +11,7 @@ function run(cmd: string) {
 export default async function globalSetup() {
   // 1. Push schema (idempotent — no destructive resets, matches test expectation of
   //    "data already exists" from `npm run seed`).
-  run('./node_modules/.bin/prisma db push --accept-data-loss --skip-generate');
+  run('./node_modules/.bin/prisma db push --accept-data-loss');
 
   // 2. Run the project's seed so we have a tournament + 20 competitors + brackets.
   //    We DO NOT call this in tests — globalSetup runs once before all tests, so the
@@ -24,7 +24,7 @@ export default async function globalSetup() {
   //    - The seeded "Spring Championship 2026" is status=in_progress with a past date;
   //      we add a sibling "E2E Open 2026" for the public-register test instead of
   //      mutating the demo data, and reset one registration's checkedIn flag.
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient({ log: ['warn', 'error'] });
 
   try {
     // 3a. Find the seeded tournament so we can copy weight classes for the new one.
