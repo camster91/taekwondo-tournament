@@ -263,34 +263,6 @@ a:focus:not(:focus-visible) {
     transform: translateY(-1px);
   }
 
-  /* Form inputs */
-  .form-input,
-  .form-textarea,
-  .form-select {
-    width: 100%;
-    background: white;
-    border: 1px solid var(--color-surface-200);
-    border-radius: var(--radius-md);
-    padding: 0.5rem 0.75rem;
-    font-size: 0.875rem;
-    color: var(--color-surface-900);
-    transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
-  }
-  .form-input:focus,
-  .form-textarea:focus,
-  .form-select:focus {
-    border-color: var(--color-primary-500);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-    outline: none;
-  }
-  .dark .form-input,
-  .dark .form-textarea,
-  .dark .form-select {
-    background: var(--color-surface-800);
-    border-color: var(--color-surface-700);
-    color: var(--color-surface-100);
-  }
-
   /* Badge / Pill */
   .pill {
     display: inline-flex;
