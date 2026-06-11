@@ -471,7 +471,7 @@ function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRe
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
           <Label htmlFor="code">6-digit code</Label>
-          <input
+          <Input
             ref={codeInputRef}
             id="code"
             name="code"
@@ -482,7 +482,7 @@ function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRe
             required
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            className="form-input text-center text-2xl tracking-[0.5em] font-mono py-3"
+            inputClassName="text-center text-2xl tracking-[0.5em] font-mono py-3"
             placeholder="000000"
           />
         </div>
