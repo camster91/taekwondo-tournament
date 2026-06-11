@@ -248,9 +248,9 @@ export default function UserManagement() {
         <ShieldX className="mx-auto h-12 w-12 text-red-400 dark:text-red-500" />
         <h2 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Access Denied</h2>
         <p className="mt-2 text-gray-500 dark:text-gray-400">You need admin privileges to access this page.</p>
-        <Link to="/" className="mt-4 btn btn-primary inline-block">
+        <Button as={Link} to="/" variant="primary" className="mt-4">
           Go to Dashboard
-        </Link>
+        </Button>
       </div>
     );
   }

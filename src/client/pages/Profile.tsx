@@ -61,9 +61,9 @@ export default function Profile() {
     return (
       <div className="text-center py-12">
         <p className="text-gray-500 dark:text-gray-400">Please log in to view your profile.</p>
-        <Link to="/login" className="mt-4 btn btn-primary inline-block">
+        <Button as={Link} to="/login" variant="primary" className="mt-4">
           Go to Login
-        </Link>
+        </Button>
       </div>
     );
   }
