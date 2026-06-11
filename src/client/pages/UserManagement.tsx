@@ -28,6 +28,7 @@ import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
+import { Modal } from '../components/ui';
 import { Select } from '../components/ui';
 import { DataTable, TableHead, TableBody } from '../components/ui';
 
@@ -579,113 +580,97 @@ export default function UserManagement() {
 
       {/* Invite User Modal */}
       {showInviteModal && (
-        <div className="modal-container flex items-center justify-center p-4">
-          <div className="modal-backdrop" onClick={() => {
+        <Modal
+          isOpen={showInviteModal}
+          onClose={() => {
             setShowInviteModal(false);
             setInviteData({ email: '', firstName: '', lastName: '', role: 'viewer' });
             setError(null);
-          }} />
-          <div className="modal-panel max-w-md">
-            <div className="modal-header">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Invite User</h2>
-              <button
+          }}
+          title="Invite User"
+          footer={
+            <>
+              <Button
+                type="button"
+                variant="secondary"
                 onClick={() => {
                   setShowInviteModal(false);
                   setInviteData({ email: '', firstName: '', lastName: '', role: 'viewer' });
                   setError(null);
                 }}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                className="w-full sm:w-auto"
               >
-                <X className="h-5 w-5" />
-              </button>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                form="invite-user-form"
+                variant="primary"
+                loading={sendInviteMutation.isPending}
+                className="w-full sm:w-auto flex items-center justify-center"
+              >
+                {sendInviteMutation.isPending ? (
+                  <>
+                    <Spinner size="sm" className="mr-2" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Invitation
+                  </>
+                )}
+              </Button>
+            </>
+          }
+        >
+          <form id="invite-user-form" onSubmit={handleSendInvite} className="space-y-4">
+            <div>
+              <Label required>Email</Label>
+              <Input
+                type="email"
+                required
+                value={inviteData.email}
+                onChange={(e) => setInviteData({ ...inviteData, email: e.target.value })}
+                placeholder="user@example.com"
+              />
             </div>
-            <form onSubmit={handleSendInvite}>
-              <div className="modal-body space-y-4">
-                <div>
-                  <Label required>Email</Label>
-                  <Input
-                    type="email"
-                    required
-                    value={inviteData.email}
-                    onChange={(e) => setInviteData({ ...inviteData, email: e.target.value })}
-                    placeholder="user@example.com"
-                    className="w-full"
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label>First Name</Label>
-                    <Input
-                      type="text"
-                      value={inviteData.firstName}
-                      onChange={(e) => setInviteData({ ...inviteData, firstName: e.target.value })}
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <Label>Last Name</Label>
-                    <Input
-                      type="text"
-                      value={inviteData.lastName}
-                      onChange={(e) => setInviteData({ ...inviteData, lastName: e.target.value })}
-                      className="w-full"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label>Role</Label>
-                  <Select
-                    value={inviteData.role}
-                    onChange={(e) => setInviteData({ ...inviteData, role: e.target.value })}
-                    className="w-full"
-                  >
-                    {ROLES.map((role) => (
-                      <option key={role.value} value={role.value}>
-                        {role.label} — {role.description}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  An email will be sent with a link to set up their account. The invitation expires in 72 hours.
-                </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label>First Name</Label>
+                <Input
+                  type="text"
+                  value={inviteData.firstName}
+                  onChange={(e) => setInviteData({ ...inviteData, firstName: e.target.value })}
+                />
               </div>
-              <div className="modal-footer">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    setShowInviteModal(false);
-                    setInviteData({ email: '', firstName: '', lastName: '', role: 'viewer' });
-                    setError(null);
-                  }}
-                  className="w-full sm:w-auto"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={sendInviteMutation.isPending}
-                  loading={sendInviteMutation.isPending}
-                  className="w-full sm:w-auto flex items-center justify-center"
-                >
-                  {sendInviteMutation.isPending ? (
-                    <>
-                      <Spinner size="sm" className="mr-2" />
-                      Sending...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4 mr-2" />
-                      Send Invitation
-                    </>
-                  )}
-                </Button>
+              <div>
+                <Label>Last Name</Label>
+                <Input
+                  type="text"
+                  value={inviteData.lastName}
+                  onChange={(e) => setInviteData({ ...inviteData, lastName: e.target.value })}
+                />
               </div>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div>
+              <Label>Role</Label>
+              <Select
+                value={inviteData.role}
+                onChange={(e) => setInviteData({ ...inviteData, role: e.target.value })}
+              >
+                {ROLES.map((role) => (
+                  <option key={role.value} value={role.value}>
+                    {role.label} — {role.description}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              An email will be sent with a link to set up their account. The invitation expires in 72 hours.
+            </p>
+          </form>
+        </Modal>
       )}
     </div>
   );
