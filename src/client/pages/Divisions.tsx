@@ -29,6 +29,7 @@ import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
+import { Modal } from '../components/ui';
 import { Select } from '../components/ui';
 import { StatTile } from '../components/ui';
 
@@ -577,115 +578,16 @@ export default function Divisions() {
 
       {/* preview Modal */}
       {showPreview && previewData && (
-        <div className="modal-container flex items-center justify-center p-4">
-          <div className="modal-backdrop" onClick={() => setShowPreview(false)} />
-          <div className="modal-panel max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="modal-header">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Division Preview</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {previewData.divisions.length} divisions • {previewData.totalCompetitors} competitors
-                </p>
-              </div>
-              <button onClick={() => setShowPreview(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 touch-target">
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            {previewData.warnings.length > 0 && (
-              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800">
-                <div className="flex items-start">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-yellow-800 dark:text-yellow-200">Warnings:</p>
-                    <ul className="text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside">
-                      {previewData.warnings.map((w, i) => (
-                        <li key={i}>{w}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-              <div>
-                <div className="text-xl font-bold text-gray-900 dark:text-white">{previewData.divisions.length}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Total Divisions</div>
-              </div>
-              <div>
-                <div className="text-xl font-bold text-green-600 dark:text-green-400">
-                  {previewData.divisions.filter(d => d.competitorCount >= 3 && d.competitorCount <= 8).length}
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Optimal Size (3-8)</div>
-              </div>
-              <div>
-                <div className="text-xl font-bold text-yellow-600 dark:text-yellow-400">
-                  {previewData.divisions.filter(d => d.competitorCount > 0 && d.competitorCount < 3).length}
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Small (&lt;3)</div>
-              </div>
-              <div>
-                <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
-                  {previewData.divisions.filter(d => d.competitorCount > 8).length}
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Large (&gt;8)</div>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="space-y-3">
-                {previewData.divisions.map((div, index) => (
-                  <div
-                    key={index}
-                    className={`p-4 rounded-lg border ${
-                      div.competitorCount === 0 ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20' :
-                      div.competitorCount < 3 ? 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20' :
-                      div.competitorCount > 8 ? 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20' :
-                      'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-gray-900 dark:text-white">{div.name}</h4>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-sm font-medium ${
-                          div.competitorCount === 0 ? 'text-red-600 dark:text-red-400' :
-                          div.competitorCount < 3 ? 'text-yellow-600 dark:text-yellow-400' :
-                          div.competitorCount > 8 ? 'text-orange-600 dark:text-orange-400' :
-                          'text-green-600 dark:text-green-400'
-                        }`}>
-                          {div.competitorCount} competitors
-                        </span>
-                        {div.competitorCount === 0 && (
-                          <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 px-2 py-0.5 rounded">Empty</span>
-                        )}
-                        {div.competitorCount > 0 && div.competitorCount < 3 && (
-                          <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 px-2 py-0.5 rounded">Needs merge</span>
-                        )}
-                        {div.competitorCount > 8 && (
-                          <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 px-2 py-0.5 rounded">Will be split</span>
-                        )}
-                      </div>
-                    </div>
-                    {div.competitors.length > 0 && (
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        {div.competitors.slice(0, 5).map((c, i) => (
-                          <span key={i}>
-                            {c.name}{c.school && ` (${c.school})`}
-                            {i < Math.min(div.competitors.length - 1, 4) && ', '}
-                          </span>
-                        ))}
-                        {div.competitors.length > 5 && (
-                          <span className="text-gray-400 dark:text-gray-500"> +{div.competitors.length - 5} more</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="modal-footer">
+        <Modal
+          isOpen={showPreview}
+          onClose={() => setShowPreview(false)}
+          title="Division Preview"
+          subtitle={`${previewData.divisions.length} divisions • ${previewData.totalCompetitors} competitors`}
+          size="full"
+          panelClassName="max-h-[90vh]"
+          noBodyPadding
+          footer={
+            <>
               <Button variant="secondary" onClick={() => setShowPreview(false)} className="w-full sm:w-auto">
                 Cancel
               </Button>
@@ -707,9 +609,102 @@ export default function Divisions() {
                   </>
                 )}
               </Button>
+            </>
+          }
+        >
+          {previewData.warnings.length > 0 && (
+            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800">
+              <div className="flex items-start">
+                <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-yellow-800 dark:text-yellow-200">Warnings:</p>
+                  <ul className="text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside">
+                    {previewData.warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+            <div>
+              <div className="text-xl font-bold text-gray-900 dark:text-white">{previewData.divisions.length}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Total Divisions</div>
+            </div>
+            <div>
+              <div className="text-xl font-bold text-green-600 dark:text-green-400">
+                {previewData.divisions.filter(d => d.competitorCount >= 3 && d.competitorCount <= 8).length}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Optimal Size (3-8)</div>
+            </div>
+            <div>
+              <div className="text-xl font-bold text-yellow-600 dark:text-yellow-400">
+                {previewData.divisions.filter(d => d.competitorCount > 0 && d.competitorCount < 3).length}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Small (&lt;3)</div>
+            </div>
+            <div>
+              <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
+                {previewData.divisions.filter(d => d.competitorCount > 8).length}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Large (&gt;8)</div>
             </div>
           </div>
-        </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="space-y-3">
+              {previewData.divisions.map((div, index) => (
+                <div
+                  key={index}
+                  className={`p-4 rounded-lg border ${
+                    div.competitorCount === 0 ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20' :
+                    div.competitorCount < 3 ? 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20' :
+                    div.competitorCount > 8 ? 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20' :
+                    'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium text-gray-900 dark:text-white">{div.name}</h4>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-medium ${
+                        div.competitorCount === 0 ? 'text-red-600 dark:text-red-400' :
+                        div.competitorCount < 3 ? 'text-yellow-600 dark:text-yellow-400' :
+                        div.competitorCount > 8 ? 'text-orange-600 dark:text-orange-400' :
+                        'text-green-600 dark:text-green-400'
+                      }`}>
+                        {div.competitorCount} competitors
+                      </span>
+                      {div.competitorCount === 0 && (
+                        <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 px-2 py-0.5 rounded">Empty</span>
+                      )}
+                      {div.competitorCount > 0 && div.competitorCount < 3 && (
+                        <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 px-2 py-0.5 rounded">Needs merge</span>
+                      )}
+                      {div.competitorCount > 8 && (
+                        <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 px-2 py-0.5 rounded">Will be split</span>
+                      )}
+                    </div>
+                  </div>
+                  {div.competitors.length > 0 && (
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      {div.competitors.slice(0, 5).map((c, i) => (
+                        <span key={i}>
+                          {c.name}{c.school && ` (${c.school})`}
+                          {i < Math.min(div.competitors.length - 1, 4) && ', '}
+                        </span>
+                      ))}
+                      {div.competitors.length > 5 && (
+                        <span className="text-gray-400 dark:text-gray-500"> +{div.competitors.length - 5} more</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Delete Division Confirmation */}
@@ -763,25 +758,18 @@ export default function Divisions() {
 
       {/* Result Message Modal */}
       {resultMessage && (
-        <div className="modal-container flex items-center justify-center p-4">
-          <div className="modal-backdrop" onClick={() => setResultMessage(null)} />
-          <div className="modal-panel max-w-md">
-            <div className="modal-header">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{resultMessage.title}</h2>
-              <button onClick={() => setResultMessage(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="modal-body">
-              <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{resultMessage.message}</p>
-            </div>
-            <div className="modal-footer">
-              <Button variant="primary" onClick={() => setResultMessage(null)} className="w-full">
-                OK
-              </Button>
-            </div>
-          </div>
-        </div>
+        <Modal
+          isOpen={!!resultMessage}
+          onClose={() => setResultMessage(null)}
+          title={resultMessage.title}
+          footer={
+            <Button variant="primary" onClick={() => setResultMessage(null)} className="w-full sm:w-auto">
+              OK
+            </Button>
+          }
+        >
+          <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{resultMessage.message}</p>
+        </Modal>
       )}
     </div>
   );
