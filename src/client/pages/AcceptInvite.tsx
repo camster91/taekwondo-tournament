@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Trophy, UserPlus, AlertCircle } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
+import Button from '../components/ui/Button';
 
 export default function AcceptInvite() {
   const navigate = useNavigate();
@@ -105,9 +106,9 @@ export default function AcceptInvite() {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">{error}</p>
           <div className="mt-6 text-center">
-            <Link to="/login" className="btn btn-primary inline-block">
+            <Button as={Link} to="/login" variant="primary" className="inline-block">
               Go to Login
-            </Link>
+            </Button>
           </div>
         </div>
       </div>
@@ -185,10 +186,12 @@ export default function AcceptInvite() {
               </div>
             </div>
 
-            <button
+            <Button
               type="submit"
-              disabled={isSubmitting}
-              className="w-full btn btn-primary py-3 flex items-center justify-center text-base font-medium"
+              loading={isSubmitting}
+              variant="primary"
+              size="lg"
+              className="w-full flex items-center justify-center text-base font-medium"
             >
               {isSubmitting ? (
                 <>
@@ -201,7 +204,7 @@ export default function AcceptInvite() {
                   Create Account
                 </>
               )}
-            </button>
+            </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
