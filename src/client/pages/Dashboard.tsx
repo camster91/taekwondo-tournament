@@ -130,15 +130,16 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/competitors" className="btn btn-secondary py-2 text-sm">
+            <Button as={Link} to="/competitors" variant="secondary" size="sm">
               <FileSpreadsheet className="h-4 w-4" /> Import Excel
-            </Link>
-            <button
+            </Button>
+            <Button
               onClick={() => navigate('/tournaments')}
-              className="btn btn-gradient py-2 text-sm"
+              variant="gradient"
+              size="sm"
             >
               <Plus className="h-4 w-4" /> New Tournament
-            </button>
+            </Button>
           </div>
         </div>
 
