@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Home, AlertTriangle } from 'lucide-react';
+import Button from '../components/ui/Button';
 
 export default function NotFound() {
   return (
@@ -9,13 +10,10 @@ export default function NotFound() {
       <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">
         Page not found. The page you are looking for does not exist.
       </p>
-      <Link
-        to="/"
-        className="btn btn-primary flex items-center gap-2 px-6 py-3"
-      >
+      <Button as={Link} to="/" variant="primary" size="lg">
         <Home className="h-5 w-5" />
         Back to Dashboard
-      </Link>
+      </Button>
     </div>
   );
 }

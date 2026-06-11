@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Trophy, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
+import Button from '../components/ui/Button';
 
 export default function VerifyMagicLink() {
   const navigate = useNavigate();
@@ -54,9 +55,9 @@ export default function VerifyMagicLink() {
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">{error}</p>
         <div className="mt-6 text-center">
-          <Link to="/login" className="btn btn-primary inline-block">
+          <Button as={Link} to="/login" variant="primary" className="inline-block">
             Back to Login
-          </Link>
+          </Button>
         </div>
       </div>
     </div>
