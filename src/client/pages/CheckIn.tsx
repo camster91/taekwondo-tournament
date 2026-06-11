@@ -17,6 +17,7 @@ import { Card, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
+import { Modal } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { Select } from '../components/ui';
 
@@ -445,57 +446,15 @@ export default function CheckIn() {
 
       {/* Weight Entry Modal */}
       {selectedRegistration && (
-        <div className="modal-container flex items-center justify-center p-4">
-          <div className="modal-backdrop" onClick={() => { setSelectedRegistration(null); setCheckInWeight(''); }} />
-          <div className="modal-panel max-w-md">
-            <div className="modal-header">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                Check In: {selectedRegistration.competitor.firstName}{' '}
-                {selectedRegistration.competitor.lastName}
-              </h3>
-            </div>
-
-            <div className="modal-body">
-              <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                <div className="text-sm text-gray-500 dark:text-gray-400">Registered Weight</div>
-                <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {selectedRegistration.weightAtRegistration || 'Not recorded'} lbs
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  <Scale className="h-4 w-4 inline mr-1" />
-                  Weigh-In Weight (lbs)
-                </label>
-                <Input
-                  type="number"
-                  value={checkInWeight}
-                  onChange={(e) => setCheckInWeight(e.target.value)}
-                  min={20}
-                  max={400}
-                  inputClassName="p-3 text-lg"
-                  placeholder="Enter weight"
-                  autoFocus
-                />
-                {checkInWeight && (parseFloat(checkInWeight) < 20 || parseFloat(checkInWeight) > 400) && (
-                  <p className="text-red-500 text-sm mt-1">Weight must be between 20 and 400 lbs</p>
-                )}
-              </div>
-
-              {checkInWeight &&
-                selectedRegistration.weightAtRegistration &&
-                Math.abs(parseFloat(checkInWeight) - selectedRegistration.weightAtRegistration) > 2 && (
-                  <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start">
-                    <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-yellow-800 dark:text-yellow-200">
-                      Weight differs by more than 2 lbs from registration. Consider verifying weight class eligibility.
-                    </div>
-                  </div>
-                )}
-            </div>
-
-            <div className="modal-footer">
+        <Modal
+          isOpen={!!selectedRegistration}
+          onClose={() => {
+            setSelectedRegistration(null);
+            setCheckInWeight('');
+          }}
+          title={`Check In: ${selectedRegistration.competitor.firstName} ${selectedRegistration.competitor.lastName}`}
+          footer={
+            <>
               <Button
                 variant="secondary"
                 className="flex-1"
@@ -523,9 +482,47 @@ export default function CheckIn() {
                   'Confirm Check-In'
                 )}
               </Button>
+            </>
+          }
+        >
+          <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+            <div className="text-sm text-gray-500 dark:text-gray-400">Registered Weight</div>
+            <div className="text-lg font-semibold text-gray-900 dark:text-white">
+              {selectedRegistration.weightAtRegistration || 'Not recorded'} lbs
             </div>
           </div>
-        </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <Scale className="h-4 w-4 inline mr-1" />
+              Weigh-In Weight (lbs)
+            </label>
+            <Input
+              type="number"
+              value={checkInWeight}
+              onChange={(e) => setCheckInWeight(e.target.value)}
+              min={20}
+              max={400}
+              inputClassName="p-3 text-lg"
+              placeholder="Enter weight"
+              autoFocus
+            />
+            {checkInWeight && (parseFloat(checkInWeight) < 20 || parseFloat(checkInWeight) > 400) && (
+              <p className="text-red-500 text-sm mt-1">Weight must be between 20 and 400 lbs</p>
+            )}
+          </div>
+
+          {checkInWeight &&
+            selectedRegistration.weightAtRegistration &&
+            Math.abs(parseFloat(checkInWeight) - selectedRegistration.weightAtRegistration) > 2 && (
+              <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start">
+                <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-yellow-800 dark:text-yellow-200">
+                  Weight differs by more than 2 lbs from registration. Consider verifying weight class eligibility.
+                </div>
+              </div>
+            )}
+        </Modal>
       )}
     </div>
   );
