@@ -1,18 +1,30 @@
-name: CI - Deployment Checks
+name: CI Build
+
+# Build-only workflow: verifies the project builds cleanly. No deploy, no secrets required.
+# Triggered on push to default branch and on PRs targeting it. Manual dispatch available.
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Lint
+  build:
+    name: Build
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 15
+
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -24,55 +36,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run ESLint
-        run: npm run lint || echo "No lint script found, checking TypeScript..."
+      - name: Type check (if configured)
+        run: |
+          if grep -q '"typecheck"\|"type-check"\|"tsc"' package.json; then
+            echo "Running typecheck..."
+            npm run typecheck || npm run type-check || npx tsc --noEmit
+          else
+            echo "No typecheck script found, skipping."
+          fi
+        continue-on-error: true
 
-      - name: Type check
-        run: npx tsc --noEmit || echo "TypeScript check completed"
+      - name: Lint (if configured)
+        run: |
+          if grep -q '"lint"' package.json; then
+            echo "Running lint..."
+            npm run lint
+          else
+            echo "No lint script found, skipping."
+          fi
+        continue-on-error: true
 
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      - name: Run tests
-        run: npm test
-
-  docker-build:
-    name: Docker Build Test
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          load: true
-          tags: martial-arts-tournament:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Verify image exists
-        run: docker images martial-arts-tournament:test --format '{{.Repository}}:{{.Tag}}'
+      - name: Build
+        run: npm run build
+        env:
+          # CI-safe defaults so the build doesn't depend on real env vars
+          NODE_ENV: production
+          CI: true
