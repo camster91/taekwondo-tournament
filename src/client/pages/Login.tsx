@@ -367,12 +367,14 @@ function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: 
       </form>
 
       <div className="relative">
-        <Link
+        <Button
+          as={Link}
           to="/register"
-          className="btn btn-secondary w-full py-2.5 text-sm"
+          variant="secondary"
+          className="w-full"
         >
           <UserPlus className="h-4 w-4 mr-2" /> Register as Competitor
-        </Link>
+        </Button>
       </div>
     </div>
   );
