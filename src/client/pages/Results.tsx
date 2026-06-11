@@ -19,6 +19,7 @@ import { getAuthHeaders } from '../context/AuthContext';
 import { Card, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
+import { Select } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { DataTable, TableHead, TableBody } from '../components/ui';
 
@@ -539,15 +540,15 @@ export default function Results() {
 
       {/* Filters */}
       <div className="px-4 pb-2 flex gap-2 flex-wrap">
-        <select
+        <Select
           value={filterEvent}
           onChange={(e) => setFilterEvent(e.target.value as any)}
-          className="form-select text-sm"
+          className="text-sm"
         >
           <option value="all">All Events</option>
           <option value="patterns">Patterns</option>
           <option value="sparring">Sparring</option>
-        </select>
+        </Select>
 
         <div className="flex bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
           <Button
@@ -642,15 +643,18 @@ export default function Results() {
                 <CardBody className="p-4">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{selectedSchool} - All Placements</h3>
-                    <a
+                    <Button
+                      as="a"
                       href={`/api/brackets/tournament/${tournamentId}/school-report?school=${encodeURIComponent(selectedSchool)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="btn btn-secondary text-sm flex items-center"
+                      variant="secondary"
+                      size="sm"
+                      className="flex items-center"
                     >
                       <Download className="h-4 w-4 mr-2" />
                       <span className="hidden sm:inline">Download Report</span>
-                    </a>
+                    </Button>
                   </div>
                   <div className="space-y-2">
                     {filteredDivisions?.map((division) =>
