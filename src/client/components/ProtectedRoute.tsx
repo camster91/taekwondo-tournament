@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ShieldAlert, Loader2 } from 'lucide-react';
+import Button from './ui/Button';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -73,15 +74,15 @@ export default function ProtectedRoute({
               Your current role: <span className="font-medium">{user?.role}</span>
             </p>
             <div className="mt-6 space-x-4">
-              <a href="/" className="btn btn-primary">
+              <Button as="a" href="/" variant="primary">
                 Go to Dashboard
-              </a>
-              <button
+              </Button>
+              <Button
                 onClick={() => window.history.back()}
-                className="btn btn-secondary"
+                variant="secondary"
               >
                 Go Back
-              </button>
+              </Button>
             </div>
           </div>
         </div>
