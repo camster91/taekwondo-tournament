@@ -4,6 +4,8 @@ interface BadgeProps {
   size?: 'sm' | 'md';
   dot?: boolean;
   className?: string;
+  /** Optional tooltip text (rendered as native title attribute). */
+  title?: string;
 }
 
 const variants = {
@@ -35,10 +37,12 @@ export default function Badge({
   size = 'sm',
   dot = false,
   className = '',
+  title,
 }: BadgeProps) {
   return (
     <span
       className={`inline-flex items-center font-medium rounded-full ${variants[variant]} ${sizes[size]} ${className}`}
+      title={title}
     >
       {dot && (
         <span
