@@ -148,6 +148,31 @@ export default function DirectorDashboard() {
         });
       });
 
+      // Backfill from configured ring count. The schedule generator persists
+      // config.ringCount to tournament.settings.rings.count when the user
+      // regenerates the schedule, so the dashboard shows configured-but-empty
+      // rings (status: 'idle', 0 upcoming) instead of "No rings assigned yet".
+      // Closes #34.
+      let configuredRingCount = 0;
+      try {
+        const settings = tournament.settings ? JSON.parse(tournament.settings) : null;
+        configuredRingCount = settings?.rings?.count || 0;
+      } catch {
+        configuredRingCount = 0;
+      }
+      if (configuredRingCount > 0) {
+        for (let i = 1; i <= configuredRingCount; i++) {
+          const ringKey = `Ring ${i}`;
+          if (!rings.some((r) => r.ring === ringKey)) {
+            rings.push({
+              ring: ringKey,
+              upcomingMatches: 0,
+              status: 'idle',
+            });
+          }
+        }
+      }
+
       const divisionDetails: DivisionStats[] = divisions.map((d: any) => {
         const divMatches = matches.filter((m: any) => m._divisionId === d.id);
         const completed = divMatches.filter((m: any) => m.status === 'completed').length;
@@ -362,7 +387,7 @@ export default function DirectorDashboard() {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-bold text-lg text-gray-900 dark:text-white">Ring {ring.ring}</h3>
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white">{ring.ring}</h3>
                     <span
                       className={`flex items-center text-sm ${
                         ring.status === 'active'
