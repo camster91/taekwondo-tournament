@@ -1,4 +1,4 @@
-import type { HTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from 'react';
+import type { HTMLAttributes, ReactNode, TdHTMLAttributes } from 'react';
 
 interface DataTableProps {
   children: ReactNode;
@@ -20,7 +20,7 @@ export default function DataTable({
   );
 }
 
-type ThProps = ThHTMLAttributes<HTMLTableCellElement> & {
+type TheadProps = HTMLAttributes<HTMLTableSectionElement> & {
   density?: 'comfortable' | 'compact';
 };
 
@@ -29,7 +29,7 @@ export function TableHead({
   density = 'comfortable',
   className = '',
   ...rest
-}: ThProps) {
+}: TheadProps) {
   const spacing = density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-2.5';
   return (
     <thead
@@ -46,6 +46,7 @@ export function TableHead({
               child ? (
                 <th
                   key={i}
+                  scope="col"
                   className={[
                     spacing,
                     'text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left',
