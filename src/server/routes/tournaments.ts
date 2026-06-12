@@ -489,13 +489,35 @@ router.get('/:id/day-of', authenticate, async (req: Request, res: Response) => {
   };
 
   // By ring: how many matches are scheduled per ring, how many in-progress
+  // Matches with null ringNumber are NOT bucketed into a default ring (the
+  // previous `|| 1` fallback miscounted unassigned matches into Ring 1 and
+  // made "Up next by ring" lie about which ring was busy). Closes #30
+  // (the public scoreboard fix shipped in fa278b6 applied the same logic
+  // on the client; this is the server side).
   const byRing: Record<number, { total: number; inProgress: number; completed: number }> = {};
   for (const m of matches) {
-    const ring = m.ringNumber || 1;
+    if (m.ringNumber == null) continue;
+    const ring = m.ringNumber;
     if (!byRing[ring]) byRing[ring] = { total: 0, inProgress: 0, completed: 0 };
     byRing[ring].total++;
     if (m.status === 'in_progress') byRing[ring].inProgress++;
     else if (m.status === 'completed') byRing[ring].completed++;
+  }
+
+  // Backfill from configured ring count (tournament.settings.rings.count).
+  // Without this, a brand-new tournament with no matches routed to a ring
+  // yet shows an empty byRing / upNext list even though rings 1..N are
+  // configured in the Schedule page. Same fix as the DirectorDashboard
+  // backfill in 320bac8.
+  let configuredRingCount = 0;
+  try {
+    const settings = tournament.settings ? JSON.parse(tournament.settings) : null;
+    configuredRingCount = settings?.rings?.count || 0;
+  } catch {
+    configuredRingCount = 0;
+  }
+  for (let i = 1; i <= configuredRingCount; i++) {
+    if (!byRing[i]) byRing[i] = { total: 0, inProgress: 0, completed: 0 };
   }
 
   // Up next per ring: next ready match (smallest matchNumber per ring)
