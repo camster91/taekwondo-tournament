@@ -166,6 +166,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader
               title="Recent tournaments"
+              as="h2"
               description="Click a tournament to view divisions, brackets, and results"
               action={
                 <Link to="/tournaments" className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 flex items-center gap-1">
@@ -230,6 +231,7 @@ export default function Dashboard() {
             <Card>
               <CardHeader
                 title="Belt distribution"
+                as="h2"
                 description={`Across your ${totalCompetitors.toLocaleString()} competitors`}
                 action={<Target className="h-4 w-4 text-slate-400" />}
               />
@@ -268,7 +270,7 @@ export default function Dashboard() {
         <div className="space-y-6">
           {/* Quick actions */}
           <Card>
-            <CardHeader title="Quick actions" />
+            <CardHeader title="Quick actions" as="h2" />
             <CardBody className="px-3 pb-3 space-y-1">
               {[
                 { label: 'Import competitors', sub: 'Excel file', icon: FileSpreadsheet, to: '/competitors', tone: 'from-emerald-500 to-teal-500' },
@@ -298,6 +300,7 @@ export default function Dashboard() {
             <Card>
               <CardHeader
                 title="Top schools"
+                as="h2"
                 description="Most represented dojangs"
                 action={<School className="h-4 w-4 text-slate-400" />}
               />
@@ -329,7 +332,7 @@ export default function Dashboard() {
             if (completedCount >= 3) return null;
             return (
               <Card>
-                <CardHeader title="Getting started" />
+                <CardHeader title="Getting started" as="h2" />
                 <CardBody className="px-5 pb-5">
                   <ol className="space-y-3">
                     {[

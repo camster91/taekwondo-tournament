@@ -7,6 +7,8 @@ interface CardHeaderProps {
   icon?: ComponentType<{ className?: string }>;
   children?: ReactNode;
   className?: string;
+  /** Heading level. Defaults to h3; use h2 for top-level page sections. */
+  as?: 'h2' | 'h3' | 'h4';
 }
 
 export default function CardHeader({
@@ -16,6 +18,7 @@ export default function CardHeader({
   icon: Icon,
   children,
   className = '',
+  as: Heading = 'h3',
 }: CardHeaderProps) {
   const hasContentBelow = action || description;
 
@@ -24,10 +27,10 @@ export default function CardHeader({
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           {(title || Icon) && (
-            <h3 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+            <Heading className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
               {Icon && <Icon className="h-5 w-5 text-slate-500" />}
               {title}
-            </h3>
+            </Heading>
           )}
           {description && (
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">

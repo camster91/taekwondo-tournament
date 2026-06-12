@@ -33,7 +33,7 @@ import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
-import { DataTable, TableHead, TableBody, TableRow, TableCell } from '../components/ui';
+import { DataTable, TableHead, TableBody, TableRow, TableCell, IconButton } from '../components/ui';
 import { PageLoader } from '../components/ui/Spinner';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
@@ -72,6 +72,25 @@ interface Registration {
   checkedIn: boolean;
   ageAtTournament: number | null;
   competitor: Competitor;
+}
+
+function formatStatus(status: string): string {
+  switch (status) {
+    case 'in_progress':
+      return 'In Progress';
+    case 'registration':
+      return 'Registration';
+    case 'draft':
+      return 'Draft';
+    case 'completed':
+      return 'Completed';
+    case 'brackets':
+      return 'Brackets Ready';
+    case 'active':
+      return 'Active';
+    default:
+      return status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
+  }
 }
 
 export default function TournamentDetail() {
@@ -381,7 +400,7 @@ export default function TournamentDetail() {
           icon={ClipboardCheck}
         />
         <StatTile label="Divisions" value={tournament._count.divisions} icon={LayoutGrid} />
-        <StatTile label="Status" value={tournament.status} icon={Settings} />
+        <StatTile label="Status" value={formatStatus(tournament.status)} icon={Settings} />
       </div>
 
       {/* Day-Of Operations Panel — live stats for the running tournament */}
@@ -520,12 +539,13 @@ export default function TournamentDetail() {
                           {reg.competitor.danRank && ` ${reg.competitor.danRank}D`}
                         </span>
                       </div>
-                      <button
+                      <IconButton
+                        icon={<Trash2 className="h-4 w-4" />}
+                        label={`Remove ${reg.competitor.firstName} ${reg.competitor.lastName} from this tournament`}
+                        variant="danger"
+                        size="sm"
                         onClick={() => setDeleteTarget(reg)}
-                        className="text-gray-400 hover:text-red-600 p-2 -mr-2"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      />
                     </div>
                     <div className="text-sm text-gray-500 space-y-1">
                       <div className="flex justify-between">
@@ -622,7 +642,12 @@ export default function TournamentDetail() {
                         </TableCell>
                         <TableCell className="max-w-[150px] truncate">{reg.competitor.schoolDojang || '-'}</TableCell>
                         <TableCell className="text-center">
-                          <button
+                          <IconButton
+                            icon={reg.patterns ? <Check className="h-4 w-4" /> : <span aria-hidden="true">—</span>}
+                            label={`${reg.competitor.firstName} ${reg.competitor.lastName} — Patterns ${reg.patterns ? 'enrolled' : 'not enrolled'}`}
+                            variant={reg.patterns ? 'success' : 'default'}
+                            size="sm"
+                            pressed={reg.patterns}
                             onClick={() =>
                               updateRegistrationMutation.mutate({
                                 regId: reg.id,
@@ -630,17 +655,15 @@ export default function TournamentDetail() {
                                 sparring: reg.sparring,
                               })
                             }
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
-                              reg.patterns
-                                ? 'bg-green-500 text-white hover:bg-green-600'
-                                : 'bg-gray-200 dark:bg-gray-600 text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-500'
-                            }`}
-                          >
-                            {reg.patterns && <Check className="h-4 w-4" />}
-                          </button>
+                          />
                         </TableCell>
                         <TableCell className="text-center">
-                          <button
+                          <IconButton
+                            icon={reg.sparring ? <Check className="h-4 w-4" /> : <span aria-hidden="true">—</span>}
+                            label={`${reg.competitor.firstName} ${reg.competitor.lastName} — Sparring ${reg.sparring ? 'enrolled' : 'not enrolled'}`}
+                            variant={reg.sparring ? 'success' : 'default'}
+                            size="sm"
+                            pressed={reg.sparring}
                             onClick={() =>
                               updateRegistrationMutation.mutate({
                                 regId: reg.id,
@@ -648,22 +671,16 @@ export default function TournamentDetail() {
                                 sparring: !reg.sparring,
                               })
                             }
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
-                              reg.sparring
-                                ? 'bg-green-500 text-white hover:bg-green-600'
-                                : 'bg-gray-200 dark:bg-gray-600 text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-500'
-                            }`}
-                          >
-                            {reg.sparring && <Check className="h-4 w-4" />}
-                          </button>
+                          />
                         </TableCell>
                         <TableCell>
-                          <button
+                          <IconButton
+                            icon={<Trash2 className="h-4 w-4" />}
+                            label={`Remove ${reg.competitor.firstName} ${reg.competitor.lastName} from this tournament`}
+                            variant="danger"
+                            size="sm"
                             onClick={() => setDeleteTarget(reg)}
-                            className="text-gray-400 hover:text-red-600 p-1 rounded transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          />
                         </TableCell>
                       </TableRow>
                     ))}

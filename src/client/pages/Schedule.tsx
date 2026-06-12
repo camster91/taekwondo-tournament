@@ -268,7 +268,7 @@ export default function Schedule() {
 
       {/* Configuration */}
       <Card className="mb-6">
-        <CardHeader title="Schedule Configuration" />
+        <CardHeader title="Schedule Configuration" as="h2" />
         <CardBody>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
@@ -466,7 +466,7 @@ export default function Schedule() {
       {/* Timeline View */}
       {schedule?.schedule && schedule.schedule.length > 0 && (
         <Card className="mt-6">
-          <CardHeader title="Timeline View" />
+          <CardHeader title="Timeline View" as="h2" />
           <CardBody className="p-0 overflow-x-auto">
             <DataTable>
               <TableHead>

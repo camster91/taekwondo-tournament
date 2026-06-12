@@ -6,6 +6,7 @@ export { default as CardBody } from './CardBody';
 export { default as CardHeader } from './CardHeader';
 export { default as CloseButton } from './CloseButton';
 export { default as ConfirmDialog } from './ConfirmDialog';
+export { default as IconButton } from './IconButton';
 export { default as DataTable, TableHead, TableBody, TableRow, TableCell } from './DataTable';
 export { default as EmptyState } from './EmptyState';
 export { default as Input } from './Input';
