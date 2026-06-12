@@ -621,7 +621,7 @@ export default function Scorekeeper() {
                 >
                   -{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
-                <div className="text-center text-xl font-bold text-red-400" aria-live="polite" aria-atomic="true">
+                <div className={`text-center text-xl font-bold ${penalties1 > 0 ? 'text-red-400' : 'text-gray-500'}`} aria-live="polite" aria-atomic="true">
                   {penalties1}
                 </div>
               </div>
@@ -676,7 +676,7 @@ export default function Scorekeeper() {
                 >
                   -{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
-                <div className="text-center text-xl font-bold text-red-400" aria-live="polite" aria-atomic="true">
+                <div className={`text-center text-xl font-bold ${penalties1 > 0 ? 'text-red-400' : 'text-gray-500'}`} aria-live="polite" aria-atomic="true">
                   {penalties2}
                 </div>
               </div>
@@ -716,10 +716,26 @@ export default function Scorekeeper() {
               </div>
             </div>
 
-            {/* Result Type */}
+            {/* Result Type — only matters for non-WIN results (DQ, FORFEIT,
+                INJURY all imply a winner). Show a hint next to the group
+                indicating which competitor "won" via this result. */}
             <fieldset className="border-0 p-0 m-0 mb-4">
               <legend className="sr-only">Result type</legend>
-              <div className="flex gap-2" role="radiogroup" aria-label="Result type">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-400 uppercase tracking-wider">Result</span>
+                {selectedWinner && resultType !== 'win' && (
+                  <span className="text-xs text-gray-400">
+                    {getCompetitorName(
+                      currentMatch.competitor1?.id === selectedWinner
+                        ? currentMatch.competitor1
+                        : currentMatch.competitor2
+                    )}
+                    {' wins by '}
+                    <span className="text-red-400 font-semibold uppercase">{resultType}</span>
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2" role="radiogroup" aria-label={`Result type${selectedWinner ? ' — winner: ' + getCompetitorName(selectedWinner === currentMatch.competitor1?.id ? currentMatch.competitor1 : currentMatch.competitor2) : ''}`}>
                 {(['win', 'dq', 'forfeit', 'injury'] as ResultType[]).map((type) => (
                   <button
                     key={type}

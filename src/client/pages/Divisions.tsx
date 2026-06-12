@@ -16,6 +16,8 @@ import {
   Eye,
   Check,
   X,
+  UserPlus,
+  Search,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -87,6 +89,7 @@ export default function Divisions() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Division | null>(null);
   const [splitTarget, setSplitTarget] = useState<Division | null>(null);
+  const [assignTarget, setAssignTarget] = useState<Division | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [regenerateConfirm, setRegenerateConfirm] = useState(false);
   const [resultMessage, setResultMessage] = useState<{ title: string; message: string } | null>(null);
@@ -210,6 +213,116 @@ export default function Divisions() {
       });
     },
   });
+
+  // Manual assignment UI for #50 — backend endpoints exist
+  // (POST /api/divisions/:id/assign, DELETE /api/divisions/:id/assign/:id),
+  // the page just never had a UI to call them. This is a minimal
+  // picker: open the modal, search the global competitor list, check
+  // boxes, save. Pre-existing assignments can be unassigned with the
+  // trash button next to each row.
+  const [assignmentSearch, setAssignmentSearch] = useState('');
+  const [selectedCompetitorIds, setSelectedCompetitorIds] = useState<Set<string>>(new Set());
+
+  // Full division (with assignments) — fetched fresh when modal opens
+  const { data: assignDivision, isLoading: assignDivisionLoading, refetch: refetchAssignDivision } = useQuery<any>({
+    queryKey: ['division', assignTarget?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/divisions/${assignTarget?.id}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch division');
+      return res.json();
+    },
+    enabled: !!assignTarget,
+  });
+
+  // All tournament registrations (for the unassigned list)
+  const { data: allRegistrations } = useQuery<any[]>({
+    queryKey: ['tournament-registrations', id],
+    queryFn: async () => {
+      const res = await fetch(`/api/tournaments/${id}/registrations`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch registrations');
+      return res.json();
+    },
+    enabled: !!assignTarget,
+  });
+
+  // Currently-assigned registration IDs for the open division
+  const assignedRegistrationIds = useMemo(
+    () => new Set((assignDivision?.assignments ?? []).map((a: any) => a.registrationId)),
+    [assignDivision]
+  );
+
+  // Registrations that match the division's event type (so we don't
+  // show a patterns-only competitor in a sparring-only division)
+  const eligibleRegistrations = useMemo(() => {
+    if (!allRegistrations || !assignTarget) return [];
+    const eventType = assignTarget.eventType;
+    return allRegistrations.filter((r: any) => r[eventType] === true);
+  }, [allRegistrations, assignTarget]);
+
+  // Eligible + unassigned + search filter
+  const availableRegistrations = useMemo(() => {
+    const q = assignmentSearch.trim().toLowerCase();
+    return eligibleRegistrations
+      .filter((r: any) => !assignedRegistrationIds.has(r.id))
+      .filter((r: any) => {
+        if (!q) return true;
+        const c = r.competitor;
+        return (
+          c.firstName.toLowerCase().includes(q) ||
+          c.lastName.toLowerCase().includes(q) ||
+          (c.schoolDojang || '').toLowerCase().includes(q)
+        );
+      });
+  }, [eligibleRegistrations, assignedRegistrationIds, assignmentSearch]);
+
+  const assignCompetitorsMutation = useMutation({
+    mutationFn: async (registrationIds: string[]) => {
+      if (!assignTarget) return;
+      const results = await Promise.all(
+        registrationIds.map((regId) =>
+          fetch(`/api/divisions/${assignTarget.id}/assign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({ registrationId: regId, manualOverride: true }),
+          }).then((r) => {
+            if (!r.ok) throw new Error(`Failed to assign ${regId}`);
+            return r.json();
+          })
+        )
+      );
+      return results;
+    },
+    onSuccess: (results) => {
+      queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+      refetchAssignDivision();
+      setSelectedCompetitorIds(new Set());
+      setResultMessage({
+        title: 'Competitors Assigned',
+        message: `Added ${results?.length ?? 0} competitor(s) to the division.`,
+      });
+    },
+  });
+
+  const unassignMutation = useMutation({
+    mutationFn: async (assignmentId: string) => {
+      if (!assignTarget) return;
+      const res = await fetch(`/api/divisions/${assignTarget.id}/assign/${assignmentId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error('Failed to unassign');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+      refetchAssignDivision();
+    },
+  });
+
+  const closeAssignModal = () => {
+    setAssignTarget(null);
+    setSelectedCompetitorIds(new Set());
+    setAssignmentSearch('');
+  };
 
   const fetchPreview = async () => {
     setPreviewLoading(true);
@@ -530,6 +643,14 @@ export default function Divisions() {
                       >
                         {div.bracket ? 'Ready' : 'No Bracket'}
                       </span>
+                      <button
+                        onClick={() => setAssignTarget(div)}
+                        className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
+                        title="Manage Competitors"
+                        aria-label={`Manage competitors in ${div.name}`}
+                      >
+                        <UserPlus className="h-4 w-4" />
+                      </button>
                       {div._count.assignments > 8 && (
                         <button
                           onClick={() => setSplitTarget(div)}
@@ -769,6 +890,133 @@ export default function Divisions() {
           }
         >
           <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{resultMessage.message}</p>
+        </Modal>
+      )}
+
+      {/* Manage Competitors modal — #50. Two columns: left = currently
+          assigned (with unassign buttons), right = unassigned competitors
+          filtered by event type + search (with checkboxes). Save commits
+          the new assignments via POST /:id/assign. */}
+      {assignTarget && (
+        <Modal
+          isOpen={!!assignTarget}
+          onClose={closeAssignModal}
+          title={`Manage Competitors — ${assignTarget.name}`}
+          size="lg"
+          footer={
+            <>
+              <Button variant="secondary" onClick={closeAssignModal} className="flex-1">
+                Done
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1"
+                loading={assignCompetitorsMutation.isPending}
+                disabled={selectedCompetitorIds.size === 0}
+                onClick={() => assignCompetitorsMutation.mutate(Array.from(selectedCompetitorIds))}
+              >
+                Add {selectedCompetitorIds.size} Selected
+              </Button>
+            </>
+          }
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-h-[400px]">
+            {/* LEFT: currently assigned */}
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+                In this division ({assignDivision?.assignments?.length ?? 0})
+              </h3>
+              {assignDivisionLoading ? (
+                <CardSkeleton />
+              ) : (assignDivision?.assignments ?? []).length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No competitors assigned yet.</p>
+              ) : (
+                <div className="space-y-1 max-h-96 overflow-y-auto">
+                  {assignDivision.assignments.map((a: any) => {
+                    const c = a.registration?.competitor;
+                    if (!c) return null;
+                    return (
+                      <div key={a.id} className="flex items-center justify-between gap-2 py-1.5 px-2 hover:bg-gray-50 dark:hover:bg-gray-800/40 rounded">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                            {c.firstName} {c.lastName}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {c.belt}{c.schoolDojang && ` · ${c.schoolDojang}`}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => unassignMutation.mutate(a.id)}
+                          disabled={unassignMutation.isPending}
+                          className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1"
+                          title="Remove from division"
+                          aria-label={`Remove ${c.firstName} ${c.lastName}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT: available to add */}
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+                Available ({availableRegistrations.length})
+              </h3>
+              <div className="relative mb-2">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  value={assignmentSearch}
+                  onChange={(e) => setAssignmentSearch(e.target.value)}
+                  placeholder="Search name or school..."
+                  inputClassName="pl-8 py-1.5 text-sm"
+                />
+              </div>
+              {availableRegistrations.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {assignmentSearch ? 'No matches.' : 'All eligible competitors already assigned.'}
+                </p>
+              ) : (
+                <div className="space-y-1 max-h-80 overflow-y-auto">
+                  {availableRegistrations.map((r: any) => {
+                    const c = r.competitor;
+                    const checked = selectedCompetitorIds.has(r.id);
+                    return (
+                      <label
+                        key={r.id}
+                        className="flex items-center gap-2 py-1.5 px-2 hover:bg-gray-50 dark:hover:bg-gray-800/40 rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const next = new Set(selectedCompetitorIds);
+                            if (next.has(r.id)) next.delete(r.id);
+                            else next.add(r.id);
+                            setSelectedCompetitorIds(next);
+                          }}
+                          className="h-4 w-4"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                            {c.firstName} {c.lastName}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {c.belt}{c.schoolDojang && ` · ${c.schoolDojang}`}
+                            {c.weightLbs != null && ` · ${c.weightLbs} lbs`}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </Modal>
       )}
     </div>
