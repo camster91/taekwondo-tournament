@@ -15,6 +15,22 @@ import { loginAsDemo } from './helpers';
  *  9. Penalty count updates announced via aria-live.
  */
 
+/**
+ * Resolve the Spring Championship 2026 tournament id from the tournaments list.
+ * The id changes per seed run, so we extract it from the link href rather than
+ * hardcoding a UUID that would rot as soon as the seed file is regenerated.
+ */
+async function resolveSpringChampionshipId(page: import('@playwright/test').Page): Promise<string> {
+  await page.goto('/tournaments');
+  const link = page.locator('a', { hasText: 'Spring Championship 2026' }).first();
+  await expect(link).toBeVisible({ timeout: 10_000 });
+  const href = await link.getAttribute('href');
+  expect(href, 'Spring Championship 2026 link must be visible on /tournaments').toMatch(
+    /^\/tournaments\/[a-f0-9-]+$/,
+  );
+  return href!.replace('/tournaments/', '');
+}
+
 test.describe('scorekeeper (a11y)', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsDemo(page);
@@ -22,7 +38,8 @@ test.describe('scorekeeper (a11y)', () => {
 
   test('scorekeeper page renders live region for announcements', async ({ page }) => {
     // The "Spring Championship 2026" seed has divisions with ready matches.
-    await page.goto('/scorekeeper/31d47592-6c76-4e3d-a9d2-c7953d6179c5');
+    const tournamentId = await resolveSpringChampionshipId(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
     await expect(page.getByRole('heading', { name: /Scorekeeper/i })).toBeVisible();
 
     // SR live region must be present (off-screen, role=status).
@@ -31,7 +48,8 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('division list buttons have state-describing aria-labels', async ({ page }) => {
-    await page.goto('/scorekeeper/31d47592-6c76-4e3d-a9d2-c7953d6179c5');
+    const tournamentId = await resolveSpringChampionshipId(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
     // The seed has at least one division with ready matches.
     // Wait for the division list to load.
     await page.waitForLoadState('networkidle');
@@ -52,7 +70,8 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('match-scoring view: competitor buttons have aria-pressed + descriptive aria-label', async ({ page }) => {
-    await page.goto('/scorekeeper/31d47592-6c76-4e3d-a9d2-c7953d6179c5');
+    const tournamentId = await resolveSpringChampionshipId(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
     // Click first division with ready matches.
@@ -64,7 +83,9 @@ test.describe('scorekeeper (a11y)', () => {
     await readyDivision.click();
 
     // The match-scoring view should have competitor buttons with aria-pressed.
-    const competitorButtons = page.locator('button[aria-pressed]').filter({ hasText: /select as winner/i });
+    // "select as winner" is in the aria-label, not visible text, so filter by
+    // the aria-label attribute (hasText only matches visible text).
+    const competitorButtons = page.locator('button[aria-pressed][aria-label*="select as winner"]');
     const buttonCount = await competitorButtons.count();
     expect(buttonCount).toBeGreaterThan(0);
 
@@ -75,7 +96,8 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('score inputs are programmatically associated with their labels', async ({ page }) => {
-    await page.goto('/scorekeeper/31d47592-6c76-4e3d-a9d2-c7953d6179c5');
+    const tournamentId = await resolveSpringChampionshipId(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
     const readyDivision = page
@@ -97,7 +119,8 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('result-type buttons live in a radiogroup with aria-pressed', async ({ page }) => {
-    await page.goto('/scorekeeper/31d47592-6c76-4e3d-a9d2-c7953d6179c5');
+    const tournamentId = await resolveSpringChampionshipId(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
     const readyDivision = page
@@ -117,7 +140,8 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('icon-only header buttons have aria-label', async ({ page }) => {
-    await page.goto('/scorekeeper/31d47592-6c76-4e3d-a9d2-c7953d6179c5');
+    const tournamentId = await resolveSpringChampionshipId(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
     const readyDivision = page
@@ -136,7 +160,8 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('arrow-key navigation moves focus to the new match heading', async ({ page }) => {
-    await page.goto('/scorekeeper/31d47592-6c76-4e3d-a9d2-c7953d6179c5');
+    const tournamentId = await resolveSpringChampionshipId(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
     const readyDivision = page
@@ -150,20 +175,25 @@ test.describe('scorekeeper (a11y)', () => {
 
     // Press right arrow — focus should move to the new match heading.
     await page.keyboard.press('ArrowRight');
-    // The active match heading has tabindex=-1 and should now be the active element.
-    const focusedTag = await page.evaluate(() => {
+    // The active match heading has tabindex=-1 and its aria-label is
+    // "<division> match N of M" — the visible text is just the division
+    // name, so check aria-label and tabindex instead of textContent.
+    const focusedInfo = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement;
       return {
         tag: el?.tagName,
         text: el?.textContent ?? '',
-        hasTabIndex: el?.getAttribute('tabindex'),
+        ariaLabel: el?.getAttribute('aria-label') ?? '',
+        tabindex: el?.getAttribute('tabindex'),
       };
     });
-    expect(focusedTag.text.toLowerCase()).toContain('match');
+    expect(focusedInfo.tabindex).toBe('-1');
+    expect(focusedInfo.ariaLabel.toLowerCase()).toMatch(/match \d+ of \d+/);
   });
 
   test('confirmation modal has dialog semantics + focusable buttons', async ({ page }) => {
-    await page.goto('/scorekeeper/31d47592-6c76-4e3d-a9d2-c7953d6179c5');
+    const tournamentId = await resolveSpringChampionshipId(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
     const readyDivision = page

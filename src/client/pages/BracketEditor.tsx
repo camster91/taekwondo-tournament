@@ -160,40 +160,10 @@ export default function BracketEditor() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <CardSkeleton />
-        <CardSkeleton />
-      </div>
-    );
-  }
-
-  if (!division) {
-    return (
-      <div className="text-center py-12">
-        <div className="text-gray-500 dark:text-gray-400">Division not found</div>
-      </div>
-    );
-  }
-
-  const winnersMatches =
-    division.bracket?.matches?.filter((m) => m.bracketType === 'winners') || [];
-  const losersMatches =
-    division.bracket?.matches?.filter((m) => m.bracketType === 'losers') || [];
-  const finalsMatches =
-    division.bracket?.matches?.filter((m) => m.bracketType === 'finals') || [];
-
-  const winnersRounds = [...new Set(winnersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
-  const losersRounds = [...new Set(losersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
-
-  const handleSelectWinner = (matchId: string, winnerId: string, match: Match) => {
-    const comp = match.competitor1Id === winnerId ? match.competitor1 : match.competitor2;
-    const name = comp
-      ? `${comp.competitor.firstName} ${comp.competitor.lastName}`
-      : 'Unknown';
-    setPendingWinner({ matchId, winnerId, name });
-  };
+  // All hooks must be declared BEFORE any early returns so the hook order is
+  // stable across renders. (See the Rules of Hooks — early returns below
+  // these hooks would otherwise fire on a different number of hooks per
+  // render, causing "Rendered more hooks than during the previous render".)
 
   // Roving-tabindex keyboard navigation for the bracket grid.
   // The "grid" is organised: each column = a round, each match within a column
@@ -312,6 +282,41 @@ export default function BracketEditor() {
       );
     }
   }, [updateMatchMutation.isError]);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <CardSkeleton />
+        <CardSkeleton />
+      </div>
+    );
+  }
+
+  if (!division) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-gray-500 dark:text-gray-400">Division not found</div>
+      </div>
+    );
+  }
+
+  const winnersMatches =
+    division.bracket?.matches?.filter((m) => m.bracketType === 'winners') || [];
+  const losersMatches =
+    division.bracket?.matches?.filter((m) => m.bracketType === 'losers') || [];
+  const finalsMatches =
+    division.bracket?.matches?.filter((m) => m.bracketType === 'finals') || [];
+
+  const winnersRounds = [...new Set(winnersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
+  const losersRounds = [...new Set(losersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
+
+  const handleSelectWinner = (matchId: string, winnerId: string, match: Match) => {
+    const comp = match.competitor1Id === winnerId ? match.competitor1 : match.competitor2;
+    const name = comp
+      ? `${comp.competitor.firstName} ${comp.competitor.lastName}`
+      : 'Unknown';
+    setPendingWinner({ matchId, winnerId, name });
+  };
 
   return (
     <div className="space-y-6">
