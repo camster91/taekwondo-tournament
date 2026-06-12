@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, useNavigate, useParams, Navigate } from 'react-router-dom';
 import {
   Trophy,
   Users,
@@ -422,6 +422,18 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
 }
 
 
+// Redirects old /tournaments/:id/<page> URLs to the canonical /<page>/:tournamentId
+// (or /<page>/:id for the admin-wrapped ones). Closes #39 — stale bookmarks
+// and old docs referencing the nested path no longer 404. Renders a brief
+// "Redirecting..." state for one tick so the user sees the URL change in the
+// address bar rather than appearing to swap mid-page.
+function LegacyRedirect({ toKey }: { toKey: 'scorekeeper' | 'checkin' | 'display' }) {
+  const { id } = useParams<{ id: string }>();
+  if (!id) return <NotFound />;
+  return <Navigate to={`/${toKey}/${id}`} replace />;
+}
+
+
 function AppRoutes() {
   const location = useLocation();
 
@@ -433,7 +445,11 @@ function AppRoutes() {
     location.pathname.startsWith('/accept-invite') ||
     location.pathname.startsWith('/scorekeeper') ||
     location.pathname.startsWith('/checkin') ||
-    location.pathname.startsWith('/display');
+    location.pathname.startsWith('/display') ||
+    // Legacy nested paths — matched here so the redirect routes can fire
+    // (and render without the AdminLayout) before falling into the admin
+    // Route tree that would otherwise show a 404.
+    /^\/tournaments\/[^/]+\/(scorekeeper|checkin|display)(\/|$)/.test(location.pathname);
 
   if (isPublicPage) {
     return (
@@ -445,6 +461,11 @@ function AppRoutes() {
         <Route path="/scorekeeper/:tournamentId" element={<ProtectedRoute><Scorekeeper /></ProtectedRoute>} />
         <Route path="/checkin/:tournamentId" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
         <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
+        {/* Legacy URL redirects — old paths used /tournaments/:id/<page>.
+            Closes #39 where a stale URL or bookmark hit a 404. */}
+        <Route path="/tournaments/:id/scorekeeper" element={<LegacyRedirect toKey="scorekeeper" />} />
+        <Route path="/tournaments/:id/checkin" element={<LegacyRedirect toKey="checkin" />} />
+        <Route path="/tournaments/:id/display" element={<LegacyRedirect toKey="display" />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     );
