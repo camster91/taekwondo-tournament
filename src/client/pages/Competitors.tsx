@@ -621,7 +621,7 @@ export default function Competitors() {
                       </div>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => setEditingCompetitor(c)}
+                          onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
                           className="p-2 text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                         >
                           <Edit className="h-5 w-5" />
@@ -691,7 +691,7 @@ export default function Competitors() {
                     {filteredCompetitors.map((c: Competitor) => (
                       <TableRow
                         key={c.id}
-                        onClick={() => setEditingCompetitor(c)}
+                        onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
                         className={`border-b border-slate-100 dark:border-slate-800/60 cursor-pointer ${selectedIds.has(c.id) ? 'row-selected' : ''}`}
                       >
                         <TableCell className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
@@ -745,7 +745,7 @@ export default function Competitors() {
                               label={`Edit ${c.firstName} ${c.lastName}`}
                               variant="primary"
                               size="sm"
-                              onClick={() => setEditingCompetitor(c)}
+                              onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
                             />
                             <IconButton
                               icon={<Trash2 className="h-3.5 w-3.5" />}
