@@ -319,6 +319,9 @@ export default function PublicRegister() {
                 className="w-full"
                 onClick={() => {
                   setResult(null);
+                  setStep(1);
+                  setError(null);
+                  setValidationErrors([]);
                   setFormData({
                     tournamentId: formData.tournamentId,
                     firstName: '',
@@ -517,6 +520,12 @@ export default function PublicRegister() {
                       name="dateOfBirth"
                       value={formData.dateOfBirth}
                       onChange={handleChange}
+                      // Closes #48 — some browsers (Chromium on Android in
+                      // particular) fire `input` on date-picker interactions
+                      // but the synthetic `change` event can be missed when
+                      // the input is re-rendered mid-pick. Mirror to onInput
+                      // so the state is always updated.
+                      onInput={handleChange}
                       required
                       aria-required="true"
                       autoComplete="bday"
