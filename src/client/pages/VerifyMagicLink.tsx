@@ -16,7 +16,7 @@ export default function VerifyMagicLink() {
 
   useEffect(() => {
     if (!token) {
-      setError('No verification token provided');
+      setError('Your sign-in link is invalid or has expired. Please request a new one.');
       setIsVerifying(false);
       return;
     }
@@ -25,7 +25,7 @@ export default function VerifyMagicLink() {
       if (result.success) {
         navigate('/', { replace: true });
       } else {
-        setError(result.error || 'Verification failed');
+        setError(result.error || 'Your sign-in link is invalid or has expired. Please request a new one.');
         setIsVerifying(false);
       }
     });
