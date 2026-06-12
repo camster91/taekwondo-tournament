@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Trophy, Clock, Users, ChevronRight, Award, Zap, Radio, MapPin } from 'lucide-react';
+import { Trophy, Clock, Users, ChevronRight, Award, Zap, Radio, MapPin, Loader2, AlertCircle } from 'lucide-react';
 import { Card, CardBody } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { Button } from '../components/ui';
@@ -57,18 +57,36 @@ export default function PublicScoreboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch tournament via public endpoint (no auth required)
-  const { data: tournament } = useQuery<Tournament>({
+  // Fetch tournament via public endpoint (no auth required).
+  // Treats 400 (not open) and 404 (not found) the same as a real fetch error so
+  // the error UI can render instead of silently showing a blank board.
+  // Closes #35 — invalid tournament IDs used to render the empty template
+  // with NOW COMPETING / UP NEXT headings, looking like a tournament with
+  // zero matches. Same hook for #33 (no loading state at all).
+  const {
+    data: tournament,
+    isLoading: tournamentLoading,
+    error: tournamentError,
+  } = useQuery<Tournament>({
     queryKey: ['scoreboard-tournament', tournamentId],
     queryFn: async () => {
       const res = await fetch(`/api/public/tournaments/${tournamentId}`);
-      if (!res.ok) throw new Error('Failed to fetch tournament');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const msg = res.status === 404
+          ? 'Tournament not found'
+          : res.status === 400
+          ? (body.error || 'Tournament is not open')
+          : `Failed to load tournament (${res.status})`;
+        throw new Error(msg);
+      }
       return res.json();
     },
+    retry: false,
   });
 
   // Fetch divisions with brackets via public endpoint (no auth required)
-  const { data: divisions } = useQuery<Division[]>({
+  const { data: divisions, isLoading: divisionsLoading } = useQuery<Division[]>({
     queryKey: ['scoreboard-divisions', tournamentId],
     queryFn: async () => {
       const res = await fetch(`/api/public/tournaments/${tournamentId}/scoreboard`);
@@ -76,14 +94,18 @@ export default function PublicScoreboard() {
       return res.json();
     },
     refetchInterval: 3000, // TV mode: refresh every 3s
+    enabled: !tournamentError, // Don't keep retrying the scoreboard if the tournament is bad
   });
 
-  // Group by ring
+  // Group by ring. Matches without a ringNumber are NOT bucketed into a
+  // default ring — they go into a separate "unassigned" bucket so the LIVE
+  // badge count reflects reality, not a || 1 fallback. Closes #30.
   const matchesByRing = useMemo(() => {
     const out: Record<number, Match[]> = { 1: [], 2: [], 3: [], 4: [] };
     for (const d of divisions || []) {
       for (const m of d.bracket?.matches || []) {
-        const ring = m.ringNumber || 1;
+        if (m.ringNumber == null) continue; // unassigned — render separately
+        const ring = m.ringNumber;
         if (!out[ring]) out[ring] = [];
         out[ring].push(m);
       }
@@ -148,6 +170,39 @@ export default function PublicScoreboard() {
 
   return (
     <div className="min-h-screen bg-[#0a0e1a] text-white overflow-hidden">
+      {/* Error / not-found state. Replaces the old behavior of rendering an
+          empty scoreboard template (NOW COMPETING / UP NEXT headings with
+          no body) when the tournament ID is invalid. Closes #35.
+          Same conditional handles 400 "Tournament is not open" — a common
+          case for TV operators who paste the wrong URL mid-event. */}
+      {tournamentError && (
+        <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center">
+          <AlertCircle className="h-20 w-20 text-red-400 mb-6" />
+          <h1 className="text-3xl font-bold mb-3">
+            {tournamentError.message || 'Could not load tournament'}
+          </h1>
+          <p className="text-slate-400 max-w-md">
+            Check the URL with the tournament director. The display link looks like
+            <code className="block mt-3 px-3 py-2 bg-slate-800/60 rounded text-sm font-mono">
+              /display/&lt;tournament-id&gt;
+            </code>
+          </p>
+        </div>
+      )}
+      {/* Loading state. Spinner only shown while the tournament query is
+          in-flight. After the tournament loads we keep the layout rendered
+          even while divisions re-fetch (3s polling) so the TV doesn't flash.
+          Closes #33. */}
+      {tournamentLoading && !tournamentError && (
+        <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center">
+          <Loader2 className="h-16 w-16 text-indigo-400 mb-6 animate-spin" />
+          <h1 className="text-2xl font-bold mb-2">Loading tournament…</h1>
+          <p className="text-slate-400">Fetching live brackets and match data</p>
+        </div>
+      )}
+      {/* Main board — only render once we have a valid tournament. */}
+      {!tournamentLoading && !tournamentError && (
+      <>
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-b border-white/5">
         <div className="px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
@@ -234,7 +289,7 @@ export default function PublicScoreboard() {
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row h-[calc(100vh-180px)]">
+      <div className="flex flex-col md:flex-row md:h-[calc(100vh-180px)]">
         {/* Left Column - Current Matches (TV hero) */}
         <div className="w-full md:w-1/2 p-4 md:p-6 border-r border-white/5 overflow-hidden">
           <div className="flex items-center mb-6">
@@ -437,6 +492,8 @@ export default function PublicScoreboard() {
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
