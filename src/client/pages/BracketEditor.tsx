@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import {
@@ -195,6 +195,124 @@ export default function BracketEditor() {
     setPendingWinner({ matchId, winnerId, name });
   };
 
+  // Roving-tabindex keyboard navigation for the bracket grid.
+  // The "grid" is organised: each column = a round, each match within a column
+  // is stacked vertically. Adjacent rounds have different match counts, so
+  // we use a simple 1D pattern that maps cleanly:
+  //   - Left / Right: previous / next match within the same round
+  //   - Up / Down: previous / next round (focus the match at the same vertical
+  //                position if it exists, else clamp to the nearest match)
+  //   - Tab / Shift+Tab: next / previous cell in the bracket as a flat list
+  // The first cell of the first column starts as the only tabbable cell; after
+  // any focus event inside the grid we update tabindex via the effect below.
+  const bracketGridRef = useRef<HTMLDivElement>(null);
+  const handleBracketKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      const grid = bracketGridRef.current;
+      if (!grid) return;
+      const target = e.target as HTMLElement;
+      if (!target.matches('[data-bracket-cell]')) return;
+      const cell = target.closest<HTMLElement>('[data-bracket-cell]');
+      if (!cell) return;
+
+      const allCells = Array.from(
+        grid.querySelectorAll<HTMLElement>('[data-bracket-cell]')
+      );
+      // Group cells by column. Within a column they're in DOM order.
+      const byCol = new Map<number, HTMLElement[]>();
+      for (const el of allCells) {
+        const c = parseInt(el.dataset.col ?? '-1', 10);
+        if (c < 0) continue;
+        if (!byCol.has(c)) byCol.set(c, []);
+        byCol.get(c)!.push(el);
+      }
+      const cols = Array.from(byCol.keys()).sort((a, b) => a - b);
+      if (cols.length === 0) return;
+
+      const col = parseInt(cell.dataset.col ?? '-1', 10);
+      const cellsInCol = byCol.get(col) ?? [];
+      const idxInCol = cellsInCol.indexOf(cell);
+
+      const tryFocus = (el: HTMLElement | undefined) => {
+        if (el) {
+          e.preventDefault();
+          el.focus();
+        }
+      };
+
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        const dir = e.key === 'ArrowLeft' ? -1 : 0; // Up moves to previous round
+        if (e.key === 'ArrowLeft') {
+          // Previous match within the same round.
+          tryFocus(cellsInCol[idxInCol - 1]);
+        } else {
+          const nextColIdx = cols.indexOf(col) - 1;
+          if (nextColIdx < 0) return;
+          const nextCol = cols[nextColIdx];
+          const nextColCells = byCol.get(nextCol) ?? [];
+          // Pick the cell at the same vertical position, clamped.
+          const targetIdx = Math.min(idxInCol, nextColCells.length - 1);
+          tryFocus(nextColCells[targetIdx]);
+        }
+        return;
+      }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        if (e.key === 'ArrowRight') {
+          tryFocus(cellsInCol[idxInCol + 1]);
+        } else {
+          const nextColIdx = cols.indexOf(col) + 1;
+          if (nextColIdx >= cols.length) return;
+          const nextCol = cols[nextColIdx];
+          const nextColCells = byCol.get(nextCol) ?? [];
+          const targetIdx = Math.min(idxInCol, nextColCells.length - 1);
+          tryFocus(nextColCells[targetIdx]);
+        }
+        return;
+      }
+    },
+    []
+  );
+
+  // Sync the roving tabindex: the first cell of the first column is the tab stop,
+  // all others are tabindex=-1. After any focus event, recompute which cell is the active one.
+  useEffect(() => {
+    const grid = bracketGridRef.current;
+    if (!grid) return;
+    const cells = Array.from(grid.querySelectorAll<HTMLElement>('[data-bracket-cell]'));
+    if (cells.length === 0) return;
+
+    const setActive = (el: HTMLElement) => {
+      cells.forEach((c) => {
+        if (c === el) c.setAttribute('tabindex', '0');
+        else c.setAttribute('tabindex', '-1');
+      });
+    };
+
+    // Initial: first cell is tabbable, rest are not.
+    setActive(cells[0]);
+    const onFocusIn = (e: Event) => {
+      const t = e.target as HTMLElement;
+      if (t.matches('[data-bracket-cell]')) setActive(t);
+    };
+    grid.addEventListener('focusin', onFocusIn);
+    return () => grid.removeEventListener('focusin', onFocusIn);
+  }, [division?.bracket?.id]);
+
+  // Live region announcement for bracket update success/failure.
+  const [bracketAnnounce, setBracketAnnounce] = useState('');
+  useEffect(() => {
+    if (updateMatchMutation.isSuccess) {
+      setBracketAnnounce('Winner recorded. Bracket updated.');
+    }
+  }, [updateMatchMutation.isSuccess]);
+  useEffect(() => {
+    if (updateMatchMutation.isError) {
+      setBracketAnnounce(
+        `Failed to record winner: ${(updateMatchMutation.error as Error)?.message ?? 'Unknown error'}`
+      );
+    }
+  }, [updateMatchMutation.isError]);
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -205,18 +323,35 @@ export default function BracketEditor() {
           <div className="flex gap-2 sm:gap-3">
             {division.bracket ? (
               <>
-                <Button variant="secondary" size="sm" onClick={() => setShowReseedConfirm(true)} loading={generateBracketMutation.isPending}>
-                  <Shuffle className="h-4 w-4 mr-2" />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowReseedConfirm(true)}
+                  loading={generateBracketMutation.isPending}
+                  aria-label="Reseed bracket"
+                >
+                  <Shuffle className="h-4 w-4 mr-2" aria-hidden="true" />
                   <span className="hidden sm:inline">Reseed</span>
                 </Button>
-                <Button variant="secondary" size="sm" onClick={exportPDF}>
-                  <Download className="h-4 w-4 mr-2" />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={exportPDF}
+                  aria-label={`Export ${division.name} bracket as PDF`}
+                >
+                  <Download className="h-4 w-4 mr-2" aria-hidden="true" />
                   <span className="hidden sm:inline">Export PDF</span>
                 </Button>
               </>
             ) : (
-              <Button variant="primary" size="sm" onClick={() => generateBracketMutation.mutate()} loading={generateBracketMutation.isPending}>
-                <RefreshCw className="h-4 w-4 mr-2" /> Generate Bracket
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => generateBracketMutation.mutate()}
+                loading={generateBracketMutation.isPending}
+                aria-label={`Generate bracket for ${division.name}`}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" /> Generate Bracket
               </Button>
             )}
           </div>
@@ -227,8 +362,9 @@ export default function BracketEditor() {
       <Link
         to={`/tournaments/${tournamentId}/divisions`}
         className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center"
+        aria-label="Back to Divisions"
       >
-        <ArrowLeft className="h-4 w-4 mr-1" /> Back to Divisions
+        <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" /> Back to Divisions
       </Link>
 
       {/* Competitors List */}
@@ -258,16 +394,30 @@ export default function BracketEditor() {
       {/* Bracket Visualization */}
       {division.bracket ? (
         <Card>
-          <CardHeader title="Bracket" action={<Trophy className="h-5 w-5 text-primary-600 dark:text-primary-400" />} />
+          <CardHeader
+            title="Bracket"
+            action={<Trophy className="h-5 w-5 text-primary-600 dark:text-primary-400" aria-hidden="true" />}
+          />
           <CardBody className="overflow-x-auto">
+            <div
+              ref={bracketGridRef}
+              role="grid"
+              aria-label={`${division.name} bracket — use arrow keys to move between matches`}
+              onKeyDown={handleBracketKeyDown}
+            >
             {/* Winners Bracket */}
-            <div className="mb-8">
+            <div className="mb-8" role="rowgroup" aria-label="Winners bracket">
               <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
                 Winners Bracket
               </h4>
               <div className="flex gap-8">
-                {winnersRounds.map((round) => (
-                  <div key={round} className="space-y-4">
+                {winnersRounds.map((round, colIdx) => (
+                  <div
+                    key={round}
+                    className="space-y-4"
+                    role="row"
+                    aria-label={`Winners round ${round}`}
+                  >
                     <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
                       Round {round}
                     </div>
@@ -277,6 +427,7 @@ export default function BracketEditor() {
                         <MatchCard
                           key={match.id}
                           match={match}
+                          bracketCol={colIdx}
                           onSelectWinner={(winnerId) =>
                             handleSelectWinner(match.id, winnerId, match)
                           }
@@ -288,60 +439,82 @@ export default function BracketEditor() {
             </div>
 
             {/* Losers Bracket */}
-            <div className="mb-8">
-              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-                Losers Bracket
-              </h4>
-              <div className="flex gap-8">
-                {losersRounds.map((round) => {
-                  const roundMatches = losersMatches.filter(
-                    (m) => m.roundNumber === round
-                  );
-                  return (
-                    <div key={round} className="space-y-4">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
-                        Round {round}
+            {losersRounds.length > 0 && (
+              <div className="mb-8" role="rowgroup" aria-label="Losers bracket">
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+                  Losers Bracket
+                </h4>
+                <div className="flex gap-8">
+                  {losersRounds.map((round, colIdx) => {
+                    const roundMatches = losersMatches.filter(
+                      (m) => m.roundNumber === round
+                    );
+                    return (
+                      <div
+                        key={round}
+                        className="space-y-4"
+                        role="row"
+                        aria-label={`Losers round ${round}`}
+                      >
+                        <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
+                          Round {round}
+                        </div>
+                        {roundMatches.map((match) => (
+                          <MatchCard
+                            key={match.id}
+                            match={match}
+                            bracketCol={winnersRounds.length + colIdx}
+                            onSelectWinner={(winnerId) =>
+                              handleSelectWinner(match.id, winnerId, match)
+                            }
+                          />
+                        ))}
                       </div>
-                      {roundMatches.map((match) => (
-                        <MatchCard
-                          key={match.id}
-                          match={match}
-                          onSelectWinner={(winnerId) =>
-                            handleSelectWinner(match.id, winnerId, match)
-                          }
-                        />
-                      ))}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Grand Finals */}
             {finalsMatches.length > 0 && (
-              <div>
+              <div role="rowgroup" aria-label="Grand finals">
                 <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
                   Grand Finals
                 </h4>
                 <div className="flex gap-8">
                   {finalsMatches.map((match) => (
-                    <MatchCard
+                    <div
                       key={match.id}
-                      match={match}
-                      onSelectWinner={(winnerId) =>
-                        handleSelectWinner(match.id, winnerId, match)
-                      }
-                    />
+                      className="space-y-4"
+                      role="row"
+                      aria-label="Grand finals"
+                    >
+                      {finalsMatches.length > 1 && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
+                          Match {match.matchNumber}
+                        </div>
+                      )}
+                      <MatchCard
+                        key={match.id}
+                        match={match}
+                        bracketCol={winnersRounds.length + losersRounds.length}
+                        onSelectWinner={(winnerId) =>
+                          handleSelectWinner(match.id, winnerId, match)
+                        }
+                      />
+                    </div>
                   ))}
                 </div>
               </div>
             )}
+            </div>
           </CardBody>
         </Card>
       ) : (
         <Card>
           <CardBody className="text-center py-12">
-            <Trophy className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
+            <Trophy className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" aria-hidden="true" />
             <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
               No bracket generated
             </h3>
@@ -353,6 +526,7 @@ export default function BracketEditor() {
               className="mt-4"
               onClick={() => generateBracketMutation.mutate()}
               loading={generateBracketMutation.isPending}
+              aria-label={`Generate bracket for ${division.name}`}
             >
               Generate Bracket
             </Button>
@@ -393,15 +567,22 @@ export default function BracketEditor() {
         variant="info"
         isLoading={updateMatchMutation.isPending}
       />
+
+      {/* Live region for bracket update announcements. */}
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {bracketAnnounce}
+      </div>
     </div>
   );
 }
 
 function MatchCard({
   match,
+  bracketCol,
   onSelectWinner,
 }: {
   match: Match;
+  bracketCol: number;
   onSelectWinner: (winnerId: string) => void;
 }) {
   const name1 = match.competitor1
@@ -418,6 +599,7 @@ function MatchCard({
 
   const isReady = match.competitor1Id && match.competitor2Id && !match.winnerId;
   const isComplete = !!match.winnerId;
+  const cardStatus = isComplete ? 'complete' : isReady ? 'ready' : match.status;
 
   return (
     <div
@@ -431,7 +613,7 @@ function MatchCard({
     >
       <div className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400 flex justify-between">
         <span>Match {match.matchNumber}</span>
-        <span className="capitalize">{match.status}</span>
+        <span className="capitalize" aria-label={`Status: ${cardStatus}`}>{cardStatus}</span>
       </div>
       <div className="divide-y divide-gray-200 dark:divide-gray-700">
         <button
@@ -439,7 +621,16 @@ function MatchCard({
             isReady && match.competitor1Id && onSelectWinner(match.competitor1Id)
           }
           disabled={!isReady}
-          className={`w-full px-3 py-2 text-left text-sm truncate text-gray-900 dark:text-gray-100 ${
+          data-bracket-cell="true"
+          data-col={bracketCol}
+          data-row={0}
+          aria-pressed={match.winnerId === match.competitor1Id}
+          aria-label={
+            `Match ${match.matchNumber}, ${name1}` +
+            (match.winnerId === match.competitor1Id ? ' (winner)' : '') +
+            (isReady ? ' — press Enter to record as winner' : '')
+          }
+          className={`w-full px-3 py-2 text-left text-sm truncate text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 ${
             match.winnerId === match.competitor1Id
               ? 'bg-green-100 dark:bg-green-800/50 font-semibold'
               : isReady
@@ -459,7 +650,16 @@ function MatchCard({
             isReady && match.competitor2Id && onSelectWinner(match.competitor2Id)
           }
           disabled={!isReady}
-          className={`w-full px-3 py-2 text-left text-sm truncate text-gray-900 dark:text-gray-100 ${
+          data-bracket-cell="true"
+          data-col={bracketCol}
+          data-row={1}
+          aria-pressed={match.winnerId === match.competitor2Id}
+          aria-label={
+            `Match ${match.matchNumber}, ${name2}` +
+            (match.winnerId === match.competitor2Id ? ' (winner)' : '') +
+            (isReady ? ' — press Enter to record as winner' : '')
+          }
+          className={`w-full px-3 py-2 text-left text-sm truncate text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 ${
             match.winnerId === match.competitor2Id
               ? 'bg-green-100 dark:bg-green-800/50 font-semibold'
               : isReady

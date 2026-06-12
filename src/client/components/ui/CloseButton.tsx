@@ -1,37 +1,72 @@
-// CloseButton — X icon button primitive
-import React from 'react';
+import type { ComponentProps, MouseEvent } from 'react';
+import { X } from 'lucide-react';
 
-interface CloseButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  label?: string;
-  size?: 'sm' | 'md' | 'lg';
-}
+type Variant = 'default' | 'ghost';
+type Size = 'sm' | 'md' | 'lg';
 
-const sizeClasses = {
-  sm: 'h-6 w-6 text-sm',
-  md: 'h-8 w-8 text-base',
-  lg: 'h-10 w-10 text-lg',
+const sizeClasses: Record<Size, string> = {
+  sm: 'p-1',
+  md: 'p-1.5',
+  lg: 'p-2',
 };
 
-export default function CloseButton({ label = 'Close', size = 'md', className = '', ...rest }: CloseButtonProps) {
+const iconClasses: Record<Size, string> = {
+  sm: 'h-4 w-4',
+  md: 'h-5 w-5',
+  lg: 'h-6 w-6',
+};
+
+const variantClasses: Record<Variant, string> = {
+  // Color-shift (default): used inside modals, toasts, header bars
+  default:
+    'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300',
+  // Filled ghost: for use on bare backgrounds where color shift is too subtle
+  ghost:
+    'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-md',
+};
+
+export type CloseButtonProps = Omit<ComponentProps<'button'>, 'children' | 'aria-label'> & {
+  /** Visual style. `default` = color shift only; `ghost` = adds a subtle filled background on hover. */
+  variant?: Variant;
+  /** Size of the X icon and hit area. `md` matches the existing ConfirmDialog. */
+  size?: Size;
+  /** Accessible label. Defaults to "Close". */
+  label?: string;
+  /** Click handler. The X event is stopped to prevent click-through to underlying surfaces. */
+  onClose?: (e: MouseEvent<HTMLButtonElement>) => void;
+};
+
+export default function CloseButton({
+  variant = 'default',
+  size = 'md',
+  label = 'Close',
+  onClose,
+  onClick,
+  className = '',
+  type = 'button',
+  ...rest
+}: CloseButtonProps) {
+  const classes = [
+    'inline-flex items-center justify-center flex-shrink-0 transition-colors',
+    sizeClasses[size],
+    variantClasses[variant],
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <button
-      type="button"
+      type={type}
+      onClick={(e) => {
+        if (onClose) onClose(e);
+        else if (onClick) onClick(e);
+      }}
+      className={classes}
       aria-label={label}
-      className={`inline-flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${sizeClasses[size]} ${className}`}
       {...rest}
     >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        aria-hidden="true"
-      >
-        <path
-          fillRule="evenodd"
-          d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293-5.707a1 1 0 010-1.414z"
-          clipRule="evenodd"
-        />
-      </svg>
+      <X className={iconClasses[size]} aria-hidden="true" />
     </button>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
@@ -91,6 +91,21 @@ export default function Schedule() {
       refetch();
     },
   });
+
+  // Live region announcement for schedule regeneration success/failure.
+  const [scheduleAnnounce, setScheduleAnnounce] = useState('');
+  useEffect(() => {
+    if (regenerateMutation.isSuccess) {
+      setScheduleAnnounce('Schedule regenerated.');
+    }
+  }, [regenerateMutation.isSuccess]);
+  useEffect(() => {
+    if (regenerateMutation.isError) {
+      setScheduleAnnounce(
+        `Failed to regenerate schedule: ${(regenerateMutation.error as Error)?.message ?? 'Unknown error'}`
+      );
+    }
+  }, [regenerateMutation.isError]);
 
   const exportPDF = () => {
     if (!schedule) return;
@@ -224,16 +239,18 @@ export default function Schedule() {
               variant="secondary"
               onClick={() => regenerateMutation.mutate()}
               disabled={regenerateMutation.isPending}
+              aria-label="Regenerate schedule"
             >
-              {regenerateMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              {regenerateMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" />}
               <span className="hidden sm:inline">{regenerateMutation.isPending ? 'Generating...' : 'Regenerate'}</span>
             </Button>
             <Button
               variant="primary"
               onClick={exportPDF}
               disabled={!schedule?.schedule.length}
+              aria-label="Export schedule as PDF"
             >
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="h-4 w-4 mr-2" aria-hidden="true" />
               <span className="hidden sm:inline">Export PDF</span>
             </Button>
           </div>
@@ -242,8 +259,9 @@ export default function Schedule() {
         <Link
           to={`/tournaments/${id}`}
           className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          aria-label="Back to Tournament"
         >
-          <ArrowLeft className="h-4 w-4 mr-1" />
+          <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" />
           Back to Tournament
         </Link>
       </PageHeader>
@@ -254,8 +272,9 @@ export default function Schedule() {
         <CardBody>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <Label>Start Time</Label>
+              <Label htmlFor="schedule-start-time">Start Time</Label>
               <Input
+                id="schedule-start-time"
                 type="time"
                 value={config.startTime}
                 onChange={(e) =>
@@ -264,8 +283,9 @@ export default function Schedule() {
               />
             </div>
             <div>
-              <Label>End Time</Label>
+              <Label htmlFor="schedule-end-time">End Time</Label>
               <Input
+                id="schedule-end-time"
                 type="time"
                 value={config.endTime}
                 onChange={(e) =>
@@ -274,9 +294,11 @@ export default function Schedule() {
               />
             </div>
             <div>
-              <Label>Number of Rings</Label>
+              <Label htmlFor="schedule-ring-count">Number of Rings</Label>
               <Input
+                id="schedule-ring-count"
                 type="number"
+                inputMode="numeric"
                 min={1}
                 max={10}
                 value={config.ringCount}
@@ -286,9 +308,11 @@ export default function Schedule() {
               />
             </div>
             <div>
-              <Label>Break Between (min)</Label>
+              <Label htmlFor="schedule-break">Break Between (min)</Label>
               <Input
+                id="schedule-break"
                 type="number"
+                inputMode="numeric"
                 min={0}
                 max={30}
                 value={config.breakBetweenDivisions}
@@ -303,9 +327,11 @@ export default function Schedule() {
           </div>
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div>
-              <Label>Patterns Match Duration (min)</Label>
+              <Label htmlFor="schedule-patterns-duration">Patterns Match Duration (min)</Label>
               <Input
+                id="schedule-patterns-duration"
                 type="number"
+                inputMode="numeric"
                 min={1}
                 max={15}
                 value={config.matchDurationMinutes?.patterns}
@@ -321,9 +347,11 @@ export default function Schedule() {
               />
             </div>
             <div>
-              <Label>Sparring Match Duration (min)</Label>
+              <Label htmlFor="schedule-sparring-duration">Sparring Match Duration (min)</Label>
               <Input
+                id="schedule-sparring-duration"
                 type="number"
+                inputMode="numeric"
                 min={1}
                 max={15}
                 value={config.matchDurationMinutes?.sparring}
@@ -342,11 +370,15 @@ export default function Schedule() {
         </CardBody>
       </Card>
 
-      {/* Warnings */}
+      {/* Warnings — time conflicts and end-time overruns. role="alert" so SR
+          users hear about the conflict without having to spot the yellow box. */}
       {schedule?.warnings && schedule.warnings.length > 0 && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
+        <div
+          role="alert"
+          className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6"
+        >
           <div className="flex items-start">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0 mt-0.5" aria-hidden="true" />
             <div>
               <h3 className="font-medium text-yellow-800 dark:text-yellow-200">Schedule Warnings</h3>
               <ul className="mt-1 text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside">
@@ -438,12 +470,12 @@ export default function Schedule() {
           <CardBody className="p-0 overflow-x-auto">
             <DataTable>
               <TableHead>
-                <th>Time</th>
-                <th>Ring</th>
-                <th>Division</th>
-                <th>Event</th>
-                <th>Competitors</th>
-                <th>Duration</th>
+                <th scope="col">Time</th>
+                <th scope="col">Ring</th>
+                <th scope="col">Division</th>
+                <th scope="col">Event</th>
+                <th scope="col">Competitors</th>
+                <th scope="col">Duration</th>
               </TableHead>
               <TableBody>
                 {schedule.schedule.map((div) => (
@@ -460,6 +492,7 @@ export default function Schedule() {
                       <Link
                         to={`/tournaments/${id}/divisions/${div.divisionId}/bracket`}
                         className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+                        aria-label={`Open ${div.divisionName} bracket`}
                       >
                         {div.divisionName}
                       </Link>
@@ -484,6 +517,11 @@ export default function Schedule() {
           </CardBody>
         </Card>
       )}
+
+      {/* Live region for schedule regeneration announcements. */}
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {scheduleAnnounce}
+      </div>
     </div>
   );
 }

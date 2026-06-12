@@ -8,7 +8,6 @@ import {
   LogOut,
   Shield,
   Menu,
-  X,
   Sun,
   Moon,
   ChevronRight,
@@ -28,6 +27,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import CloseButton from './components/ui/CloseButton';
 import Dashboard from './pages/Dashboard';
 import Competitors from './pages/Competitors';
 import Trash from './pages/Trash';
@@ -186,12 +186,11 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
             </div>
           )}
           {/* Close button on mobile */}
-          <button
-            onClick={closeMobile}
-            className="ml-auto p-1.5 text-white/40 hover:text-white lg:hidden flex-shrink-0"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <CloseButton
+            onClose={closeMobile}
+            label="Close sidebar"
+            className="ml-auto lg:hidden !text-white/40 hover:!text-white"
+          />
         </div>
 
         {/* Nav scrollable area */}

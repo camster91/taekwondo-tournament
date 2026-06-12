@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
+import CloseButton from '../components/ui/CloseButton';
 
 type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -146,12 +147,12 @@ function ToastItem({
       <p className={`flex-1 text-sm font-medium ${textColors[toast.type]}`}>
         {toast.message}
       </p>
-      <button
-        onClick={() => onRemove(toast.id)}
+      <CloseButton
+        onClose={() => onRemove(toast.id)}
+        size="sm"
+        label="Dismiss"
         className={`${textColors[toast.type]} opacity-60 hover:opacity-100`}
-      >
-        <X className="h-4 w-4" />
-      </button>
+      />
     </div>
   );
 }
