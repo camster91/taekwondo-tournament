@@ -9,13 +9,11 @@ import {
   ArrowLeft,
   CheckCircle,
   Sparkles,
-  Loader2,
   Users,
   Calendar,
   Award,
   Zap,
   Shield,
-  ChevronRight,
   Check,
   Copy,
   ExternalLink,
@@ -269,6 +267,11 @@ export default function Login() {
                   </div>
                 )}
 
+                <h1 className="sr-only">Sign in</h1>
+                <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white mb-6">
+                  Sign in
+                </h2>
+
                 {step === 'email' ? (
                   <EmailForm
                     email={email} setEmail={setEmail}
@@ -316,35 +319,9 @@ export default function Login() {
 function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: any) {
   return (
     <div className="space-y-5">
-      {/* Demo button — primary, gradient, prominent */}
-      <button
-        type="button"
-        onClick={onDemo}
-        disabled={demoLoading}
-        className="group w-full relative overflow-hidden py-3.5 px-5 rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-white font-medium text-sm shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:shadow-xl transition-all duration-300 disabled:opacity-50"
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-        {demoLoading ? (
-          <span className="relative flex items-center justify-center">
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Setting up demo...
-          </span>
-        ) : (
-          <span className="relative flex items-center justify-center">
-            <Sparkles className="h-4 w-4 mr-2" />
-            Try the demo — no signup
-            <ChevronRight className="h-4 w-4 ml-1 opacity-60 group-hover:translate-x-0.5 transition-transform" />
-          </span>
-        )}
-      </button>
-
-      <p className="text-center text-xs text-slate-500 -mt-2">
-        Full access for 4 hours. Pre-loaded with 682 real competitors.
-      </p>
-
-      <div className="divider-text">
-        <span>Or sign in with email</span>
-      </div>
+      <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 text-center">
+        Or sign in with email
+      </h3>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
@@ -365,6 +342,26 @@ function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: 
           <Mail className="h-4 w-4 mr-2" /> Send sign-in link
         </Button>
       </form>
+
+      <div className="relative my-6 flex items-center">
+        <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
+        <span className="px-3 text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wider">or</span>
+        <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
+      </div>
+
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={onDemo}
+        loading={demoLoading}
+        className="w-full text-slate-600 dark:text-slate-300"
+      >
+        <Sparkles className="h-4 w-4 mr-2" /> Try the demo
+      </Button>
+
+      <p className="text-center text-xs text-slate-500">
+        Full access for 4 hours. Pre-loaded with 682 real competitors.
+      </p>
 
       <div className="relative">
         <Button

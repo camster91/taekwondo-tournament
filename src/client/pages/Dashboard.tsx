@@ -316,27 +316,40 @@ export default function Dashboard() {
             </Card>
           )}
 
-          {/* Getting started */}
-          <Card>
-            <CardHeader title="Getting started" />
-            <CardBody className="px-5 pb-5">
-              <ol className="space-y-3">
-                {[
-                  { text: 'Import competitors from Excel', done: totalCompetitors > 0 },
-                  { text: 'Create your first tournament', done: (tournaments?.length || 0) > 0 },
-                  { text: 'Auto-generate divisions', done: totalDivisions > 0 },
-                  { text: 'Run the tournament day-of', done: false },
-                ].map((step, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <div className={`flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center ${step.done ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                      {step.done ? <Check className="h-3 w-3" strokeWidth={3} /> : <span className="text-[10px] font-semibold">{i + 1}</span>}
-                    </div>
-                    <span className={`text-sm leading-relaxed ${step.done ? 'text-slate-500 line-through decoration-slate-300 dark:decoration-slate-700' : 'text-slate-700 dark:text-slate-300'}`}>{step.text}</span>
-                  </li>
-                ))}
-              </ol>
-            </CardBody>
-          </Card>
+          {/* Getting started — auto-dismiss when nearly complete */}
+          {(() => {
+            const steps = [
+              totalCompetitors > 0,
+              (tournaments?.length || 0) > 0,
+              totalDivisions > 0,
+              false, // "Run the tournament day-of" is always pending
+            ];
+            const completedCount = steps.filter(Boolean).length;
+            // Hide once user is 3/4 of the way through (only "run day-of" remains)
+            if (completedCount >= 3) return null;
+            return (
+              <Card>
+                <CardHeader title="Getting started" />
+                <CardBody className="px-5 pb-5">
+                  <ol className="space-y-3">
+                    {[
+                      { text: 'Import competitors from Excel', done: steps[0] },
+                      { text: 'Create your first tournament', done: steps[1] },
+                      { text: 'Auto-generate divisions', done: steps[2] },
+                      { text: 'Run the tournament day-of', done: steps[3] },
+                    ].map((step, i) => (
+                      <li key={i} className="flex items-start gap-3">
+                        <div className={`flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center ${step.done ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                          {step.done ? <Check className="h-3 w-3" strokeWidth={3} /> : <span className="text-[10px] font-semibold">{i + 1}</span>}
+                        </div>
+                        <span className={`text-sm leading-relaxed ${step.done ? 'text-slate-500 line-through decoration-slate-300 dark:decoration-slate-700' : 'text-slate-700 dark:text-slate-300'}`}>{step.text}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </CardBody>
+              </Card>
+            );
+          })()}
         </div>
       </div>
     </div>
