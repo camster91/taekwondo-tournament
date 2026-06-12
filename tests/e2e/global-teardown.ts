@@ -93,6 +93,27 @@ export default async function globalTeardown() {
       where: { id: { in: testCompetitors.map((c) => c.id) } },
     });
 
+    // 5. Delete the test Users themselves. The e2e suite creates
+    //    `e2e-${Date.now()}@example.com` accounts in login.spec.ts and
+    //    public-register.spec.ts via the magic-link endpoint. Without
+    //    this they pile up in the demo DB — 35+ ghost accounts from
+    //    previous test runs were visible in /admin/users. Cascading FKs
+    //    in the schema (UserTournamentAccess, OrganizationMember) clean
+    //    up the user-linked rows automatically. The Invitation model
+    //    has no FK to User, so nothing extra to do there.
+    const testUsers = await prisma.user.findMany({
+      where: {
+        email: { startsWith: 'e2e-' },
+      },
+      select: { id: true },
+    });
+    if (testUsers.length > 0) {
+      const userDelete = await prisma.user.deleteMany({
+        where: { id: { in: testUsers.map((u) => u.id) } },
+      });
+      console.log(`[global-teardown] wiped ${userDelete.count} test users`);
+    }
+
     console.log(
       `[global-teardown] wiped ${tournamentDelete.count} tournaments, ${competitorDelete.count} competitors, ${regDelete.count} registrations`,
     );
