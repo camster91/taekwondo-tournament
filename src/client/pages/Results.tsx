@@ -22,7 +22,24 @@ import { Button } from '../components/ui';
 import { Select } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { DataTable, TableHead, TableBody } from '../components/ui';
+import {
+  type DivisionLike,
+  type SchoolStats,
+  buildSchoolsCSV,
+  buildResultsCSV,
+  buildCompetitorsCSV,
+  downloadCSV,
+  getPlaceName,
+} from '../utils/csv-export';
+import {
+  buildBeltBreakdown,
+  buildAgeBreakdown,
+  buildResultsWorkbook,
+} from '../utils/excel-export';
 
+// Local interfaces `Division` and `SchoolStats` removed — they now come from
+// `../utils/csv-export` as `DivisionLike` and `SchoolStats`. The other shapes
+// here are kept local since they don't need to be shared.
 interface Placement {
   place: number;
   registrationId: string;
@@ -36,21 +53,6 @@ interface Placement {
   };
 }
 
-interface Division {
-  id: string;
-  name: string;
-  eventType: string;
-  bracket: {
-    id: string;
-    status: string;
-    placements: Placement[];
-    matches: {
-      id: string;
-      status: string;
-    }[];
-  } | null;
-}
-
 interface Tournament {
   id: string;
   name: string;
@@ -58,28 +60,8 @@ interface Tournament {
   location: string | null;
 }
 
-interface SchoolStats {
-  name: string;
-  gold: number;
-  silver: number;
-  bronze: number;
-  total: number;
-  competitors: number;
-}
-
-// CSV export utility
-function downloadCSV(data: string[][], filename: string) {
-  const csvContent = data
-    .map((row) => row.map((cell) => `"${(cell || '').replace(/"/g, '""')}"`).join(','))
-    .join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(link.href);
-}
-
+// CSV export utility — see ../utils/csv-export.ts for the testable builders
+// and the browser-side `downloadCSV` that triggers the file save.
 export default function Results() {
   const { tournamentId } = useParams();
   const [filterEvent, setFilterEvent] = useState<'all' | 'patterns' | 'sparring'>('all');
@@ -98,7 +80,7 @@ export default function Results() {
   });
 
   // Fetch divisions with brackets and placements
-  const { data: divisions, isLoading } = useQuery<Division[]>({
+  const { data: divisions, isLoading } = useQuery<DivisionLike[]>({
     queryKey: ['results-divisions', tournamentId],
     queryFn: async () => {
       const res = await fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`, { headers: getAuthHeaders() });
@@ -143,61 +125,11 @@ export default function Results() {
     });
   })();
 
-  // Parse division name to extract belt level and age group
-  const parseDivisionName = (name: string) => {
-    const ageMatch = name.match(/^(\d+-\d+)/);
-    const ageGroup = ageMatch ? ageMatch[1] : 'Unknown';
-    const isBB = name.includes(' BB') || name.includes('BB-') || name.includes('Black Belt');
-    const beltLevel = isBB ? 'Black Belt' : 'Colored Belt';
-    return { ageGroup, beltLevel };
-  };
-
-  // Calculate breakdown by belt level
-  const beltBreakdown = (() => {
-    const stats: Record<string, { name: string; divisions: number; gold: number; silver: number; bronze: number }> = {
-      'Black Belt': { name: 'Black Belt', divisions: 0, gold: 0, silver: 0, bronze: 0 },
-      'Colored Belt': { name: 'Colored Belt', divisions: 0, gold: 0, silver: 0, bronze: 0 },
-    };
-
-    filteredDivisions?.forEach((division) => {
-      const { beltLevel } = parseDivisionName(division.name);
-      stats[beltLevel].divisions++;
-
-      division.bracket?.placements?.forEach((placement) => {
-        if (placement.place === 1) stats[beltLevel].gold++;
-        else if (placement.place === 2) stats[beltLevel].silver++;
-        else if (placement.place === 3) stats[beltLevel].bronze++;
-      });
-    });
-
-    return Object.values(stats);
-  })();
-
-  // Calculate breakdown by age group
-  const ageBreakdown = (() => {
-    const stats: Record<string, { name: string; divisions: number; gold: number; silver: number; bronze: number }> = {};
-
-    filteredDivisions?.forEach((division) => {
-      const { ageGroup } = parseDivisionName(division.name);
-
-      if (!stats[ageGroup]) {
-        stats[ageGroup] = { name: ageGroup, divisions: 0, gold: 0, silver: 0, bronze: 0 };
-      }
-      stats[ageGroup].divisions++;
-
-      division.bracket?.placements?.forEach((placement) => {
-        if (placement.place === 1) stats[ageGroup].gold++;
-        else if (placement.place === 2) stats[ageGroup].silver++;
-        else if (placement.place === 3) stats[ageGroup].bronze++;
-      });
-    });
-
-    return Object.values(stats).sort((a, b) => {
-      const aNum = parseInt(a.name.split('-')[0]) || 999;
-      const bNum = parseInt(b.name.split('-')[0]) || 999;
-      return aNum - bNum;
-    });
-  })();
+  // Breakdown data is computed by the pure builders in ../utils/excel-export
+  // so the same logic is testable without React. The IIFEs just call them
+  // against the current `filteredDivisions` snapshot.
+  const beltBreakdown = buildBeltBreakdown(filteredDivisions ?? []);
+  const ageBreakdown = buildAgeBreakdown(filteredDivisions ?? []);
 
   // Overall stats
   const overallStats = {
@@ -214,180 +146,38 @@ export default function Results() {
     return <span className="text-gray-500 text-sm">{place}th</span>;
   };
 
-  const getPlaceName = (place: number) => {
-    if (place === 1) return '1st Place';
-    if (place === 2) return '2nd Place';
-    if (place === 3) return '3rd Place';
-    return `${place}th Place`;
-  };
+  // getPlaceName is imported from ../utils/csv-export (it's also used inside
+  // the pure builders there for consistency).
 
   // Export school standings to CSV
   const exportSchoolsCSV = () => {
-    const data: string[][] = [
-      ['Rank', 'School', 'Gold', 'Silver', 'Bronze', 'Total'],
-    ];
-
-    schoolStats.forEach((school, index) => {
-      data.push([
-        String(index + 1),
-        school.name,
-        String(school.gold),
-        String(school.silver),
-        String(school.bronze),
-        String(school.gold + school.silver + school.bronze),
-      ]);
-    });
-
     const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
     const tournamentName = (tournament?.name || 'tournament').replace(/[^a-zA-Z0-9]/g, '_');
-    downloadCSV(data, `${tournamentName}_school_standings${eventSuffix}.csv`);
+    downloadCSV(buildSchoolsCSV(schoolStats), `${tournamentName}_school_standings${eventSuffix}.csv`);
     setShowExportMenu(false);
   };
 
   // Export all results to CSV
   const exportResultsCSV = () => {
-    const data: string[][] = [
-      ['Division', 'Event Type', 'Place', 'Competitor', 'School'],
-    ];
-
-    filteredDivisions?.forEach((division) => {
-      division.bracket?.placements
-        ?.sort((a, b) => a.place - b.place)
-        .forEach((placement) => {
-          data.push([
-            division.name,
-            division.eventType,
-            getPlaceName(placement.place),
-            `${placement.registration.competitor.firstName} ${placement.registration.competitor.lastName}`,
-            placement.registration.competitor.schoolDojang || 'Independent',
-          ]);
-        });
-    });
-
     const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
     const tournamentName = (tournament?.name || 'tournament').replace(/[^a-zA-Z0-9]/g, '_');
-    downloadCSV(data, `${tournamentName}_results${eventSuffix}.csv`);
+    downloadCSV(buildResultsCSV(filteredDivisions ?? []), `${tournamentName}_results${eventSuffix}.csv`);
     setShowExportMenu(false);
   };
 
   // Export all competitors with placements
   const exportCompetitorsCSV = () => {
-    const data: string[][] = [
-      ['Competitor', 'School', 'Division', 'Event Type', 'Place'],
-    ];
-
-    const competitorMap = new Map<string, { competitor: any; placements: { division: string; eventType: string; place: number }[] }>();
-
-    filteredDivisions?.forEach((division) => {
-      division.bracket?.placements?.forEach((placement) => {
-        const key = placement.registration.competitor.id;
-        if (!competitorMap.has(key)) {
-          competitorMap.set(key, {
-            competitor: placement.registration.competitor,
-            placements: [],
-          });
-        }
-        competitorMap.get(key)!.placements.push({
-          division: division.name,
-          eventType: division.eventType,
-          place: placement.place,
-        });
-      });
-    });
-
-    competitorMap.forEach(({ competitor, placements }) => {
-      placements.forEach((p) => {
-        data.push([
-          `${competitor.firstName} ${competitor.lastName}`,
-          competitor.schoolDojang || 'Independent',
-          p.division,
-          p.eventType,
-          getPlaceName(p.place),
-        ]);
-      });
-    });
-
     const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
     const tournamentName = (tournament?.name || 'tournament').replace(/[^a-zA-Z0-9]/g, '_');
-    downloadCSV(data, `${tournamentName}_competitor_results${eventSuffix}.csv`);
+    downloadCSV(buildCompetitorsCSV(filteredDivisions ?? []), `${tournamentName}_competitor_results${eventSuffix}.csv`);
     setShowExportMenu(false);
   };
 
-  // Export full results to Excel with multiple sheets
+  // Export full results to Excel with multiple sheets. The workbook assembly
+  // is in the pure builder; here we just trigger the browser download.
   const exportExcel = () => {
-    const wb = XLSX.utils.book_new();
-
-    const schoolData = [
-      ['Rank', 'School', 'Gold', 'Silver', 'Bronze', 'Total'],
-      ...schoolStats.map((school, index) => [
-        index + 1,
-        school.name,
-        school.gold,
-        school.silver,
-        school.bronze,
-        school.gold + school.silver + school.bronze,
-      ]),
-    ];
-    const schoolSheet = XLSX.utils.aoa_to_sheet(schoolData);
-    schoolSheet['!cols'] = [{ wch: 6 }, { wch: 30 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }];
-    XLSX.utils.book_append_sheet(wb, schoolSheet, 'School Standings');
-
-    const divisionData = [
-      ['Division', 'Event Type', 'Place', 'Competitor', 'School'],
-    ];
-    filteredDivisions?.forEach((division) => {
-      division.bracket?.placements
-        ?.sort((a, b) => a.place - b.place)
-        .forEach((placement) => {
-          divisionData.push([
-            division.name,
-            division.eventType,
-            getPlaceName(placement.place),
-            `${placement.registration.competitor.firstName} ${placement.registration.competitor.lastName}`,
-            placement.registration.competitor.schoolDojang || 'Independent',
-          ]);
-        });
-    });
-    const divisionSheet = XLSX.utils.aoa_to_sheet(divisionData);
-    divisionSheet['!cols'] = [{ wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 25 }, { wch: 25 }];
-    XLSX.utils.book_append_sheet(wb, divisionSheet, 'By Division');
-
-    const beltData = [
-      ['Belt Level', 'Divisions', 'Gold', 'Silver', 'Bronze', 'Total'],
-      ...beltBreakdown.map((belt) => [
-        belt.name,
-        belt.divisions,
-        belt.gold,
-        belt.silver,
-        belt.bronze,
-        belt.gold + belt.silver + belt.bronze,
-      ]),
-    ];
-    const beltSheet = XLSX.utils.aoa_to_sheet(beltData);
-    XLSX.utils.book_append_sheet(wb, beltSheet, 'By Belt Level');
-
-    const ageData = [
-      ['Age Group', 'Divisions', 'Gold', 'Silver', 'Bronze', 'Total'],
-      ...ageBreakdown.map((age) => [
-        `${age.name} years`,
-        age.divisions,
-        age.gold,
-        age.silver,
-        age.bronze,
-        age.gold + age.silver + age.bronze,
-      ]),
-      ['Total',
-        ageBreakdown.reduce((s, a) => s + a.divisions, 0),
-        ageBreakdown.reduce((s, a) => s + a.gold, 0),
-        ageBreakdown.reduce((s, a) => s + a.silver, 0),
-        ageBreakdown.reduce((s, a) => s + a.bronze, 0),
-        ageBreakdown.reduce((s, a) => s + a.gold + a.silver + a.bronze, 0),
-      ],
-    ];
-    const ageSheet = XLSX.utils.aoa_to_sheet(ageData);
-    XLSX.utils.book_append_sheet(wb, ageSheet, 'By Age Group');
-
     const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
+    const wb = buildResultsWorkbook(schoolStats, filteredDivisions ?? []);
     XLSX.writeFile(wb, `tournament_results${eventSuffix}.xlsx`);
     setShowExportMenu(false);
   };
