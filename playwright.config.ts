@@ -26,6 +26,11 @@ export default defineConfig({
     },
   ],
   globalSetup: './tests/e2e/global-setup.ts',
+  // globalTeardown wipes e2e-created records (TestKid, E2E Open 2026,
+  // E2E Test Tournament …) after the suite finishes so the dev DB
+  // — which doubles as the prod demo's source of truth — stays clean
+  // between runs. See tests/e2e/global-teardown.ts.
+  globalTeardown: './tests/e2e/global-teardown.ts',
   webServer: {
     // RATE_LIMIT_DISABLED skips the in-memory rate limiters on /api/auth/*
     // so a tight test loop doesn't bump into the 5-per-15min cap. Only
