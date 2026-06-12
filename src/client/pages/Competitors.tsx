@@ -29,6 +29,8 @@ import { Label } from '../components/ui';
 import { Modal } from '../components/ui';
 import { Select } from '../components/ui';
 import { Toolbar } from '../components/ui';
+import { Badge } from '../components/ui';
+import { isTestData } from '../utils/test-data';
 
 interface Competitor {
   id: string;
@@ -711,7 +713,14 @@ export default function Competitors() {
                               {c.firstName?.[0]}{c.lastName?.[0]}
                             </div>
                             <div className="min-w-0">
-                              <div className="text-sm font-medium text-slate-900 dark:text-white truncate">{c.firstName} {c.lastName}</div>
+                              <div className="text-sm font-medium text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                                <span className="truncate">{c.firstName} {c.lastName}</span>
+                                {isTestData(c) && (
+                                  <Badge variant="warning" size="sm" title="Row seeded by Playwright e2e test">
+                                    TEST
+                                  </Badge>
+                                )}
+                              </div>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className={`pill ${getBeltColor(c.belt)} text-[10px]`}>
                                   {c.belt}{c.danRank && ` ${c.danRank}D`}

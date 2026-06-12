@@ -6,10 +6,12 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
+import Badge from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
 import { SPORT_PROFILES } from '../../shared/constants/sport-profiles';
 import { Card, CardHeader, CardBody } from '../components/ui';
+import { isTestData } from '../utils/test-data';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
@@ -307,10 +309,15 @@ function TournamentCard({
               </div>
               <div className="ml-3 min-w-0">
                 <h3
-                  className="font-semibold text-gray-900 dark:text-white truncate"
+                  className="font-semibold text-gray-900 dark:text-white truncate flex items-center gap-1.5"
                   title={tournament.name}
                 >
-                  {tournament.name}
+                  <span className="truncate">{tournament.name}</span>
+                  {isTestData(tournament) && (
+                    <Badge variant="warning" size="sm" title="Tournament created by Playwright e2e test">
+                      TEST
+                    </Badge>
+                  )}
                 </h3>
                 <StatusBadge status={tournament.status} />
                 {tournament.sportProfileSlug && (
