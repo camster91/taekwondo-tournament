@@ -66,10 +66,11 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Tournament not found' });
   }
 
-  if (tournament.status !== 'registration') {
-    return res.status(400).json({ error: 'Tournament is not open for registration' });
-  }
-
+  // Previously gated to status === 'registration' which broke the public
+  // scoreboard during in_progress / brackets / completed events. The scoreboard
+  // needs the tournament name + date to render its header, and that's not
+  // sensitive. Status is exposed so the client can show "Registration closed"
+  // on its own if it wants — the server no longer hard-blocks.
   res.json(tournament);
 });
 
