@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { X } from 'lucide-react';
+import CloseButton from './CloseButton';
 
 type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
@@ -79,13 +79,7 @@ export default function Modal({
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0"
-            aria-label="Close"
-          >
-            <X className="h-6 w-6" />
-          </button>
+          <CloseButton onClose={onClose} size="lg" />
         </div>
         <div className={noBodyPadding ? 'flex-1 overflow-hidden' : 'modal-body'}>
           {children}

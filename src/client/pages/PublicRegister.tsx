@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Trophy, CheckCircle, AlertCircle, User, Calendar, Award } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
@@ -62,6 +62,25 @@ export default function PublicRegister() {
   const [result, setResult] = useState<RegistrationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+
+  // Refs for a11y: focus the error region on submit failure, focus the first
+  // invalid field if we can identify one from the server response.
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const tournamentRef = useRef<HTMLSelectElement | null>(null);
+  const firstNameRef = useRef<HTMLInputElement | null>(null);
+  const lastNameRef = useRef<HTMLInputElement | null>(null);
+  const genderRef = useRef<HTMLSelectElement | null>(null);
+  const dobRef = useRef<HTMLInputElement | null>(null);
+  const beltRef = useRef<HTMLSelectElement | null>(null);
+  const danRankRef = useRef<HTMLSelectElement | null>(null);
+  const schoolRef = useRef<HTMLInputElement | null>(null);
+  const heightRef = useRef<HTMLInputElement | null>(null);
+  const weightRef = useRef<HTMLInputElement | null>(null);
+  const specialNeedsRef = useRef<HTMLTextAreaElement | null>(null);
+  const parentNameRef = useRef<HTMLInputElement | null>(null);
+  const parentEmailRef = useRef<HTMLInputElement | null>(null);
+  const parentPhoneRef = useRef<HTMLInputElement | null>(null);
 
   // 2-step form: step 1 = kid info, step 2 = parent + consent
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -133,6 +152,39 @@ export default function PublicRegister() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Map a field name from server validation errors to its DOM ref. We use a
+  // regex match against the error string; if no match we fall back to focusing
+  // the error region itself.
+  const focusFieldByErrorMessage = (messages: string[]) => {
+    const lc = messages.map((m) => m.toLowerCase()).join(' | ');
+    if (lc.includes('tournament')) return tournamentRef.current;
+    if (lc.includes('first name')) return firstNameRef.current;
+    if (lc.includes('last name')) return lastNameRef.current;
+    if (lc.includes('gender')) return genderRef.current;
+    if (lc.includes('date of birth') || lc.includes('birth')) return dobRef.current;
+    if (lc.includes('belt')) return beltRef.current;
+    if (lc.includes('dan')) return danRankRef.current;
+    if (lc.includes('school') || lc.includes('dojang')) return schoolRef.current;
+    if (lc.includes('height')) return heightRef.current;
+    if (lc.includes('weight')) return weightRef.current;
+    if (lc.includes('special')) return specialNeedsRef.current;
+    if (lc.includes('parent') && lc.includes('name')) return parentNameRef.current;
+    if (lc.includes('parent') && lc.includes('email')) return parentEmailRef.current;
+    if (lc.includes('parent') && lc.includes('phone')) return parentPhoneRef.current;
+    if (lc.includes('event')) {
+      // Events are checkboxes; focus the patterns checkbox (first in DOM order).
+      const patternsEl = formRef.current?.querySelector<HTMLInputElement>('input[name="patterns"]');
+      return patternsEl ?? null;
+    }
+    return null;
+  };
+
+  const focusErrorRegion = () => {
+    // The error region is role="alert" + tabIndex={-1} so it can receive focus
+    // and be announced by screen readers as the failure point.
+    errorRef.current?.focus();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -147,6 +199,12 @@ export default function PublicRegister() {
       if (clientErrors.length > 0) {
         setValidationErrors(clientErrors);
         setSubmitting(false);
+        // Focus the parent-name field if we can identify it, otherwise the
+        // error region.
+        queueMicrotask(() => {
+          const target = focusFieldByErrorMessage(clientErrors) ?? errorRef.current;
+          target?.focus();
+        });
         return;
       }
     }
@@ -170,8 +228,13 @@ export default function PublicRegister() {
       if (!res.ok) {
         if (data.details) {
           setValidationErrors(data.details);
+          queueMicrotask(() => {
+            const target = focusFieldByErrorMessage(data.details as string[]) ?? errorRef.current;
+            target?.focus();
+          });
         } else {
           setError(data.error || 'Registration failed');
+          queueMicrotask(() => focusErrorRegion());
         }
         return;
       }
@@ -179,6 +242,7 @@ export default function PublicRegister() {
       setResult(data);
     } catch {
       setError('Network error. Please try again.');
+      queueMicrotask(() => focusErrorRegion());
     } finally {
       setSubmitting(false);
     }
@@ -313,9 +377,16 @@ export default function PublicRegister() {
 
         {/* Error Display */}
         {(error || validationErrors.length > 0) && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+          <div
+            ref={errorRef}
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+            tabIndex={-1}
+            className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6"
+          >
             <div className="flex items-start">
-              <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400 mt-0.5 mr-2" />
+              <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400 mt-0.5 mr-2" aria-hidden="true" />
               <div>
                 {error && <p className="text-red-700 dark:text-red-300 font-medium">{error}</p>}
                 {validationErrors.length > 0 && (
@@ -333,7 +404,13 @@ export default function PublicRegister() {
         {/* Registration Form */}
         <Card>
           <CardBody className="p-6">
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form
+              ref={formRef}
+              onSubmit={handleSubmit}
+              aria-label="Tournament registration form"
+              className="space-y-6"
+              noValidate
+            >
               {/* Step Indicator */}
               <div className="flex items-center gap-2 mb-2 overflow-x-auto">
                 <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
@@ -350,15 +427,18 @@ export default function PublicRegister() {
               {step === 1 && (<>
               {/* Tournament Selection */}
               <div>
-                <Label required>
-                  <Trophy className="h-4 w-4 inline mr-1" />
+                <Label htmlFor="tournamentId" required>
+                  <Trophy className="h-4 w-4 inline mr-1" aria-hidden="true" />
                   Select Tournament
                 </Label>
                 <Select
+                  id="tournamentId"
+                  ref={tournamentRef}
                   name="tournamentId"
                   value={formData.tournamentId}
                   onChange={handleChange}
                   required
+                  aria-required="true"
                 >
                   <option value="">-- Select a Tournament --</option>
                   {tournaments.map((t) => (
@@ -373,40 +453,51 @@ export default function PublicRegister() {
               {/* Competitor Information */}
               <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                  <User className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
+                  <User className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" aria-hidden="true" />
                   Competitor Information
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label required>First Name</Label>
+                    <Label htmlFor="firstName" required>First Name</Label>
                     <Input
+                      id="firstName"
+                      ref={firstNameRef}
                       type="text"
                       name="firstName"
                       value={formData.firstName}
                       onChange={handleChange}
                       required
+                      aria-required="true"
+                      autoComplete="given-name"
                     />
                   </div>
 
                   <div>
-                    <Label required>Last Name</Label>
+                    <Label htmlFor="lastName" required>Last Name</Label>
                     <Input
+                      id="lastName"
+                      ref={lastNameRef}
                       type="text"
                       name="lastName"
                       value={formData.lastName}
                       onChange={handleChange}
                       required
+                      aria-required="true"
+                      autoComplete="family-name"
                     />
                   </div>
 
                   <div>
-                    <Label required>Gender</Label>
+                    <Label htmlFor="gender" required>Gender</Label>
                     <Select
+                      id="gender"
+                      ref={genderRef}
                       name="gender"
                       value={formData.gender}
                       onChange={handleChange}
                       required
+                      aria-required="true"
                     >
                       <option value="">-- Select --</option>
                       <option value="M">Male</option>
@@ -415,16 +506,20 @@ export default function PublicRegister() {
                   </div>
 
                   <div>
-                    <Label required>
-                      <Calendar className="h-4 w-4 inline mr-1" />
+                    <Label htmlFor="dateOfBirth" required>
+                      <Calendar className="h-4 w-4 inline mr-1" aria-hidden="true" />
                       Date of Birth
                     </Label>
                     <Input
+                      id="dateOfBirth"
+                      ref={dobRef}
                       type="date"
                       name="dateOfBirth"
                       value={formData.dateOfBirth}
                       onChange={handleChange}
                       required
+                      aria-required="true"
+                      autoComplete="bday"
                     />
                   </div>
                 </div>
@@ -433,18 +528,21 @@ export default function PublicRegister() {
               {/* Belt Information */}
               <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                  <Award className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" />
+                  <Award className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" aria-hidden="true" />
                   Belt Rank
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label required>Belt Level</Label>
+                    <Label htmlFor="belt" required>Belt Level</Label>
                     <Select
+                      id="belt"
+                      ref={beltRef}
                       name="belt"
                       value={formData.belt}
                       onChange={handleChange}
                       required
+                      aria-required="true"
                     >
                       <option value="">-- Select Belt --</option>
                       {beltOptions.map((belt) => (
@@ -457,12 +555,15 @@ export default function PublicRegister() {
 
                   {formData.belt === topLevelBeltName && sportProfile.beltConfig.hasDanRank && (
                     <div>
-                      <Label required>Dan Rank</Label>
+                      <Label htmlFor="danRank" required>Dan Rank</Label>
                       <Select
+                        id="danRank"
+                        ref={danRankRef}
                         name="danRank"
                         value={formData.danRank}
                         onChange={handleChange}
                         required
+                        aria-required="true"
                       >
                         {[1, 2, 3, 4, 5, 6].map((dan) => (
                           <option key={dan} value={dan}>
@@ -475,13 +576,16 @@ export default function PublicRegister() {
                   )}
 
                   <div>
-                    <Label>School / Dojang</Label>
+                    <Label htmlFor="schoolDojang">School / Dojang</Label>
                     <Input
+                      id="schoolDojang"
+                      ref={schoolRef}
                       type="text"
                       name="schoolDojang"
                       value={formData.schoolDojang}
                       onChange={handleChange}
                       placeholder="e.g., Downtown Martial Arts Academy"
+                      autoComplete="organization"
                     />
                   </div>
                 </div>
@@ -495,8 +599,10 @@ export default function PublicRegister() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label>Height (inches)</Label>
+                    <Label htmlFor="heightInches">Height (inches)</Label>
                     <Input
+                      id="heightInches"
+                      ref={heightRef}
                       type="number"
                       name="heightInches"
                       value={formData.heightInches}
@@ -504,12 +610,17 @@ export default function PublicRegister() {
                       placeholder="e.g., 60"
                       min={30}
                       max={84}
+                      inputMode="numeric"
                     />
                   </div>
 
                   <div>
-                    <Label>Weight (lbs) {formData.sparring && '*'}</Label>
+                    <Label htmlFor="weightLbs" required={formData.sparring}>
+                      Weight (lbs) {formData.sparring && '*'}
+                    </Label>
                     <Input
+                      id="weightLbs"
+                      ref={weightRef}
                       type="number"
                       name="weightLbs"
                       value={formData.weightLbs}
@@ -518,9 +629,12 @@ export default function PublicRegister() {
                       min={30}
                       max={400}
                       required={formData.sparring}
+                      aria-required={formData.sparring}
+                      aria-describedby="weightLbs-help"
+                      inputMode="numeric"
                     />
                     {formData.sparring && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <p id="weightLbs-help" className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Required for {eventType1?.name ?? 'combat'} events
                       </p>
                     )}
@@ -528,8 +642,10 @@ export default function PublicRegister() {
                 </div>
 
                 <div className="mt-4">
-                  <Label>Special Needs / Medical Notes</Label>
+                  <Label htmlFor="specialNeeds">Special Needs / Medical Notes</Label>
                   <Textarea
+                    id="specialNeeds"
+                    ref={specialNeedsRef}
                     name="specialNeeds"
                     value={formData.specialNeeds}
                     onChange={handleChange}
@@ -550,7 +666,7 @@ export default function PublicRegister() {
                   />
                   <Label htmlFor="competeWithOlder" className="text-sm text-gray-700 dark:text-gray-300 mb-0">
                     <span className="font-medium">Compete in older age band</span>
-                    <span className="block text-xs text-gray-500">
+                    <span id="competeWithOlder-desc" className="block text-xs text-gray-500">
                       Check this if your child is near the top of their age band and you'd like them considered for the next age group up (subject to the tournament's age-flex rules).
                     </span>
                   </Label>
@@ -558,15 +674,15 @@ export default function PublicRegister() {
               </div>
 
               {/* Event Selection */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Event Selection *
-                </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              <fieldset className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <legend className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                  Event Selection <span className="text-red-500" aria-hidden="true">*</span>
+                </legend>
+                <p id="event-selection-help" className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                   Select at least one event to compete in
                 </p>
 
-                <div className="space-y-3">
+                <div className="space-y-3" role="group" aria-describedby="event-selection-help" aria-required="true">
                   {eventType0 && (
                     <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                       <input
@@ -575,10 +691,11 @@ export default function PublicRegister() {
                         checked={formData.patterns}
                         onChange={handleChange}
                         className="h-5 w-5 text-primary-600 rounded"
+                        aria-describedby="event-patterns-desc"
                       />
                       <div className="ml-3">
                         <span className="font-medium text-gray-900 dark:text-white">{eventType0.name}</span>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p id="event-patterns-desc" className="text-sm text-gray-500 dark:text-gray-400">
                           {eventType0.description}
                         </p>
                       </div>
@@ -593,20 +710,21 @@ export default function PublicRegister() {
                         checked={formData.sparring}
                         onChange={handleChange}
                         className="h-5 w-5 text-primary-600 rounded"
+                        aria-describedby="event-sparring-desc"
                       />
                       <div className="ml-3">
                         <span className="font-medium text-gray-900 dark:text-white">
                           {eventType1.name}
                           {eventType1.hasWeightClasses && ' (requires weight)'}
                         </span>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p id="event-sparring-desc" className="text-sm text-gray-500 dark:text-gray-400">
                           {eventType1.description}
                         </p>
                       </div>
                     </label>
                   )}
                 </div>
-              </div>
+              </fieldset>
 
               {/* Step 1 → Step 2 navigation */}
               <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex flex-col sm:flex-row justify-end gap-3">
@@ -614,9 +732,20 @@ export default function PublicRegister() {
                   type="button"
                   variant="primary"
                   onClick={() => {
-                    const form = document.querySelector('form');
-                    if (form && !form.checkValidity()) {
-                      form.reportValidity();
+                    // We use noValidate on the form, so the browser doesn't show
+                    // its own error popups. We do the same job ourselves: find
+                    // the first invalid field in Step 1, surface a friendly
+                    // error in our role="alert" region, and focus the field.
+                    if (!formRef.current) return;
+                    const form = formRef.current;
+                    const invalid = form.querySelector<HTMLElement>(':invalid');
+                    if (invalid) {
+                      setError('Please fill in all required fields before continuing.');
+                      setValidationErrors([]);
+                      invalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      // Cast to focusable element (input/select/textarea/button).
+                      (invalid as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).focus();
+                      queueMicrotask(() => focusErrorRegion());
                       return;
                     }
                     setStep(2);
@@ -631,45 +760,57 @@ export default function PublicRegister() {
 
               {step === 2 && (<>
               {/* Parent/Guardian Info */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <fieldset className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <legend className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                   {isMinor ? 'Parent/Guardian Contact (Required for minors)' : 'Parent/Guardian Contact (Optional)'}
-                </h3>
+                </legend>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label required={isMinor}>Parent/Guardian Name</Label>
+                    <Label htmlFor="parentName" required={isMinor}>Parent/Guardian Name</Label>
                     <Input
+                      id="parentName"
+                      ref={parentNameRef}
                       type="text"
                       name="parentName"
                       value={formData.parentName}
                       onChange={handleChange}
                       required={isMinor}
+                      aria-required={isMinor}
+                      autoComplete="name"
                     />
                   </div>
 
                   <div>
-                    <Label required={isMinor}>Email</Label>
+                    <Label htmlFor="parentEmail" required={isMinor}>Email</Label>
                     <Input
+                      id="parentEmail"
+                      ref={parentEmailRef}
                       type="email"
                       name="parentEmail"
                       value={formData.parentEmail}
                       onChange={handleChange}
                       required={isMinor}
+                      aria-required={isMinor}
+                      autoComplete="email"
                     />
                   </div>
 
                   <div>
-                    <Label>Phone</Label>
+                    <Label htmlFor="parentPhone">Phone</Label>
                     <Input
+                      id="parentPhone"
+                      ref={parentPhoneRef}
                       type="tel"
                       name="parentPhone"
                       value={formData.parentPhone}
                       onChange={handleChange}
+                      inputMode="tel"
+                      autoComplete="tel"
                     />
                   </div>
                 </div>
-              </div>
+              </fieldset>
 
               {/* Submit Button */}
               <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center">

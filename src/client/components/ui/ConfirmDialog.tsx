@@ -1,6 +1,7 @@
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import Button from './Button';
+import CloseButton from './CloseButton';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -65,13 +66,7 @@ export default function ConfirmDialog({
                   {message}
                 </p>
               </div>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <CloseButton onClose={onClose} />
             </div>
           </div>
           <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 rounded-b-lg flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">

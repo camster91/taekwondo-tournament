@@ -57,11 +57,16 @@ test.describe('public registration (self-register)', () => {
     const e2eOption = page.locator('option', { hasText: 'E2E Open 2026' });
     await expect(e2eOption).toHaveCount(1, { timeout: 10_000 });
 
-    // Try to advance without filling the required fields. The "Next" button calls
-    // form.checkValidity() first, so the browser shows a native validation popup.
-    // We assert we never leave step 1.
+    // Try to advance without filling the required fields. The form uses
+    // noValidate, so the browser does NOT show its own validation popup — we
+    // surface a friendly error in our role="alert" region and focus the first
+    // invalid field. Either way, we must never leave step 1.
     await page.getByRole('button', { name: /Next: Parent & Consent/i }).click();
     await expect(page.locator('input[name="firstName"]')).toBeVisible();
     await expect(page.locator('select[name="tournamentId"]')).toBeVisible();
+    // The error region should be present and announced.
+    const errorRegion = page.locator('[role="alert"]');
+    await expect(errorRegion).toBeVisible();
+    await expect(errorRegion).toContainText(/required fields/i);
   });
 });
