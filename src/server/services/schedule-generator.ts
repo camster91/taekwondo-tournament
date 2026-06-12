@@ -97,6 +97,25 @@ export async function generateSchedule(
     throw new Error('Tournament not found');
   }
 
+  // Persist the schedule config to tournament.settings so the
+  // DirectorDashboard can read the configured ring count even before
+  // any matches have been assigned a ringNumber. Closes #34 — the
+  // dashboard used to derive the rings array purely from m.ringNumber
+  // on matches, so a brand-new tournament (or one with no matches yet
+  // routed to a ring) showed "No rings assigned yet" despite rings
+  // being configured in Schedule.
+  if (configOverrides && Object.keys(configOverrides).length > 0) {
+    let current: Record<string, any> = {};
+    if (tournament.settings) {
+      try { current = JSON.parse(tournament.settings); } catch { current = {}; }
+    }
+    current.rings = { count: config.ringCount, startTime: config.startTime, endTime: config.endTime };
+    await prisma.tournament.update({
+      where: { id: tournamentId },
+      data: { settings: JSON.stringify(current) },
+    });
+  }
+
   const divisions = await prisma.division.findMany({
     where: { tournamentId },
     include: {
