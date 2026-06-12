@@ -122,6 +122,19 @@ export default function Scorekeeper() {
       .sort((a, b) => a.matchNumber - b.matchNumber) || [];
   }, [divisions, selectedDivision]);
 
+  // Total + completed counts for the selected division. Used to distinguish
+  // "all done" (truly complete) from "no ready match yet" (still pending/in-progress
+  // elsewhere). Closes #36 / #44 where a division with 14 pending matches
+  // showed "All Matches Complete!" because no match was in 'ready' state.
+  const divisionMatchCounts = useMemo(() => {
+    const div = divisions?.find((d) => d.id === selectedDivision);
+    const matches = div?.bracket?.matches ?? [];
+    return {
+      total: matches.length,
+      completed: matches.filter((m) => m.status === 'completed').length,
+    };
+  }, [divisions, selectedDivision]);
+
   const currentMatch = readyMatches[currentMatchIndex];
 
   const recordResult = useMutation({
@@ -387,14 +400,16 @@ export default function Scorekeeper() {
                           `${division.name}, ${getEventLabel(division.eventType)}, ` +
                           (readyCount > 0
                             ? `${readyCount} ready, ${completedCount} of ${totalCount} complete`
+                            : totalCount === 0
+                            ? `no matches scheduled`
                             : completedCount === totalCount
                             ? `complete, all ${totalCount} matches done`
-                            : `pending, ${completedCount} of ${totalCount} complete`)
+                            : `no ready matches, ${completedCount} of ${totalCount} complete`)
                         }
                         className={`p-4 rounded-lg text-left transition-colors ${
                           readyCount > 0
                             ? 'bg-green-900 hover:bg-green-800 border-2 border-green-500'
-                            : completedCount === totalCount
+                            : totalCount > 0 && completedCount === totalCount
                             ? 'bg-gray-800 hover:bg-gray-700 opacity-50'
                             : 'bg-gray-800 hover:bg-gray-700'
                         }`}
@@ -407,10 +422,12 @@ export default function Scorekeeper() {
                           <div className="text-right">
                             {readyCount > 0 ? (
                               <span className="text-green-400 font-bold">{readyCount} ready</span>
-                            ) : completedCount === totalCount ? (
+                            ) : totalCount > 0 && completedCount === totalCount ? (
                               <span className="text-gray-500">Complete</span>
+                            ) : totalCount === 0 ? (
+                              <span className="text-yellow-500">No bracket</span>
                             ) : (
-                              <span className="text-gray-500">Pending</span>
+                              <span className="text-blue-400">No ready</span>
                             )}
                             <div className="text-xs text-gray-500 mt-1">
                               {completedCount}/{totalCount} done
@@ -495,12 +512,40 @@ export default function Scorekeeper() {
 
       {!currentMatch ? (
         <div className="p-8 text-center">
-          <Check className="h-16 w-16 text-green-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">All Matches Complete!</h2>
-          <p className="text-gray-400 mb-6">No more ready matches in this division.</p>
-          <Button variant="primary" className="px-8 py-3" onClick={() => setSelectedDivision(null)}>
-            Select Another Division
-          </Button>
+          {divisionMatchCounts.total > 0 && divisionMatchCounts.completed === divisionMatchCounts.total ? (
+            <>
+              <Check className="h-16 w-16 text-green-500 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold mb-2">All Matches Complete!</h2>
+              <p className="text-gray-400 mb-6">
+                {divisionMatchCounts.completed} of {divisionMatchCounts.total} matches done.
+              </p>
+              <Button variant="primary" className="px-8 py-3" onClick={() => setSelectedDivision(null)}>
+                Select Another Division
+              </Button>
+            </>
+          ) : divisionMatchCounts.total === 0 ? (
+            <>
+              <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold mb-2">No bracket generated</h2>
+              <p className="text-gray-400 mb-6">
+                This division doesn't have a bracket yet. Generate brackets from the Divisions page.
+              </p>
+              <Button variant="primary" className="px-8 py-3" onClick={() => setSelectedDivision(null)}>
+                Select Another Division
+              </Button>
+            </>
+          ) : (
+            <>
+              <Clock className="h-16 w-16 text-blue-400 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold mb-2">No ready matches</h2>
+              <p className="text-gray-400 mb-6">
+                {divisionMatchCounts.completed} of {divisionMatchCounts.total} done — matches are pending or being seeded from prior rounds. Check back shortly.
+              </p>
+              <Button variant="primary" className="px-8 py-3" onClick={() => setSelectedDivision(null)}>
+                Select Another Division
+              </Button>
+            </>
+          )}
         </div>
       ) : (
         <>
