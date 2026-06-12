@@ -18,7 +18,7 @@ import { TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
-import { DataTable, TableHead, TableBody, TableRow, TableCell } from '../components/ui';
+import { DataTable, TableHead, TableBody, TableRow, TableCell, IconButton } from '../components/ui';
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui';
@@ -677,8 +677,12 @@ export default function Competitors() {
                       <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Name</th>
                       <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left hidden lg:table-cell">School</th>
                       <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right w-12">Age</th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right w-16">Weight</th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right w-16"></th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right w-16">
+                        Weight <span className="text-slate-400 dark:text-slate-500 normal-case tracking-normal">(lbs)</span>
+                      </th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right w-16">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
                   </TableHead>
                   <TableBody>
@@ -712,30 +716,35 @@ export default function Competitors() {
                                 <span className={`pill ${getBeltColor(c.belt)} text-[10px]`}>
                                   {c.belt}{c.danRank && ` ${c.danRank}D`}
                                 </span>
-                                <span className="text-[10px] text-slate-400 lg:hidden">{c.schoolDojang || '—'}</span>
+                                <span className="text-[10px] text-slate-400 lg:hidden truncate max-w-[140px]" title={c.schoolDojang || ''}>{c.schoolDojang || '—'}</span>
                               </div>
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="px-2 py-2 text-sm text-slate-500 dark:text-slate-400 max-w-[160px] truncate hidden lg:table-cell">{c.schoolDojang || '—'}</TableCell>
+                        <TableCell
+                          className="px-2 py-2 text-sm text-slate-500 dark:text-slate-400 max-w-[160px] truncate hidden lg:table-cell"
+                          title={c.schoolDojang || ''}
+                        >
+                          {c.schoolDojang || '—'}
+                        </TableCell>
                         <TableCell className="px-2 py-2 text-sm text-slate-600 dark:text-slate-300 tabular-nums text-right">{calculateAge(c.dateOfBirth)}</TableCell>
                         <TableCell className="px-2 py-2 text-sm text-slate-600 dark:text-slate-300 tabular-nums text-right">{c.weightLbs ? `${c.weightLbs}` : <span className="text-slate-300">—</span>}</TableCell>
                         <TableCell className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
-                            <button
+                            <IconButton
+                              icon={<Edit className="h-3.5 w-3.5" />}
+                              label={`Edit ${c.firstName} ${c.lastName}`}
+                              variant="primary"
+                              size="sm"
                               onClick={() => setEditingCompetitor(c)}
-                              className="h-10 w-10 sm:h-7 sm:w-7 rounded-md text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 flex items-center justify-center transition-colors"
-                              title="Edit"
-                            >
-                              <Edit className="h-3.5 w-3.5" />
-                            </button>
-                            <button
+                            />
+                            <IconButton
+                              icon={<Trash2 className="h-3.5 w-3.5" />}
+                              label={`Delete ${c.firstName} ${c.lastName}`}
+                              variant="danger"
+                              size="sm"
                               onClick={() => setDeleteTarget(c)}
-                              className="h-10 w-10 sm:h-7 sm:w-7 rounded-md text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 flex items-center justify-center transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            />
                           </div>
                         </TableCell>
                       </TableRow>
