@@ -306,7 +306,10 @@ function TournamentCard({
                 <Trophy className={`h-6 w-6 ${isCompleted ? 'text-gray-500' : 'text-primary-600 dark:text-primary-400'}`} />
               </div>
               <div className="ml-3 min-w-0">
-                <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                <h3
+                  className="font-semibold text-gray-900 dark:text-white truncate"
+                  title={tournament.name}
+                >
                   {tournament.name}
                 </h3>
                 <StatusBadge status={tournament.status} />
