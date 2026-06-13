@@ -1,15 +1,23 @@
 #!/bin/bash
 # Deploy taekwondo-tournament to Hostinger VPS (coolify@187.77.26.99).
 #
-# Strategy: build client + server on Mac, tar the artifacts, scp to
-# the VPS, extract to /opt/taekwondo-tournament/, build a small image,
-# run the container with the prod DB URL.
+# One-time VPS setup (before first deploy):
+#   1. Database: docker exec markup-postgres createdb -U markup taekwondo
+#      (or use the existing 'taekwondo' DB on markup-postgres)
+#   2. JWT secret: openssl rand -base64 48 > /etc/taekwondo.d/jwt-secret && chmod 600
+#   3. Caddy entry: append "tkd.ashbi.ca { reverse_proxy 127.0.0.1:18301 }"
+#      to /opt/caddy/Caddyfile, then systemctl reload caddy
+#   4. DNS: A record tkd.ashbi.ca -> 187.77.26.99 (already set)
 #
-# Pre-reqs on the VPS (one-time):
-#   - The 'taekwondo' database already exists on the markup-postgres container
-#   - /etc/taekwondo-jwt-secret file contains a strong random secret
+# Strategy (mirrors the jw-habits pattern from memory):
+#   1. Build dist/ + dist-server/ locally
+#   2. Tar them
+#   3. Pipe to the VPS via ssh + cat (scp tends to fail on this box)
+#   4. Extract into /opt/taekwondo-tournament/, install prod deps, build
+#   5. Run the container with --network markup-net so it can reach the
+#      existing markup-postgres instance
 #
-# Rollback: docker rm -f taekwondo-tournament && rm -rf /opt/taekwondo-tournament
+# Rollback: ssh coolify "docker rm -f taekwondo-tournament && rm -rf /opt/taekwondo-tournament"
 
 set -e
 PROJECT="$HOME/taekwondo-tournament"
@@ -26,21 +34,18 @@ tar czf "$TARBALL" \
     -C "$PROJECT" \
     dist dist-server prisma server.js package.json package-lock.json
 
-echo "==> Uploading to VPS"
-scp "$TARBALL" "$VPS:/tmp/"
+echo "==> Uploading to VPS via ssh cat pipe (scp is unreliable here)"
+cat "$TARBALL" | ssh "$VPS" "cat > $TARBALL && rm -rf $REMOTE_BUILD_DIR && mkdir -p $REMOTE_BUILD_DIR && cd $REMOTE_BUILD_DIR && tar xzf $TARBALL && rm $TARBALL && echo 'extracted to ' \$(pwd)"
 
-echo "==> Deploying on VPS"
-ssh "$VPS" "set -e
-    rm -rf $REMOTE_BUILD_DIR
-    mkdir -p $REMOTE_BUILD_DIR
-    cd $REMOTE_BUILD_DIR
-    tar xzf $TARBALL
-    rm $TARBALL
+echo "==> Building + starting container on VPS"
+ssh "$VPS" <<'DEPLOY_SCRIPT'
+set -e
+cd /opt/taekwondo-tournament
 
-    # Minimal Dockerfile: pre-built artifacts only, no npm install.
-    # We DO need node_modules with the Prisma engine binary, so install
-    # prod deps once at deploy time.
-    cat > Dockerfile <<'DOCKERFILE'
+# Minimal Dockerfile: pre-built artifacts only, no npm install at deploy.
+# We DO need node_modules with the Prisma engine binary, so install
+# prod deps once at deploy time. ~120MB.
+cat > Dockerfile <<'DOCKERFILE'
 FROM node:20-alpine
 WORKDIR /app
 RUN apk add --no-cache openssl
@@ -53,35 +58,42 @@ COPY --chown=node:node server.js ./
 COPY --chown=node:node node_modules ./node_modules
 USER node
 EXPOSE 3001
-CMD ['sh', '-c', './node_modules/.bin/prisma db push --skip-generate && node server.js']
+# Prisma 7 db push needs the URL set BEFORE the config loads. The CLI
+# --url flag passes it directly so it works without dotenv.
+CMD ["sh", "-c", "./node_modules/.bin/prisma db push --url=\"$DATABASE_URL\" && node server.js"]
 DOCKERFILE
 
-    # Install prod deps (with prisma engines) into the build dir so the
-    # COPY above picks them up. ~120MB.
-    npm ci --omit=dev
+echo "==> Installing prod deps (1-2 min)"
+npm ci --omit=dev 2>&1 | tail -3
 
-    echo '==> Building image'
-    docker build -t camster91/taekwondo-tournament:build-latest .
+echo "==> Building image"
+docker build -t camster91/taekwondo-tournament:build-latest . 2>&1 | tail -3
 
-    echo '==> Stopping old container (if any)'
-    docker rm -f taekwondo-tournament 2>/dev/null || true
+echo "==> Stopping old container"
+docker rm -f taekwondo-tournament 2>/dev/null || true
 
-    echo '==> Starting new container'
-    docker run -d \\
-        --name taekwondo-tournament \\
-        --restart unless-stopped \\
-        -p 127.0.0.1:18301:3001 \\
-        -e NODE_ENV=production \\
-        -e PORT=3001 \\
-        -e JWT_SECRET=\"\$(cat /etc/taekwondo-jwt-secret 2>/dev/null || echo dev-only-not-for-prod)\" \\
-        -e DATABASE_URL=\"postgresql://markup:bKADG4...TH-w@markup-postgres:5432/taekwondo?schema=public\" \\
-        camster91/taekwondo-tournament:build-latest
+echo "==> Reading DB password from markup-postgres"
+DB_PW=$(docker exec markup-postgres printenv POSTGRES_PASSWORD)
+echo "DB password length: ${#DB_PW}"
 
-    echo '==> Container status:'
-    sleep 3
-    docker ps --filter 'name=taekwondo-tournament' --format '{{.Names}} {{.Status}} {{.Ports}}'
-    echo '==> Recent logs:'
-    docker logs --tail 20 taekwondo-tournament 2>&1 | head -30
-"
+echo "==> Starting container"
+docker run -d \
+    --name taekwondo-tournament \
+    --restart unless-stopped \
+    --network markup-net \
+    -p 127.0.0.1:18301:3001 \
+    -e NODE_ENV=production \
+    -e PORT=3001 \
+    -e JWT_SECRET=*** /etc/taekwondo.d/jwt-secret)" \
+    -e "DATABASE_URL=postgresql://markup:***@markup-postgres:5432/taekwondo?schema=public" \
+    camster91/taekwondo-tournament:build-latest
 
-echo "==> Done. Test at http://localhost:18301 (or via caddy once DNS is set)"
+echo "==> Container status:"
+sleep 8
+docker ps --filter name=taekwondo-tournament --format "{{.Names}} {{.Status}} {{.Ports}}"
+
+echo "==> Recent logs:"
+docker logs --tail 20 taekwondo-tournament 2>&1
+DEPLOY_SCRIPT
+
+echo "==> Done. Live at https://tkd.ashbi.ca"
