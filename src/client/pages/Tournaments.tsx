@@ -367,6 +367,7 @@ function TournamentCard({
           to={`/tournaments/${tournament.id}`}
           variant="primary"
           className="flex-1"
+          aria-label={isCompleted ? `View results for ${tournament.name}` : `Manage ${tournament.name}`}
         >
           {isCompleted ? 'View Results' : 'Manage'}
         </Button>
