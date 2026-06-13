@@ -484,9 +484,12 @@ export default function BracketEditor() {
             {/* Grand Finals */}
             {finalsMatches.length > 0 && (
               <div role="rowgroup" aria-label="Grand finals">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   Grand Finals
                 </h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                  After Losers Final
+                </p>
                 <div className="flex gap-8">
                   {finalsMatches.map((match) => (
                     <div
