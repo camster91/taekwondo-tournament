@@ -307,6 +307,27 @@ export default function BracketEditor() {
   const finalsMatches =
     division.bracket?.matches?.filter((m) => m.bracketType === 'finals') || [];
 
+  // Sort each bracket by (roundNumber, matchNumber) so we can derive a stable
+  // 1-indexed per-bracket position. The display label uses this position so
+  // losers matches restart numbering at 1 (L1, L2, ...) instead of continuing
+  // the global matchNumber from the winners bracket.
+  const sortBracket = (arr: Match[]) =>
+    [...arr].sort((a, b) => a.roundNumber - b.roundNumber || a.matchNumber - b.matchNumber);
+
+  const winnersMatchesSorted = sortBracket(winnersMatches);
+  const losersMatchesSorted = sortBracket(losersMatches);
+  const finalsMatchesSorted = sortBracket(finalsMatches);
+
+  // Build a lookup: match.id -> display label. Winners/Losers restart at 1;
+  // Finals are labeled "GF" (Grand Finals). Falls back to the raw matchNumber
+  // if the bracketType is unknown.
+  const matchLabelById = new Map<string, string>();
+  winnersMatchesSorted.forEach((m, i) => matchLabelById.set(m.id, `W${i + 1}`));
+  losersMatchesSorted.forEach((m, i) => matchLabelById.set(m.id, `L${i + 1}`));
+  finalsMatchesSorted.forEach((m) => matchLabelById.set(m.id, 'GF'));
+  const getMatchLabel = (match: Match) =>
+    matchLabelById.get(match.id) ?? `M${match.matchNumber}`;
+
   const winnersRounds = [...new Set(winnersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
   const losersRounds = [...new Set(losersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
 
@@ -432,6 +453,7 @@ export default function BracketEditor() {
                         <MatchCard
                           key={match.id}
                           match={match}
+                          label={getMatchLabel(match)}
                           bracketCol={colIdx}
                           onSelectWinner={(winnerId) =>
                             handleSelectWinner(match.id, winnerId, match)
@@ -468,6 +490,7 @@ export default function BracketEditor() {
                           <MatchCard
                             key={match.id}
                             match={match}
+                            label={getMatchLabel(match)}
                             bracketCol={winnersRounds.length + colIdx}
                             onSelectWinner={(winnerId) =>
                               handleSelectWinner(match.id, winnerId, match)
@@ -500,12 +523,13 @@ export default function BracketEditor() {
                     >
                       {finalsMatches.length > 1 && (
                         <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
-                          Match {match.matchNumber}
+                          Match {getMatchLabel(match)}
                         </div>
                       )}
                       <MatchCard
                         key={match.id}
                         match={match}
+                        label={getMatchLabel(match)}
                         bracketCol={winnersRounds.length + losersRounds.length}
                         onSelectWinner={(winnerId) =>
                           handleSelectWinner(match.id, winnerId, match)
@@ -588,10 +612,12 @@ function MatchCard({
   match,
   bracketCol,
   onSelectWinner,
+  label,
 }: {
   match: Match;
   bracketCol: number;
   onSelectWinner: (winnerId: string) => void;
+  label: string;
 }) {
   const name1 = match.competitor1
     ? `${match.competitor1.competitor.firstName} ${match.competitor1.competitor.lastName}`
@@ -620,7 +646,7 @@ function MatchCard({
       }`}
     >
       <div className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400 flex justify-between">
-        <span>Match {match.matchNumber}</span>
+        <span>Match {label}</span>
         <span className="capitalize" aria-label={`Status: ${cardStatus}`}>{cardStatus}</span>
       </div>
       <div className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -634,7 +660,7 @@ function MatchCard({
           data-row={0}
           aria-pressed={match.winnerId === match.competitor1Id}
           aria-label={
-            `Match ${match.matchNumber}, ${name1}` +
+            `Match ${label}, ${name1}` +
             (match.winnerId === match.competitor1Id ? ' (winner)' : '') +
             (isReady ? ' — press Enter to record as winner' : '')
           }
@@ -663,7 +689,7 @@ function MatchCard({
           data-row={1}
           aria-pressed={match.winnerId === match.competitor2Id}
           aria-label={
-            `Match ${match.matchNumber}, ${name2}` +
+            `Match ${label}, ${name2}` +
             (match.winnerId === match.competitor2Id ? ' (winner)' : '') +
             (isReady ? ' — press Enter to record as winner' : '')
           }
