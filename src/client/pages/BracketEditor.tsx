@@ -431,114 +431,47 @@ export default function BracketEditor() {
               aria-label={`${division.name} bracket — use arrow keys to move between matches`}
               onKeyDown={handleBracketKeyDown}
             >
-            {/* Winners Bracket */}
-            <div className="mb-8" role="rowgroup" aria-label="Winners bracket">
-              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-                Winners Bracket
-              </h4>
-              <div className="flex gap-8">
-                {winnersRounds.map((round, colIdx) => (
-                  <div
-                    key={round}
-                    className="space-y-4"
-                    role="row"
-                    aria-label={`Winners round ${round}`}
-                  >
-                    <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
-                      Round {round}
-                    </div>
-                    {winnersMatches
-                      .filter((m) => m.roundNumber === round)
-                      .map((match) => (
-                        <MatchCard
-                          key={match.id}
-                          match={match}
-                          label={getMatchLabel(match)}
-                          bracketCol={colIdx}
-                          onSelectWinner={(winnerId) =>
-                            handleSelectWinner(match.id, winnerId, match)
-                          }
-                        />
-                      ))}
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Winners / Losers / Grand Finals sections — all rendered as
+                horizontal columns (rounds left-to-right, matches stacked
+                vertically within each round column) via the shared
+                <BracketSection> component. Adding the same component to all
+                three sections guarantees the losers bracket cannot drift
+                out of alignment with the winners layout. */}
+            <BracketSection
+              ariaLabel="Winners bracket"
+              title="Winners Bracket"
+              rounds={winnersRounds}
+              matches={winnersMatches}
+              colOffset={0}
+              getMatchLabel={getMatchLabel}
+              onSelectWinner={handleSelectWinner}
+            />
 
-            {/* Losers Bracket */}
             {losersRounds.length > 0 && (
-              <div className="mb-8" role="rowgroup" aria-label="Losers bracket">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-                  Losers Bracket
-                </h4>
-                <div className="flex gap-8">
-                  {losersRounds.map((round, colIdx) => {
-                    const roundMatches = losersMatches.filter(
-                      (m) => m.roundNumber === round
-                    );
-                    return (
-                      <div
-                        key={round}
-                        className="space-y-4"
-                        role="row"
-                        aria-label={`Losers round ${round}`}
-                      >
-                        <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
-                          Round {round}
-                        </div>
-                        {roundMatches.map((match) => (
-                          <MatchCard
-                            key={match.id}
-                            match={match}
-                            label={getMatchLabel(match)}
-                            bracketCol={winnersRounds.length + colIdx}
-                            onSelectWinner={(winnerId) =>
-                              handleSelectWinner(match.id, winnerId, match)
-                            }
-                          />
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <BracketSection
+                ariaLabel="Losers bracket"
+                title="Losers Bracket"
+                rounds={losersRounds}
+                matches={losersMatches}
+                colOffset={winnersRounds.length}
+                getMatchLabel={getMatchLabel}
+                onSelectWinner={handleSelectWinner}
+              />
             )}
 
-            {/* Grand Finals */}
             {finalsMatches.length > 0 && (
-              <div role="rowgroup" aria-label="Grand finals">
-                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  Grand Finals
-                </h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                  After Losers Final
-                </p>
-                <div className="flex gap-8">
-                  {finalsMatches.map((match) => (
-                    <div
-                      key={match.id}
-                      className="space-y-4"
-                      role="row"
-                      aria-label="Grand finals"
-                    >
-                      {finalsMatches.length > 1 && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
-                          Match {getMatchLabel(match)}
-                        </div>
-                      )}
-                      <MatchCard
-                        key={match.id}
-                        match={match}
-                        label={getMatchLabel(match)}
-                        bracketCol={winnersRounds.length + losersRounds.length}
-                        onSelectWinner={(winnerId) =>
-                          handleSelectWinner(match.id, winnerId, match)
-                        }
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <BracketSection
+                ariaLabel="Grand finals"
+                title="Grand Finals"
+                subtitle="After Losers Final"
+                rounds={[0]}
+                matches={finalsMatches}
+                colOffset={winnersRounds.length + losersRounds.length}
+                getMatchLabel={getMatchLabel}
+                onSelectWinner={handleSelectWinner}
+                showMatchLabels
+                matchLabelPrefix="Match"
+              />
             )}
             </div>
           </CardBody>
@@ -603,6 +536,95 @@ export default function BracketEditor() {
       {/* Live region for bracket update announcements. */}
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
         {bracketAnnounce}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Render one bracket section (Winners, Losers, or Grand Finals) as a
+ * horizontal row of round columns, with matches stacked vertically inside
+ * each column. Shared by all three sections so the Losers bracket cannot
+ * drift out of horizontal alignment with the Winners bracket.
+ */
+function BracketSection({
+  ariaLabel,
+  title,
+  subtitle,
+  rounds,
+  matches,
+  colOffset,
+  getMatchLabel,
+  onSelectWinner,
+  showMatchLabels = false,
+  matchLabelPrefix = 'Match',
+}: {
+  ariaLabel: string;
+  title: string;
+  subtitle?: string;
+  rounds: number[];
+  matches: Match[];
+  colOffset: number;
+  getMatchLabel: (match: Match) => string;
+  onSelectWinner: (matchId: string, winnerId: string, match: Match) => void;
+  showMatchLabels?: boolean;
+  matchLabelPrefix?: string;
+}) {
+  // Group matches by round so each column gets its own list. For Grand
+  // Finals (rounds=[0]) we just dump every match into a single column.
+  const matchesByRound = new Map<number, Match[]>();
+  matches.forEach((m) => {
+    const key = rounds.length === 1 ? 0 : m.roundNumber;
+    const list = matchesByRound.get(key) ?? [];
+    list.push(m);
+    matchesByRound.set(key, list);
+  });
+
+  return (
+    <div className="mb-8 last:mb-0" role="rowgroup" aria-label={ariaLabel}>
+      <h4
+        className={`text-sm font-semibold text-gray-700 dark:text-gray-300 ${
+          subtitle ? 'mb-1' : 'mb-4'
+        }`}
+      >
+        {title}
+      </h4>
+      {subtitle && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          {subtitle}
+        </p>
+      )}
+      <div className="flex gap-8">
+        {rounds.map((round, colIdx) => {
+          const columnMatches = matchesByRound.get(round) ?? [];
+          return (
+            <div
+              key={round}
+              className="min-w-max space-y-4"
+              role="row"
+              aria-label={
+                rounds.length === 1 ? ariaLabel : `${ariaLabel} round ${round}`
+              }
+            >
+              {rounds.length > 1 && (
+                <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
+                  Round {round}
+                </div>
+              )}
+              {columnMatches.map((match) => (
+                <MatchCard
+                  key={match.id}
+                  match={match}
+                  label={getMatchLabel(match)}
+                  bracketCol={colOffset + colIdx}
+                  onSelectWinner={(winnerId) =>
+                    onSelectWinner(match.id, winnerId, match)
+                  }
+                />
+              ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
