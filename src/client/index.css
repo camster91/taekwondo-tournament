@@ -5,6 +5,11 @@
 
 @import 'tailwindcss';
 
+/* Enable dark variants via `.dark` class on <html>. Tailwind v4 ignores the
+   JS `darkMode: 'class'` from tailwind.config.js, so we MUST define the variant
+   in CSS or every `dark:*` utility silently no-ops. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   /* Brand: deep indigo → vivid blue (more confident than the old flat blue) */
   --color-primary-50:  #eef2ff;
