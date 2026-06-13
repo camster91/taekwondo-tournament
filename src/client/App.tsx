@@ -399,6 +399,17 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
 
             <div className="flex-1" />
 
+            {/* Theme toggle — visible in the topbar so users can flip
+                between light/dark without opening the account menu. */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+
             {/* Notification bell */}
             <button
               className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
