@@ -50,4 +50,4 @@ USER node
 EXPOSE 3001
 
 # Run schema sync and start server (use local prisma binary to ensure correct version)
-CMD ["sh", "-c", "./node_modules/.bin/prisma db push --skip-generate && node server.js"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma db push --url=\"$DATABASE_URL\" && node server.js"]
