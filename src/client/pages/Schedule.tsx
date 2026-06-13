@@ -508,7 +508,22 @@ export default function Schedule() {
                         {div.eventType === 'patterns' ? 'Patterns' : 'Sparring'}
                       </span>
                     </td>
-                    <td className="text-gray-600 dark:text-gray-400">{div.competitorCount}</td>
+                    <td className="text-gray-600 dark:text-gray-400">
+                      {(() => {
+                        const names = div.competitorNames ?? [];
+                        if (names.length === 0) return '—';
+                        const fullTitle = names.join(', ');
+                        const display =
+                          names.length <= 3
+                            ? names.join(', ')
+                            : `${names.slice(0, 3).join(', ')}, +${names.length - 3} more`;
+                        return (
+                          <span title={fullTitle} aria-label={fullTitle}>
+                            {display}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="text-gray-600 dark:text-gray-400">{div.estimatedDurationMinutes} min</td>
                   </tr>
                 ))}

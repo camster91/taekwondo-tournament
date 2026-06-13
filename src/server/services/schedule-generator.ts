@@ -18,6 +18,7 @@ interface ScheduledDivision {
   beltLevel: string;
   gender: string;
   competitorCount: number;
+  competitorNames: string[];
   ring: number;
   startTime: string;
   endTime: string;
@@ -122,6 +123,17 @@ export async function generateSchedule(
       _count: {
         select: { assignments: true },
       },
+      assignments: {
+        select: {
+          registration: {
+            select: {
+              competitor: {
+                select: { firstName: true, lastName: true },
+              },
+            },
+          },
+        },
+      },
     },
     orderBy: [
       { eventType: 'asc' }, // Patterns first, then sparring
@@ -181,6 +193,13 @@ export async function generateSchedule(
       beltLevel: div.beltLevel,
       gender: div.gender,
       competitorCount: div._count.assignments,
+      competitorNames: div.assignments
+        .map((a) => {
+          const c = a.registration.competitor;
+          return `${c.firstName} ${c.lastName}`.trim();
+        })
+        .filter((n) => n.length > 0)
+        .sort((a, b) => a.localeCompare(b)),
       ring: ringIndex + 1, // 1-indexed
       startTime: minutesToTime(startTimeMinutes),
       endTime: minutesToTime(endTimeDivision),
