@@ -12,11 +12,23 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
-    // Check localStorage first
-    const saved = localStorage.getItem('theme') as Theme;
-    if (saved) return saved;
+    // Check localStorage first — an explicit user choice always wins
+    try {
+      const saved = localStorage.getItem('theme') as Theme;
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch {
+      // ignore storage errors (e.g. SSR or privacy mode)
+    }
 
-    // Default to light — let users opt in to dark, not the other way around
+    // Otherwise respect the OS preference. The admin panel's dark
+    // variants all key off `<html>.dark`, so without this step users
+    // with `prefers-color-scheme: dark` saw the topbar render light
+    // until they manually toggled. Closes "Top bar is white?" bug.
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
+    }
     return 'light';
   });
 
