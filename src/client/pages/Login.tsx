@@ -319,6 +319,7 @@ export default function Login() {
 function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: any) {
   return (
     <div className="space-y-5">
+      <h2 className="sr-only">Sign in</h2>
       <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 text-center">
         Or sign in with email
       </h3>
@@ -368,7 +369,7 @@ function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: 
           as={Link}
           to="/register"
           variant="secondary"
-          className="w-full"
+          className="w-full text-primary-700 dark:text-primary-300 border border-primary-300 dark:border-primary-600"
         >
           <UserPlus className="h-4 w-4 mr-2" /> Register as Competitor
         </Button>
