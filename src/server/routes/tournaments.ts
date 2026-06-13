@@ -122,10 +122,21 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, settings, sportProfileSlug, organizationId } = req.body;
 
+  // Normalize the incoming date to noon UTC. The schema column is a
+  // timestamptz but the field represents a calendar date, not an
+  // instant. Storing at midnight UTC causes the date to shift by one
+  // day when displayed in negative-offset timezones (e.g. PDT shows
+  // "2026-08-14" for a date the user picked as 2026-08-15). Noon
+  // UTC is safe across all timezones.
+  const normalizeDate = (raw: string): Date => {
+    const dateOnly = raw.includes('T') ? raw.slice(0, 10) : raw;
+    return new Date(dateOnly + 'T12:00:00.000Z');
+  };
+
   const tournament = await prisma.tournament.create({
     data: {
       name,
-      date: new Date(date),
+      date: normalizeDate(date),
       location,
       settings: settings ? JSON.stringify(settings) : null,
       status: 'draft',
