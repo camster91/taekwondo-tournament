@@ -109,11 +109,21 @@ if (isProduction) {
     },
   }));
 
-  // Handle client-side routing - serve index.html for all non-API routes
+  // Handle client-side routing - serve index.html for non-API routes,
+  // return 404 JSON for unmatched /api/* paths. Without the /api/* branch,
+  // the handler silently no-ops and the connection sits open until the
+  // client times out (Express 4 has no built-in 404 default).
   app.get('*', (req: Request, res: Response) => {
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(distPath, 'index.html'));
+    if (req.path.startsWith('/api')) {
+      res.status(404).json({
+        error: 'Not found',
+        code: 'ROUTE_NOT_FOUND',
+        path: req.originalUrl,
+        method: req.method,
+      });
+      return;
     }
+    res.sendFile(path.join(distPath, 'index.html'));
   });
 }
 
