@@ -76,16 +76,27 @@ echo "==> Reading DB password from markup-postgres"
 DB_PW=$(docker exec markup-postgres printenv POSTGRES_PASSWORD)
 echo "DB password length: ${#DB_PW}"
 
+echo "==> Reading JWT secret"
+JWT_SECRET=$(cat /etc/taekwondo.d/jwt-secret)
+echo "JWT secret length: ${#JWT_SECRET}"
+
+echo "==> Exporting JWT_SECRET into the docker run environment"
+# Write env to a temp file so the secret never appears on the docker run cmdline
+ENV_FILE=$(mktemp /tmp/tkd-env.XXXXXX)
+chmod 600 "$ENV_FILE"
+echo "NODE_ENV=production" > "$ENV_FILE"
+echo "PORT=3001" >> "$ENV_FILE"
+printf "JWT_SECRET=%s\n" "$JWT_SECRET" >> "$ENV_FILE"
+echo "DATABASE_URL=postgresql://markup:${DB_PW}@markup-postgres:5432/taekwondo?schema=public" >> "$ENV_FILE"
+trap "rm -f $ENV_FILE" EXIT
+
 echo "==> Starting container"
 docker run -d \
     --name taekwondo-tournament \
     --restart unless-stopped \
     --network markup-net \
     -p 127.0.0.1:18301:3001 \
-    -e NODE_ENV=production \
-    -e PORT=3001 \
-    -e JWT_SECRET=*** /etc/taekwondo.d/jwt-secret)" \
-    -e "DATABASE_URL=postgresql://markup:***@markup-postgres:5432/taekwondo?schema=public" \
+    --env-file "$ENV_FILE" \
     camster91/taekwondo-tournament:build-latest
 
 echo "==> Container status:"
