@@ -81,23 +81,6 @@ export async function advanceWinner(
     }
   }
 
-  // Handle special cases for losers bracket drops from winners semifinals/finals
-  if (match.bracketType === 'winners' && matchData.nextLoserMatch) {
-    // Loser of winners bracket drops down
-    const loserId = match.competitor1Id === match.winnerId
-      ? match.competitor2Id
-      : match.competitor1Id;
-
-    if (loserId) {
-      const loserMatch = bracket.matches.find(
-        m => m.matchNumber === matchData.nextLoserMatch
-      );
-      if (loserMatch) {
-        await advanceToMatch(prisma, loserMatch.id, loserId, match.matchNumber);
-      }
-    }
-  }
-
   // Check if grand finals reset is needed
   if (match.bracketType === 'finals' && match.matchNumber === 14) {
     // Grand finals - check if losers bracket champion won
