@@ -31,6 +31,7 @@ export function generateRoundRobin(
       losers: [],
       finals: [],
       competitorCount: count,
+      positions: { winnersFinal: null, losersFinal: null, grandFinals: null, reset: null },
       seedingInfo: { strategy: 'random', skillBalance: 100, schoolDiversity: 100 },
     };
   }
@@ -82,6 +83,10 @@ export function generateRoundRobin(
     losers: [],
     finals: [],
     competitorCount: count,
+    // Round-robin has no winners/losers final — pool winners advance
+    // via a separate flow (out of scope for this generator). The
+    // named positions are null until a final bracket is generated.
+    positions: { winnersFinal: null, losersFinal: null, grandFinals: null, reset: null },
     seedingInfo: {
       strategy,
       skillBalance: computeBalance(sorted),
@@ -174,6 +179,7 @@ export function generatePoolPlay(
     losers: [],
     finals: [], // Pool-play finals are created on demand after pool stage completes
     competitorCount: count,
+    positions: { winnersFinal: null, losersFinal: null, grandFinals: null, reset: null },
     seedingInfo: {
       strategy,
       skillBalance: computeBalance(sorted),

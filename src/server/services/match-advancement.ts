@@ -81,15 +81,24 @@ export async function advanceWinner(
     }
   }
 
-  // Check if grand finals reset is needed
-  if (match.bracketType === 'finals' && match.matchNumber === 14) {
+  // Check if grand finals reset is needed. The grand final and reset
+  // match numbers come from the bracket structure, NOT a hardcoded
+  // 14/15 — for non-8-person brackets those numbers are different
+  // (4-person grand final is match 4, 16-person is match 22, etc).
+  const grandFinalsNumber = structure.positions?.grandFinals ?? null;
+  const resetNumber = structure.positions?.reset ?? null;
+  if (
+    match.bracketType === 'finals' &&
+    grandFinalsNumber !== null &&
+    match.matchNumber === grandFinalsNumber
+  ) {
     // Grand finals - check if losers bracket champion won
     // The winner from losers bracket is competitor2 in grand finals
     const needsReset = match.winnerId === match.competitor2Id;
 
-    if (needsReset) {
-      // Activate reset match (match 15)
-      const resetMatch = bracket.matches.find(m => m.matchNumber === 15);
+    if (needsReset && resetNumber !== null) {
+      // Activate reset match
+      const resetMatch = bracket.matches.find(m => m.matchNumber === resetNumber);
       if (resetMatch) {
         await prisma.match.update({
           where: { id: resetMatch.id },
@@ -255,12 +264,25 @@ export async function getBracketPlacements(
 
   if (!bracket) return [];
 
+  // Pull named positions from the bracket structure. For legacy
+  // brackets generated before `positions` existed (no field at all),
+  // fall back to the old hardcoded 13/14/15 lookup. New brackets
+  // always have `positions` populated.
+  const structure: BracketStructure | null = (() => {
+    try { return JSON.parse(bracket.structure); } catch { return null; }
+  })();
+  const positions = structure?.positions;
+  const grandFinalsNumber = positions?.grandFinals ?? 14;
+  const resetNumber = positions?.reset ?? 15;
+  const losersFinalNumber = positions?.losersFinal ?? 13;
+  const winnersFinalNumber = positions?.winnersFinal ?? 7;
+
   const placements: { place: number; competitorId: string }[] = [];
 
   // Find finals matches
-  const grandFinals = bracket.matches.find(m => m.matchNumber === 14);
-  const resetMatch = bracket.matches.find(m => m.matchNumber === 15);
-  const losersFinal = bracket.matches.find(m => m.matchNumber === 13);
+  const grandFinals = bracket.matches.find(m => m.matchNumber === grandFinalsNumber);
+  const resetMatch = bracket.matches.find(m => m.matchNumber === resetNumber);
+  const losersFinal = bracket.matches.find(m => m.matchNumber === losersFinalNumber);
 
   // Determine 1st and 2nd place
   if (resetMatch?.status === 'completed' && resetMatch.winnerId) {
@@ -289,7 +311,7 @@ export async function getBracketPlacements(
 
   // Also 3rd place - loser of winners final who lost in losers bracket
   // (In double elimination, there can be two 3rd place finishers)
-  const winnersFinal = bracket.matches.find(m => m.matchNumber === 7);
+  const winnersFinal = bracket.matches.find(m => m.matchNumber === winnersFinalNumber);
   if (winnersFinal?.status === 'completed' && winnersFinal.winnerId) {
     const losersFinalist = winnersFinal.competitor1Id === winnersFinal.winnerId
       ? winnersFinal.competitor2Id
@@ -350,10 +372,17 @@ export async function getBracketPlacementsEnriched(
  * Checks if a bracket is complete
  */
 export function isBracketComplete(
-  matches: { status: string; matchNumber: number }[]
+  matches: { status: string; matchNumber: number }[],
+  structure?: BracketStructure | null
 ): boolean {
-  const grandFinals = matches.find(m => m.matchNumber === 14);
-  const resetMatch = matches.find(m => m.matchNumber === 15);
+  // Resolve the grand-finals and reset match numbers. Prefer the
+  // bracket structure's named positions when available; fall back
+  // to 14/15 for legacy 8-person brackets.
+  const grandFinalsNumber = structure?.positions?.grandFinals ?? 14;
+  const resetNumber = structure?.positions?.reset ?? 15;
+
+  const grandFinals = matches.find(m => m.matchNumber === grandFinalsNumber);
+  const resetMatch = matches.find(m => m.matchNumber === resetNumber);
 
   if (!grandFinals) return false;
 
