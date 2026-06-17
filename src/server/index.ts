@@ -13,11 +13,9 @@ import divisionsRouter from './routes/divisions.js';
 import bracketsRouter from './routes/brackets.js';
 import authRouter from './routes/auth.js';
 import publicRouter from './routes/public.js';
-import fairnessRouter from './routes/fairness.js';
 import analyticsRouter from './routes/analytics.js';
 import invitesRouter from './routes/invites.js';
 import sportsRouter from './routes/sports.js';
-import organizationsRouter from './routes/organizations.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 
@@ -89,11 +87,9 @@ app.use('/api/competitors', competitorsRouter);
 app.use('/api/tournaments', tournamentsRouter);
 app.use('/api/divisions', divisionsRouter);
 app.use('/api/brackets', bracketsRouter);
-app.use('/api/fairness', fairnessRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/invites', invitesRouter);
 app.use('/api/sports', sportsRouter);
-app.use('/api/organizations', organizationsRouter);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {
