@@ -60,11 +60,6 @@ router.post('/division/:divisionId/generate', authenticate, requireRole('admin',
     return res.status(404).json({ error: 'Division not found' });
   }
 
-  // Delete existing bracket if any
-  await prisma.bracket.deleteMany({
-    where: { divisionId: division.id },
-  });
-
   const competitors = (division as any).assignments.map((a: any) => ({
     registrationId: a.registrationId,
     name: `${a.registration.competitor.firstName} ${a.registration.competitor.lastName}`,
@@ -88,42 +83,62 @@ router.post('/division/:divisionId/generate', authenticate, requireRole('admin',
     bracketStructure = generateBracket(competitors, seedingStrategy);
   }
 
-  // Save bracket
-  const bracket = await prisma.bracket.create({
-    data: {
-      divisionId: division.id,
-      structure: JSON.stringify(bracketStructure),
-      format,
-    },
-  });
-
-  // Create matches
+  // Wrap the destructive delete + create + per-match create in a single
+  // transaction. This prevents a race where a scorekeeper records a
+  // result on the old bracket between our deleteMany and the new
+  // bracket.create (which would either silently lose the score or
+  // update a deleted match).
   const allMatches = [
     ...bracketStructure.winners.map((m) => ({ ...m, bracketType: 'winners' })),
     ...bracketStructure.losers.map((m) => ({ ...m, bracketType: 'losers' })),
     ...bracketStructure.finals.map((m) => ({ ...m, bracketType: 'finals' })),
   ];
 
-  for (const match of allMatches) {
-    await prisma.match.create({
+  const result = await prisma.$transaction(async (tx) => {
+    // Delete existing bracket (cascade-deletes its matches + audit log
+    // because schema has onDelete: Cascade on Bracket -> Match).
+    await tx.bracket.deleteMany({
+      where: { divisionId: division.id },
+    });
+
+    // Create the new bracket record.
+    const bracket = await tx.bracket.create({
       data: {
+        divisionId: division.id,
+        structure: JSON.stringify(bracketStructure),
+        format,
+      },
+    });
+
+    // Batch-create all matches in one round-trip. createMany is
+    // significantly faster than N sequential creates for a 16-person
+    // division (31 matches).
+    await tx.match.createMany({
+      data: allMatches.map((match) => ({
         bracketId: bracket.id,
         roundNumber: match.round,
         matchNumber: match.matchNumber,
         bracketType: match.bracketType,
         competitor1Id: match.competitor1Id || null,
         competitor2Id: match.competitor2Id || null,
-        status: match.competitor1Id && match.competitor2Id ? 'ready' : 'pending',
-      },
+        status: (match.competitor1Id && match.competitor2Id ? 'ready' : 'pending') as any,
+      })),
     });
-  }
 
-  // Handle BYE matches automatically
-  await handleByeMatches(prisma, bracket.id);
+    return { bracketId: bracket.id };
+  });
+
+  // BYE handling happens OUTSIDE the transaction because
+  // handleByeMatches -> advanceWinner chains through PrismaClient.read
+  // calls that don't see the in-flight transaction's uncommitted
+  // writes. The transaction has already committed the bracket and
+  // its matches, so reads from the now-committed data see the
+  // correct state.
+  await handleByeMatches(prisma, result.bracketId);
 
   // Fetch complete bracket with matches
   const completeBracket = await prisma.bracket.findUnique({
-    where: { id: bracket.id },
+    where: { id: result.bracketId },
     include: {
       matches: {
         include: {
@@ -179,39 +194,60 @@ router.put('/match/:matchId', authenticate, requireRole('admin', 'director', 'sc
     return res.status(404).json({ error: 'Match not found' });
   }
 
-  const match = await prisma.match.update({
-    where: { id: getParam(req.params.matchId) },
-    data: {
-      winnerId,
-      score1,
-      score2,
-      status,
-      notes,
-    },
-    include: {
-      competitor1: { include: { competitor: true } },
-      competitor2: { include: { competitor: true } },
-      winner: { include: { competitor: true } },
-      bracket: true,
-    },
-  });
+  // SECURITY: validate that the winner is one of the two competitors
+  // in this match (or null for an incomplete match). Without this check,
+  // a scorekeeper could set winnerId to any competitor in the system
+  // and the bracket advancement would propagate that bogus winner
+  // through downstream matches.
+  if (winnerId !== null && winnerId !== undefined) {
+    if (winnerId !== currentMatch.competitor1Id && winnerId !== currentMatch.competitor2Id) {
+      return res.status(400).json({
+        error: 'winnerId must be competitor1 or competitor2 of this match (or null to clear)',
+      });
+    }
+  }
 
-  // Create audit log entry
-  await prisma.matchAuditLog.create({
-    data: {
-      matchId: match.id,
-      action: status === 'completed' ? 'complete' : 'update',
-      previousState: JSON.stringify(currentMatch),
-      newState: JSON.stringify({
-        winnerId: match.winnerId,
-        score1: match.score1,
-        score2: match.score2,
-        status: match.status,
-        notes: match.notes,
-      }),
-      userId: user?.id,
-      userEmail: user?.email,
-    },
+  // Wrap the match update + audit log in a single transaction so the
+  // audit log can never desync from the match state. advanceWinner
+  // stays outside the transaction because it makes its own round-trip
+  // reads to find downstream matches and writes that depend on the
+  // just-committed match.
+  const match = await prisma.$transaction(async (tx) => {
+    const updated = await tx.match.update({
+      where: { id: getParam(req.params.matchId) },
+      data: {
+        winnerId,
+        score1,
+        score2,
+        status,
+        notes,
+      },
+      include: {
+        competitor1: { include: { competitor: true } },
+        competitor2: { include: { competitor: true } },
+        winner: { include: { competitor: true } },
+        bracket: true,
+      },
+    });
+
+    await tx.matchAuditLog.create({
+      data: {
+        matchId: updated.id,
+        action: status === 'completed' ? 'complete' : 'update',
+        previousState: JSON.stringify(currentMatch),
+        newState: JSON.stringify({
+          winnerId: updated.winnerId,
+          score1: updated.score1,
+          score2: updated.score2,
+          status: updated.status,
+          notes: updated.notes,
+        }),
+        userId: user?.id,
+        userEmail: user?.email,
+      },
+    });
+
+    return updated;
   });
 
   // If winner set, advance to next match

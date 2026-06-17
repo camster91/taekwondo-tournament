@@ -77,8 +77,16 @@ const getParam = (param: string | string[] | undefined): string => {
 // Get all tournaments (requires authentication)
 router.get('/', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  // ?trash=true returns soft-deleted tournaments (for the Trash page);
+  // ?trash=all returns both. Default hides soft-deleted.
+  const trash = req.query.trash;
+  const where =
+    trash === 'true' ? { deletedAt: { not: null } } :
+    trash === 'all' ? {} :
+    { deletedAt: null };
 
   const tournaments = await prisma.tournament.findMany({
+    where,
     include: {
       _count: {
         select: {
@@ -206,11 +214,38 @@ router.post('/:id/rules/reset', authenticate, requireRole('admin', 'director'), 
 });
 
 // Delete tournament (requires authentication + admin/director role)
+// Delete a tournament. The Tournament table has a deletedAt column
+// (see prisma/schema.prisma) for soft-delete. Hard-deleting a tournament
+// cascades through Match (SetNull), Division (cascade-delete), and
+// Registration (cascade-delete) — losing the entire bracket history.
+// The default is therefore a soft-delete that preserves audit trail;
+// a separate ?hard=true flag is required to actually drop the row.
 router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const hard = req.query.hard === 'true';
 
-  await prisma.tournament.delete({
+  if (hard) {
+    await prisma.tournament.delete({
+      where: { id: getParam(req.params.id) },
+    });
+    return res.status(204).send();
+  }
+
+  await prisma.tournament.update({
     where: { id: getParam(req.params.id) },
+    data: { deletedAt: new Date() },
+  });
+
+  res.status(204).send();
+});
+
+// Restore a soft-deleted tournament
+router.post('/:id/restore', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+
+  await prisma.tournament.update({
+    where: { id: getParam(req.params.id) },
+    data: { deletedAt: null },
   });
 
   res.status(204).send();
