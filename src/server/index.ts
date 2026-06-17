@@ -65,6 +65,8 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (isProduction) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'");
@@ -72,7 +74,10 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-app.use(express.json({ limit: '10mb' }));
+// 1 MB JSON body limit. Heavy endpoints (Excel auto-map, import) accept
+// multipart/form-data or pre-parsed JSON from the client. A larger
+// default + a single huge endpoint was an OOM vector.
+app.use(express.json({ limit: '1mb' }));
 
 // Make prisma available to routes
 app.locals.prisma = prisma;

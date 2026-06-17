@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { normalizeBelt } from '../../shared/constants/belts.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
+import { escapeHtml } from '../services/email-templates.js';
 
 const router = Router();
 
@@ -242,19 +243,19 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       const html = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #4F46E5;">Registration Confirmed!</h2>
-          <p>Hello${parentName ? ` ${parentName}` : ''},</p>
-          <p><strong>${competitor.firstName} ${competitor.lastName}</strong> has been successfully registered for:</p>
+          <p>Hello${parentName ? ` ${escapeHtml(parentName)}` : ''},</p>
+          <p><strong>${escapeHtml(competitor.firstName)} ${escapeHtml(competitor.lastName)}</strong> has been successfully registered for:</p>
           <div style="background: #F3F4F6; border-radius: 8px; padding: 16px; margin: 16px 0;">
-            <p style="margin: 4px 0;"><strong>Tournament:</strong> ${registration.tournament.name}</p>
-            <p style="margin: 4px 0;"><strong>Date:</strong> ${tournamentDate}</p>
-            ${registration.tournament.location ? `<p style="margin: 4px 0;"><strong>Location:</strong> ${registration.tournament.location}</p>` : ''}
-            <p style="margin: 4px 0;"><strong>Events:</strong> ${eventList}</p>
-            <p style="margin: 4px 0;"><strong>Age Group:</strong> ${getAgeGroupLabel(ageAtTournament)}</p>
+            <p style="margin: 4px 0;"><strong>Tournament:</strong> ${escapeHtml(registration.tournament.name)}</p>
+            <p style="margin: 4px 0;"><strong>Date:</strong> ${escapeHtml(tournamentDate)}</p>
+            ${registration.tournament.location ? `<p style="margin: 4px 0;"><strong>Location:</strong> ${escapeHtml(registration.tournament.location)}</p>` : ''}
+            <p style="margin: 4px 0;"><strong>Events:</strong> ${escapeHtml(eventList)}</p>
+            <p style="margin: 4px 0;"><strong>Age Group:</strong> ${escapeHtml(getAgeGroupLabel(ageAtTournament))}</p>
           </div>
           <p style="color: #6B7280; font-size: 14px;">Please keep this email for your records. You may be asked to provide registration confirmation at check-in.</p>
         </div>
       `;
-      sendEmail(parentEmail, `Registration Confirmed - ${registration.tournament.name}`, html).catch(() => {});
+      sendEmail(parentEmail, `Registration Confirmed - ${escapeHtml(registration.tournament.name)}`, html).catch(() => {});
     }
   } catch (error) {
     console.error('Registration error:', error);

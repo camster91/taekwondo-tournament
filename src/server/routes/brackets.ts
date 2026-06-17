@@ -459,7 +459,7 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireRole(
 // ============ PDF Export Endpoints ============
 
 // Export single bracket PDF
-router.get('/division/:divisionId/pdf', async (req: Request, res: Response) => {
+router.get('/division/:divisionId/pdf', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const showResults = req.query.results === 'true';
 
@@ -549,7 +549,7 @@ router.get('/division/:divisionId/pdf', async (req: Request, res: Response) => {
 });
 
 // Export all brackets for tournament
-router.get('/tournament/:tournamentId/pdf', async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/pdf', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const showResults = req.query.results === 'true';
 
@@ -645,7 +645,7 @@ router.get('/tournament/:tournamentId/pdf', async (req: Request, res: Response) 
 });
 
 // Export tournament results PDF
-router.get('/tournament/:tournamentId/results/pdf', async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/results/pdf', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const tournament = await prisma.tournament.findUnique({
@@ -724,7 +724,7 @@ router.get('/tournament/:tournamentId/results/pdf', async (req: Request, res: Re
 });
 
 // Generate certificate for a single placement
-router.get('/division/:divisionId/certificate/:place', async (req: Request, res: Response) => {
+router.get('/division/:divisionId/certificate/:place', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const place = parseInt(getParam(req.params.place));
 
@@ -785,7 +785,7 @@ router.get('/division/:divisionId/certificate/:place', async (req: Request, res:
 });
 
 // Generate all certificates for tournament
-router.get('/tournament/:tournamentId/certificates', async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/certificates', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const placeFilter = req.query.place ? parseInt(req.query.place as string) : null;
 
@@ -871,7 +871,7 @@ router.get('/tournament/:tournamentId/certificates', async (req: Request, res: R
 });
 
 // Generate school-specific results report
-router.get('/tournament/:tournamentId/school-report', async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/school-report', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const schoolName = req.query.school as string;
 

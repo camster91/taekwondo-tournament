@@ -17,6 +17,14 @@ if (!JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is required');
   process.exit(1);
 }
+
+// Reject weak JWT secrets in production. A 32+ character secret
+// gives ~192 bits of entropy, which is the OWASP-recommended floor
+// for HS256 signing keys.
+if (process.env.NODE_ENV === 'production' && JWT_SECRET.length < 32) {
+  console.error('FATAL: JWT_SECRET must be at least 32 characters in production');
+  process.exit(1);
+}
 const EFFECTIVE_JWT_SECRET = JWT_SECRET;
 
 export interface JWTPayload {
@@ -36,10 +44,19 @@ export interface AuthenticatedRequest extends Request {
 }
 
 /**
- * Creates a JWT token for a user
+ * Creates a JWT token for a user. Pass `expiresIn` to override the
+ * default 7-day TTL (use a string like '4h' or a number in seconds).
+ * Defaults stay at 7d for normal user sessions; demo routes use a
+ * shorter TTL via this parameter.
  */
-export function createToken(payload: JWTPayload): string {
-  return jwt.sign(payload, EFFECTIVE_JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+export function createToken(payload: JWTPayload, expiresIn: string | number = JWT_EXPIRES_IN): string {
+  const options: jwt.SignOptions = {
+    expiresIn: expiresIn as any,
+    algorithm: 'HS256',
+    issuer: 'tkd-app',
+    audience: 'tkd-app',
+  };
+  return jwt.sign(payload, EFFECTIVE_JWT_SECRET, options);
 }
 
 /**
@@ -47,7 +64,11 @@ export function createToken(payload: JWTPayload): string {
  */
 export function verifyToken(token: string): JWTPayload | null {
   try {
-    return jwt.verify(token, EFFECTIVE_JWT_SECRET) as JWTPayload;
+    return jwt.verify(token, EFFECTIVE_JWT_SECRET, {
+      algorithms: ['HS256'],
+      issuer: 'tkd-app',
+      audience: 'tkd-app',
+    }) as JWTPayload;
   } catch {
     return null;
   }
