@@ -179,7 +179,22 @@ export function requireRole(...allowedRoles: string[]) {
 }
 
 /**
- * Middleware to require tournament-specific access
+ * Middleware to require tournament-specific access.
+ *
+ * Authorization precedence (first match wins):
+ * 1. Admin - global access, can mutate any tournament.
+ * 2. UserTournamentAccess row exists for (user, tournament) - the
+ *    user is explicitly granted a per-tournament role. Check the
+ *    role hierarchy (director=3 > scorekeeper=2 > viewer=1).
+ * 3. Tournament has no organizationId (legacy single-tenant data) -
+ *    any non-admin user with the global role required by minRole
+ *    is allowed. This preserves the pre-multi-tenant behavior for
+ *    existing installations.
+ * 4. Tournament belongs to an org, and the user is a member of
+ *    that org - implicit director access. This is the multi-tenant
+ *    boundary: a non-member can't even read a tournament they don't
+ *    belong to.
+ * 5. Otherwise - 403.
  */
 export function requireTournamentAccess(minRole: 'director' | 'scorekeeper' | 'viewer') {
   const roleHierarchy = { director: 3, scorekeeper: 2, viewer: 1 };
@@ -194,6 +209,13 @@ export function requireTournamentAccess(minRole: 'director' | 'scorekeeper' | 'v
       return next();
     }
 
+    // Global role must meet the per-tournament minimum
+    const userGlobalLevel = roleHierarchy[req.user.role as keyof typeof roleHierarchy] || 0;
+    const requiredLevel = roleHierarchy[minRole];
+    if (userGlobalLevel < requiredLevel) {
+      return res.status(403).json({ error: 'Insufficient role for this operation' });
+    }
+
     const tournamentId = req.params.tournamentId || req.params.id;
     if (!tournamentId) {
       return res.status(400).json({ error: 'Tournament ID required' });
@@ -202,6 +224,7 @@ export function requireTournamentAccess(minRole: 'director' | 'scorekeeper' | 'v
     const prisma: PrismaClient = req.app.locals.prisma;
 
     try {
+      // Explicit per-tournament access row (always wins when present)
       const access = await prisma.userTournamentAccess.findUnique({
         where: {
           userId_tournamentId: {
@@ -211,18 +234,42 @@ export function requireTournamentAccess(minRole: 'director' | 'scorekeeper' | 'v
         },
       });
 
-      if (!access) {
-        return res.status(403).json({ error: 'No access to this tournament' });
-      }
-
-      const userRoleLevel = roleHierarchy[access.role as keyof typeof roleHierarchy] || 0;
-      const requiredRoleLevel = roleHierarchy[minRole];
-
-      if (userRoleLevel < requiredRoleLevel) {
+      if (access) {
+        const userRoleLevel = roleHierarchy[access.role as keyof typeof roleHierarchy] || 0;
+        if (userRoleLevel >= requiredLevel) {
+          return next();
+        }
         return res.status(403).json({ error: 'Insufficient tournament permissions' });
       }
 
-      next();
+      // No explicit row. Check the tournament's org membership.
+      const tournament = await prisma.tournament.findUnique({
+        where: { id: tournamentId },
+        select: { organizationId: true },
+      });
+
+      // Orphan tournament (no org) — fall back to the global-role
+      // check we already passed. Preserves single-tenant behavior
+      // for legacy data.
+      if (!tournament?.organizationId) {
+        return next();
+      }
+
+      // Org-scoped tournament: require the user to be a member of
+      // the same org. This is the multi-tenant boundary.
+      const membership = await prisma.organizationMember.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId: tournament.organizationId,
+            userId: req.user.id,
+          },
+        },
+      });
+      if (membership) {
+        return next();
+      }
+
+      return res.status(403).json({ error: 'No access to this tournament' });
     } catch {
       res.status(500).json({ error: 'Authorization error' });
     }
