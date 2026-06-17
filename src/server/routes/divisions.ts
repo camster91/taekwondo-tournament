@@ -403,7 +403,7 @@ router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req
 });
 
 // Clear all divisions for a tournament (requires authentication)
-router.delete('/tournament/:tournamentId/all', authenticate, async (req: Request, res: Response) => {
+router.delete('/tournament/:tournamentId/all', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
   const force = req.query.force === 'true';
@@ -439,7 +439,7 @@ router.delete('/tournament/:tournamentId/all', authenticate, async (req: Request
 });
 
 // Assign competitor to division (requires authentication)
-router.post('/:id/assign', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/assign', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { registrationId, seedPosition, manualOverride } = req.body;
 
@@ -461,7 +461,7 @@ router.post('/:id/assign', authenticate, async (req: Request, res: Response) => 
 });
 
 // Remove competitor from division (requires authentication)
-router.delete('/:id/assign/:assignmentId', authenticate, async (req: Request, res: Response) => {
+router.delete('/:id/assign/:assignmentId', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.divisionAssignment.delete({
@@ -472,7 +472,7 @@ router.delete('/:id/assign/:assignmentId', authenticate, async (req: Request, re
 });
 
 // Move competitor between divisions (requires authentication)
-router.post('/:id/move', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/move', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { assignmentId, toDivisionId } = req.body;
 

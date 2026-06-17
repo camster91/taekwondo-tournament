@@ -459,7 +459,7 @@ router.put('/:id/weight-classes', authenticate, requireRole('admin', 'director')
 });
 
 // Generate tournament schedule (requires authentication)
-router.post('/:id/schedule', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/schedule', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const config = req.body.config || {};
 

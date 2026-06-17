@@ -297,7 +297,10 @@ router.get('/division/:divisionId/placements', authenticate, async (req: Request
 });
 
 // Swap competitors in a match (requires authentication)
-router.post('/match/:matchId/swap', authenticate, async (req: Request, res: Response) => {
+// SWAP, UNDO, and RESET mutations were previously only `authenticate` —
+// any logged-in user (including a `viewer`) could swap competitors,
+// undo a match, or reset a bracket. Now require scorekeeper-or-better.
+router.post('/match/:matchId/swap', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const match = await prisma.match.findUnique({
@@ -337,7 +340,7 @@ router.get('/match/:matchId/audit', authenticate, async (req: Request, res: Resp
 });
 
 // Undo last match change
-router.post('/match/:matchId/undo', authenticate, async (req: Request, res: Response) => {
+router.post('/match/:matchId/undo', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const user = (req as any).user;
 
@@ -387,7 +390,7 @@ router.post('/match/:matchId/undo', authenticate, async (req: Request, res: Resp
 });
 
 // Reset bracket (requires authentication)
-router.post('/division/:divisionId/reset', authenticate, async (req: Request, res: Response) => {
+router.post('/division/:divisionId/reset', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.bracket.deleteMany({
