@@ -46,6 +46,16 @@ jobs:
           fi
         continue-on-error: true
 
+      - name: Unit tests
+        # Run vitest before lint/build so a failing test short-circuits
+        # the pipeline. Vitest doesn't need a real DATABASE_URL (the
+        # tests are pure functions on bracket/weight/categorization
+        # logic), so the placeholder URL is fine.
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://placeholder:***@localhost:5432/placeholder
+          JWT_SECRET: ci-throwaway-secret-not-used-in-tests-min-32-chars-xx
+
       - name: Lint (if configured)
         run: |
           if grep -q '"lint"' package.json; then
@@ -63,4 +73,4 @@ jobs:
           NODE_ENV: production
           CI: true
           # Placeholder for prisma generate schema validation (no DB connection is made)
-          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+          DATABASE_URL: postgresql://placeholder:***@localhost:5432/placeholder
