@@ -230,6 +230,59 @@ export async function generateSchedule(
     return a.ring - b.ring;
   });
 
+  // Per-competitor double-booking check. The schedule generator only
+  // tracks per-ring time, so a kid registered in two divisions (e.g.
+  // black-belt patterns + black-belt sparring) can be scheduled on
+  // different rings at overlapping times. This pass scans the final
+  // schedule and flags every such conflict as a warning so the
+  // director can manually re-arrange.
+  //
+  // Note: this is detection, not auto-resolution. Auto-shifting the
+  // later division to a free ring would change the schedule the
+  // director approved; better to surface the conflict and let a
+  // human decide. A future iteration could mark conflicting
+  // divisions with a "needs review" badge in the UI.
+  const competitorSlots = new Map<string, { divId: string; start: number; end: number; ring: number }[]>();
+  for (const slot of scheduled) {
+    const startMin = timeToMinutes(slot.startTime);
+    const endMin = timeToMinutes(slot.endTime);
+    for (const name of slot.competitorNames) {
+      // Normalise to handle whitespace differences ("Minho Kim" vs "Minho  Kim")
+      const key = name.replace(/\s+/g, ' ').trim();
+      if (!competitorSlots.has(key)) competitorSlots.set(key, []);
+      competitorSlots.get(key)!.push({
+        divId: slot.divisionId,
+        start: startMin,
+        end: endMin,
+        ring: slot.ring,
+      });
+    }
+  }
+  // Two slots overlap if they share time and the competitor is in
+  // different divisions (a competitor doing the same division twice
+  // is a data error, not a scheduling conflict).
+  const seenWarnings = new Set<string>();
+  for (const [name, slots] of competitorSlots) {
+    if (slots.length < 2) continue;
+    for (let i = 0; i < slots.length; i++) {
+      for (let j = i + 1; j < slots.length; j++) {
+        const a = slots[i];
+        const b = slots[j];
+        if (a.divId === b.divId) continue;
+        const overlaps = a.start < b.end && b.start < a.end;
+        if (!overlaps) continue;
+        // Sort the two for a stable warning key (alphabetical)
+        const [first, second] = [a, b].sort((x, y) => x.divId.localeCompare(y.divId));
+        const warnKey = `${name}|${first.divId}|${second.divId}`;
+        if (seenWarnings.has(warnKey)) continue;
+        seenWarnings.add(warnKey);
+        warnings.push(
+          `Competitor "${name}" is double-booked across two divisions (${minutesToTime(first.start)} on ring ${first.ring} and ${minutesToTime(second.start)} on ring ${second.ring}). Re-assign one division or change the competitor's registration.`,
+        );
+      }
+    }
+  }
+
   // Check for late end time
   const latestEnd = Math.max(
     ...scheduled.map((s) => timeToMinutes(s.endTime))

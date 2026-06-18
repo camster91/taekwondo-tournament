@@ -787,12 +787,15 @@ user-walk cover the test gap in the meantime.
 - `src/server/routes/**` (no route-level unit tests; e2e covers
   the happy paths).
 - `src/server/services/pdf-export.ts`, `email.ts`,
-  `match-advancement.ts`, `schedule-generator.ts`,
-  `backup-recovery.ts` (no unit tests).
+  `match-advancement.ts`, `backup-recovery.ts` (no unit tests).
 - `src/client/**` (no React component tests; no hook tests).
 - `src/server/services/categorization-engine.ts` (the most
   complex untested service — known bugs in weight handling,
   see "Categorization engine").
+
+The per-competitor double-booking detector in
+`schedule-generator.ts` is unit-tested in
+`schedule-generator.test.ts` (6 tests).
 
 ---
 
