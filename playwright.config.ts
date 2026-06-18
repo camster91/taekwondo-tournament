@@ -26,18 +26,20 @@ export default defineConfig({
     },
   ],
   globalSetup: './tests/e2e/global-setup.ts',
-  // globalTeardown wipes e2e-created records (TestKid, E2E Open 2026,
-  // E2E Test Tournament …) after the suite finishes so the dev DB
-  // — which doubles as the prod demo's source of truth — stays clean
-  // between runs. See tests/e2e/global-teardown.ts.
   globalTeardown: './tests/e2e/global-teardown.ts',
   webServer: {
-    // RATE_LIMIT_DISABLED skips the in-memory rate limiters on /api/auth/*
-    // so a tight test loop doesn't bump into the 5-per-15min cap. Only
-    // applies when Playwright spawns the dev server (reuseExistingServer
-    // case inherits the operator's own env). Safe in dev: this is a
-    // development affordance, not a bypass for production.
-    command: 'RATE_LIMIT_DISABLED=1 npm run dev',
+    command: ['npm run dev'],
+    // ENABLE_E2E_AUTH_BYPASS lets the dev-mode magic-link endpoint
+    // return `code` + `magicUrl` in the response so the e2e suite
+    // can sign in without a real email round-trip. NEVER set in
+    // production. The dev-mode branch in src/server/routes/auth.ts
+    // is also gated on !isEmailConfigured(), so this is a no-op in
+    // production regardless.
+    env: {
+      RATE_LIMIT_DISABLED: String(true),
+      ENABLE_E2E_AUTH_BYPASS: String(true),
+      ...process.env,
+    },
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

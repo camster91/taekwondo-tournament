@@ -1,4 +1,5 @@
 import type { HTMLAttributes, ReactNode, TdHTMLAttributes } from 'react';
+import { Children, isValidElement } from 'react';
 
 interface DataTableProps {
   children: ReactNode;
@@ -24,6 +25,32 @@ type TheadProps = HTMLAttributes<HTMLTableSectionElement> & {
   density?: 'comfortable' | 'compact';
 };
 
+// Returns true if any direct child is a React element whose root tag is
+// `th` or `tr` — in that case the caller is providing pre-wrapped header
+// cells or a header row, and we should NOT auto-wrap.
+function alreadyWrapped(children: ReactNode): boolean {
+  let found = false;
+  Children.forEach(children, (child) => {
+    if (found) return;
+    if (isValidElement(child)) {
+      // ValidElement.props has a .type that's a string for HTML elements
+      // and a function/class for components.
+      const t = child.type as unknown;
+      if (typeof t === 'string' && (t === 'th' || t === 'tr')) {
+        found = true;
+      } else if (typeof t === 'function') {
+        // Component types — check the displayName as a hint. TableRow and
+        // SortableHeader both render their own <tr>/<th>.
+        const name = (t as { displayName?: string; name?: string }).displayName || (t as { name?: string }).name || '';
+        if (name === 'TableRow' || name === 'SortableHeader') {
+          found = true;
+        }
+      }
+    }
+  });
+  return found;
+}
+
 export function TableHead({
   children,
   density = 'comfortable',
@@ -31,6 +58,25 @@ export function TableHead({
   ...rest
 }: TheadProps) {
   const spacing = density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-2.5';
+
+  // Pass-through mode: caller is providing their own <tr>/<th> structure.
+  // The legacy auto-wrap mode handled callers that passed bare strings or
+  // numbers (one per column). We preserve that path because several
+  // pages still use it; new callers can just use TableRow/SortableHeader.
+  if (alreadyWrapped(children)) {
+    return (
+      <thead
+        {...rest}
+        className={[
+          'bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-800',
+          className,
+        ].filter(Boolean).join(' ')}
+      >
+        {children}
+      </thead>
+    );
+  }
+
   return (
     <thead
       {...rest}
@@ -74,6 +120,25 @@ export function TableBody({
   ...rest
 }: TbodyProps) {
   const spacing = density === 'compact' ? 'px-3 py-1.5' : 'px-4 py-2.5';
+
+  // Pass-through mode: caller is providing their own <TableRow>s (which
+  // render their own <tr>). Auto-wrap mode (legacy) accepted arrays of
+  // cell values and built the row for the caller; preserve that for
+  // back-compat.
+  if (alreadyWrapped(children)) {
+    return (
+      <tbody
+        {...rest}
+        className={[
+          'divide-y divide-slate-100 dark:divide-slate-800/60',
+          className,
+        ].filter(Boolean).join(' ')}
+      >
+        {children}
+      </tbody>
+    );
+  }
+
   return (
     <tbody
       {...rest}

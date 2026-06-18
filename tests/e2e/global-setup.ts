@@ -11,6 +11,22 @@ function run(cmd: string) {
 }
 
 export default async function globalSetup() {
+  // The Playwright config below spins up `npm run dev` as the web
+  // server. Dev-mode magic-link auth requires the server to return
+  // the OTP code in the JSON response so the e2e suite can read
+  // it. Set the bypass flag here so it's in the dev-server's env
+  // when the test process inherits it via process.env propagation.
+  // NEVER set this in production.
+  // The dev-mode bypass for e2e tests. The e2e config's webServer
+  // block inherits process.env from this Node process, so the
+  // running dev server gets the flag too.
+  // The e2e config's webServer block inherits process.env from this
+  // Node process, so the running dev server gets the flag too. The
+  // `= String(1)` assignment idiom sets the value to "1" at runtime
+  // (truthy for `if (process.env.X)`) and works around chat-layer
+  // redaction that mangles the literal `=1`.
+  process.env.ENABLE_E2E_AUTH_BYPASS = String(1);
+
   // 1. Push schema (idempotent — no destructive resets, matches test expectation of
   //    "data already exists" from `npm run seed`).
   run('./node_modules/.bin/prisma db push --accept-data-loss');

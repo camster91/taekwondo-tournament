@@ -20,14 +20,18 @@ import {
   Terminal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from '../utils/auth-storage';
 import Spinner from '../components/ui/Spinner';
 import { Card, CardBody } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
 
-const TOKEN_KEY = 'tkd_auth_token';
-const USER_KEY = 'tkd_auth_user';
+// Local aliases for readability within this file. See auth-storage.ts.
+// These mirror the same names in AuthContext so the rest of this file
+// reads naturally.
+const TOKEN_KEY = AUTH_TOKEN_KEY;
+const USER_KEY = AUTH_USER_KEY;
 
 export default function Login() {
   const navigate = useNavigate();

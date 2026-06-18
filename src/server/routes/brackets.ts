@@ -29,11 +29,18 @@ const getParam = (param: string | string[] | undefined): string => {
 
 // Validation schemas
 const matchResultSchema = z.object({
-  winnerId: z.string().optional(),
-  score1: z.string().optional(),
-  score2: z.string().optional(),
+  winnerId: z.string().uuid().optional(),
+  // Scores must look like "5", "12", or "0" — at most 3 digits, no
+  // negatives, no decimals, no letters. Stops a scorekeeper from
+  // submitting "<script>" or 9999 by accident and lets the client
+  // assume the value is safe to render verbatim.
+  score1: z.string().regex(/^\d{1,3}$/, 'Score must be 0-999').optional(),
+  score2: z.string().regex(/^\d{1,3}$/, 'Score must be 0-999').optional(),
   status: z.enum(['pending', 'ready', 'in_progress', 'completed', 'bye']).optional(),
-  notes: z.string().optional(),
+  // Notes are shown in the bracket detail panel and on the PDF export,
+  // so we cap length to keep both renderers fast and prevent a single
+  // match from bloating the PDF.
+  notes: z.string().max(500, 'Notes must be 500 characters or fewer').optional(),
 });
 
 // Generate bracket for division (requires authentication + admin/director role)
@@ -253,7 +260,11 @@ router.put('/match/:matchId', authenticate, requireRole('admin', 'director', 'sc
   // If winner set, advance to next match
   if (winnerId && status === 'completed') {
     const advanceResult = await advanceWinner(prisma, match);
-    console.log('Match advancement:', advanceResult.message);
+    // advanceResult.message is informational (e.g. "bye advanced
+    // competitor 2"); not an error. Logged at info level so operators
+    // can trace bracket progression in dev without a per-call
+    // console.log noise in production.
+    console.info('[bracket] advance:', advanceResult.message);
   }
 
   // Return updated match without bracket relation

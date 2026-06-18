@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule } from '../services/schedule-generator.js';
@@ -157,6 +158,41 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
 });
 
 // Update tournament (requires authentication + admin/director role)
+// Generate or rotate the per-tournament public scoreboard slug.
+// POST /api/tournaments/:id/public-slug — returns the new slug (or
+// the existing one if the director wants to read it).
+// Director-only; directors regenerate to revoke a leaked link.
+router.post('/:id/public-slug', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+
+  // 16 chars of base32 = ~80 bits of entropy. Brute-forcing is
+  // impractical even at 10^9 attempts/s.
+  const slug = crypto.randomBytes(10).toString('base64url').slice(0, 16);
+
+  const tournament = await prisma.tournament.update({
+    where: { id },
+    data: { publicSlug: slug },
+    select: { id: true, publicSlug: true },
+  });
+
+  res.json(tournament);
+});
+
+// Disable the public scoreboard by clearing the slug.
+router.delete('/:id/public-slug', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+
+  await prisma.tournament.update({
+    where: { id },
+    data: { publicSlug: null },
+    select: { id: true, publicSlug: true },
+  });
+
+  res.json({ ok: true });
+});
+
 router.put('/:id', authenticate, requireRole('admin', 'director'), validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, status, settings } = req.body;
