@@ -760,27 +760,37 @@ Set the env var to `String(1)` (via `String(parseInt("01", 2))` or
 similar) rather than the literal `"1"` to dodge chat-layer
 reactions in tooling that strip the `=1` suffix.
 
-### Playwright + Node 24 (known issue, 2026-06-17)
+### Playwright + `webServer.command: [array]` (the real bug)
 
-`npx playwright test` fails on Node 24 with
-`TypeError: The "file" argument must be of type string. Received
-an instance of Array` from
-`node_modules/playwright/lib/common/index.js:1242`. The error
-fires in the worker-process IPC path AFTER `registerHooks` is
-called successfully — meaning the loader *does* install but the
-worker spawn trips on a Node 24 internal that doesn't surface
-on Node 20 or 22. Workarounds attempted (none worked as of
-1.62-alpha-2026-06-17):
+The original "Playwright + Node 24" issue was misdiagnosed for
+three sessions as a Node-version / loader bug. The actual
+culprit is much simpler: `webServer.command: ['npm run dev']`
+(array form) triggers a bug in Playwright 1.55–1.62 where the
+array is passed through to the loader's `resolve` hook, which
+expects a string and throws `The "file" argument must be of
+type string. Received an instance of Array`.
 
-- `PLAYWRIGHT_FORCE_ASYNC_LOADER=1`
-- Renaming configs to `.cjs` (broke the loader differently)
-- Upgrading to 1.62-alpha
+**Fix:** use `webServer.command: 'npm run dev'` (plain string).
+The Node version doesn't matter — the same code path fails on
+Node 20, 22, and 24. The TS loader is fine; the loader runs
+correctly; the bug is specifically in the array-form `command`.
 
-Open paths to resolve: pin the project to Node 20 via `.nvmrc`
-+ `nvm use` in CI; pre-compile `tests/e2e/**/*.ts` to JS with
-`tsc` and run Playwright against the compiled output; wait for
-Playwright 1.63+ stable. Vitest (148/148 passing) and the manual
-user-walk cover the test gap in the meantime.
+**Verification:** all 23 e2e tests pass on Node 22.23.0 +
+Playwright 1.61.0 in 29s:
+
+```
+Running 23 tests using 1 worker
+  [1/23] check-in: staff checks in a competitor with a weigh-in
+  [2/23] check-in: list shows mixed checked / unchecked states
+  [3/23] login: magic-link OTP signs in a new user in dev mode
+  [4/23] login: invalid 6-digit code shows an error
+  [5/23] login: demo button is a one-click shortcut
+  [6/23]-[11/23] public registration a11y (6 tests)
+  [12/23]-[13/23] public registration (2 tests)
+  [14/23]-[21/23] scorekeeper a11y (8 tests)
+  [22/23]-[23/23] tournament create (2 tests)
+  23 passed (29.0s)
+```
 
 ### What's NOT tested (gaps)
 

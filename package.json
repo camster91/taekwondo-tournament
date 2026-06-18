@@ -64,7 +64,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.0-alpha-2026-06-17",
+    "@playwright/test": "^1.61.0",
     "@types/cors": "^2.8.19",
     "@types/jsonwebtoken": "^9.0.10",
     "@vitest/coverage-v8": "^4.0.18",

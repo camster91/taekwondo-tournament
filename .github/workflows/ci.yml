@@ -74,3 +74,30 @@ jobs:
           CI: true
           # Placeholder for prisma generate schema validation (no DB connection is made)
           DATABASE_URL: postgresql://placeholder:***@localhost:5432/placeholder
+
+      - name: Install Playwright browsers
+        # Required for `npm run test:e2e` below. ~150MB download.
+        run: npx playwright install --with-deps chromium
+
+      - name: Start Postgres
+        # The e2e suite needs a real Postgres (Prisma driver-adapter
+        # won't accept the placeholder). Spin one up on the runner.
+        uses: harmon758/postgresql-action@v1
+        with:
+          # Defaults: postgres:15, db=postgres, user=postgres, password=postgres
+          # We override the password to match the project's docker-compose convention.
+          postgresql version: '15'
+          postgresql db: 'taekwondo_tournament'
+          postgresql user: 'taekwondo'
+          postgresql password: 'taekwondo'
+
+      - name: Set DATABASE_URL
+        run: echo "DATABASE_URL=postgresql://taekwondo:taekwondo@localhost:5432/taekwondo_tournament" >> $GITHUB_ENV
+
+      - name: E2E tests
+        # Run the Playwright e2e suite. ~30s on a runner. Uses the
+        # bundled config which has `webServer` to spawn the dev
+        # server itself, so the test process owns the lifecycle.
+        run: npm run test:e2e
+        env:
+          JWT_SECRET: ci-throwaway-secret-not-used-in-tests-min-32-chars-xx
