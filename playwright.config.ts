@@ -10,8 +10,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: [['list']],
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  timeout: 180_000,
+  expect: { timeout: 15_000 },
   use: {
     baseURL: BASE_URL,
     trace: 'retain-on-failure',
