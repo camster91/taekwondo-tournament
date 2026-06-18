@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Trophy, UserPlus, AlertCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -9,6 +10,7 @@ export default function AcceptInvite() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
+  const { login } = useAuth();
 
   const [inviteData, setInviteData] = useState<{
     email: string;
@@ -68,13 +70,15 @@ export default function AcceptInvite() {
         throw new Error(data.error || 'Failed to create account');
       }
 
-      // Store auth token and user data
-      localStorage.setItem('tkd_auth_token', data.token);
-      localStorage.setItem('tkd_auth_user', JSON.stringify(data.user));
+      // Push the new session into React state via the AuthContext.
+      // Writing to localStorage directly and reloading the page works
+      // but causes a full app re-mount (flicker, loss of unsaved
+      // form state, and broken SPA back-button). The login() helper
+      // sets both the React state and localStorage in one go.
+      login({ token: data.token, user: data.user });
 
       // Redirect to dashboard
       navigate('/', { replace: true });
-      window.location.reload();
     } catch (err: any) {
       setError(err.message);
     } finally {

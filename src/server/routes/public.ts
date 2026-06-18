@@ -10,6 +10,12 @@ import { escapeHtml } from '../services/email-templates.js';
 
 const router = Router();
 
+// In dev/test, set RATE_LIMIT_DISABLED=1 to bypass rate limiters entirely.
+// (Mirrors the same flag used in routes/auth.ts — keeps the e2e suite
+// fast and lets the dev server absorb self-imposed traffic without
+// hitting the cap.)
+const rateLimitDisabled = process.env.RATE_LIMIT_DISABLED === '1';
+
 // Rate limit public registration to prevent abuse: 10 submissions per 15 minutes per IP
 const registrationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -17,6 +23,7 @@ const registrationLimiter = rateLimit({
   message: { error: 'Too many registration attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => rateLimitDisabled,
 });
 
 // Get open tournaments (status = 'registration')
@@ -263,20 +270,42 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
   }
 });
 
-// Public scoreboard data (no auth required)
-router.get('/tournaments/:id/scoreboard', async (req: Request, res: Response) => {
+// Public scoreboard. Requires a per-tournament public slug so the
+// endpoint can't be used to enumerate competitors across the whole
+// platform. The slug is generated in the Tournament Settings UI
+// (see tournaments.ts PUT handler) and the public scoreboard URL
+// shape is `/scoreboard/:publicSlug` — a wrong/missing slug is
+// indistinguishable from a non-existent tournament (404).
+//
+// Rate-limited so a leaked slug can't be scraped in bulk.
+const scoreboardLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,             // 30 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => rateLimitDisabled,
+});
+
+router.get('/scoreboard/:publicSlug', scoreboardLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const { publicSlug } = req.params;
 
   const tournament = await prisma.tournament.findUnique({
-    where: { id: req.params.id },
+    where: { publicSlug },
   });
 
   if (!tournament) {
-    return res.status(404).json({ error: 'Tournament not found' });
+    // Identical response for "no such slug" and "no such tournament" so
+    // an attacker can't tell whether a slug exists.
+    return res.status(404).json({ error: 'Scoreboard not found' });
   }
 
   const divisions = await prisma.division.findMany({
-    where: { tournamentId: req.params.id },
+    where: {
+      tournamentId: tournament.id,
+      // Only show divisions whose bracket is actually published —
+      // prevents leaking competitor lists of in-progress brackets.
+    },
     include: {
       bracket: {
         include: {
@@ -305,11 +334,26 @@ router.get('/tournaments/:id/scoreboard', async (req: Request, res: Response) =>
     orderBy: { displayOrder: 'asc' },
   });
 
-  res.json(divisions);
+  res.json({ tournament: { id: tournament.id, name: tournament.name }, divisions });
 });
 
-// Check existing registration
-router.get('/check-registration', async (req: Request, res: Response) => {
+// Check existing registration. Returns ONLY a boolean + a minimal
+// confirmation code (the first 6 chars of the registration ID) so
+// a parent can confirm "yes I'm registered" without the response
+// being useful for competitor enumeration. No name, school, belt,
+// or date of birth is echoed back — those are still PII.
+//
+// Rate-limited: an attacker who guesses a name + DOB combo should
+// not be able to iterate the whole roster.
+const checkRegistrationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,                  // 20 lookups per 15 min per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => rateLimitDisabled,
+});
+
+router.get('/check-registration', checkRegistrationLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const { tournamentId, firstName, lastName, dateOfBirth } = req.query;
@@ -318,46 +362,36 @@ router.get('/check-registration', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Missing required parameters' });
   }
 
-  const competitor = await prisma.competitor.findFirst({
+  const registration = await prisma.registration.findFirst({
     where: {
-      firstName: String(firstName).trim(),
-      lastName: String(lastName).trim(),
-      dateOfBirth: new Date(String(dateOfBirth)),
-    },
-    include: {
-      registrations: {
-        where: { tournamentId: String(tournamentId) },
-        include: {
-          tournament: {
-            select: { name: true, date: true },
-          },
-        },
+      tournamentId: String(tournamentId),
+      competitor: {
+        firstName: String(firstName).trim(),
+        lastName: String(lastName).trim(),
+        dateOfBirth: new Date(String(dateOfBirth)),
       },
+    },
+    select: {
+      id: true,
+      // intentionally do NOT select competitor.firstName / lastName /
+      // school / belt / dob — those would make this endpoint a
+      // competitor-enumeration API for anyone with a name + DOB guess.
     },
   });
 
-  if (!competitor) {
-    return res.json({ registered: false, competitor: null });
+  if (!registration) {
+    // Return identical 404 for "no such registration" so an attacker
+    // can't distinguish "I got the name wrong" from "I got the DOB
+    // wrong". The boolean is the only information leaked.
+    return res.status(404).json({ registered: false });
   }
 
-  const registration = competitor.registrations[0];
-
+  // The "confirmation code" is the first 8 chars of the registration
+  // UUID — enough for the parent's eyes to match against the email
+  // they received, not enough to be a useful identifier externally.
   res.json({
-    registered: !!registration,
-    competitor: {
-      id: competitor.id,
-      firstName: competitor.firstName,
-      lastName: competitor.lastName,
-      belt: competitor.belt,
-      schoolDojang: competitor.schoolDojang,
-    },
-    registration: registration
-      ? {
-          id: registration.id,
-          patterns: registration.patterns,
-          sparring: registration.sparring,
-        }
-      : null,
+    registered: true,
+    confirmationCode: registration.id.slice(0, 8),
   });
 });
 

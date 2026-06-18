@@ -9,3 +9,7 @@ dist/
 dist-server/
 test-results/
 playwright-report/
+.hermes/
+# Debug-helper files that get created during dev — never commit
+_debug_loader.cjs
+

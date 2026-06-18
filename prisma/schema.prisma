@@ -63,6 +63,14 @@ model Tournament {
   // Soft-delete: see Competitor.deletedAt comment
   deletedAt        DateTime?
 
+  // Public share token for the unauthenticated scoreboard. Directors
+  // see this in the Tournament Settings page; it goes into the URL for
+  // the public scoreboard link. Without a matching token the route
+  // returns 404 — a brute-force guess of valid UUIDs is impractical.
+  // Optional (NULL) means the public scoreboard link is disabled for
+  // this tournament. Rotated from the UI to revoke the old link.
+  publicSlug       String?   @unique
+
   registrations Registration[]
   divisions     Division[]
   weightClasses WeightClass[]

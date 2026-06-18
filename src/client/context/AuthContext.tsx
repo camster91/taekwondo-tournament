@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from '../utils/auth-storage';
 
 interface User {
   id: string;
@@ -17,6 +18,11 @@ interface AuthContextType {
   requestMagicLink: (email: string) => Promise<{ success: boolean; error?: string; devMode?: boolean; magicUrl?: string; code?: string }>;
   verifyCode: (email: string, code: string) => Promise<{ success: boolean; error?: string }>;
   verifyToken: (token: string) => Promise<{ success: boolean; error?: string }>;
+  // login takes a pre-issued token + user (e.g. from /api/auth/accept-invite)
+  // and pushes them into React state. Prefer verifyCode/verifyToken when
+  // the caller only has an email + OTP; this is for flows where the server
+  // returns a complete session in one step.
+  login: (data: { token: string; user: User }) => void;
   logout: () => void;
   hasRole: (roles: string[]) => boolean;
   refreshUser: () => Promise<void>;
@@ -24,8 +30,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const TOKEN_KEY = 'tkd_auth_token';
-const USER_KEY = 'tkd_auth_user';
+// Local aliases so the rest of this file reads naturally. The actual
+// string values come from `../utils/auth-storage` so all callers stay
+// in sync on rename.
+const TOKEN_KEY = AUTH_TOKEN_KEY;
+const USER_KEY = AUTH_USER_KEY;
 
 // Decode JWT to get expiry time (without external library)
 function decodeJwtExpiry(token: string): number | null {
@@ -146,6 +155,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setupLogoutTimer(data.token);
   };
 
+  // Public version of storeAuth for callers (like AcceptInvite) that
+  // receive a complete session payload from the server and want to
+  // hydrate React state without a full page reload.
+  const login = (data: { token: string; user: User }) => {
+    storeAuth(data);
+  };
+
   const requestMagicLink = async (email: string) => {
     try {
       const res = await fetch('/api/auth/request-magic-link', {
@@ -251,6 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         requestMagicLink,
         verifyCode,
         verifyToken,
+        login,
         logout,
         hasRole,
         refreshUser,
