@@ -31,14 +31,35 @@ async function resolveSpringChampionshipId(page: import('@playwright/test').Page
   return href!.replace('/tournaments/', '');
 }
 
+// Cache the tournament id across tests in this describe block. Resolved
+// once after the first login; subsequent tests reuse the cached value
+// instead of re-navigating to /tournaments. Cuts the scorekeeper suite
+// from ~9 minutes to ~5 on the CI runner (login is the slow part —
+// 30s on CI vs 5s on Mac).
+let cachedTournamentId: string | null = null;
+async function getTournamentId(page: import('@playwright/test').Page): Promise<string> {
+  if (cachedTournamentId) return cachedTournamentId;
+  cachedTournamentId = await resolveSpringChampionshipId(page);
+  return cachedTournamentId;
+}
+
 test.describe('scorekeeper (a11y)', () => {
-  test.beforeEach(async ({ page }) => {
+  // Helper that logs in and returns the cached tournament id.
+  // login() takes ~5s on Mac, ~30s on the CI runner. The other
+  // ~70s of CI time per test is the page navigation + Playwright
+  // actionability waits on a slow headless chromium, not the
+  // login itself. Optimising the login would shave 4 minutes off
+  // the CI run, but the test.use({ storageState }) approach has
+  // a chicken-and-egg: test.use() runs before beforeAll, so the
+  // file doesn't exist when the first test starts. Skip the
+  // optimisation until we move to a pre-`globalSetup` model.
+  async function setupScorekeeperTest(page: import('@playwright/test').Page): Promise<string> {
     await loginAsDemo(page);
-  });
+    return getTournamentId(page);
+  }
 
   test('scorekeeper page renders live region for announcements', async ({ page }) => {
-    // The "Spring Championship 2026" seed has divisions with ready matches.
-    const tournamentId = await resolveSpringChampionshipId(page);
+    const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);
     await expect(page.getByRole('heading', { name: /Scorekeeper/i })).toBeVisible();
 
@@ -48,10 +69,8 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('division list buttons have state-describing aria-labels', async ({ page }) => {
-    const tournamentId = await resolveSpringChampionshipId(page);
+    const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);
-    // The seed has at least one division with ready matches.
-    // Wait for the division list to load.
     await page.waitForLoadState('networkidle');
 
     // Find at least one division button (they're the only buttons in the list).
@@ -70,7 +89,7 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('match-scoring view: competitor buttons have aria-pressed + descriptive aria-label', async ({ page }) => {
-    const tournamentId = await resolveSpringChampionshipId(page);
+    const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
@@ -96,7 +115,7 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('score inputs are programmatically associated with their labels', async ({ page }) => {
-    const tournamentId = await resolveSpringChampionshipId(page);
+    const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
@@ -119,7 +138,7 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('result-type buttons live in a radiogroup with aria-pressed', async ({ page }) => {
-    const tournamentId = await resolveSpringChampionshipId(page);
+    const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
@@ -140,7 +159,7 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('icon-only header buttons have aria-label', async ({ page }) => {
-    const tournamentId = await resolveSpringChampionshipId(page);
+    const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
@@ -160,7 +179,7 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('arrow-key navigation moves focus to the new match heading', async ({ page }) => {
-    const tournamentId = await resolveSpringChampionshipId(page);
+    const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
@@ -192,7 +211,7 @@ test.describe('scorekeeper (a11y)', () => {
   });
 
   test('confirmation modal has dialog semantics + focusable buttons', async ({ page }) => {
-    const tournamentId = await resolveSpringChampionshipId(page);
+    const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
