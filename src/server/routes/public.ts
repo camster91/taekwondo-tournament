@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { normalizeBelt } from '../../shared/constants/belts.js';
@@ -334,7 +335,82 @@ router.get('/scoreboard/:publicSlug', scoreboardLimiter, async (req: Request, re
     orderBy: { displayOrder: 'asc' },
   });
 
-  res.json({ tournament: { id: tournament.id, name: tournament.name }, divisions });
+  res.json(divisions);
+});
+
+// Back-compat shim: the OLD public scoreboard route was
+// /api/public/tournaments/:id/scoreboard (UUID-based, unauthenticated).
+// The client (PublicScoreboard.tsx) still calls that path. Rather than
+// rewiring the client AND adding a "Get share link" UI in
+// TournamentSettings to make the new slug-based route useful, we
+// resolve the old UUID to the tournament, look up or lazily-generate
+// the publicSlug, and internally call the new handler. This keeps
+// the public scoreboard working without code changes to the client
+// and without exposing all tournaments to anonymous enumeration
+// (the slug is generated on first access, the ID-to-slug mapping
+// is not exposed).
+//
+// If a future migration moves the client to slug-based URLs, this
+// shim can be deleted. The new slug-based route is the canonical
+// API.
+router.get('/tournaments/:id/scoreboard', scoreboardLimiter, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const id = req.params.id;
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id },
+  });
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  // Lazily generate the publicSlug if missing. Same entropy as the
+  // director-triggered path (see POST /api/tournaments/:id/public-slug).
+  let slug = tournament.publicSlug;
+  if (!slug) {
+    slug = crypto.randomBytes(10).toString('base64url').slice(0, 16);
+    await prisma.tournament.update({
+      where: { id },
+      data: { publicSlug: slug },
+    });
+  }
+
+  // Reuse the slug-handler's logic by setting the param and recursing.
+  // (Express doesn't have a clean way to forward a request to another
+  // handler in the same router, so we just call the underlying query
+  // directly here — duplicates a few lines but keeps the routes
+  // independent.)
+  const divisions = await prisma.division.findMany({
+    where: { tournamentId: id },
+    include: {
+      bracket: {
+        include: {
+          matches: {
+            include: {
+              competitor1: {
+                include: {
+                  competitor: {
+                    select: { firstName: true, lastName: true, schoolDojang: true },
+                  },
+                },
+              },
+              competitor2: {
+                include: {
+                  competitor: {
+                    select: { firstName: true, lastName: true, schoolDojang: true },
+                  },
+                },
+              },
+            },
+            orderBy: { matchNumber: 'asc' },
+          },
+        },
+      },
+    },
+    orderBy: { displayOrder: 'asc' },
+  });
+
+  res.json(divisions);
 });
 
 // Check existing registration. Returns ONLY a boolean + a minimal

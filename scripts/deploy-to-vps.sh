@@ -94,6 +94,15 @@ echo "NODE_ENV=production" > "$ENV_FILE"
 echo "PORT=3001" >> "$ENV_FILE"
 printf "JWT_SECRET=%s\n" "$JWT_SECRET" >> "$ENV_FILE"
 echo "DATABASE_URL=postgresql://markup:${DB_PW}@markup-postgres:5432/taekwondo?schema=public" >> "$ENV_FILE"
+# tkd.ashbi.ca is a demo deployment. The landing page advertises
+# "Try the demo. Full access for 4 hours" as the primary CTA, so
+# /api/auth/demo must be reachable in this environment. The route
+# creates a shared demo@ashbi.ca user with a 4-hour TTL — safe
+# because the token is short-lived and the user is named
+# unambiguously. Gate this on ENABLE_DEMO_LOGIN so a stricter
+# prod deployment can disable it via a single env var without
+# a code change.
+echo "ENABLE_DEMO_LOGIN=1" >> "$ENV_FILE"
 trap "rm -f $ENV_FILE" EXIT
 
 echo "==> Starting container"
