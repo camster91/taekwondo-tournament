@@ -283,7 +283,7 @@ export default function TournamentDetail() {
           ? `${new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · ${tournament.location}`
           : new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div data-tour="tournament-detail-actions" className="flex flex-wrap gap-2">
             <Button as={Link} to={`/tournaments/${id}/settings`} variant="secondary">
               <Settings className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Settings</span>
@@ -296,6 +296,7 @@ export default function TournamentDetail() {
                 tab so the director can check what spectators will see without
                 having to log out or copy-paste a URL. */}
             <Button
+              data-tour="public-display"
               as="a"
               href={`/display/${id}`}
               target="_blank"

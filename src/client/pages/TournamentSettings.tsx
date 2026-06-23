@@ -415,7 +415,7 @@ export default function TournamentSettings() {
       </Card>
 
       {/* Share Link — public scoreboard URL */}
-      <Card className="mb-6">
+      <Card data-tour="settings-share-link" className="mb-6">
         <CardHeader
           title="Share Link"
           icon={LinkIcon}

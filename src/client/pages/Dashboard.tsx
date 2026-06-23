@@ -113,7 +113,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 lg:space-y-8">
       {/* ── Hero greeting ── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-6 lg:p-8 shadow-xl">
+      <div data-tour="dashboard-hero" className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 p-6 lg:p-8 shadow-xl">
         <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
         <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-violet-500/15 rounded-full blur-3xl translate-y-1/2" />
         <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
