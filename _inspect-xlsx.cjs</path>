@@ -1,0 +1,40 @@
+// Read the 2025 Newton's Championship xlsm and dump structure: sheet names,
+// column headers (first row), first 5 data rows of each sheet, and a count
+// of non-empty rows. This tells us whether the app can ingest it as-is.
+const XLSX = require('xlsx');
+const path = require('path');
+
+const file = path.resolve('2025 NEWTONS CHAMPIONSHIP LIST.xlsm');
+const wb = XLSX.readFile(file, { cellDates: true });
+
+console.log(`Workbook: ${file}`);
+console.log(`Sheets: ${wb.SheetNames.length}\n`);
+
+for (const name of wb.SheetNames) {
+  const sheet = wb.Sheets[name];
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: null, raw: false });
+  console.log(`\n=== Sheet "${name}" — ${rows.length} data rows ===`);
+  if (rows.length === 0) {
+    console.log('  (empty)');
+    continue;
+  }
+  // Show column headers from first row
+  const headers = Object.keys(rows[0]);
+  console.log(`  Columns (${headers.length}):`, headers.slice(0, 20).join(' | '));
+  if (headers.length > 20) console.log(`    ... and ${headers.length - 20} more`);
+  // Show first 3 data rows
+  console.log('  First 3 rows:');
+  for (let i = 0; i < Math.min(3, rows.length); i++) {
+    const row = rows[i];
+    const preview = headers.slice(0, 8).map(h => {
+      const v = row[h];
+      if (v == null) return '∅';
+      const s = String(v).slice(0, 30);
+      return s;
+    });
+    console.log(`    [${i + 1}]`, preview.join(' | '));
+  }
+  if (rows.length > 3) {
+    console.log(`    ... ${rows.length - 3} more rows`);
+  }
+}
