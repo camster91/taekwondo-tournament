@@ -27,6 +27,13 @@ describe('Belt Constants', () => {
     it('should return false for belts with stripes', () => {
       expect(isBlackBelt('Red / Single Black Stripe')).toBe(false);
       expect(isBlackBelt('Red / Double Black Stripe')).toBe(false);
+      expect(isBlackBelt('Brown / Single Black Stripe')).toBe(false);
+    });
+
+    it('should return false for Brown (pre-black tier, not Poom/Dan)', () => {
+      expect(isBlackBelt('Brown')).toBe(false);
+      expect(isBlackBelt('brown')).toBe(false);
+      expect(isBlackBelt('BROWN')).toBe(false);
     });
   });
 
@@ -42,6 +49,7 @@ describe('Belt Constants', () => {
       expect(getBeltLevel('Green')).toBe('CB');
       expect(getBeltLevel('Blue')).toBe('CB');
       expect(getBeltLevel('Red')).toBe('CB');
+      expect(getBeltLevel('Brown')).toBe('CB');
     });
   });
 
@@ -83,6 +91,7 @@ describe('Belt Constants', () => {
       expect(getSimpleBeltCategory('Green')).toBe('Green');
       expect(getSimpleBeltCategory('Blue')).toBe('Blue');
       expect(getSimpleBeltCategory('Red')).toBe('Red');
+      expect(getSimpleBeltCategory('Brown')).toBe('Brown');
     });
 
     it('should categorize belts with stripes to their base color', () => {
@@ -91,6 +100,8 @@ describe('Belt Constants', () => {
       expect(getSimpleBeltCategory('Green / Single Blue Stripe')).toBe('Green');
       expect(getSimpleBeltCategory('Blue / Double Red Stripe')).toBe('Blue');
       expect(getSimpleBeltCategory('Red / Single Black Stripe')).toBe('Red');
+      expect(getSimpleBeltCategory('Brown / Single Black Stripe')).toBe('Brown');
+      expect(getSimpleBeltCategory('Brown / Double Black Stripe')).toBe('Brown');
     });
 
     it('should categorize black belt', () => {
@@ -104,25 +115,26 @@ describe('Belt Constants', () => {
   });
 
   describe('COLORED_BELTS constant', () => {
-    it('should have all 15 colored belt variations', () => {
-      expect(COLORED_BELTS).toHaveLength(15);
+    it('should have all 18 colored belt variations (15 legacy + 3 brown)', () => {
+      expect(COLORED_BELTS).toHaveLength(18);
     });
 
-    it('should start with White and end with Red / Double Black Stripe', () => {
+    it('should start with White and end with Brown / Double Black Stripe', () => {
       expect(COLORED_BELTS[0]).toBe('White');
-      expect(COLORED_BELTS[COLORED_BELTS.length - 1]).toBe('Red / Double Black Stripe');
+      expect(COLORED_BELTS[COLORED_BELTS.length - 1]).toBe('Brown / Double Black Stripe');
     });
   });
 
   describe('BELT_CATEGORIES constant', () => {
-    it('should have all 6 categories', () => {
+    it('should have all 7 categories', () => {
       const categories = Object.keys(BELT_CATEGORIES);
-      expect(categories).toHaveLength(6);
+      expect(categories).toHaveLength(7);
       expect(categories).toContain('White');
       expect(categories).toContain('Yellow');
       expect(categories).toContain('Green');
       expect(categories).toContain('Blue');
       expect(categories).toContain('Red');
+      expect(categories).toContain('Brown');
       expect(categories).toContain('Black');
     });
 

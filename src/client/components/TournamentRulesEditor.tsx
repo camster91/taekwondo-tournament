@@ -44,6 +44,8 @@ const BELT_COLOR_OPTIONS = [
   'Blue / Single Red Stripe', 'Blue / Double Red Stripe',
   'Red',
   'Red / Single Black Stripe', 'Red / Double Black Stripe',
+  'Brown',
+  'Brown / Single Black Stripe', 'Brown / Double Black Stripe',
   'Black',
 ];
 
@@ -59,7 +61,7 @@ const BELT_PRESETS: Record<string, BeltGroup[]> = {
   ],
   '4-tier (Beginner CB / Adv CB / Poom / BB)': [
     { id: 'CB-Beginner', label: 'Beginner Colored (White-Yellow)', belts: ['White', 'White / Single Yellow Stripe', 'White / Double Yellow Stripe', 'Yellow'] },
-    { id: 'CB-Advanced', label: 'Advanced Colored (Green-Red)', belts: ['Yellow / Single Green Stripe','Yellow / Double Green Stripe','Green','Green / Single Blue Stripe','Green / Double Blue Stripe','Blue','Blue / Single Red Stripe','Blue / Double Red Stripe','Red','Red / Single Black Stripe','Red / Double Black Stripe'] },
+    { id: 'CB-Advanced', label: 'Advanced Colored (Green-Brown)', belts: ['Yellow / Single Green Stripe','Yellow / Double Green Stripe','Green','Green / Single Blue Stripe','Green / Double Blue Stripe','Blue','Blue / Single Red Stripe','Blue / Double Red Stripe','Red','Red / Single Black Stripe','Red / Double Black Stripe','Brown','Brown / Single Black Stripe','Brown / Double Black Stripe'] },
     { id: 'POOM', label: 'Poom Belt', belts: ['Black'], danMin: 1, danMax: 3, maxAge: 15 },
     { id: 'BB', label: 'Senior Black Belt', belts: ['Black'], danMin: 1, danMax: 9, minAge: 16 },
   ],
