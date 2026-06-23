@@ -135,7 +135,7 @@ export default function Dashboard() {
               <FileSpreadsheet className="h-4 w-4" /> Import Excel
             </Button>
             <Button
-              onClick={() => navigate('/tournaments')}
+              onClick={() => navigate('/tournaments?create=1')}
               variant="gradient"
               size="sm"
             >

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -33,7 +33,23 @@ interface Tournament {
 
 export default function Tournaments() {
   const queryClient = useQueryClient();
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Auto-open the create modal when ?create=1 is in the URL. Lets the
+  // dashboard "New Tournament" button land here with the modal already
+  // open, instead of making the user click "New Tournament" twice.
+  const [showCreateModal, setShowCreateModal] = useState(
+    searchParams.get('create') === '1'
+  );
+  // Closes the modal AND strips ?create=1 from the URL so a manual
+  // close + reload doesn't re-open the modal.
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    if (searchParams.get('create') === '1') {
+      const next = new URLSearchParams(searchParams);
+      next.delete('create');
+      setSearchParams(next, { replace: true });
+    }
+  };
   const [deleteTarget, setDeleteTarget] = useState<Tournament | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState({
@@ -63,7 +79,7 @@ export default function Tournaments() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournaments'] });
-      setShowCreateModal(false);
+      closeCreateModal();
       setFormData({ name: '', date: '', location: '', sportProfileSlug: 'taekwondo' });
     },
   });
@@ -184,14 +200,14 @@ export default function Tournaments() {
       {showCreateModal && (
         <Modal
           isOpen={showCreateModal}
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => closeCreateModal()}
           title="Create Tournament"
           footer={
             <>
               <Button
                 variant="secondary"
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => closeCreateModal()}
                 className="w-full sm:w-auto"
               >
                 Cancel
