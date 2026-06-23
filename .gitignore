@@ -13,3 +13,4 @@ playwright-report/
 # Debug-helper files that get created during dev — never commit
 _debug_loader.cjs
 
+_qa-*.cjs
