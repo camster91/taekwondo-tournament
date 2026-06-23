@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Trophy, CheckCircle, AlertCircle, User, Calendar, Award } from 'lucide-react';
+import { Trophy, CheckCircle, AlertCircle, User, Calendar, Award, CreditCard } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
 import { Card, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
@@ -484,6 +484,27 @@ export default function PublicRegister() {
           <p className="text-gray-600 dark:text-gray-400 mt-2">
             Register for an upcoming tournament
           </p>
+          {/* Fee note — pulled from tournament.settings.registrationFee.
+              The director writes this in TournamentSettings; we surface
+              it here so parents know what to expect cost-wise before
+              they spend 5 minutes filling out the form. */}
+          {(() => {
+            try {
+              const settings = selectedTournament?.settings
+                ? JSON.parse(selectedTournament.settings)
+                : null;
+              const fee = settings?.registrationFee;
+              if (!fee) return null;
+              return (
+                <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-200 text-sm font-medium">
+                  <CreditCard className="h-4 w-4" aria-hidden="true" />
+                  <span>Fee: {fee}</span>
+                </div>
+              );
+            } catch {
+              return null;
+            }
+          })()}
         </div>
 
         {/* Error Display */}

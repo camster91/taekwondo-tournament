@@ -56,6 +56,7 @@ interface TournamentSettings {
   divisionThreshold: number;
   ageGroups: AgeGroup[];
   weightClasses: WeightClass[];
+  registrationFee: string;
 }
 
 const DEFAULT_AGE_GROUPS: AgeGroup[] = [
@@ -73,6 +74,7 @@ const DEFAULT_SETTINGS: TournamentSettings = {
   divisionThreshold: 8,
   ageGroups: DEFAULT_AGE_GROUPS,
   weightClasses: [],
+  registrationFee: '',
 };
 
 export default function TournamentSettings() {
@@ -318,26 +320,49 @@ export default function TournamentSettings() {
           icon={Settings}
         />
         <CardBody>
-          <div className="max-w-md">
-            <Label>
-              Division Split Threshold
-              <span className="text-gray-500 dark:text-gray-400 font-normal ml-2">
-                (max competitors per division)
-              </span>
-            </Label>
-            <Input
-              type="number"
-              min="2"
-              max="16"
-              value={settings.divisionThreshold}
-              onChange={(e) =>
-                updateSettings({ divisionThreshold: parseInt(e.target.value) || 8 })
-              }
-              className="w-32"
-            />
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Divisions with more competitors will be split (e.g., DIV1, DIV2)
-            </p>
+          <div className="max-w-md space-y-4">
+            <div>
+              <Label>
+                Division Split Threshold
+                <span className="text-gray-500 dark:text-gray-400 font-normal ml-2">
+                  (max competitors per division)
+                </span>
+              </Label>
+              <Input
+                type="number"
+                min="2"
+                max="16"
+                value={settings.divisionThreshold}
+                onChange={(e) =>
+                  updateSettings({ divisionThreshold: parseInt(e.target.value) || 8 })
+                }
+                className="w-32"
+              />
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Divisions with more competitors will be split (e.g., DIV1, DIV2)
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="registrationFee">
+                Registration Fee Notes
+                <span className="text-gray-500 dark:text-gray-400 font-normal ml-2">
+                  (shown to parents during registration)
+                </span>
+              </Label>
+              <Input
+                id="registrationFee"
+                type="text"
+                value={settings.registrationFee}
+                onChange={(e) => updateSettings({ registrationFee: e.target.value })}
+                placeholder="e.g. $25, pay at door — or leave empty for free"
+                maxLength={200}
+              />
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Free-text note displayed on the public registration page. We don't
+                process payment here — this is a "pay at the door" or "free event"
+                hint.
+              </p>
+            </div>
           </div>
         </CardBody>
       </Card>

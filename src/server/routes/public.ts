@@ -44,6 +44,10 @@ router.get('/tournaments', async (req: Request, res: Response) => {
       date: true,
       location: true,
       sportProfileSlug: true,
+      // Settings carries registrationFee (free-text), which the public
+      // register page surfaces next to the tournament name. Don't expose
+      // anything else from settings — most of it is director-only.
+      settings: true,
       _count: {
         select: { registrations: true },
       },
