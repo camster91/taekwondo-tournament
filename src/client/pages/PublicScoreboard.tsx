@@ -447,11 +447,37 @@ export default function PublicScoreboard() {
               <Users className="h-5 w-5 text-purple-400 mr-2" />
               <h3 className="text-xl font-semibold text-purple-400">DIVISION STATUS</h3>
             </div>
-            {divisions && divisions.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {divisions
-                  ?.filter((d) => d.bracket)
-                  .map((division) => {
+            {(() => {
+              // Show a division row only if it has a bracket with matches.
+              // Divisions without brackets (categorization done, brackets
+              // not yet generated) still count for the "is anything here"
+              // check below — we want to tell the user "brackets pending",
+              // not "no divisions" in that case.
+              const divisionsWithBrackets = divisions?.filter((d) => d.bracket) ?? [];
+              const hasAnyDivisions = (divisions?.length ?? 0) > 0;
+              if (!hasAnyDivisions) {
+                return (
+                  <div className="bg-gray-900/30 border border-gray-700/50 rounded-lg p-6 text-center">
+                    <Users className="h-8 w-8 text-gray-600 mx-auto mb-2" />
+                    <p className="text-sm text-gray-400">
+                      No divisions generated yet. The director is still setting up categories.
+                    </p>
+                  </div>
+                );
+              }
+              if (divisionsWithBrackets.length === 0) {
+                return (
+                  <div className="bg-gray-900/30 border border-gray-700/50 rounded-lg p-6 text-center">
+                    <Users className="h-8 w-8 text-gray-600 mx-auto mb-2" />
+                    <p className="text-sm text-gray-400">
+                      Divisions are set, but brackets haven't been generated yet.
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {divisionsWithBrackets.map((division) => {
                     const completed =
                       division.bracket?.matches?.filter((m) => m.status === 'completed').length || 0;
                     const total = division.bracket?.matches.length || 0;
@@ -487,17 +513,11 @@ export default function PublicScoreboard() {
                         />
                       </div>
                     </div>
-                  );
-                })}
+                  )}
+                )}
               </div>
-            ) : (
-              <div className="bg-gray-900/30 border border-gray-700/50 rounded-lg p-6 text-center">
-                <Users className="h-8 w-8 text-gray-600 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">
-                  No divisions generated yet. The director is still setting up categories.
-                </p>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
       </div>
