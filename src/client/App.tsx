@@ -22,11 +22,13 @@ import {
   Trash2,
   PanelLeftClose,
   PanelLeft,
+  HelpCircle,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import Tour from './components/Tour';
 import CloseButton from './components/ui/CloseButton';
 import Dashboard from './pages/Dashboard';
 import Competitors from './pages/Competitors';
@@ -338,6 +340,18 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                   >
                     {theme === 'dark' ? <><Sun className="h-3.5 w-3.5" /> Light mode</> : <><Moon className="h-3.5 w-3.5" /> Dark mode</>}
                   </button>
+                  <button
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      try { localStorage.removeItem('tkd_tour_completed'); } catch { /* ignore */ }
+                      // Force a remount by reloading — simplest way to re-trigger
+                      // the tour from anywhere. The tour reads its own state.
+                      window.location.reload();
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-sm text-white/80 hover:bg-white/5 rounded-md"
+                  >
+                    <HelpCircle className="h-3.5 w-3.5" /> Show tour
+                  </button>
                   <div className="my-1 border-t border-white/5" />
                   <button
                     onClick={() => { setUserMenuOpen(false); logout(); }}
@@ -429,6 +443,10 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
+      {/* Onboarding tour — first-time directors only (persists in localStorage).
+          Public pages and unauthenticated viewers never see this because
+          AdminLayout only wraps admin routes. */}
+      <Tour />
     </div>
   );
 }

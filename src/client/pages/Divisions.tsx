@@ -439,6 +439,7 @@ export default function Divisions() {
               <span className="hidden sm:inline">{autoGenerateMutation.isPending ? 'Generating...' : 'Auto-Generate'}</span>
             </Button>
             <Button
+              data-tour="nav-scorekeeper"
               variant="secondary"
               onClick={() => generateAllBracketsMutation.mutate()}
               disabled={generateAllBracketsMutation.isPending || !divisions?.length}
