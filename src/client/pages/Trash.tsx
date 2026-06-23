@@ -83,7 +83,7 @@ export default function Trash() {
             <div className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">
               {data?.total ?? 0}
             </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <div className="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-wider">
               in trash
             </div>
           </div>
@@ -150,7 +150,7 @@ export default function Trash() {
                       </span>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                     {c.schoolDojang && <span>{c.schoolDojang}</span>}
                     {c._count?.registrations !== undefined && (
                       <span>{c._count.registrations} registration{c._count.registrations === 1 ? '' : 's'}</span>

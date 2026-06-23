@@ -295,7 +295,7 @@ export default function BracketEditor() {
   if (!division) {
     return (
       <div className="text-center py-12">
-        <div className="text-gray-500 dark:text-gray-400">Division not found</div>
+        <div className="text-gray-600 dark:text-gray-400">Division not found</div>
       </div>
     );
   }
@@ -387,7 +387,7 @@ export default function BracketEditor() {
       {/* Back link */}
       <Link
         to={`/tournaments/${tournamentId}/divisions`}
-        className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center"
+        className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center"
         aria-label="Back to Divisions"
       >
         <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" /> Back to Divisions
@@ -407,7 +407,7 @@ export default function BracketEditor() {
                 {a.registration.competitor.firstName}{' '}
                 {a.registration.competitor.lastName}
                 {a.registration.competitor.schoolDojang && (
-                  <span className="ml-1 text-gray-500 dark:text-gray-400 text-xs">
+                  <span className="ml-1 text-gray-600 dark:text-gray-400 text-xs">
                     ({a.registration.competitor.schoolDojang})
                   </span>
                 )}
@@ -479,11 +479,11 @@ export default function BracketEditor() {
       ) : (
         <Card>
           <CardBody className="text-center py-12">
-            <Trophy className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" aria-hidden="true" />
+            <Trophy className="mx-auto h-12 w-12 text-gray-600 dark:text-gray-500" aria-hidden="true" />
             <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
               No bracket generated
             </h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
               Generate a bracket to start the competition.
             </p>
             <Button
@@ -590,7 +590,7 @@ function BracketSection({
         {title}
       </h4>
       {subtitle && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">
           {subtitle}
         </p>
       )}
@@ -607,7 +607,7 @@ function BracketSection({
               }
             >
               {rounds.length > 1 && (
-                <div className="text-xs text-gray-500 dark:text-gray-400 text-center mb-2">
+                <div className="text-xs text-gray-600 dark:text-gray-400 text-center mb-2">
                   Round {round}
                 </div>
               )}
@@ -667,7 +667,7 @@ function MatchCard({
           : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
       }`}
     >
-      <div className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400 flex justify-between">
+      <div className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-xs text-gray-700 dark:text-gray-400 flex justify-between">
         <span>Match {label}</span>
         <span className="capitalize" aria-label={`Status: ${cardStatus}`}>{cardStatus}</span>
       </div>
@@ -696,7 +696,7 @@ function MatchCard({
         >
           {name1}
           {match.competitor1?.competitor.schoolDojang && (
-            <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
+            <span className="text-xs text-gray-600 dark:text-gray-500 ml-1">
               ({match.competitor1.competitor.schoolDojang.substring(0, 20)})
             </span>
           )}
@@ -725,7 +725,7 @@ function MatchCard({
         >
           {name2}
           {match.competitor2?.competitor.schoolDojang && (
-            <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
+            <span className="text-xs text-gray-600 dark:text-gray-500 ml-1">
               ({match.competitor2.competitor.schoolDojang.substring(0, 20)})
             </span>
           )}

@@ -431,7 +431,14 @@ export default function Competitors() {
               <Plus className="h-4 w-4 mr-2" /> Add
             </Button>
             <div className="relative">
-              <Button variant="secondary" size="sm" onClick={() => setMoreMenuOpen(!moreMenuOpen)} className="px-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+                aria-label="More actions"
+                aria-expanded={moreMenuOpen}
+                className="px-2"
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
               {moreMenuOpen && (
@@ -505,6 +512,7 @@ export default function Competitors() {
           {/* Gender + School + Belt row */}
           <div className="flex flex-wrap items-center gap-2">
             <Select
+              aria-label="Filter by gender"
               value={genderFilter}
               onChange={(e) => setGenderFilter(e.target.value)}
               className="py-1.5 min-w-[110px]"
@@ -514,6 +522,7 @@ export default function Competitors() {
               <option value="F">Female</option>
             </Select>
             <Select
+              aria-label="Filter by school"
               value={schoolFilter}
               onChange={(e) => setSchoolFilter(e.target.value)}
               className="py-1.5 min-w-[160px] max-w-[240px]"
@@ -524,7 +533,7 @@ export default function Competitors() {
               ))}
             </Select>
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap">Belt</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 whitespace-nowrap">Belt</span>
               <div className="flex-1 overflow-x-auto flex-nowrap flex items-center gap-1">
                 {aggregates && Object.entries(aggregates.byBelt || {}).map(([belt, count]) => {
                   const active = beltFilter.includes(belt);
@@ -549,8 +558,9 @@ export default function Competitors() {
 
           {/* Age range row */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Age</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Age</span>
             <Select
+              aria-label="Minimum age filter"
               value={ageMin}
               onChange={(e) => setAgeMin(e.target.value)}
               className="py-1 text-xs min-w-[70px]"
@@ -565,8 +575,9 @@ export default function Competitors() {
               <option value="18">18+</option>
               <option value="36">36+</option>
             </Select>
-            <span className="text-xs text-slate-400">–</span>
+            <span className="text-xs text-slate-600">–</span>
             <Select
+              aria-label="Maximum age filter"
               value={ageMax}
               onChange={(e) => setAgeMax(e.target.value)}
               className="py-1 text-xs min-w-[70px]"
@@ -587,7 +598,7 @@ export default function Competitors() {
                   setSearch(''); setBeltFilter([]); setGenderFilter('');
                   setAgeMin(''); setAgeMax(''); setSchoolFilter('');
                 }}
-                className="ml-auto text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center gap-1"
+                className="ml-auto text-xs text-slate-600 hover:text-slate-900 dark:hover:text-white flex items-center gap-1"
               >
                 <X className="h-3 w-3" /> Clear all
               </button>
@@ -622,13 +633,15 @@ export default function Competitors() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
-                          className="p-2 text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                          aria-label={`Edit ${c.firstName} ${c.lastName}`}
+                          className="p-2 text-gray-600 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                         >
                           <Edit className="h-5 w-5" />
                         </button>
                         <button
                           onClick={() => setDeleteTarget(c)}
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                          aria-label={`Delete ${c.firstName} ${c.lastName}`}
+                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                         >
                           <Trash2 className="h-5 w-5" />
                         </button>
@@ -636,19 +649,19 @@ export default function Competitors() {
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm mt-3">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Gender</span>
+                        <span className="text-gray-600">Gender</span>
                         <span className="text-gray-900 dark:text-white">{c.gender === 'M' ? 'Male' : 'Female'}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Age</span>
+                        <span className="text-gray-600">Age</span>
                         <span className="text-gray-900 dark:text-white">{calculateAge(c.dateOfBirth)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Weight</span>
+                        <span className="text-gray-600">Weight</span>
                         <span className="text-gray-900 dark:text-white">{c.weightLbs ? `${c.weightLbs} lbs` : '-'}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">School</span>
+                        <span className="text-gray-600">School</span>
                         <span className="text-gray-900 dark:text-white truncate max-w-[100px]">{c.schoolDojang || '-'}</span>
                       </div>
                     </div>
@@ -661,9 +674,10 @@ export default function Competitors() {
                 <DataTable>
                   <TableHead>
                     <tr>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left w-10">
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left w-10">
                         <input
                           type="checkbox"
+                          aria-label={selectedIds.size === filteredCompetitors?.length ? "Deselect all competitors" : "Select all competitors"}
                           checked={filteredCompetitors?.length > 0 && selectedIds.size === filteredCompetitors.length}
                           ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < (filteredCompetitors?.length || 0); }}
                           onChange={(e) => {
@@ -676,13 +690,13 @@ export default function Competitors() {
                           className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                         />
                       </th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Name</th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left hidden lg:table-cell">School</th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right w-12">Age</th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right w-16">
-                        Weight <span className="text-slate-400 dark:text-slate-500 normal-case tracking-normal">(lbs)</span>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Name</th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left hidden lg:table-cell">School</th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-right w-12">Age</th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-right w-16">
+                        Weight <span className="text-slate-600 dark:text-slate-500 normal-case tracking-normal">(lbs)</span>
                       </th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-right w-16">
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-right w-16">
                         <span className="sr-only">Actions</span>
                       </th>
                     </tr>
@@ -697,6 +711,7 @@ export default function Competitors() {
                         <TableCell className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
+                            aria-label={`Select ${c.firstName} ${c.lastName}`}
                             checked={selectedIds.has(c.id)}
                             onChange={(e) => {
                               const next = new Set(selectedIds);
@@ -725,13 +740,13 @@ export default function Competitors() {
                                 <span className={`pill ${getBeltColor(c.belt)} text-[10px]`}>
                                   {c.belt}{c.danRank && ` ${c.danRank}D`}
                                 </span>
-                                <span className="text-[10px] text-slate-400 lg:hidden truncate max-w-[140px]" title={c.schoolDojang || ''}>{c.schoolDojang || '—'}</span>
+                                <span className="text-[10px] text-slate-600 lg:hidden truncate max-w-[140px]" title={c.schoolDojang || ''}>{c.schoolDojang || '—'}</span>
                               </div>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell
-                          className="px-2 py-2 text-sm text-slate-500 dark:text-slate-400 max-w-[160px] truncate hidden lg:table-cell"
+                          className="px-2 py-2 text-sm text-slate-600 dark:text-slate-400 max-w-[160px] truncate hidden lg:table-cell"
                           title={c.schoolDojang || ''}
                         >
                           {c.schoolDojang || '—'}
@@ -1106,7 +1121,7 @@ export default function Competitors() {
                   <TableHead>
                     <tr>
                       {Object.keys(importData[0]).slice(0, 4).map((key) => (
-                        <th key={key} className="px-2 py-1 text-left whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        <th key={key} className="px-2 py-1 text-left whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                           {key.length > 12 ? key.substring(0, 12) + '...' : key}
                         </th>
                       ))}

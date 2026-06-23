@@ -285,7 +285,7 @@ export default function Tournaments() {
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 placeholder="e.g., Downtown Martial Arts Center"
               />
-              <p className="mt-1 text-xs text-gray-500">Optional</p>
+              <p className="mt-1 text-xs text-gray-600">Optional</p>
             </div>
           </form>
         </Modal>
@@ -321,7 +321,7 @@ function TournamentCard({
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center min-w-0">
               <div className={`p-2 rounded-lg ${isCompleted ? 'bg-gray-100 dark:bg-gray-700' : 'bg-primary-100 dark:bg-primary-900/30'}`}>
-                <Trophy className={`h-6 w-6 ${isCompleted ? 'text-gray-500' : 'text-primary-600 dark:text-primary-400'}`} />
+                <Trophy className={`h-6 w-6 ${isCompleted ? 'text-gray-700' : 'text-primary-600 dark:text-primary-400'}`} />
               </div>
               <div className="ml-3 min-w-0">
                 <h3
@@ -337,7 +337,7 @@ function TournamentCard({
                 </h3>
                 <StatusBadge status={tournament.status} />
                 {tournament.sportProfileSlug && (
-                  <span className="text-xs text-gray-500 mt-0.5">
+                  <span className="text-xs text-gray-600 mt-0.5">
                     {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.icon}{' '}
                     {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.name}
                   </span>
@@ -366,12 +366,12 @@ function TournamentCard({
               <div className="flex items-center text-gray-600 dark:text-gray-400">
                 <Users className="h-4 w-4 mr-1.5" />
                 <span className="font-medium">{tournament._count.registrations}</span>
-                <span className="ml-1 text-gray-400">competitors</span>
+                <span className="ml-1 text-gray-600">competitors</span>
               </div>
               <div className="flex items-center text-gray-600 dark:text-gray-400">
                 <LayoutGrid className="h-4 w-4 mr-1.5" />
                 <span className="font-medium">{tournament._count.divisions}</span>
-                <span className="ml-1 text-gray-400">divisions</span>
+                <span className="ml-1 text-gray-600">divisions</span>
               </div>
             </div>
           </div>

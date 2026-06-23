@@ -240,13 +240,13 @@ export default function CheckIn() {
             <div className="flex items-center">
               <Link
                 to={`/tournaments/${tournamentId}`}
-                className="mr-3 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                className="mr-3 text-gray-600 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <ChevronLeft className="h-6 w-6" />
               </Link>
               <div>
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white">Check-In</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{tournament?.name}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{tournament?.name}</p>
               </div>
             </div>
           </div>
@@ -267,7 +267,7 @@ export default function CheckIn() {
               style={{ width: `${stats.total > 0 ? Math.round((stats.checkedIn / stats.total) * 100) : 0}%` }}
             />
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 text-center">
             {stats.checkedIn} / {stats.total} checked in ({stats.total > 0 ? Math.round((stats.checkedIn / stats.total) * 100) : 0}%)
           </p>
         </div>
@@ -348,7 +348,7 @@ export default function CheckIn() {
             <CardSkeleton />
           </div>
         ) : sortedRegistrations.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+          <div className="text-center py-12 text-gray-600 dark:text-gray-400">
             No registrations found matching your filters.
           </div>
         ) : (
@@ -370,7 +370,7 @@ export default function CheckIn() {
                         <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400 ml-2" />
                       )}
                     </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                       {registration.competitor.schoolDojang || 'No School'} •{' '}
                       {registration.competitor.belt}
                       {registration.ageAtTournament && ` • Age ${registration.ageAtTournament}`}
@@ -414,7 +414,7 @@ export default function CheckIn() {
                 </div>
 
                 {registration.checkedIn && registration.checkInWeight && (
-                  <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 flex items-center">
+                  <div className="mt-2 text-sm text-gray-600 dark:text-gray-400 flex items-center">
                     <Scale className="h-4 w-4 mr-1" />
                     Weigh-in: {registration.checkInWeight} lbs
                     {registration.weightAtRegistration &&
@@ -486,7 +486,7 @@ export default function CheckIn() {
           }
         >
           <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <div className="text-sm text-gray-500 dark:text-gray-400">Registered Weight</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Registered Weight</div>
             <div className="text-lg font-semibold text-gray-900 dark:text-white">
               {selectedRegistration.weightAtRegistration || 'Not recorded'} lbs
             </div>

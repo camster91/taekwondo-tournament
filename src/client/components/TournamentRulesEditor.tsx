@@ -204,7 +204,7 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
             onChange={(e) => update('ageBands', { ...local.ageBands, yearMinDivisionSize: parseInt(e.target.value) || 2 })}
             className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
           />
-          <span className="text-xs text-gray-500">Under this, they merge with adjacent age</span>
+          <span className="text-xs text-gray-600">Under this, they merge with adjacent age</span>
         </div>
       </Section>
 
@@ -266,7 +266,7 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
             onChange={(e) => update('weights', { ...local.weights, skipIfDivisionSmallerThan: parseInt(e.target.value) || 4 })}
             className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
           />
-          <span className="text-xs text-gray-500">competitors (saves you from 1-person weight divisions)</span>
+          <span className="text-xs text-gray-600">competitors (saves you from 1-person weight divisions)</span>
         </div>
       </Section>
 
@@ -429,7 +429,7 @@ function Radio({ label, sub, checked, onChange }: { label: string; sub: string; 
       <input type="radio" checked={checked} onChange={onChange} className="mt-1" />
       <div>
         <div className="text-sm font-medium text-gray-900">{label}</div>
-        <div className="text-xs text-gray-500">{sub}</div>
+        <div className="text-xs text-gray-600">{sub}</div>
       </div>
     </label>
   );
@@ -441,7 +441,7 @@ function Checkbox({ label, help, checked, onChange }: { label: string; help: str
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-1" />
       <div>
         <div className="text-sm font-medium text-gray-900">{label}</div>
-        <div className="text-xs text-gray-500">{help}</div>
+        <div className="text-xs text-gray-600">{help}</div>
       </div>
     </label>
   );
@@ -459,7 +459,7 @@ function NumberField({ label, help, value, min, max, onChange }: { label: string
         onChange={(e) => onChange(parseInt(e.target.value) || min)}
         className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
       />
-      <p className="text-xs text-gray-500 mt-1">{help}</p>
+      <p className="text-xs text-gray-600 mt-1">{help}</p>
     </div>
   );
 }
@@ -475,7 +475,7 @@ function SelectField({ label, help, value, options, onChange }: { label: string;
       >
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
-      {help && <p className="text-xs text-gray-500 mt-1">{help}</p>}
+      {help && <p className="text-xs text-gray-600 mt-1">{help}</p>}
     </div>
   );
 }
@@ -595,7 +595,7 @@ function EventRuleEditor({ title, rule, onChange }: { title: string; rule: Event
         />
         <h4 className="text-sm font-semibold">{title}</h4>
       </div>
-      <div className="text-xs text-gray-500 mb-2">Group competitors by:</div>
+      <div className="text-xs text-gray-600 mb-2">Group competitors by:</div>
       <div className="flex flex-wrap gap-2 mb-2">
         {['tier','gender','age','weight','belt'].map(g => {
           const active = (rule.groupBy as string[]).includes(g);

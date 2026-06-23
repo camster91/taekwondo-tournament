@@ -177,7 +177,7 @@ export default function Login() {
             <span className="text-base font-semibold tracking-tight">Martial Arts TM</span>
           </Link>
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-slate-500 hidden sm:inline">Real tournament management, end-to-end.</span>
+            <span className="text-slate-600 hidden sm:inline">Real tournament management, end-to-end.</span>
             {needsSetup ? null : (
               <Link
                 to="/register"
@@ -293,7 +293,7 @@ export default function Login() {
                 )}
 
                 {step === 'email' && (
-                  <p className="mt-6 text-center text-xs text-slate-500">
+                  <p className="mt-6 text-center text-xs text-slate-600">
                     By continuing you agree to the tournament's data handling policy.
                     Email addresses are only used to send sign-in links and never shared.
                   </p>
@@ -306,7 +306,7 @@ export default function Login() {
 
       {/* Footer */}
       <footer className="border-t border-slate-200/60 dark:border-slate-800/60 py-4 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600">
           <div>Martial Arts Tournament Manager · v1.0</div>
           <div className="flex items-center gap-4">
             <a href="/register" className="hover:text-slate-900 dark:hover:text-white">Public Registration</a>
@@ -324,7 +324,7 @@ function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: 
   return (
     <div className="space-y-5">
       <h2 className="sr-only">Sign in</h2>
-      <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 text-center">
+      <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 text-center">
         Or sign in with email
       </h3>
 
@@ -350,7 +350,7 @@ function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: 
 
       <div className="relative my-6 flex items-center">
         <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
-        <span className="px-3 text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wider">or</span>
+        <span className="px-3 text-xs text-slate-600 dark:text-slate-500 uppercase tracking-wider">or</span>
         <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
       </div>
 
@@ -364,7 +364,7 @@ function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: 
         <Sparkles className="h-4 w-4 mr-2" /> Try the demo
       </Button>
 
-      <p className="text-center text-xs text-slate-500">
+      <p className="text-center text-xs text-slate-600">
         Want to look around first? Use a demo account — full access, no signup.
       </p>
 
@@ -413,7 +413,7 @@ function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRe
 
             {/* Magic URL row */}
             <div className="mb-3">
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">Magic link</div>
+              <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Magic link</div>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -442,7 +442,7 @@ function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRe
 
             {/* 6-digit code row */}
             <div>
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">6-digit code</div>
+              <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">6-digit code</div>
               <div className="flex items-center gap-2">
                 <div className="flex-1 text-center text-2xl font-mono font-bold tracking-[0.3em] text-indigo-700 dark:text-indigo-300 py-2">
                   {devModeData.code}
@@ -496,7 +496,7 @@ function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRe
 
       <button
         onClick={onBack}
-        className="w-full flex items-center justify-center text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+        className="w-full flex items-center justify-center text-sm text-slate-600 hover:text-slate-700 dark:hover:text-slate-300"
       >
         <ArrowLeft className="h-4 w-4 mr-1.5" /> Use a different email
       </button>
@@ -509,7 +509,7 @@ function SetupForm({ email, setEmail, firstName, setFirstName, lastName, setLast
     <div className="space-y-5">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Set up your admin account</h2>
-        <p className="mt-1 text-sm text-slate-500">No accounts exist yet. Create the first one to get started.</p>
+        <p className="mt-1 text-sm text-slate-600">No accounts exist yet. Create the first one to get started.</p>
       </div>
 
       {error && (

@@ -190,16 +190,16 @@ export default function Dashboard() {
                       style={{ animationDelay: `${i * 40}ms` }}
                     >
                       <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center flex-shrink-0">
-                        <Trophy className="h-4.5 w-4.5 text-slate-500 dark:text-slate-400" />
+                        <Trophy className="h-4.5 w-4.5 text-slate-600 dark:text-slate-400" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-sm text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{t.name}</div>
-                        <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                        <div className="text-xs text-slate-600 mt-0.5 flex items-center gap-2 flex-wrap">
                           <span>{new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                           {t.location && <><span className="text-slate-300 dark:text-slate-600">·</span><span className="truncate">{t.location}</span></>}
                         </div>
                       </div>
-                      <div className="hidden sm:flex items-center gap-5 text-xs text-slate-500 flex-shrink-0">
+                      <div className="hidden sm:flex items-center gap-5 text-xs text-slate-600 flex-shrink-0">
                         <div className="text-right">
                           <div className="font-semibold text-slate-900 dark:text-white">{t._count.registrations}</div>
                           <div className="text-[10px] uppercase tracking-wider">kids</div>
@@ -234,7 +234,7 @@ export default function Dashboard() {
                 title="Belt distribution"
                 as="h2"
                 description={`Across your ${totalCompetitors.toLocaleString()} competitors`}
-                action={<Target className="h-4 w-4 text-slate-400" />}
+                action={<Target className="h-4 w-4 text-slate-600" />}
               />
               <CardBody className="px-5 pb-5 space-y-2.5">
                 {(() => {
@@ -292,7 +292,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{a.label}</div>
-                    <div className="text-[11px] text-slate-500">{a.sub}</div>
+                    <div className="text-[11px] text-slate-600">{a.sub}</div>
                   </div>
                   <ArrowRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all" />
                 </Link>
@@ -307,7 +307,7 @@ export default function Dashboard() {
                 title="Top schools"
                 as="h2"
                 description="Most represented dojangs"
-                action={<School className="h-4 w-4 text-slate-400" />}
+                action={<School className="h-4 w-4 text-slate-600" />}
               />
               <CardBody className="px-5 pb-5 space-y-2.5">
                 {analytics.topSchools.slice(0, 6).map((school, index) => {
