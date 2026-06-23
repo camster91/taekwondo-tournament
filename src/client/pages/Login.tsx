@@ -365,7 +365,7 @@ function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: 
       </Button>
 
       <p className="text-center text-xs text-slate-500">
-        Full access for 4 hours. Pre-loaded with 682 real competitors.
+        Want to look around first? Use a demo account — full access, no signup.
       </p>
 
       <div className="relative">
