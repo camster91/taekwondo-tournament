@@ -385,6 +385,15 @@ export default function Scorekeeper() {
                 />
               </div>
               <div className="grid gap-3">
+                {divisions && divisions.length === 0 && (
+                  <div className="text-center py-12 text-gray-400">
+                    <Trophy className="h-12 w-12 mx-auto mb-3 text-gray-500" aria-hidden="true" />
+                    <p className="text-base font-medium mb-1">No divisions to score yet</p>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Brackets need to be generated before matches can be scored.
+                    </p>
+                  </div>
+                )}
                 {divisions
                   ?.filter((d) => d.bracket && (!divisionSearch || d.name.toLowerCase().includes(divisionSearch.toLowerCase())))
                   .map((division) => {
