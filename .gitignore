@@ -14,3 +14,4 @@ playwright-report/
 _debug_loader.cjs
 
 _qa-*.cjs
+_inspect-*.cjs
