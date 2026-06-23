@@ -14,6 +14,7 @@ import {
   Timer,
 } from 'lucide-react';
 import MatchTimer from '../components/MatchTimer';
+import SpecialNeedsBadge from '../components/SpecialNeedsBadge';
 import { getAuthHeaders } from '../context/AuthContext';
 import CloseButton from '../components/ui/CloseButton';
 import { useToast } from '../context/ToastContext';
@@ -33,11 +34,25 @@ interface Match {
   winnerId: string | null;
   competitor1: {
     id: string;
-    competitor: { firstName: string; lastName: string; schoolDojang: string | null };
+    specialNeeds?: string | null;
+    competeWithOlder?: boolean;
+    competitor: {
+      firstName: string;
+      lastName: string;
+      schoolDojang: string | null;
+      specialNeeds?: string | null;
+    };
   } | null;
   competitor2: {
     id: string;
-    competitor: { firstName: string; lastName: string; schoolDojang: string | null };
+    specialNeeds?: string | null;
+    competeWithOlder?: boolean;
+    competitor: {
+      firstName: string;
+      lastName: string;
+      schoolDojang: string | null;
+      specialNeeds?: string | null;
+    };
   } | null;
 }
 
@@ -597,9 +612,19 @@ export default function Scorekeeper() {
                 } ${!currentMatch.competitor1 ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <div className="text-2xl font-bold">{getCompetitorName(currentMatch.competitor1)}</div>
                     <div className="text-gray-600 mt-1">{getCompetitorSchool(currentMatch.competitor1)}</div>
+                    {currentMatch.competitor1 && (
+                      <div className="mt-2">
+                        <SpecialNeedsBadge
+                          competitorNotes={currentMatch.competitor1.competitor.specialNeeds}
+                          registrationNotes={currentMatch.competitor1.specialNeeds}
+                          competeWithOlder={currentMatch.competitor1.competeWithOlder}
+                          size="md"
+                        />
+                      </div>
+                    )}
                     {penalties1 > 0 && (
                       <div className="text-red-400 text-sm mt-1">
                         {penalties1} {sportProfile.scoringConfig.penaltyName} ({penalties1} pts to opponent)
@@ -652,9 +677,19 @@ export default function Scorekeeper() {
                 } ${!currentMatch.competitor2 ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <div className="text-2xl font-bold">{getCompetitorName(currentMatch.competitor2)}</div>
                     <div className="text-gray-600 mt-1">{getCompetitorSchool(currentMatch.competitor2)}</div>
+                    {currentMatch.competitor2 && (
+                      <div className="mt-2">
+                        <SpecialNeedsBadge
+                          competitorNotes={currentMatch.competitor2.competitor.specialNeeds}
+                          registrationNotes={currentMatch.competitor2.specialNeeds}
+                          competeWithOlder={currentMatch.competitor2.competeWithOlder}
+                          size="md"
+                        />
+                      </div>
+                    )}
                     {penalties2 > 0 && (
                       <div className="text-red-400 text-sm mt-1">
                         {penalties2} {sportProfile.scoringConfig.penaltyName} ({penalties2} pts to opponent)
