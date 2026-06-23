@@ -141,9 +141,9 @@ export default function Results() {
 
   const getMedalIcon = (place: number) => {
     if (place === 1) return <Medal className="h-5 w-5 text-yellow-500" />;
-    if (place === 2) return <Medal className="h-5 w-5 text-gray-400" />;
+    if (place === 2) return <Medal className="h-5 w-5 text-gray-600" />;
     if (place === 3) return <Medal className="h-5 w-5 text-amber-600" />;
-    return <span className="text-gray-500 text-sm">{place}th</span>;
+    return <span className="text-gray-600 text-sm">{place}th</span>;
   };
 
   // getPlaceName is imported from ../utils/csv-export (it's also used inside
@@ -191,13 +191,13 @@ export default function Results() {
             <div className="flex items-center">
               <Link
                 to={`/tournaments/${tournamentId}`}
-                className="mr-3 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                className="mr-3 text-gray-600 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <ChevronLeft className="h-6 w-6" />
               </Link>
               <div>
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white">Tournament Results</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{tournament?.name}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{tournament?.name}</p>
               </div>
             </div>
             <div className="relative">
@@ -215,7 +215,7 @@ export default function Results() {
                   />
                   <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20">
                     <div className="py-1">
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">
                         PDF Export
                       </div>
                       <a
@@ -230,7 +230,7 @@ export default function Results() {
                       </a>
 
                       <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">
                         CSV Export
                       </div>
                       <button
@@ -256,7 +256,7 @@ export default function Results() {
                       </button>
 
                       <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">
                         Excel Export
                       </div>
                       <button
@@ -268,7 +268,7 @@ export default function Results() {
                       </button>
 
                       <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
-                      <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">
                         Certificates
                       </div>
                       <a
@@ -383,7 +383,7 @@ export default function Results() {
                     <th>Rank</th>
                     <th>School</th>
                     <th className="text-center"><Medal className="h-4 w-4 inline text-yellow-500" /> Gold</th>
-                    <th className="text-center"><Medal className="h-4 w-4 inline text-gray-400" /> Silver</th>
+                    <th className="text-center"><Medal className="h-4 w-4 inline text-gray-600" /> Silver</th>
                     <th className="text-center"><Medal className="h-4 w-4 inline text-amber-600" /> Bronze</th>
                     <th className="text-center">Total</th>
                   </TableHead>
@@ -415,7 +415,7 @@ export default function Results() {
                         </td>
                         <td className="font-medium text-gray-900 dark:text-white">{school.name}</td>
                         <td className="text-center text-lg font-bold text-yellow-600 dark:text-yellow-400">{school.gold}</td>
-                        <td className="text-center text-lg font-bold text-gray-400">{school.silver}</td>
+                        <td className="text-center text-lg font-bold text-gray-600">{school.silver}</td>
                         <td className="text-center text-lg font-bold text-amber-600 dark:text-amber-400">{school.bronze}</td>
                         <td className="text-center text-lg font-semibold text-gray-700 dark:text-gray-300">
                           {school.gold + school.silver + school.bronze}
@@ -465,7 +465,7 @@ export default function Results() {
                                   {placement.registration.competitor.firstName}{' '}
                                   {placement.registration.competitor.lastName}
                                 </div>
-                                <div className="text-sm text-gray-500 dark:text-gray-400">{division.name}</div>
+                                <div className="text-sm text-gray-600 dark:text-gray-400">{division.name}</div>
                               </div>
                             </div>
                             <span
@@ -493,7 +493,7 @@ export default function Results() {
           /* Division Results View */
           <div className="space-y-4">
             {filteredDivisions?.length === 0 ? (
-              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+              <div className="text-center py-12 text-gray-600 dark:text-gray-400">
                 No completed divisions with results yet.
               </div>
             ) : (
@@ -503,7 +503,7 @@ export default function Results() {
                     <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
                       <div>
                         <h3 className="font-semibold text-gray-900 dark:text-white">{division.name}</h3>
-                        <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">{division.eventType}</span>
+                        <span className="text-xs text-gray-600 dark:text-gray-400 capitalize">{division.eventType}</span>
                       </div>
                       <Link
                         to={`/tournaments/${tournamentId}/divisions/${division.id}/bracket`}
@@ -514,7 +514,7 @@ export default function Results() {
                     </div>
                     <div className="p-4">
                       {division.bracket?.placements?.length === 0 ? (
-                        <p className="text-gray-500 dark:text-gray-400 text-sm">No placements recorded</p>
+                        <p className="text-gray-600 dark:text-gray-400 text-sm">No placements recorded</p>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           {division.bracket?.placements
@@ -533,7 +533,7 @@ export default function Results() {
                               >
                                 <div className="flex items-center mb-2">
                                   {getMedalIcon(placement.place)}
-                                  <span className="ml-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+                                  <span className="ml-2 text-sm font-medium text-gray-600 dark:text-gray-400">
                                     {getPlaceName(placement.place)}
                                   </span>
                                 </div>
@@ -541,7 +541,7 @@ export default function Results() {
                                   {placement.registration.competitor.firstName}{' '}
                                   {placement.registration.competitor.lastName}
                                 </div>
-                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">
                                   {placement.registration.competitor.schoolDojang || 'Independent'}
                                 </div>
                               </div>
@@ -561,7 +561,7 @@ export default function Results() {
             <Card>
               <CardBody className="p-0">
                 <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex items-center">
-                  <BarChart3 className="h-5 w-5 text-gray-500 dark:text-gray-400 mr-2" />
+                  <BarChart3 className="h-5 w-5 text-gray-600 dark:text-gray-400 mr-2" />
                   <h3 className="font-semibold text-gray-900 dark:text-white">By Belt Level</h3>
                 </div>
                 <div className="p-4">
@@ -579,24 +579,24 @@ export default function Results() {
                         >
                           <div className="flex items-center justify-between mb-3">
                             <span className="font-bold text-lg text-gray-900 dark:text-white">{belt.name}</span>
-                            <span className="text-sm text-gray-500 dark:text-gray-400">{belt.divisions} divisions</span>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">{belt.divisions} divisions</span>
                           </div>
                           <div className="grid grid-cols-4 gap-2 text-center">
                             <div>
                               <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{belt.gold}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">Gold</div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">Gold</div>
                             </div>
                             <div>
-                              <div className="text-2xl font-bold text-gray-400">{belt.silver}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">Silver</div>
+                              <div className="text-2xl font-bold text-gray-600">{belt.silver}</div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">Silver</div>
                             </div>
                             <div>
                               <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{belt.bronze}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">Bronze</div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">Bronze</div>
                             </div>
                             <div>
                               <div className="text-2xl font-bold text-gray-700 dark:text-gray-300">{total}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">Total</div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">Total</div>
                             </div>
                           </div>
                         </div>
@@ -611,7 +611,7 @@ export default function Results() {
             <Card>
               <CardBody className="p-0">
                 <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex items-center">
-                  <Users className="h-5 w-5 text-gray-500 dark:text-gray-400 mr-2" />
+                  <Users className="h-5 w-5 text-gray-600 dark:text-gray-400 mr-2" />
                   <h3 className="font-semibold text-gray-900 dark:text-white">By Age Group</h3>
                 </div>
                 <div className="p-4 overflow-x-auto">
@@ -628,9 +628,9 @@ export default function Results() {
                       {ageBreakdown.map((age) => (
                         <tr key={age.name} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                           <td className="font-medium text-gray-900 dark:text-white">{age.name} years</td>
-                          <td className="text-center text-gray-500 dark:text-gray-400">{age.divisions}</td>
+                          <td className="text-center text-gray-600 dark:text-gray-400">{age.divisions}</td>
                           <td className="text-center font-bold text-yellow-600 dark:text-yellow-400">{age.gold}</td>
-                          <td className="text-center font-bold text-gray-400">{age.silver}</td>
+                          <td className="text-center font-bold text-gray-600">{age.silver}</td>
                           <td className="text-center font-bold text-amber-600 dark:text-amber-400">{age.bronze}</td>
                           <td className="text-center font-semibold text-gray-900 dark:text-white">{age.gold + age.silver + age.bronze}</td>
                         </tr>
@@ -639,7 +639,7 @@ export default function Results() {
                         <td className="text-gray-900 dark:text-white">Total</td>
                         <td className="text-center text-gray-700 dark:text-gray-300">{ageBreakdown.reduce((s, a) => s + a.divisions, 0)}</td>
                         <td className="text-center text-yellow-600 dark:text-yellow-400">{ageBreakdown.reduce((s, a) => s + a.gold, 0)}</td>
-                        <td className="text-center text-gray-400">{ageBreakdown.reduce((s, a) => s + a.silver, 0)}</td>
+                        <td className="text-center text-gray-600">{ageBreakdown.reduce((s, a) => s + a.silver, 0)}</td>
                         <td className="text-center text-amber-600 dark:text-amber-400">{ageBreakdown.reduce((s, a) => s + a.bronze, 0)}</td>
                         <td className="text-center text-gray-900 dark:text-white">{ageBreakdown.reduce((s, a) => s + a.gold + a.silver + a.bronze, 0)}</td>
                       </tr>

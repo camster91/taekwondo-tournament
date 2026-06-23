@@ -44,7 +44,7 @@ export default function PublicScoreboardBySlug() {
         <div className="max-w-md text-center">
           <AlertCircle className="h-20 w-20 text-red-400 mx-auto mb-6" />
           <h1 className="text-3xl font-bold text-white mb-3">Scoreboard not found</h1>
-          <p className="text-gray-400">{error}</p>
+          <p className="text-gray-600">{error}</p>
         </div>
       </div>
     );

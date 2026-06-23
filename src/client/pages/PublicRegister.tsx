@@ -325,7 +325,7 @@ export default function PublicRegister() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="flex items-center text-gray-500 dark:text-gray-400">
+        <div className="flex items-center text-gray-600 dark:text-gray-400">
           <Spinner className="mr-2" />
           Loading tournaments...
         </div>
@@ -347,25 +347,25 @@ export default function PublicRegister() {
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Registration Details</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">Competitor:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Competitor:</span>
                     <span className="font-medium text-gray-900 dark:text-white">{result.registration.competitorName}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">Tournament:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Tournament:</span>
                     <span className="font-medium text-gray-900 dark:text-white">{result.registration.tournamentName}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">Date:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Date:</span>
                     <span className="font-medium text-gray-900 dark:text-white">
                       {new Date(result.registration.tournamentDate).toLocaleDateString()}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">Age Group:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Age Group:</span>
                     <span className="font-medium text-gray-900 dark:text-white">{result.registration.ageGroup}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">Events:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Events:</span>
                     <span className="font-medium text-gray-900 dark:text-white">
                       {[
                         result.registration.events.patterns && (sportProfile.eventTypes[0]?.name || 'Patterns'),
@@ -464,7 +464,7 @@ export default function PublicRegister() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
         <div className="max-w-md mx-auto text-center">
-          <Trophy className="h-16 w-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+          <Trophy className="h-16 w-16 text-gray-600 dark:text-gray-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">No Open Tournaments</h1>
           <p className="text-gray-600 dark:text-gray-400">
             There are currently no tournaments open for registration. Please check back later.
@@ -545,12 +545,12 @@ export default function PublicRegister() {
             >
               {/* Step Indicator */}
               <div className="flex items-center gap-2 mb-2 overflow-x-auto">
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-700'}`}>
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px]">1</span>
                   Athlete
                 </div>
                 <div className={`h-px flex-1 min-w-[1rem] ${step >= 2 ? 'bg-indigo-400' : 'bg-gray-200 dark:bg-gray-700'}`} />
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 2 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-500'}`}>
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 2 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-700'}`}>
                   <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-indigo-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
                   Parent & Consent
                 </div>
@@ -794,7 +794,7 @@ export default function PublicRegister() {
                       inputMode="numeric"
                     />
                     {formData.sparring && (
-                      <p id="weightLbs-help" className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <p id="weightLbs-help" className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                         Required for {eventType1?.name ?? 'combat'} events
                       </p>
                     )}
@@ -826,7 +826,7 @@ export default function PublicRegister() {
                   />
                   <Label htmlFor="competeWithOlder" className="text-sm text-gray-700 dark:text-gray-300 mb-0">
                     <span className="font-medium">Compete in older age band</span>
-                    <span id="competeWithOlder-desc" className="block text-xs text-gray-500">
+                    <span id="competeWithOlder-desc" className="block text-xs text-gray-600">
                       Check this if your child is near the top of their age band and you'd like them considered for the next age group up (subject to the tournament's age-flex rules).
                     </span>
                   </Label>
@@ -838,11 +838,16 @@ export default function PublicRegister() {
                 <legend className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                   Event Selection <span className="text-red-500" aria-hidden="true">*</span>
                 </legend>
-                <p id="event-selection-help" className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                <p id="event-selection-help" className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                   Select at least one event to compete in
                 </p>
 
-                <div className="space-y-3" role="group" aria-describedby="event-selection-help" aria-required="true">
+                <div
+                  className="space-y-3"
+                  role="group"
+                  aria-describedby="event-selection-help"
+                  aria-label="Event selection"
+                >
                   {eventType0 && (
                     <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                       <input
@@ -855,7 +860,7 @@ export default function PublicRegister() {
                       />
                       <div className="ml-3">
                         <span className="font-medium text-gray-900 dark:text-white">{eventType0.name}</span>
-                        <p id="event-patterns-desc" className="text-sm text-gray-500 dark:text-gray-400">
+                        <p id="event-patterns-desc" className="text-sm text-gray-600 dark:text-gray-400">
                           {eventType0.description}
                         </p>
                       </div>
@@ -877,7 +882,7 @@ export default function PublicRegister() {
                           {eventType1.name}
                           {eventType1.hasWeightClasses && ' (requires weight)'}
                         </span>
-                        <p id="event-sparring-desc" className="text-sm text-gray-500 dark:text-gray-400">
+                        <p id="event-sparring-desc" className="text-sm text-gray-600 dark:text-gray-400">
                           {eventType1.description}
                         </p>
                       </div>
@@ -991,7 +996,7 @@ export default function PublicRegister() {
                   {submitting ? 'Submitting...' : 'Complete Registration'}
                 </Button>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-3">
+              <p className="text-xs text-gray-600 dark:text-gray-400 text-center mt-3">
                 By registering, you agree to follow all tournament rules and regulations.
               </p>
               </>)}

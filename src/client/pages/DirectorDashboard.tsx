@@ -277,7 +277,7 @@ export default function DirectorDashboard() {
   if (!progress) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500 dark:text-gray-400">Tournament not found</p>
+        <p className="text-gray-600 dark:text-gray-400">Tournament not found</p>
       </div>
     );
   }
@@ -297,14 +297,14 @@ export default function DirectorDashboard() {
         description={progress.tournament.name}
         actions={
           <div className="text-right">
-            <div className="text-sm text-gray-500 dark:text-gray-400">Last updated</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">Last updated</div>
             <div className="text-lg font-medium text-gray-900 dark:text-white">{new Date().toLocaleTimeString()}</div>
           </div>
         }
       >
         <Link
           to={`/tournaments/${tournamentId}`}
-          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Tournament
@@ -370,7 +370,7 @@ export default function DirectorDashboard() {
         <CardHeader title="Ring Status" />
         <CardBody>
           {progress.rings.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-4">
+            <p className="text-gray-600 dark:text-gray-400 text-center py-4">
               No rings assigned yet. Assign rings in the schedule page.
             </p>
           ) : (
@@ -423,9 +423,9 @@ export default function DirectorDashboard() {
                       </p>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">No active match</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">No active match</p>
                   )}
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                  <p className="text-xs text-gray-600 dark:text-gray-500 mt-2">
                     {ring.upcomingMatches} match{ring.upcomingMatches !== 1 ? 'es' : ''} remaining
                   </p>
                 </div>
@@ -440,7 +440,7 @@ export default function DirectorDashboard() {
         <CardHeader title="Division Progress" />
         <CardBody>
           {progress.divisionDetails.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-4">
+            <p className="text-gray-600 dark:text-gray-400 text-center py-4">
               No divisions created yet.
             </p>
           ) : (
@@ -458,7 +458,7 @@ export default function DirectorDashboard() {
                       ) : division.status === 'in_progress' ? (
                         <Play className="h-5 w-5 text-blue-500 dark:text-blue-400" />
                       ) : (
-                        <Clock className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                        <Clock className="h-5 w-5 text-gray-600 dark:text-gray-500" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -469,7 +469,7 @@ export default function DirectorDashboard() {
                         >
                           {division.name}
                         </Link>
-                        <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                        <span className="text-xs text-gray-600 dark:text-gray-400 ml-2">
                           {division.completedMatches}/{division.totalMatches} matches
                         </span>
                       </div>
@@ -491,7 +491,7 @@ export default function DirectorDashboard() {
                         Ring {division.ring}
                       </span>
                     )}
-                    <span className="text-xs text-gray-500 dark:text-gray-400 w-16 text-right">
+                    <span className="text-xs text-gray-600 dark:text-gray-400 w-16 text-right">
                       ~{division.estimatedMinutesRemaining}m
                     </span>
                   </div>

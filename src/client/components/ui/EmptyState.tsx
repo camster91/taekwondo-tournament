@@ -26,7 +26,7 @@ export default function EmptyState({
   return (
     <div className="text-center py-12 px-6">
       <div className="mx-auto w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
-        <span className="[&>svg]:h-8 [&>svg]:w-8 [&>svg]:text-gray-400 [&>svg]:dark:text-gray-500">
+        <span className="[&>svg]:h-8 [&>svg]:w-8 [&>svg]:text-gray-600 [&>svg]:dark:text-gray-500">
           {isValidElement(icon)
             ? icon
             : createElement(icon as React.ComponentType<{ className?: string }>, { className: 'h-8 w-8 text-gray-400 dark:text-gray-500' })}
@@ -36,7 +36,7 @@ export default function EmptyState({
         {title}
       </h3>
       {description && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto mb-6">
+        <p className="text-sm text-gray-600 dark:text-gray-400 max-w-sm mx-auto mb-6">
           {description}
         </p>
       )}

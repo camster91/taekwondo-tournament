@@ -248,7 +248,7 @@ export default function UserManagement() {
       <div className="text-center py-12">
         <ShieldX className="mx-auto h-12 w-12 text-red-400 dark:text-red-500" />
         <h2 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Access Denied</h2>
-        <p className="mt-2 text-gray-500 dark:text-gray-400">You need admin privileges to access this page.</p>
+        <p className="mt-2 text-gray-600 dark:text-gray-400">You need admin privileges to access this page.</p>
         <Button as={Link} to="/" variant="primary" className="mt-4">
           Go to Dashboard
         </Button>
@@ -271,7 +271,7 @@ export default function UserManagement() {
       >
         <Link
           to="/"
-          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Dashboard
@@ -314,7 +314,7 @@ export default function UserManagement() {
                 <TableBody>
                   {users?.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                      <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-400">
                         <EmptyState
                           icon={Users}
                           title="No users found"
@@ -341,10 +341,10 @@ export default function UserManagement() {
                               <div className="text-sm font-medium text-gray-900 dark:text-white">
                                 {user.firstName} {user.lastName}
                                 {user.id === currentUser?.id && (
-                                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(you)</span>
+                                  <span className="ml-2 text-xs text-gray-600 dark:text-gray-400">(you)</span>
                                 )}
                               </div>
-                              <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+                              <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center">
                                 <Mail className="h-3 w-3 mr-1" />
                                 {user.email}
                               </div>
@@ -415,17 +415,17 @@ export default function UserManagement() {
                             )}
                           </Button>
                         </td>
-                        <td className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                           {user.lastLogin ? (
                             <div className="flex items-center">
                               <Calendar className="h-3 w-3 mr-1" />
                               {new Date(user.lastLogin).toLocaleDateString()}
                             </div>
                           ) : (
-                            <span className="text-gray-400 dark:text-gray-500">Never</span>
+                            <span className="text-gray-600 dark:text-gray-500">Never</span>
                           )}
                         </td>
-                        <td className="whitespace-nowrap text-sm text-gray-400 dark:text-gray-500">
+                        <td className="whitespace-nowrap text-sm text-gray-600 dark:text-gray-500">
                           {new Date(user.createdAt).toLocaleDateString()}
                         </td>
                       </tr>
@@ -452,7 +452,7 @@ export default function UserManagement() {
                 >
                   {role.label}
                 </span>
-                <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">{role.description}</span>
+                <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">{role.description}</span>
               </div>
             ))}
           </div>
@@ -464,7 +464,7 @@ export default function UserManagement() {
         <Card className="mt-6">
           <CardHeader
             title="Invitations"
-            action={<Mail className="h-4 w-4 text-gray-400" />}
+            action={<Mail className="h-4 w-4 text-gray-600" />}
           />
           <CardBody className="p-0">
             <div className="overflow-x-auto">
@@ -487,7 +487,7 @@ export default function UserManagement() {
                               : inv.email}
                           </div>
                           {(inv.firstName || inv.lastName) && (
-                            <div className="text-sm text-gray-500 dark:text-gray-400">{inv.email}</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">{inv.email}</div>
                           )}
                         </div>
                       </td>
@@ -510,7 +510,7 @@ export default function UserManagement() {
                           {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      <td className="whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                         {new Date(inv.createdAt).toLocaleDateString()}
                       </td>
                       <td className="whitespace-nowrap">
@@ -538,7 +538,7 @@ export default function UserManagement() {
                           <button
                             onClick={() => cancelInviteMutation.mutate(inv.id)}
                             disabled={cancelInviteMutation.isPending}
-                            className="text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400"
+                            className="text-gray-600 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400"
                             title="Remove"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -666,7 +666,7 @@ export default function UserManagement() {
                 ))}
               </Select>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               An email will be sent with a link to set up their account. The invitation expires in 72 hours.
             </p>
           </form>

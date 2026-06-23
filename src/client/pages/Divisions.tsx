@@ -459,7 +459,7 @@ export default function Divisions() {
       >
         <Link
           to={`/tournaments/${id}`}
-          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Tournament
@@ -471,8 +471,10 @@ export default function Divisions() {
         <CardBody>
           <div className="flex flex-wrap gap-4 items-end">
             <div>
-              <Label>Belt Level</Label>
+              <Label htmlFor="filter-belt">Belt Level</Label>
               <Select
+                id="filter-belt"
+                aria-label="Filter divisions by belt level"
                 value={filter.beltLevel}
                 onChange={(e) =>
                   setFilter({ ...filter, beltLevel: e.target.value })
@@ -484,8 +486,10 @@ export default function Divisions() {
               </Select>
             </div>
             <div>
-              <Label>Gender</Label>
+              <Label htmlFor="filter-gender">Gender</Label>
               <Select
+                id="filter-gender"
+                aria-label="Filter divisions by gender"
                 value={filter.gender}
                 onChange={(e) =>
                   setFilter({ ...filter, gender: e.target.value })
@@ -497,8 +501,10 @@ export default function Divisions() {
               </Select>
             </div>
             <div>
-              <Label>Event</Label>
+              <Label htmlFor="filter-event">Event</Label>
               <Select
+                id="filter-event"
+                aria-label="Filter divisions by event type"
                 value={filter.eventType}
                 onChange={(e) =>
                   setFilter({ ...filter, eventType: e.target.value })
@@ -595,7 +601,7 @@ export default function Divisions() {
                 <div className="flex items-center justify-between w-full">
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-white">{category}</h3>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
                       {divs.length} division{divs.length !== 1 ? 's' : ''}
                     </span>
                   </div>
@@ -608,10 +614,10 @@ export default function Divisions() {
                     className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50"
                   >
                     <div className="flex items-center">
-                      <LayoutGrid className="h-5 w-5 text-gray-400 dark:text-gray-500 mr-3 flex-shrink-0" />
+                      <LayoutGrid className="h-5 w-5 text-gray-600 dark:text-gray-500 mr-3 flex-shrink-0" />
                       <div>
                         <p className="font-medium text-gray-900 dark:text-white">{div.name}</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
                           {div.ageMin}-{div.ageMax} years
                           {div.weightClass && ` • ${div.weightClass}`}
                         </p>
@@ -645,7 +651,7 @@ export default function Divisions() {
                       </span>
                       <button
                         onClick={() => setAssignTarget(div)}
-                        className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
+                        className="text-gray-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
                         title="Manage Competitors"
                         aria-label={`Manage competitors in ${div.name}`}
                       >
@@ -654,7 +660,7 @@ export default function Divisions() {
                       {div._count.assignments > 8 && (
                         <button
                           onClick={() => setSplitTarget(div)}
-                          className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
+                          className="text-gray-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
                           title="Split Division"
                         >
                           <Scissors className="h-4 w-4" />
@@ -662,7 +668,7 @@ export default function Divisions() {
                       )}
                       <button
                         onClick={() => setDeleteTarget(div)}
-                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 touch-target"
+                        className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 touch-target"
                         title="Delete Division"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -752,25 +758,25 @@ export default function Divisions() {
           <div className="p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
             <div>
               <div className="text-xl font-bold text-gray-900 dark:text-white">{previewData.divisions.length}</div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">Total Divisions</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400">Total Divisions</div>
             </div>
             <div>
               <div className="text-xl font-bold text-green-600 dark:text-green-400">
                 {previewData.divisions.filter(d => d.competitorCount >= 3 && d.competitorCount <= 8).length}
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">Optimal Size (3-8)</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400">Optimal Size (3-8)</div>
             </div>
             <div>
               <div className="text-xl font-bold text-yellow-600 dark:text-yellow-400">
                 {previewData.divisions.filter(d => d.competitorCount > 0 && d.competitorCount < 3).length}
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">Small (&lt;3)</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400">Small (&lt;3)</div>
             </div>
             <div>
               <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
                 {previewData.divisions.filter(d => d.competitorCount > 8).length}
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">Large (&gt;8)</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400">Large (&gt;8)</div>
             </div>
           </div>
 
@@ -817,7 +823,7 @@ export default function Divisions() {
                         </span>
                       ))}
                       {div.competitors.length > 5 && (
-                        <span className="text-gray-400 dark:text-gray-500"> +{div.competitors.length - 5} more</span>
+                        <span className="text-gray-600 dark:text-gray-500"> +{div.competitors.length - 5} more</span>
                       )}
                     </div>
                   )}
@@ -929,7 +935,7 @@ export default function Divisions() {
               {assignDivisionLoading ? (
                 <CardSkeleton />
               ) : (assignDivision?.assignments ?? []).length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400">No competitors assigned yet.</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">No competitors assigned yet.</p>
               ) : (
                 <div className="space-y-1 max-h-96 overflow-y-auto">
                   {assignDivision.assignments.map((a: any) => {
@@ -941,14 +947,14 @@ export default function Divisions() {
                           <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                             {c.firstName} {c.lastName}
                           </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                          <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
                             {c.belt}{c.schoolDojang && ` · ${c.schoolDojang}`}
                           </p>
                         </div>
                         <button
                           onClick={() => unassignMutation.mutate(a.id)}
                           disabled={unassignMutation.isPending}
-                          className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1"
+                          className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 p-1"
                           title="Remove from division"
                           aria-label={`Remove ${c.firstName} ${c.lastName}`}
                         >
@@ -967,7 +973,7 @@ export default function Divisions() {
                 Available ({availableRegistrations.length})
               </h3>
               <div className="relative mb-2">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-600" />
                 <Input
                   type="text"
                   value={assignmentSearch}
@@ -977,7 +983,7 @@ export default function Divisions() {
                 />
               </div>
               {availableRegistrations.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   {assignmentSearch ? 'No matches.' : 'All eligible competitors already assigned.'}
                 </p>
               ) : (
@@ -1005,7 +1011,7 @@ export default function Divisions() {
                           <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                             {c.firstName} {c.lastName}
                           </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                          <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
                             {c.belt}{c.schoolDojang && ` · ${c.schoolDojang}`}
                             {c.weightLbs != null && ` · ${c.weightLbs} lbs`}
                           </p>

@@ -308,7 +308,7 @@ export default function TournamentSettings() {
       >
         <Link
           to={`/tournaments/${id}`}
-          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Tournament
@@ -337,7 +337,7 @@ export default function TournamentSettings() {
           >
             <Settings className="inline h-4 w-4 mr-1.5" />
             Setup
-            <span className="ml-2 text-xs text-gray-400">(quick)</span>
+            <span className="ml-2 text-xs text-gray-600">(quick)</span>
           </button>
           <button
             type="button"
@@ -351,7 +351,7 @@ export default function TournamentSettings() {
           >
             <Award className="inline h-4 w-4 mr-1.5" />
             Categorization + Brackets
-            <span className="ml-2 text-xs text-gray-400">(advanced)</span>
+            <span className="ml-2 text-xs text-gray-600">(advanced)</span>
           </button>
         </nav>
       </div>
@@ -367,13 +367,15 @@ export default function TournamentSettings() {
         <CardBody>
           <div className="max-w-md space-y-4">
             <div>
-              <Label>
+              <Label htmlFor="division-threshold">
                 Division Split Threshold
-                <span className="text-gray-500 dark:text-gray-400 font-normal ml-2">
+                <span className="text-gray-600 dark:text-gray-400 font-normal ml-2">
                   (max competitors per division)
                 </span>
               </Label>
               <Input
+                id="division-threshold"
+                aria-label="Division split threshold"
                 type="number"
                 min="2"
                 max="16"
@@ -383,14 +385,14 @@ export default function TournamentSettings() {
                 }
                 className="w-32"
               />
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                 Divisions with more competitors will be split (e.g., DIV1, DIV2)
               </p>
             </div>
             <div>
               <Label htmlFor="registrationFee">
                 Registration Fee Notes
-                <span className="text-gray-500 dark:text-gray-400 font-normal ml-2">
+                <span className="text-gray-600 dark:text-gray-400 font-normal ml-2">
                   (shown to parents during registration)
                 </span>
               </Label>
@@ -402,7 +404,7 @@ export default function TournamentSettings() {
                 placeholder="e.g. $25, pay at door — or leave empty for free"
                 maxLength={200}
               />
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                 Free-text note displayed on the public registration page. We don't
                 process payment here — this is a "pay at the door" or "free event"
                 hint.
@@ -424,6 +426,8 @@ export default function TournamentSettings() {
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Input
+                  id="share-link"
+                  aria-label="Public scoreboard share link"
                   readOnly
                   value={`${window.location.origin}/scoreboard/${shareSlug}`}
                   className="font-mono text-sm flex-1"
@@ -461,7 +465,7 @@ export default function TournamentSettings() {
                 >
                   Revoke link
                 </button>
-                <span className="text-gray-500 dark:text-gray-400 text-xs">
+                <span className="text-gray-600 dark:text-gray-400 text-xs">
                   Anyone with this URL can view the live scoreboard.
                 </span>
               </div>
@@ -475,7 +479,7 @@ export default function TournamentSettings() {
               >
                 {generateSlugMutation.isPending ? 'Generating...' : 'Generate share link'}
               </Button>
-              <span className="text-sm text-gray-500 dark:text-gray-400">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
                 Default off. Enable when ready to share with spectators.
               </span>
             </div>
@@ -556,7 +560,7 @@ export default function TournamentSettings() {
                     <td>
                       <button
                         onClick={() => removeAgeGroup(index)}
-                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 touch-target"
+                        className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 touch-target"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -582,7 +586,7 @@ export default function TournamentSettings() {
         />
         {settings.weightClasses.length === 0 ? (
           <CardBody>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
               No custom weight classes. Using system defaults.
             </p>
             <Button variant="secondary" size="sm" onClick={loadDefaultWeightClasses}>
@@ -665,7 +669,7 @@ export default function TournamentSettings() {
                       <td>
                         <button
                           onClick={() => removeWeightClass(index)}
-                          className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 touch-target"
+                          className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 touch-target"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>

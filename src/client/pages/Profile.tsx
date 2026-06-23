@@ -60,7 +60,7 @@ export default function Profile() {
   if (!user) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500 dark:text-gray-400">Please log in to view your profile.</p>
+        <p className="text-gray-600 dark:text-gray-400">Please log in to view your profile.</p>
         <Button as={Link} to="/login" variant="primary" className="mt-4">
           Go to Login
         </Button>
@@ -77,7 +77,7 @@ export default function Profile() {
       >
         <Link
           to="/"
-          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Dashboard
@@ -91,28 +91,28 @@ export default function Profile() {
           <div className="space-y-4">
             <div className="flex items-center">
               <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg mr-3">
-                <Mail className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                <Mail className="h-5 w-5 text-gray-600 dark:text-gray-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Email</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Email</p>
                 <p className="font-medium text-gray-900 dark:text-white">{user.email}</p>
               </div>
             </div>
             <div className="flex items-center">
               <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg mr-3">
-                <Shield className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                <Shield className="h-5 w-5 text-gray-600 dark:text-gray-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Role</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Role</p>
                 <p className="font-medium text-gray-900 dark:text-white capitalize">{user.role}</p>
               </div>
             </div>
             <div className="flex items-center">
               <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg mr-3">
-                <Calendar className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                <Calendar className="h-5 w-5 text-gray-600 dark:text-gray-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Member Since</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Member Since</p>
                 <p className="font-medium text-gray-900 dark:text-white">
                   {user.createdAt
                     ? new Date(user.createdAt).toLocaleDateString()

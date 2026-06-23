@@ -59,7 +59,7 @@ export default function StatTile({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
             {label}
           </p>
           <p
@@ -92,7 +92,7 @@ export default function StatTile({
       </div>
       {trend && (
         typeof trend === 'string' ? (
-          <div className="mt-3 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+          <div className="mt-3 flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400">
             {trend}
           </div>
         ) : (
@@ -104,7 +104,7 @@ export default function StatTile({
             <TrendingDown className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
           )}
           {trend.direction === 'flat' && (
-            <Minus className="h-3.5 w-3.5 text-slate-400" />
+            <Minus className="h-3.5 w-3.5 text-slate-600" />
           )}
           <span
             className={[

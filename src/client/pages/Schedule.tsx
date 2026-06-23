@@ -258,7 +258,7 @@ export default function Schedule() {
       >
         <Link
           to={`/tournaments/${id}`}
-          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
           aria-label="Back to Tournament"
         >
           <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" />
@@ -416,7 +416,7 @@ export default function Schedule() {
                     {scheduleByRing[Number(ring)].map((div) => (
                       <div key={div.divisionId} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
                             {div.startTime} - {div.endTime}
                           </span>
                           <span
@@ -432,7 +432,7 @@ export default function Schedule() {
                         <p className="font-medium text-gray-900 dark:text-white text-sm">
                           {div.divisionName}
                         </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                           {div.competitorCount} competitors •{' '}
                           {div.estimatedDurationMinutes} min
                         </p>

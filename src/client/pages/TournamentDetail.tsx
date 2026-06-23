@@ -269,7 +269,7 @@ export default function TournamentDetail() {
       <div>
         <Link
           to="/tournaments"
-          className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+          className="inline-flex items-center text-sm text-gray-600 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
           Back to Tournaments
@@ -326,9 +326,9 @@ export default function TournamentDetail() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-900 dark:text-slate-100">Director Dashboard</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Tournament control center</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Tournament control center</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-indigo-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-indigo-600 transition-colors flex-shrink-0" />
         </Link>
 
         <Link
@@ -340,9 +340,9 @@ export default function TournamentDetail() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-900 dark:text-slate-100">Check-In</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Verify competitor attendance</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Verify competitor attendance</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-blue-600 transition-colors flex-shrink-0" />
         </Link>
 
         <Link
@@ -354,9 +354,9 @@ export default function TournamentDetail() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-900 dark:text-slate-100">Scorekeeper</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Record match results</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Record match results</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-green-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-green-600 transition-colors flex-shrink-0" />
         </Link>
 
         <a
@@ -370,9 +370,9 @@ export default function TournamentDetail() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-900 dark:text-slate-100">Export Brackets</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Download all bracket PDFs</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Download all bracket PDFs</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-purple-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-purple-600 transition-colors flex-shrink-0" />
         </a>
 
         <Link
@@ -385,9 +385,9 @@ export default function TournamentDetail() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-900 dark:text-slate-100">Live Scoreboard</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Public display for spectators</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Public display for spectators</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-yellow-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-yellow-600 transition-colors flex-shrink-0" />
         </Link>
 
         <Link
@@ -399,9 +399,9 @@ export default function TournamentDetail() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-900 dark:text-slate-100">Results</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">View standings and medals</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">View standings and medals</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-red-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-red-600 transition-colors flex-shrink-0" />
         </Link>
       </div>
 
@@ -561,7 +561,7 @@ export default function TournamentDetail() {
                         onClick={() => setDeleteTarget(reg)}
                       />
                     </div>
-                    <div className="text-sm text-gray-500 space-y-1">
+                    <div className="text-sm text-gray-600 space-y-1">
                       <div className="flex justify-between">
                         <span>Age</span>
                         <span className="text-gray-900 dark:text-white">{reg.ageAtTournament || '-'}</span>
@@ -591,7 +591,7 @@ export default function TournamentDetail() {
                         className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.patterns
                             ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
                         }`}
                       >
                         {reg.patterns ? '✓ ' : ''}Patterns
@@ -607,7 +607,7 @@ export default function TournamentDetail() {
                         className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.sparring
                             ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
                         }`}
                       >
                         {reg.sparring ? '✓ ' : ''}Sparring
@@ -622,13 +622,13 @@ export default function TournamentDetail() {
                 <DataTable>
                   <TableHead>
                     <tr>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Name</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Age</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Belt</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">Weight</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-left">School</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-center">Patterns</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-center">Sparring</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Name</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Age</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Belt</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Weight</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">School</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-center">Patterns</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-center">Sparring</th>
                       <th className="px-4 py-2.5 w-10"></th>
                     </tr>
                   </TableHead>
@@ -826,7 +826,7 @@ export default function TournamentDetail() {
                           : `Select All (${filteredAvailable.length})`}
                       </button>
                       {modalSearch && (
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-gray-600">
                           Showing {filteredAvailable.length} of {availableCompetitors.length}
                         </span>
                       )}
@@ -863,7 +863,7 @@ export default function TournamentDetail() {
                           {c.belt}
                         </span>
                         {c.schoolDojang && (
-                          <span className="ml-2 text-sm text-gray-500 dark:text-gray-400 hidden sm:inline truncate max-w-[120px]">
+                          <span className="ml-2 text-sm text-gray-600 dark:text-gray-400 hidden sm:inline truncate max-w-[120px]">
                             {c.schoolDojang}
                           </span>
                         )}
@@ -952,7 +952,7 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
         title="Tournament day"
         description="Live operational view · auto-refreshes every 10s"
         action={
-          <span className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span className="flex items-center gap-1.5 text-xs text-slate-600">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
           </span>
         }
@@ -962,17 +962,17 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
         <div className="lg:col-span-2 p-4 rounded-xl bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-slate-900/20 border border-slate-200/60 dark:border-slate-800">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Check-in</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Check-in</div>
               <div className="text-2xl font-bold tabular-nums mt-0.5">
                 <span className="text-slate-900 dark:text-white">{data.checkIn.checkedIn}</span>
-                <span className="text-slate-400"> / {data.checkIn.total}</span>
+                <span className="text-slate-600"> / {data.checkIn.total}</span>
               </div>
             </div>
             <div className="text-right">
               <div className="text-3xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                 {checkInPct}%
               </div>
-              <div className="text-[10px] text-slate-500 uppercase tracking-wider">complete</div>
+              <div className="text-[10px] text-slate-600 uppercase tracking-wider">complete</div>
             </div>
           </div>
           <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -981,7 +981,7 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
               style={{ width: `${checkInPct}%` }}
             />
           </div>
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-600">
             <span><strong className="text-slate-900 dark:text-white tabular-nums">{data.checkIn.checkedIn}</strong> checked in</span>
             <span className="text-slate-300">·</span>
             <span><strong className="text-amber-600 dark:text-amber-400 tabular-nums">{data.checkIn.notCheckedIn}</strong> not yet</span>
@@ -1002,7 +1002,7 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
           <div className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Matches</div>
           <div className="text-2xl font-bold tabular-nums mt-0.5">
             <span className="text-slate-900 dark:text-white">{data.matches.completed}</span>
-            <span className="text-slate-400"> / {data.matches.total}</span>
+            <span className="text-slate-600"> / {data.matches.total}</span>
           </div>
           <div className="mt-2 h-1.5 bg-indigo-100 dark:bg-indigo-950 rounded-full overflow-hidden">
             <div
@@ -1010,14 +1010,14 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
               style={{ width: `${data.matches.total > 0 ? (data.matches.completed / data.matches.total) * 100 : 0}%` }}
             />
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
             {data.matches.inProgress > 0 && (
               <span className="text-amber-600 dark:text-amber-400 font-medium">
                 {data.matches.inProgress} live
               </span>
             )}
             <span>{data.matches.ready} ready</span>
-            <span className="text-slate-400">{data.matches.pending} pending</span>
+            <span className="text-slate-600">{data.matches.pending} pending</span>
           </div>
         </div>
       </CardBody>
@@ -1040,10 +1040,10 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
               <div key={u.ring} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
                 <div className="flex items-center gap-2 mb-1.5">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Ring {u.ring}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Ring {u.ring}</span>
                 </div>
                 <div className="text-xs text-slate-600 dark:text-slate-300 truncate">{u.division}</div>
-                <div className="text-[11px] text-slate-400 mt-0.5">Match #{u.matchNumber}</div>
+                <div className="text-[11px] text-slate-600 mt-0.5">Match #{u.matchNumber}</div>
               </div>
             ))}
           </div>
@@ -1062,10 +1062,10 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
               <div key={m.registrationId} className="flex items-center justify-between px-3 py-2 rounded-md bg-white dark:bg-slate-900 border border-red-200/60 dark:border-red-900/40">
                 <div className="min-w-0 flex-1">
                   <div className="font-medium text-slate-900 dark:text-white truncate">{m.name}</div>
-                  <div className="text-slate-500 truncate">{m.school || '—'}</div>
+                  <div className="text-slate-600 truncate">{m.school || '—'}</div>
                 </div>
                 <div className="text-right tabular-nums ml-2">
-                  <div className="text-[11px] text-slate-500">
+                  <div className="text-[11px] text-slate-600">
                     <span className="line-through opacity-60">{m.weightAtRegistration}</span>
                     {' → '}
                     <span className="text-slate-900 dark:text-white">{m.checkInWeight}</span>
