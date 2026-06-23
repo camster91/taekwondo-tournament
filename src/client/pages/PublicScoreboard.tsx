@@ -447,17 +447,18 @@ export default function PublicScoreboard() {
               <Users className="h-5 w-5 text-purple-400 mr-2" />
               <h3 className="text-xl font-semibold text-purple-400">DIVISION STATUS</h3>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {divisions
-                ?.filter((d) => d.bracket)
-                .map((division) => {
-                  const completed =
-                    division.bracket?.matches?.filter((m) => m.status === 'completed').length || 0;
-                  const total = division.bracket?.matches.length || 0;
-                  const isActive = division.bracket?.matches.some(
-                    (m) => m.status === 'in_progress'
-                  );
-                  const isDone = completed === total;
+            {divisions && divisions.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {divisions
+                  ?.filter((d) => d.bracket)
+                  .map((division) => {
+                    const completed =
+                      division.bracket?.matches?.filter((m) => m.status === 'completed').length || 0;
+                    const total = division.bracket?.matches.length || 0;
+                    const isActive = division.bracket?.matches.some(
+                      (m) => m.status === 'in_progress'
+                    );
+                    const isDone = completed === total;
 
                   return (
                     <div
@@ -488,7 +489,15 @@ export default function PublicScoreboard() {
                     </div>
                   );
                 })}
-            </div>
+              </div>
+            ) : (
+              <div className="bg-gray-900/30 border border-gray-700/50 rounded-lg p-6 text-center">
+                <Users className="h-8 w-8 text-gray-600 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">
+                  No divisions generated yet. The director is still setting up categories.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

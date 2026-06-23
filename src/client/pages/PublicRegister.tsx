@@ -84,6 +84,11 @@ export default function PublicRegister() {
 
   // 2-step form: step 1 = kid info, step 2 = parent + consent
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  // Track how many competitors this device has registered in this
+  // session so the success screen can show "2 registered from this
+  // device" — gives parents confidence when registering multiple
+  // siblings and discourages accidental double-submits.
+  const [registeredCount, setRegisteredCount] = useState(0);
 
   const [formData, setFormData] = useState({
     tournamentId: preselectedTournamentId || '',
@@ -109,6 +114,62 @@ export default function PublicRegister() {
     () => tournaments.find((t) => t.id === formData.tournamentId),
     [tournaments, formData.tournamentId]
   );
+
+  // Real-time age-band preview. Mirrors the server's DEFAULT_AGE_GROUPS
+  // / BB_AGE_GROUPS logic so the displayed band matches what
+  // autoCategorize would assign on submit.
+  const ageBandPreview = useMemo(() => {
+    if (!formData.dateOfBirth) return null;
+    const dob = new Date(formData.dateOfBirth);
+    if (isNaN(dob.getTime())) return null;
+    const now = new Date();
+    let age = now.getFullYear() - dob.getFullYear();
+    // Adjust if birthday hasn't occurred yet this year.
+    const monthDiff = now.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
+      age--;
+    }
+    if (age < 4 || age > 99) return null;
+
+    // Pick CB vs BB grouping based on belt. "Black" or "Poom" → BB.
+    // Mirrors src/shared/constants/belts.ts isBlackBelt().
+    const beltLower = formData.belt.toLowerCase();
+    const isBB = beltLower.includes('black') || beltLower.startsWith('poom');
+    const groups = isBB
+      ? [
+          { min: 11, max: 11, label: '11 and Under' },
+          { min: 12, max: 13, label: '12-13' },
+          { min: 14, max: 15, label: '14-15' },
+          { min: 16, max: 17, label: '16-17' },
+          { min: 18, max: 35, label: '18-35' },
+          { min: 36, max: 99, label: '36+' },
+        ]
+      : [
+          { min: 4, max: 5, label: '4-5' },
+          { min: 6, max: 7, label: '6-7' },
+          { min: 8, max: 9, label: '8-9' },
+          { min: 10, max: 11, label: '10-11' },
+          { min: 12, max: 14, label: '12-14' },
+          { min: 15, max: 17, label: '15-17' },
+          { min: 18, max: 35, label: '18-35' },
+          { min: 36, max: 99, label: '36+' },
+        ];
+    const current = groups.find((g) => age >= g.min && age <= g.max);
+    if (!current) return null;
+
+    // Next band up: if there's a group whose min is the next step,
+    // surface it for the "compete with older" hint.
+    const idx = groups.indexOf(current);
+    const next = idx >= 0 && idx < groups.length - 1 ? groups[idx + 1] : null;
+    const tier = isBB ? 'Black Belt (BB)' : 'Colored Belt (CB)';
+
+    return {
+      label: current.label,
+      tier,
+      nextBandLabel: next?.label ?? null,
+    };
+  }, [formData.dateOfBirth, formData.belt]);
+
 
   const sportProfile = useMemo(() => {
     const slug = selectedTournament?.sportProfileSlug || 'taekwondo';
@@ -240,6 +301,9 @@ export default function PublicRegister() {
       }
 
       setResult(data);
+      // Increment on success so the success screen can show the
+      // running count and offer a fast re-entry path.
+      setRegisteredCount((c) => c + 1);
     } catch {
       setError('Network error. Please try again.');
       queueMicrotask(() => focusErrorRegion());
@@ -314,37 +378,81 @@ export default function PublicRegister() {
                 </div>
               </div>
 
-              <Button
-                variant="primary"
-                className="w-full"
-                onClick={() => {
-                  setResult(null);
-                  setStep(1);
-                  setError(null);
-                  setValidationErrors([]);
-                  setFormData({
-                    tournamentId: formData.tournamentId,
-                    firstName: '',
-                    lastName: '',
-                    gender: '',
-                    dateOfBirth: '',
-                    belt: '',
-                    danRank: 1,
-                    heightInches: '',
-                    weightLbs: '',
-                    schoolDojang: '',
-                    specialNeeds: '',
-                    patterns: false,
-                    sparring: false,
-                    parentName: '',
-                    parentEmail: '',
-                    parentPhone: '',
-                    competeWithOlder: false,
-                  });
-                }}
-              >
-                Register Another Competitor
-              </Button>
+              {registeredCount > 1 && (
+                <p className="text-sm text-indigo-700 dark:text-indigo-300 mb-4 font-medium">
+                  {registeredCount} competitors registered from this device.
+                </p>
+              )}
+
+              <div className="space-y-3">
+                <Button
+                  variant="primary"
+                  className="w-full"
+                  onClick={() => {
+                    // Reset kid + event fields, KEEP parent + tournament.
+                    // Most families register 2-3 kids and the parent/tournament
+                    // info is identical across siblings.
+                    setResult(null);
+                    setStep(1);
+                    setError(null);
+                    setValidationErrors([]);
+                    setFormData({
+                      ...formData,
+                      firstName: '',
+                      lastName: '',
+                      dateOfBirth: '',
+                      danRank: 1,
+                      heightInches: '',
+                      weightLbs: '',
+                      schoolDojang: '',
+                      specialNeeds: '',
+                      patterns: false,
+                      sparring: false,
+                      competeWithOlder: false,
+                    });
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    // Re-focus first field for fast re-entry.
+                    queueMicrotask(() => {
+                      const el = document.querySelector<HTMLInputElement>('input[name="firstName"]');
+                      el?.focus();
+                    });
+                  }}
+                >
+                  Register Another Competitor
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setRegisteredCount(0);
+                    setResult(null);
+                    setStep(1);
+                    setError(null);
+                    setValidationErrors([]);
+                    setFormData({
+                      tournamentId: preselectedTournamentId || '',
+                      firstName: '',
+                      lastName: '',
+                      gender: '',
+                      dateOfBirth: '',
+                      belt: '',
+                      danRank: 1,
+                      heightInches: '',
+                      weightLbs: '',
+                      schoolDojang: '',
+                      specialNeeds: '',
+                      patterns: false,
+                      sparring: false,
+                      parentName: '',
+                      parentEmail: '',
+                      parentPhone: '',
+                      competeWithOlder: false,
+                    });
+                  }}
+                >
+                  Done — Exit Registration
+                </Button>
+              </div>
             </CardBody>
           </Card>
         </div>
@@ -530,6 +638,28 @@ export default function PublicRegister() {
                       aria-required="true"
                       autoComplete="bday"
                     />
+                    {/* Real-time age-band preview. Shows which age band the
+                        competitor would land in based on DOB + belt (which
+                        picks CB vs BB grouping). Computed client-side from
+                        the same DEFAULT_AGE_GROUPS the server uses, so the
+                        preview matches the eventual division exactly. */}
+                    {formData.dateOfBirth && ageBandPreview && (
+                      <p
+                        className="text-xs text-indigo-700 dark:text-indigo-300 mt-1.5 font-medium"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        Will compete in: <span className="font-semibold">{ageBandPreview.label}</span>
+                        {ageBandPreview.tier && (
+                          <> · {ageBandPreview.tier}</>
+                        )}
+                        {formData.competeWithOlder && (
+                          <span className="text-amber-700 dark:text-amber-400">
+                            {' '}· eligible to compete up to {ageBandPreview.nextBandLabel}
+                          </span>
+                        )}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
