@@ -78,6 +78,9 @@ const BELT_OPTIONS = [
   'Red',
   'Red / Single Black Stripe',
   'Red / Double Black Stripe',
+  'Brown',
+  'Brown / Single Black Stripe',
+  'Brown / Double Black Stripe',
   'Black',
 ];
 

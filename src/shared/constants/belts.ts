@@ -15,6 +15,9 @@ export const COLORED_BELTS = [
   'Red',
   'Red / Single Black Stripe',
   'Red / Double Black Stripe',
+  'Brown',
+  'Brown / Single Black Stripe',
+  'Brown / Double Black Stripe',
 ] as const;
 
 export const BLACK_BELT_RANKS = [1, 2, 3, 4, 5, 6] as const;
@@ -26,6 +29,7 @@ export const BELT_CATEGORIES = {
   Green: ['Green', 'Green / Single Blue Stripe', 'Green / Double Blue Stripe'],
   Blue: ['Blue', 'Blue / Single Red Stripe', 'Blue / Double Red Stripe'],
   Red: ['Red', 'Red / Single Black Stripe', 'Red / Double Black Stripe'],
+  Brown: ['Brown', 'Brown / Single Black Stripe', 'Brown / Double Black Stripe'],
   Black: ['Black'],
 } as const;
 
@@ -41,6 +45,8 @@ export const BELT_ALIASES: Record<string, string> = {
   'BLUE': 'Blue',
   'R': 'Red',
   'RED': 'Red',
+  'BROWN': 'Brown',
+  'BR': 'Brown',
   'BL': 'Black',
   'BLACK': 'Black',
   'BB': 'Black',
@@ -48,12 +54,14 @@ export const BELT_ALIASES: Record<string, string> = {
 
 // Common belt groupings used in divisions
 export const BELT_GROUPINGS = {
-  'All Belts': ['White', 'Yellow', 'Green', 'Blue', 'Red'],
+  'All Belts': ['White', 'Yellow', 'Green', 'Blue', 'Red', 'Brown'],
   'White/Yellow': ['White', 'Yellow'],
   'Green/Blue': ['Green', 'Blue'],
   'Blue/Red': ['Blue', 'Red'],
   'White to Blue': ['White', 'Yellow', 'Green', 'Blue'],
   'Yellow to Red': ['Yellow', 'Green', 'Blue', 'Red'],
+  'Red to Brown': ['Red', 'Brown'],
+  'Brown/Black': ['Brown', 'Black'],
 } as const;
 
 export function isBlackBelt(belt: string): boolean {
