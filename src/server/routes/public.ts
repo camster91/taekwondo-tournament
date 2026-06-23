@@ -58,8 +58,13 @@ router.get('/tournaments', async (req: Request, res: Response) => {
 router.get('/tournaments/:id', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
+  // Accept either a tournament UUID or a publicSlug. The slug path is
+  // needed by the share-link client-side resolver (PublicScoreboardBySlug)
+  // which redirects /scoreboard/:slug -> /display/:tournamentId. Looking
+  // up by slug here means we don't need a separate route.
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id);
   const tournament = await prisma.tournament.findUnique({
-    where: { id: req.params.id },
+    where: isUuid ? { id: req.params.id } : { publicSlug: req.params.id },
     select: {
       id: true,
       name: true,

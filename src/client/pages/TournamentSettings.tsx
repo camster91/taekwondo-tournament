@@ -8,6 +8,9 @@ import {
   Trash2,
   Settings,
   RotateCcw,
+  Link as LinkIcon,
+  Copy,
+  Check as CheckIcon,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -80,6 +83,14 @@ export default function TournamentSettings() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
+  // Share link state — cached locally so the UI updates without a refetch.
+  // shareSlug is hydrated from the tournament record on first load.
+  const [shareSlug, setShareSlug] = useState<string | null>(null);
+  const [revokeOpen, setRevokeOpen] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+
+  const { addToast } = useToast();
+
   const { data: tournament, isLoading } = useQuery<Tournament>({
     queryKey: ['tournament', id],
     queryFn: async () => {
@@ -103,6 +114,59 @@ export default function TournamentSettings() {
       }
     }
   }, [tournament]);
+
+  // Hydrate shareSlug from tournament data on first load
+  useEffect(() => {
+    if (tournament?.publicSlug) {
+      setShareSlug(tournament.publicSlug);
+    }
+  }, [tournament?.publicSlug]);
+
+  const generateSlugMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/tournaments/${id}/public-slug`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error('Failed to generate share link');
+      const data = await res.json();
+      return data.publicSlug as string;
+    },
+    onSuccess: (slug) => {
+      setShareSlug(slug);
+      addToast('Share link generated', 'success');
+    },
+    onError: () => addToast('Failed to generate share link', 'error'),
+  });
+
+  const revokeSlugMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/tournaments/${id}/public-slug`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error('Failed to revoke share link');
+    },
+    onSuccess: () => {
+      setShareSlug(null);
+      setCopyState('idle');
+      addToast('Share link revoked', 'success');
+    },
+    onError: () => addToast('Failed to revoke share link', 'error'),
+  });
+
+  const copyShareLink = async (slug: string) => {
+    const url = `${window.location.origin}/scoreboard/${slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyState('copied');
+      addToast('Link copied to clipboard', 'success');
+      setTimeout(() => setCopyState('idle'), 2000);
+    } catch {
+      // Fallback for browsers without clipboard API permission
+      addToast('Copy failed — please copy manually', 'error');
+    }
+  };
 
   const saveMutation = useMutation({
     mutationFn: async (newSettings: TournamentSettings) => {
@@ -277,6 +341,90 @@ export default function TournamentSettings() {
           </div>
         </CardBody>
       </Card>
+
+      {/* Share Link — public scoreboard URL */}
+      <Card className="mb-6">
+        <CardHeader
+          title="Share Link"
+          icon={LinkIcon}
+          description="Generate a public read-only URL for the live scoreboard. No login required for spectators."
+        />
+        <CardBody>
+          {shareSlug ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={`${window.location.origin}/scoreboard/${shareSlug}`}
+                  className="font-mono text-sm flex-1"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => copyShareLink(shareSlug)}
+                  className="flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  {copyState === 'copied' ? (
+                    <>
+                      <CheckIcon className="h-4 w-4 text-green-600" /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" /> Copy
+                    </>
+                  )}
+                </Button>
+              </div>
+              <div className="flex items-center gap-4 text-sm flex-wrap">
+                <a
+                  href={`/scoreboard/${shareSlug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  Open in new tab
+                </a>
+                <button
+                  onClick={() => setRevokeOpen(true)}
+                  className="text-red-600 dark:text-red-400 hover:underline"
+                  type="button"
+                >
+                  Revoke link
+                </button>
+                <span className="text-gray-500 dark:text-gray-400 text-xs">
+                  Anyone with this URL can view the live scoreboard.
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4 flex-wrap">
+              <Button
+                variant="primary"
+                onClick={() => generateSlugMutation.mutate()}
+                disabled={generateSlugMutation.isPending}
+              >
+                {generateSlugMutation.isPending ? 'Generating...' : 'Generate share link'}
+              </Button>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                Default off. Enable when ready to share with spectators.
+              </span>
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      <ConfirmDialog
+        isOpen={revokeOpen}
+        title="Revoke share link?"
+        message="This will invalidate the current URL. Anyone with the old link will see a 'not found' page. You can generate a new link at any time."
+        confirmText="Revoke"
+        cancelText="Cancel"
+        onConfirm={() => {
+          setRevokeOpen(false);
+          revokeSlugMutation.mutate();
+        }}
+        onCancel={() => setRevokeOpen(false)}
+      />
 
       {/* Age Groups */}
       <Card className="mb-6">

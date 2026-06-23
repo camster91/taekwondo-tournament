@@ -43,6 +43,7 @@ import VerifyMagicLink from './pages/VerifyMagicLink';
 import Scorekeeper from './pages/Scorekeeper';
 import CheckIn from './pages/CheckIn';
 import PublicScoreboard from './pages/PublicScoreboard';
+import PublicScoreboardBySlug from './pages/PublicScoreboardBySlug';
 import Results from './pages/Results';
 import UserManagement from './pages/UserManagement';
 import Profile from './pages/Profile';
@@ -457,6 +458,7 @@ function AppRoutes() {
     location.pathname.startsWith('/scorekeeper') ||
     location.pathname.startsWith('/checkin') ||
     location.pathname.startsWith('/display') ||
+    location.pathname.startsWith('/scoreboard') ||
     // Legacy nested paths — matched here so the redirect routes can fire
     // (and render without the AdminLayout) before falling into the admin
     // Route tree that would otherwise show a 404.
@@ -472,6 +474,7 @@ function AppRoutes() {
         <Route path="/scorekeeper/:tournamentId" element={<ProtectedRoute><Scorekeeper /></ProtectedRoute>} />
         <Route path="/checkin/:tournamentId" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
         <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
+        <Route path="/scoreboard/:publicSlug" element={<PublicScoreboardBySlug />} />
         {/* Legacy URL redirects — old paths used /tournaments/:id/<page>.
             Closes #39 where a stale URL or bookmark hit a 404. */}
         <Route path="/tournaments/:id/scorekeeper" element={<LegacyRedirect toKey="scorekeeper" />} />
