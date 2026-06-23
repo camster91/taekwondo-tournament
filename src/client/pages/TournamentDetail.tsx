@@ -292,6 +292,20 @@ export default function TournamentDetail() {
               <Calendar className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Schedule</span>
             </Button>
+            {/* Preview public display — opens the read-only scoreboard in a new
+                tab so the director can check what spectators will see without
+                having to log out or copy-paste a URL. */}
+            <Button
+              as="a"
+              href={`/display/${id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="secondary"
+            >
+              <Monitor className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">View Public</span>
+              <ExternalLink className="h-3 w-3 ml-1 opacity-50" />
+            </Button>
             <Button as={Link} to={`/tournaments/${id}/divisions`} variant="primary">
               <LayoutGrid className="h-4 w-4 mr-2" />
               Manage Divisions

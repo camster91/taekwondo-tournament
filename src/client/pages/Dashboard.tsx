@@ -12,6 +12,7 @@ import {
   TrendingUp,
   Sparkles,
   Zap,
+  ListChecks,
   FileSpreadsheet,
   Check,
   Activity,
@@ -273,10 +274,14 @@ export default function Dashboard() {
             <CardHeader title="Quick actions" as="h2" />
             <CardBody className="px-3 pb-3 space-y-1">
               {[
-                { label: 'Import competitors', sub: 'Excel file', icon: FileSpreadsheet, to: '/competitors', tone: 'from-emerald-500 to-teal-500' },
-                { label: 'Create tournament', sub: 'New event', icon: Trophy, to: '/tournaments', tone: 'from-indigo-500 to-violet-500' },
-                { label: 'Add competitor', sub: 'Single entry', icon: Plus, to: '/competitors', tone: 'from-amber-500 to-orange-500', isAction: true },
-              ].map((a) => (
+                              { label: 'Import competitors', sub: 'Excel file', icon: FileSpreadsheet, to: '/competitors', tone: 'from-emerald-500 to-teal-500' },
+                              // "Create tournament" was here but it duplicates the hero
+                              // CTA + Getting Started step 2 — same prompt three times
+                              // is confusing. Replaced with "View all tournaments"
+                              // which is what directors want once they have a few.
+                              { label: 'View all tournaments', sub: 'Manage + search', icon: ListChecks, to: '/tournaments', tone: 'from-indigo-500 to-violet-500' },
+                              { label: 'Add competitor', sub: 'Single entry', icon: Plus, to: '/competitors', tone: 'from-amber-500 to-orange-500', isAction: true },
+                            ].map((a) => (
                 <Link
                   key={a.label}
                   to={a.to}
