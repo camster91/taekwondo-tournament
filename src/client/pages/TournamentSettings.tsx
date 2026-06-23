@@ -11,6 +11,7 @@ import {
   Link as LinkIcon,
   Copy,
   Check as CheckIcon,
+  Award,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -77,6 +78,8 @@ const DEFAULT_SETTINGS: TournamentSettings = {
   registrationFee: '',
 };
 
+type SettingsTab = 'setup' | 'rules';
+
 export default function TournamentSettings() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -92,6 +95,12 @@ export default function TournamentSettings() {
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
 
   const { addToast } = useToast();
+
+  // Tab state — Settings page has too many sections to be useful as a
+  // single scroll. Two tabs: 'setup' (the lightweight director-facing
+  // fields) and 'rules' (the rules engine — a sub-component with its
+  // own save flow).
+  const [tab, setTab] = useState<SettingsTab>('setup');
 
   const { data: tournament, isLoading } = useQuery<Tournament>({
     queryKey: ['tournament', id],
@@ -313,6 +322,42 @@ export default function TournamentSettings() {
         </div>
       )}
 
+      {/* Tabs */}
+      <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
+        <nav className="flex gap-6" aria-label="Settings tabs">
+          <button
+            type="button"
+            onClick={() => setTab('setup')}
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              tab === 'setup'
+                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+            }`}
+            aria-current={tab === 'setup' ? 'page' : undefined}
+          >
+            <Settings className="inline h-4 w-4 mr-1.5" />
+            Setup
+            <span className="ml-2 text-xs text-gray-400">(quick)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('rules')}
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              tab === 'rules'
+                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+            }`}
+            aria-current={tab === 'rules' ? 'page' : undefined}
+          >
+            <Award className="inline h-4 w-4 mr-1.5" />
+            Categorization + Brackets
+            <span className="ml-2 text-xs text-gray-400">(advanced)</span>
+          </button>
+        </nav>
+      </div>
+
+      {tab === 'setup' && (
+      <>
       {/* General Settings */}
       <Card className="mb-6">
         <CardHeader
@@ -635,6 +680,7 @@ export default function TournamentSettings() {
       </Card>
 
       {/* Tournament Rules (v2) */}
+      {tab === 'rules' && (
       <Card className="mt-6">
         <CardHeader
           title="Tournament Rules"
@@ -648,6 +694,9 @@ export default function TournamentSettings() {
           />
         </CardBody>
       </Card>
+      )}
+      </>
+      )}
 
       {/* Unsaved Changes Warning */}
       {hasChanges && (
