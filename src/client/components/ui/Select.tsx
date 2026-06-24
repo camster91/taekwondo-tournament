@@ -12,7 +12,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           className={[
-            'h-10 px-3 pr-10 rounded-lg border border-slate-200 dark:border-slate-700',
+            'min-h-[44px] sm:h-10 px-3 pr-10 rounded-lg border border-slate-200 dark:border-slate-700',
             'bg-white dark:bg-slate-900',
             'text-sm text-slate-900 dark:text-slate-100',
             'focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500',

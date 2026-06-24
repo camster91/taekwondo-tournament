@@ -23,7 +23,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     ref,
   ) => {
     const inputClasses = [
-      'w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700',
+      'w-full min-h-[44px] sm:h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700',
       'bg-white dark:bg-slate-900',
       'text-sm text-slate-900 dark:text-slate-100',
       'placeholder:text-slate-400',

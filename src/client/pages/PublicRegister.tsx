@@ -852,14 +852,14 @@ export default function PublicRegister() {
                 </div>
 
                 {/* v2: Compete with older */}
-                <div className="mt-4 flex items-start gap-2">
+                <div className="mt-4 flex items-start gap-2 p-2 -ml-2 rounded hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
                   <input
                     type="checkbox"
                     name="competeWithOlder"
                     id="competeWithOlder"
                     checked={formData.competeWithOlder}
                     onChange={handleChange}
-                    className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="mt-1 h-5 w-5 min-w-[20px] min-h-[20px] rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <Label htmlFor="competeWithOlder" className="text-sm text-gray-700 dark:text-gray-300 mb-0">
                     <span className="font-medium">Compete in older age band</span>
