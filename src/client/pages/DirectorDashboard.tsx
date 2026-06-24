@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuthHeaders } from '../context/AuthContext';
 import {
   LayoutDashboard,
@@ -15,6 +16,7 @@ import {
   Timer,
   Target,
   TrendingUp,
+  Monitor,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { Card, CardHeader, CardBody } from '../components/ui';
@@ -81,6 +83,34 @@ const AVERAGE_MATCH_DURATION = 5; // minutes per match
 
 export default function DirectorDashboard() {
   const { id: tournamentId } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
+
+  // Display mode state (M8). Three modes:
+  // - 'all': auto-cycle through every ring with active matches (default)
+  // - 'ring': pin to a single ring number
+  // - 'featured': pin to a specific match ID (e.g. the finals)
+  const [displayMode, setDisplayMode] = useState<'all' | 'ring' | 'featured'>('all');
+  const [displayRing, setDisplayRing] = useState<number>(1);
+  const [displayMatchId, setDisplayMatchId] = useState<string>('');
+
+  const displaySettingsMutation = useMutation({
+    mutationFn: async () => {
+      const payload =
+        displayMode === 'all' ? {}
+        : displayMode === 'ring' ? { mode: 'ring', ringNumber: displayRing }
+        : { mode: 'featured', featuredMatchId: displayMatchId };
+      const res = await fetch(`/api/tournaments/${tournamentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ settings: { display: payload } }),
+      });
+      if (!res.ok) throw new Error('Failed to update display settings');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['director-dashboard', tournamentId] });
+    },
+  });
 
   const { data: progress, isLoading } = useQuery<TournamentProgress>({
     queryKey: ['director-dashboard', tournamentId],
@@ -543,6 +573,68 @@ export default function DirectorDashboard() {
           Public Display
         </Button>
       </div>
+
+      {/* Display Mode Toggle — closes M8 from the UI audit. Pin the
+          venue TV to a specific ring or a specific match so the
+          director can make sure the crowd sees what matters. */}
+      <Card>
+        <CardHeader title="Public Display Mode" description="Pin the venue TV to a specific ring or match." />
+        <CardBody>
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+            <div className="flex-1">
+              <label htmlFor="display-mode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mode</label>
+              <select
+                id="display-mode"
+                value={displayMode}
+                onChange={(e) => setDisplayMode(e.target.value as 'all' | 'ring' | 'featured')}
+                className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 w-full sm:w-auto"
+              >
+                <option value="all">All rings (auto-cycle)</option>
+                <option value="ring">Single ring</option>
+                <option value="featured">Featured match</option>
+              </select>
+            </div>
+            {displayMode === 'ring' && (
+              <div className="flex-1">
+                <label htmlFor="display-ring" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ring</label>
+                <select
+                  id="display-ring"
+                  value={displayRing}
+                  onChange={(e) => setDisplayRing(parseInt(e.target.value, 10))}
+                  className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 w-full sm:w-auto"
+                >
+                  {Array.from(new Set(progress.divisionDetails.flatMap((d) => d.ringNumber).filter(Boolean))).sort((a, b) => (a ?? 0) - (b ?? 0)).map((r) => (
+                    <option key={r} value={r ?? 0}>Ring {r}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {displayMode === 'featured' && (
+              <div className="flex-1">
+                <label htmlFor="display-match" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Match ID</label>
+                <input
+                  id="display-match"
+                  type="text"
+                  value={displayMatchId}
+                  onChange={(e) => setDisplayMatchId(e.target.value)}
+                  placeholder="e.g. 7f59a9ad-6b08-4867-96e5-d5a8a29a682b"
+                  className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 font-mono w-full"
+                />
+              </div>
+            )}
+            <Button
+              variant="primary"
+              onClick={() => displaySettingsMutation.mutate()}
+              loading={displaySettingsMutation.isPending}
+            >
+              <Monitor className="h-4 w-4 mr-2" /> Apply
+            </Button>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            The public scoreboard at <a href={`/display/${tournamentId}`} target="_blank" rel="noopener noreferrer" className="underline">/display/{tournamentId}</a> will read this and filter its view.
+          </p>
+        </CardBody>
+      </Card>
     </div>
   );
 }

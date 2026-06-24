@@ -390,6 +390,22 @@ router.get('/tournaments/:id/scoreboard', scoreboardLimiter, async (req: Request
     });
   }
 
+  // Director-controlled display mode + featured match override (M8).
+  // The director can pin the venue TV to a specific match (e.g. the
+  // finals) or filter to a single ring. Settings live in the
+  // tournament.settings JSON string under `display`.
+  let displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string } = {};
+  try {
+    if (tournament.settings) {
+      const parsed = JSON.parse(tournament.settings);
+      if (parsed && typeof parsed === 'object' && parsed.display && typeof parsed.display === 'object') {
+        displaySettings = parsed.display as typeof displaySettings;
+      }
+    }
+  } catch {
+    // settings JSON corrupt — fall through with empty displaySettings
+  }
+
   // Reuse the slug-handler's logic by setting the param and recursing.
   // (Express doesn't have a clean way to forward a request to another
   // handler in the same router, so we just call the underlying query
@@ -425,7 +441,7 @@ router.get('/tournaments/:id/scoreboard', scoreboardLimiter, async (req: Request
     orderBy: { displayOrder: 'asc' },
   });
 
-  res.json(divisions);
+  res.json({ divisions, displaySettings });
 });
 
 // Check existing registration. Returns ONLY a boolean + a minimal

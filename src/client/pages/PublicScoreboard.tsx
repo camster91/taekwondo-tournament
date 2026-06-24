@@ -86,9 +86,15 @@ export default function PublicScoreboard() {
     retry: false,
   });
 
-  // Fetch divisions with brackets via public endpoint (no auth required)
-  const { data: divisions, isLoading: divisionsLoading } = useQuery<Division[]>({
-    queryKey: ['scoreboard-divisions', tournamentId],
+  // Fetch divisions with brackets via public endpoint (no auth required).
+  // Returns `{ divisions, displaySettings }` — displaySettings carries
+  // director overrides (mode: 'all' | 'ring:N' | 'featured:<matchId>').
+  // Closes M8 from the UI audit.
+  const { data: scoreboardData, isLoading: divisionsLoading } = useQuery<{
+    divisions: Division[];
+    displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
+  }>({
+    queryKey: ['scoreboard-data', tournamentId],
     queryFn: async () => {
       const res = await fetch(`/api/public/tournaments/${tournamentId}/scoreboard`);
       if (!res.ok) throw new Error('Failed to fetch scoreboard');
@@ -97,6 +103,8 @@ export default function PublicScoreboard() {
     refetchInterval: 3000, // TV mode: refresh every 3s
     enabled: !tournamentError, // Don't keep retrying the scoreboard if the tournament is bad
   });
+  const divisions = scoreboardData?.divisions;
+  const displaySettings = scoreboardData?.displaySettings;
 
   // Group by ring. Matches without a ringNumber are NOT bucketed into a
   // default ring — they go into a separate "unassigned" bucket so the LIVE
