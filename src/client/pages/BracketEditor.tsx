@@ -594,6 +594,7 @@ export default function BracketEditor() {
                 <BracketSection> component. Adding the same component to all
                 three sections guarantees the losers bracket cannot drift
                 out of alignment with the winners layout. */}
+            <div className="bracket-print-root">
             <BracketSection
               ariaLabel="Winners bracket"
               title="Winners Bracket"
@@ -645,6 +646,7 @@ export default function BracketEditor() {
                 matchLabelPrefix="Match"
               />
             )}
+            </div>
             </div>
           </CardBody>
         </Card>

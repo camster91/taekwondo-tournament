@@ -163,7 +163,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       {/* ─── Sidebar ─── */}
       <aside
         className={classNames(
-          'fixed inset-y-0 left-0 z-40 flex flex-col w-64',
+          'fixed inset-y-0 left-0 z-40 flex flex-col w-64 no-print',
           'bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950',
           'transition-all duration-300 ease-out',
           'lg:relative lg:flex-shrink-0',
@@ -390,7 +390,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       {/* ─── Main area ─── */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Top bar — glass */}
-        <header className="sticky top-0 z-20 surface-glass">
+        <header className="sticky top-0 z-20 surface-glass no-print">
           <div className="flex items-center gap-3 h-14 px-4 lg:px-6">
             {/* Sidebar toggle — chevron on desktop, hamburger on mobile */}
             <button
