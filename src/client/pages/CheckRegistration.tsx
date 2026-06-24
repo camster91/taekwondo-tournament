@@ -68,8 +68,11 @@ export default function CheckRegistration() {
       setResult(data);
       if (!data.registered) {
         // Don't leak whether the kid exists — just say "not found, check spelling / DOB"
+        // and point them at the /manage-registration path which uses 3-factor
+        // auth (confirmation code + lastName + DOB) so they can recover
+        // even when name spelling is uncertain.
         setError(
-          'No registration found. Check the spelling and date of birth match what was entered at registration.'
+          `No registration found for those exact details. Common causes: a typo in the name (e.g. "Jon" vs "John"), or a different DOB format (the form uses YYYY-MM-DD). If you have your confirmation code, try ${window.location.origin}/manage-registration instead.`
         );
       }
     } catch (err) {
