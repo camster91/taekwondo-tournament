@@ -63,7 +63,8 @@ interface Tournament {
 // CSV export utility — see ../utils/csv-export.ts for the testable builders
 // and the browser-side `downloadCSV` that triggers the file save.
 export default function Results() {
-  const { tournamentId } = useParams();
+  // Route param is :id (matches TournamentDetail.tsx and other tournament-scoped routes).
+  const { id: tournamentId } = useParams();
   const [filterEvent, setFilterEvent] = useState<'all' | 'patterns' | 'sparring'>('all');
   const [selectedSchool, setSelectedSchool] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'schools' | 'divisions' | 'breakdown'>('schools');

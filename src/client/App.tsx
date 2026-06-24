@@ -40,6 +40,7 @@ import Divisions from './pages/Divisions';
 import Schedule from './pages/Schedule';
 import BracketEditor from './pages/BracketEditor';
 import PublicRegister from './pages/PublicRegister';
+import CheckRegistration from './pages/CheckRegistration';
 import Login from './pages/Login';
 import VerifyMagicLink from './pages/VerifyMagicLink';
 import Scorekeeper from './pages/Scorekeeper';
@@ -470,6 +471,7 @@ function AppRoutes() {
   // Public pages (no sidebar)
   const isPublicPage =
     location.pathname.startsWith('/register') ||
+    location.pathname.startsWith('/check-registration') ||
     location.pathname.startsWith('/login') ||
     location.pathname.startsWith('/verify') ||
     location.pathname.startsWith('/accept-invite') ||
@@ -486,6 +488,7 @@ function AppRoutes() {
     return (
       <Routes>
         <Route path="/register" element={<PublicRegister />} />
+        <Route path="/check-registration" element={<CheckRegistration />} />
         <Route path="/login" element={<Login />} />
         <Route path="/verify" element={<VerifyMagicLink />} />
         <Route path="/accept-invite" element={<AcceptInvite />} />

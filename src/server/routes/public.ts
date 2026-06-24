@@ -235,6 +235,12 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       message: 'Registration successful!',
       registration: {
         id: registration.id,
+        // First 8 chars of the UUID. The /api/public/check-registration
+        // endpoint uses the same field for parent lookups — "did my
+        // registration go through?" The parent should see this number
+        // on the success screen AND in the confirmation email so they
+        // can match the two if needed.
+        confirmationCode: registration.id.slice(0, 8),
         competitorName: `${competitor.firstName} ${competitor.lastName}`,
         tournamentName: registration.tournament.name,
         tournamentDate: registration.tournament.date,

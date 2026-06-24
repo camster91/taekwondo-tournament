@@ -24,6 +24,8 @@ interface RegistrationResult {
   success: boolean;
   message: string;
   registration: {
+    id: string;
+    confirmationCode?: string;
     competitorName: string;
     tournamentName: string;
     tournamentDate: string;
@@ -345,6 +347,38 @@ export default function PublicRegister() {
               <CheckCircle className="h-16 w-16 text-green-500 dark:text-green-400 mx-auto mb-4" />
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Registration Complete!</h1>
               <p className="text-gray-600 dark:text-gray-400 mb-6">{result.message}</p>
+
+              {result.registration.confirmationCode && (
+                <div className="bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-lg p-5 mb-6">
+                  <p className="text-xs font-medium uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mb-2">
+                    Your confirmation code
+                  </p>
+                  <div className="flex items-center justify-between gap-3">
+                    <code
+                      data-testid="confirmation-code"
+                      className="text-2xl font-mono font-bold text-indigo-900 dark:text-indigo-100 tracking-widest select-all"
+                    >
+                      {result.registration.confirmationCode}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(result.registration.confirmationCode || '');
+                      }}
+                      aria-label="Copy confirmation code"
+                      className="text-xs px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-3">
+                    Save this — you'll need it at check-in. Lost it?{' '}
+                    <a href="/check-registration" className="underline hover:no-underline">
+                      Look up your registration
+                    </a>
+                  </p>
+                </div>
+              )}
 
               <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 text-left mb-6">
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Registration Details</h3>
