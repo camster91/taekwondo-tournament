@@ -442,9 +442,18 @@ router.post('/:id/restore', authenticate, requireRole('admin', 'director'), asyn
 // Get tournament registrations (requires authentication)
 router.get('/:id/registrations', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const { notInDivision } = req.query;
+
+  const where: Record<string, unknown> = { tournamentId: getParam(req.params.id) };
+  // `?notInDivision=<id>` returns only registrations that have no
+  // DivisionAssignment for this specific division. Used by the
+  // BracketEditor "Add competitor" picker. Closes H2 from the UI audit.
+  if (notInDivision && typeof notInDivision === 'string') {
+    where.assignments = { none: { divisionId: notInDivision } };
+  }
 
   const registrations = await prisma.registration.findMany({
-    where: { tournamentId: getParam(req.params.id) },
+    where,
     include: {
       competitor: true,
       assignments: {
