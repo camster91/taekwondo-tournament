@@ -119,7 +119,10 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
     },
   });
 
-  if (!tournament) {
+  if (!tournament || tournament.deletedAt) {
+    // Return identical 404 whether the tournament never existed or was
+    // soft-deleted. Mirrors the list endpoint's deletedAt filter so
+    // a deleted tournament can't be reached by URL.
     return res.status(404).json({ error: 'Tournament not found' });
   }
 

@@ -64,7 +64,13 @@ router.get('/tournament/:tournamentId', authenticate, async (req: Request, res: 
   const withMatches = req.query.withMatches === 'true';
 
   const divisions = await prisma.division.findMany({
-    where: { tournamentId: getParam(req.params.tournamentId) },
+    // Filter out divisions belonging to soft-deleted tournaments so a
+    // stale URL can't leak a deleted tournament's data via the
+    // divisions endpoint.
+    where: {
+      tournamentId: getParam(req.params.tournamentId),
+      tournament: { deletedAt: null },
+    },
     include: {
       _count: {
         select: { assignments: true },

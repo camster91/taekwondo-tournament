@@ -243,10 +243,18 @@ export function requireTournamentAccess(minRole: 'director' | 'scorekeeper' | 'v
       }
 
       // No explicit row. Check the tournament's org membership.
+      // Also: a soft-deleted tournament is invisible to anyone except
+      // admins (who bypass this middleware). Returning 404 with the same
+      // shape as "tournament doesn't exist" prevents data leaks via stale
+      // bookmarks or shared URLs.
       const tournament = await prisma.tournament.findUnique({
         where: { id: tournamentId },
-        select: { organizationId: true },
+        select: { organizationId: true, deletedAt: true },
       });
+
+      if (tournament?.deletedAt) {
+        return res.status(404).json({ error: 'Tournament not found' });
+      }
 
       // Orphan tournament (no org) — fall back to the global-role
       // check we already passed. Preserves single-tenant behavior
