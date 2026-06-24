@@ -12,6 +12,7 @@ import {
   Award,
   Keyboard,
   Timer,
+  Monitor,
 } from 'lucide-react';
 import MatchTimer from '../components/MatchTimer';
 import SpecialNeedsBadge from '../components/SpecialNeedsBadge';
@@ -376,9 +377,20 @@ export default function Scorekeeper() {
               <Trophy className="h-8 w-8 text-yellow-500 mr-3" />
               <h1 className="text-2xl font-bold">Scorekeeper</h1>
             </div>
-            <Link to={`/tournaments/${tournamentId}`} className="text-gray-600 hover:text-white">
-              Exit
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                to={`/display/${tournamentId}`}
+                target="_blank"
+                className="flex items-center text-sm text-gray-400 hover:text-white"
+                title="Open public display in new tab"
+              >
+                <Monitor className="h-4 w-4 mr-1" aria-hidden="true" />
+                <span className="hidden sm:inline">Public Display</span>
+              </Link>
+              <Link to={`/tournaments/${tournamentId}`} className="text-gray-600 hover:text-white">
+                Exit
+              </Link>
+            </div>
           </div>
 
           {isLoading ? (
@@ -517,11 +529,12 @@ export default function Scorekeeper() {
             </button>
             <button
               onClick={() => setShowKeyboardHelp(true)}
-              className="flex items-center text-gray-600 hover:text-white text-sm"
+              className="flex items-center gap-1 text-gray-600 hover:text-white text-sm"
               title="Keyboard shortcuts (?)"
               aria-label="Show keyboard shortcuts"
             >
               <Keyboard className="h-5 w-5" aria-hidden="true" />
+              <span className="hidden lg:inline text-xs">Shortcuts</span>
             </button>
           </div>
         </div>

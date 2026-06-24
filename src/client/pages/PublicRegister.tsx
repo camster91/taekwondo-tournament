@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Trophy, CheckCircle, AlertCircle, User, Calendar, Award, CreditCard } from 'lucide-react';
+import { Trophy, CheckCircle, AlertCircle, User, Calendar, Award, CreditCard, Printer } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
 import { Card, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
@@ -369,6 +369,15 @@ export default function PublicRegister() {
                       className="text-xs px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
                     >
                       Copy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      aria-label="Print registration confirmation"
+                      className="text-xs px-3 py-1.5 rounded-md border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 font-medium"
+                    >
+                      <Printer className="inline h-3 w-3 mr-1" aria-hidden="true" />
+                      Print
                     </button>
                   </div>
                   <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-3">
