@@ -447,6 +447,18 @@ export default function TournamentDetail() {
                 <Lock className="h-3.5 w-3.5" />
                 Close Registration
               </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  if (confirm('Mark this tournament as completed? Parents will no longer be able to register and the public scoreboard will show final results.')) {
+                    updateStatusMutation.mutate('completed');
+                  }
+                }}
+                loading={updateStatusMutation.isPending}
+              >
+                <Flag className="h-3.5 w-3.5 mr-1" /> Mark Completed
+              </Button>
             </div>
           </div>
         </div>
