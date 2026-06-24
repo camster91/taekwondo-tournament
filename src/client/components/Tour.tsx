@@ -263,11 +263,24 @@ export default function Tour({ force = false, onComplete }: TourProps) {
   if (!open || !currentStep) return null;
 
   return (
-    <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label="Onboarding tour">
-      {/* Dim layer with a "spotlight" cutout around the target */}
+    // The outer wrapper is invisible AND doesn't intercept clicks. The
+    // actual modal-blocking layer is the backdrop div below; the popover
+    // is its own clickable element. This lets users dismiss a tour that
+    // appears on top of another modal (e.g. /tournaments?create=1 opens
+    // a dialog + tour simultaneously) by clicking the backdrop's
+    // outside-the-popover area.
+    <div
+      className="fixed inset-0 z-[100] pointer-events-none"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Onboarding tour"
+    >
+      {/* Dim layer with a "spotlight" cutout around the target.
+          pointer-events-auto on the dim layer so clicks outside
+          the popover dismiss the tour. */}
       {targetRect && (
         <div
-          className="absolute pointer-events-none transition-all duration-300"
+          className="absolute pointer-events-auto transition-all duration-300"
           style={{
             top: targetRect.top - 6,
             left: targetRect.left - 6,
@@ -279,13 +292,16 @@ export default function Tour({ force = false, onComplete }: TourProps) {
         />
       )}
       {!targetRect && (
-        <div className="absolute inset-0 bg-slate-900/55" onClick={finish} />
+        <div
+          className="absolute inset-0 bg-slate-900/55 pointer-events-auto"
+          onClick={finish}
+        />
       )}
 
-      {/* Popover */}
+      {/* Popover — pointer-events-auto so its buttons are clickable */}
       {popover && (
         <div
-          className="absolute w-[360px] max-w-[calc(100vw-32px)] bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 animate-slide-up"
+          className="absolute w-[360px] max-w-[calc(100vw-32px)] bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 animate-slide-up pointer-events-auto"
           style={{ top: popover.top, left: popover.left }}
           role="document"
         >

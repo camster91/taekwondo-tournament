@@ -324,16 +324,23 @@ export default function TournamentSettings() {
 
       {/* Tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-        <nav className="flex gap-6" aria-label="Settings tabs">
+        <nav
+          role="tablist"
+          aria-label="Settings sections"
+          className="flex gap-6"
+        >
           <button
             type="button"
+            role="tab"
+            id="settings-tab-setup"
+            aria-selected={tab === 'setup'}
+            aria-controls="settings-panel-setup"
             onClick={() => setTab('setup')}
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
               tab === 'setup'
                 ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
             }`}
-            aria-current={tab === 'setup' ? 'page' : undefined}
           >
             <Settings className="inline h-4 w-4 mr-1.5" />
             Setup
@@ -341,13 +348,16 @@ export default function TournamentSettings() {
           </button>
           <button
             type="button"
+            role="tab"
+            id="settings-tab-rules"
+            aria-selected={tab === 'rules'}
+            aria-controls="settings-panel-rules"
             onClick={() => setTab('rules')}
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
               tab === 'rules'
                 ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
             }`}
-            aria-current={tab === 'rules' ? 'page' : undefined}
           >
             <Award className="inline h-4 w-4 mr-1.5" />
             Categorization + Brackets
@@ -357,7 +367,7 @@ export default function TournamentSettings() {
       </div>
 
       {tab === 'setup' && (
-      <>
+        <div id="settings-panel-setup" role="tabpanel" aria-labelledby="settings-tab-setup">
       {/* General Settings */}
       <Card className="mb-6">
         <CardHeader
@@ -682,24 +692,26 @@ export default function TournamentSettings() {
           </CardBody>
         )}
       </Card>
+        </div>
+      )}
 
       {/* Tournament Rules (v2) */}
       {tab === 'rules' && (
-      <Card className="mt-6">
-        <CardHeader
-          title="Tournament Rules"
-          description="The full rules engine that drives division categorization, bracket generation, and merging. Matches the workflow used in the Newton's Championship 2025 .xlsm (CB/BB tiers, 8 age bands, 3-4 weight classes)."
-        />
-        <CardBody>
-          <RulesManager
-            tournamentId={id!}
-            tournamentSettings={tournament?.settings}
-            onRulesChange={setHasChanges}
-          />
-        </CardBody>
-      </Card>
-      )}
-      </>
+        <div id="settings-panel-rules" role="tabpanel" aria-labelledby="settings-tab-rules">
+          <Card className="mt-6">
+            <CardHeader
+              title="Tournament Rules"
+              description="The full rules engine that drives division categorization, bracket generation, and merging. Matches the workflow used in the Newton's Championship 2025 .xlsm (CB/BB tiers, 8 age bands, 3-4 weight classes)."
+            />
+            <CardBody>
+              <RulesManager
+                tournamentId={id!}
+                tournamentSettings={tournament?.settings}
+                onRulesChange={setHasChanges}
+              />
+            </CardBody>
+          </Card>
+        </div>
       )}
 
       {/* Unsaved Changes Warning */}
