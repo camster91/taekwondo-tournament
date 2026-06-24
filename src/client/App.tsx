@@ -41,6 +41,7 @@ import Schedule from './pages/Schedule';
 import BracketEditor from './pages/BracketEditor';
 import PublicRegister from './pages/PublicRegister';
 import CheckRegistration from './pages/CheckRegistration';
+import ManageRegistration from './pages/ManageRegistration';
 import Login from './pages/Login';
 import VerifyMagicLink from './pages/VerifyMagicLink';
 import Scorekeeper from './pages/Scorekeeper';
@@ -472,6 +473,7 @@ function AppRoutes() {
   const isPublicPage =
     location.pathname.startsWith('/register') ||
     location.pathname.startsWith('/check-registration') ||
+    location.pathname.startsWith('/manage-registration') ||
     location.pathname.startsWith('/login') ||
     location.pathname.startsWith('/verify') ||
     location.pathname.startsWith('/accept-invite') ||
@@ -489,6 +491,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/register" element={<PublicRegister />} />
         <Route path="/check-registration" element={<CheckRegistration />} />
+        <Route path="/manage-registration" element={<ManageRegistration />} />
         <Route path="/login" element={<Login />} />
         <Route path="/verify" element={<VerifyMagicLink />} />
         <Route path="/accept-invite" element={<AcceptInvite />} />

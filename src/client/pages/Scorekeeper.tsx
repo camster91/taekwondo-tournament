@@ -337,6 +337,24 @@ export default function Scorekeeper() {
           e.preventDefault();
           setShowTimer((prev) => !prev);
           break;
+        // Ctrl/Cmd+Z: undo the most recently completed match in the
+        // current division. Closes M7 from the UI audit — scorekeepers
+        // shouldn't have to scroll to find the per-match Undo button
+        // after confirming the wrong winner. Skipped when typing in an
+        // input field (already handled above).
+        case 'z':
+        case 'Z':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            const lastCompleted = readyMatches
+              .filter((m) => m.status === 'completed')
+              .slice(-1)[0];
+            if (lastCompleted && !undoMatchResult.isPending) {
+              undoMatchResult.mutate(lastCompleted.id);
+              setAnnounce('Undid last match result.');
+            }
+          }
+          break;
       }
     }
   }, [showConfirm, selectedDivision, currentMatch, selectedWinner, readyMatches.length]);
@@ -1029,6 +1047,7 @@ export default function Scorekeeper() {
                 <div className="grid grid-cols-1 gap-2">
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between"><span>Submit / Confirm</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">Enter</kbd></div>
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between"><span>Cancel / Back</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">Esc</kbd></div>
+                  <div className="bg-gray-700 p-2 rounded flex items-center justify-between"><span>Undo last result</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">Ctrl+Z</kbd></div>
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between"><span>Show this help</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">?</kbd></div>
                 </div>
               </div>

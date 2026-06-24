@@ -150,5 +150,102 @@ export function buildResultsWorkbook(
   const ageSheet = XLSX.utils.aoa_to_sheet(ageData);
   XLSX.utils.book_append_sheet(wb, ageSheet, 'By Age Group');
 
+  // ─── Competitor Roster ──────────────────────────────────────────────
+  // Every registered competitor with their placement per division.
+  // Closes M9 (missing roster sheet) from the UI audit — a director
+  // printing "the full results for Division X" wants both the
+  // top-3 placements AND the full list of who was there.
+  const rosterData: (string | number)[][] = [
+    ['Competitor', 'Gender', 'Age', 'Belt', 'School', 'Division', 'Event', 'Place'],
+  ];
+  filteredDivisions.forEach((division) => {
+    const placements = new Map<string, string | number>();
+    division.bracket?.placements?.forEach((p) => {
+      placements.set(p.registration.competitorId, getPlaceName(p.place));
+    });
+    // We need the registrations list — currently we only have placements.
+    // Use bracket.matches to find all competitors who were in this
+    // division's bracket (both seeded and advanced through matches).
+    const seenCompetitorIds = new Set<string>();
+    division.bracket?.matches?.forEach((m) => {
+      [m.competitor1, m.competitor2].forEach((c) => {
+        if (c?.competitor && !seenCompetitorIds.has(c.competitor.id)) {
+          seenCompetitorIds.add(c.competitor.id);
+          const age = c.competitor.age ?? '';
+          const belt = c.competitor.belt ?? '';
+          const gender = c.competitor.gender ?? '';
+          const comp = c.competitor;
+          const dob = comp.dateOfBirth ? new Date(comp.dateOfBirth) : null;
+          const ageText = dob
+            ? Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000))
+            : age;
+          rosterData.push([
+            `${comp.firstName} ${comp.lastName}`,
+            gender,
+            ageText,
+            belt,
+            comp.schoolDojang || 'Independent',
+            division.name,
+            division.eventType,
+            placements.get(comp.id) ?? '—',
+          ]);
+        }
+      });
+    });
+  });
+  const rosterSheet = XLSX.utils.aoa_to_sheet(rosterData);
+  rosterSheet['!cols'] = [
+    { wch: 25 }, { wch: 8 }, { wch: 6 }, { wch: 18 },
+    { wch: 22 }, { wch: 35 }, { wch: 12 }, { wch: 12 },
+  ];
+  XLSX.utils.book_append_sheet(wb, rosterSheet, 'Competitor Roster');
+
+  // ─── Match Results ──────────────────────────────────────────────────
+  // One row per completed match: round, match#, competitors, score,
+  // winner. Closes M9 (missing match-results sheet) — directors
+  // use this to print a "what happened" recap that mirrors the
+  // PDF results export but in spreadsheet form.
+  const matchData: (string | number)[][] = [
+    ['Division', 'Round', 'Match #', 'Competitor 1', 'School', 'Score', 'Competitor 2', 'School', 'Score', 'Winner'],
+  ];
+  filteredDivisions.forEach((division) => {
+    division.bracket?.matches
+      ?.slice()
+      .sort((a, b) => {
+        if (a.roundNumber !== b.roundNumber) return a.roundNumber - b.roundNumber;
+        return a.matchNumber - b.matchNumber;
+      })
+      .forEach((m) => {
+        if (m.status !== 'completed') return;
+        const c1Name = m.competitor1?.competitor
+          ? `${m.competitor1.competitor.firstName} ${m.competitor1.competitor.lastName}`
+          : '—';
+        const c1School = m.competitor1?.competitor?.schoolDojang || '';
+        const c2Name = m.competitor2?.competitor
+          ? `${m.competitor2.competitor.firstName} ${m.competitor2.competitor.lastName}`
+          : '—';
+        const c2School = m.competitor2?.competitor?.schoolDojang || '';
+        const s1 = m.score1 ?? '';
+        const s2 = m.score2 ?? '';
+        let winner = '—';
+        if (m.winnerId === m.competitor1Id) winner = c1Name;
+        else if (m.winnerId === m.competitor2Id) winner = c2Name;
+        matchData.push([
+          division.name,
+          `Round ${m.roundNumber}`,
+          m.matchNumber,
+          c1Name, c1School, s1, c2Name, c2School, s2, winner,
+        ]);
+      });
+  });
+  const matchSheet = XLSX.utils.aoa_to_sheet(matchData);
+  matchSheet['!cols'] = [
+    { wch: 35 }, { wch: 10 }, { wch: 8 },
+    { wch: 22 }, { wch: 20 }, { wch: 6 },
+    { wch: 22 }, { wch: 20 }, { wch: 6 },
+    { wch: 22 },
+  ];
+  XLSX.utils.book_append_sheet(wb, matchSheet, 'Match Results');
+
   return wb;
 }

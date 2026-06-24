@@ -24,7 +24,41 @@ export interface DivisionLike {
     id: string;
     status: string;
     placements: PlacementLike[];
-    matches: { id: string; status: string }[];
+    matches: {
+      id: string;
+      status: string;
+      roundNumber: number;
+      matchNumber: number;
+      score1?: number | null;
+      score2?: number | null;
+      winnerId?: string | null;
+      competitor1Id?: string | null;
+      competitor2Id?: string | null;
+      competitor1?: {
+        competitor: {
+          id: string;
+          firstName: string;
+          lastName: string;
+          gender?: string | null;
+          age?: number | null;
+          belt?: string | null;
+          schoolDojang?: string | null;
+          dateOfBirth?: string | null;
+        };
+      } | null;
+      competitor2?: {
+        competitor: {
+          id: string;
+          firstName: string;
+          lastName: string;
+          gender?: string | null;
+          age?: number | null;
+          belt?: string | null;
+          schoolDojang?: string | null;
+          dateOfBirth?: string | null;
+        };
+      } | null;
+    }[];
   } | null;
 }
 

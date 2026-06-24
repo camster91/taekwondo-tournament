@@ -385,6 +385,13 @@ export default function PublicRegister() {
                     <a href="/check-registration" className="underline hover:no-underline">
                       Look up your registration
                     </a>
+                    {' '}·{' '}
+                    <a
+                      href={`/manage-registration?code=${result.registration.confirmationCode || ''}`}
+                      className="underline hover:no-underline"
+                    >
+                      Edit or withdraw
+                    </a>
                   </p>
                 </div>
               )}

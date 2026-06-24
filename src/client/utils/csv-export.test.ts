@@ -272,13 +272,17 @@ describe('buildAgeBreakdown', () => {
 });
 
 describe('buildResultsWorkbook', () => {
-  it('produces a workbook with the four expected sheets', () => {
+  it('produces a workbook with the six expected sheets', () => {
     const wb = buildResultsWorkbook(sampleSchools, sampleDivisions);
+    // 6 sheets now: standings, divisions, belts, ages, roster, matches.
+    // Closes M9 from the UI audit — added Competitor Roster + Match Results.
     expect(wb.SheetNames).toEqual([
       'School Standings',
       'By Division',
       'By Belt Level',
       'By Age Group',
+      'Competitor Roster',
+      'Match Results',
     ]);
   });
 

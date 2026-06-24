@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Users,
   LayoutGrid,
@@ -26,6 +26,8 @@ import {
   AlertTriangle,
   ExternalLink,
   Trophy,
+  Mail,
+  CheckCircle2,
 } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
 import CloseButton from '../components/ui/CloseButton';
@@ -97,6 +99,7 @@ export default function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
   const [registerPatterns, setRegisterPatterns] = useState(true);
   const [registerSparring, setRegisterSparring] = useState(true);
@@ -207,6 +210,47 @@ export default function TournamentDetail() {
     },
   });
 
+  // Clone this tournament as a template for next year. Closes M2 from
+  // the UI audit — director can roll last year's settings forward
+  // instead of copy-pasting the rules JSON.
+  const cloneMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/tournaments/${id}/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({}),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Clone failed.');
+      return body;
+    },
+    onSuccess: (cloned: { id: string }) => {
+      queryClient.invalidateQueries({ queryKey: ['tournaments'] });
+      navigate(`/tournaments/${cloned.id}/settings`);
+    },
+    onError: (e: Error) => alert(e.message || 'Clone failed'),
+  });
+  const handleClone = () => {
+    if (confirm(`Clone "${tournament.name}" as a new draft tournament? Copies age groups, weight classes, fee note, and division settings. You'll be sent to its Settings page to pick a date.`)) {
+      cloneMutation.mutate();
+    }
+  };
+
+  const broadcastMutation = useMutation({
+    mutationFn: async (vars: { subject: string; body: string; test: boolean }) => {
+      const res = await fetch(`/api/tournaments/${id}/broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(vars),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Broadcast failed (${res.status})`);
+      }
+      return data as { sent: number; failures: number; total: number; message: string };
+    },
+  });
+
   const registrationUrl = `${window.location.origin}/register?tournament=${id}`;
 
   const copyRegistrationLink = () => {
@@ -287,6 +331,15 @@ export default function TournamentDetail() {
             <Button as={Link} to={`/tournaments/${id}/settings`} variant="secondary">
               <Settings className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Settings</span>
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => handleClone()}
+              loading={cloneMutation.isPending}
+              aria-label="Clone this tournament as a template for next year"
+            >
+              <Copy className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Clone</span>
             </Button>
             <Button as={Link} to={`/tournaments/${id}/schedule`} variant="secondary">
               <Calendar className="h-4 w-4 sm:mr-2" />
@@ -535,6 +588,17 @@ export default function TournamentDetail() {
                   inputClassName="h-8 py-1.5"
                   leftIcon={<Search className="h-4 w-4" />}
                 />
+              )}
+              {registrations && registrations.length > 0 && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowBroadcastModal(true)}
+                  aria-label="Send broadcast email to all registered parents"
+                >
+                  <Mail className="h-4 w-4 mr-2" />
+                  Email Parents
+                </Button>
               )}
               <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -937,6 +1001,152 @@ export default function TournamentDetail() {
           </div>
         </div>
       )}
+
+      {/* Broadcast Email Modal — closes M1 from the UI audit. Director
+          can send "Tournament starts at 9am Saturday" to every
+          registered parent without copy-pasting. Merges {{competitor_*}}
+          and {{tournament_*}} fields per-recipient. */}
+      <BroadcastModal
+        open={showBroadcastModal}
+        onClose={() => setShowBroadcastModal(false)}
+        mutation={broadcastMutation}
+        recipientCount={registrations?.filter((r) => r.parentEmail).length ?? 0}
+      />
+    </div>
+  );
+}
+
+function BroadcastModal({
+  open,
+  onClose,
+  mutation,
+  recipientCount,
+}: {
+  open: boolean;
+  onClose: () => void;
+  mutation: ReturnType<typeof useMutation<{ sent: number; failures: number; total: number; message: string }, Error, { subject: string; body: string; test: boolean }>>;
+  recipientCount: number;
+}) {
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [testMode, setTestMode] = useState(true);
+  const [result, setResult] = useState<{ sent: number; failures: number; total: number; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setSubject('');
+      setBody('');
+      setTestMode(true);
+      setResult(null);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-label="Email registered parents">
+      <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={onClose} />
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <Mail className="h-5 w-5 text-indigo-500" />
+              Email registered parents
+            </h2>
+            <CloseButton onClose={onClose} label="Close broadcast composer" />
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="rounded-md bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 p-3 text-sm text-indigo-900 dark:text-indigo-200">
+              <strong>{recipientCount}</strong> parent{recipientCount === 1 ? '' : 's'} have an email on file.
+              {testMode && <span className="ml-1 text-amber-700 dark:text-amber-300">Test mode: no one will receive this until you uncheck "Send as test".</span>}
+            </div>
+            <div>
+              <label htmlFor="bc-subject" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subject</label>
+              <input
+                id="bc-subject"
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Reminder: Tournament starts Saturday at 9am"
+                className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="bc-body" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Message</label>
+              <textarea
+                id="bc-body"
+                rows={8}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder={'Hi {{parent_first_name}},\n\n{{competitor_first_name}} is registered for {{tournament_name}} on {{tournament_date}} at {{tournament_location}}.\n\nPlease arrive 30 minutes early.'}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 font-mono placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+              />
+              <details className="text-xs text-gray-500 mt-1">
+                <summary className="cursor-pointer font-medium">Available merge fields</summary>
+                <div className="mt-1 font-mono">
+                  {`{{tournament_name}}  {{tournament_date}}  {{tournament_location}}`}<br/>
+                  {`{{competitor_first_name}}  {{competitor_last_name}}`}<br/>
+                  {`{{parent_first_name}}`}
+                </div>
+              </details>
+            </div>
+            <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={testMode}
+                onChange={(e) => setTestMode(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>
+                <span className="font-medium">Send as test (no emails go out)</span>
+                <span className="block text-xs text-gray-500">Recommended: preview the merge before blasting {recipientCount} parents.</span>
+              </span>
+            </label>
+
+            {result && (
+              <div
+                role="status"
+                aria-live="polite"
+                className={`rounded-md p-3 text-sm flex items-start gap-2 ${
+                  result.failures > 0
+                    ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-300'
+                    : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-green-800 dark:text-green-300'
+                }`}
+              >
+                <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                <span>
+                  {result.message}
+                  {result.failures > 0 && ` (${result.failures} of ${result.total} failed — check server logs.)`}
+                </span>
+              </div>
+            )}
+            {mutation.error && (
+              <div role="alert" className="rounded-md p-3 text-sm bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300">
+                {mutation.error.message}
+              </div>
+            )}
+          </div>
+          <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row gap-3">
+            <Button variant="secondary" className="flex-1 sm:flex-none" onClick={onClose}>Close</Button>
+            <Button
+              variant="primary"
+              className="flex-1"
+              loading={mutation.isPending}
+              disabled={!subject.trim() || !body.trim() || recipientCount === 0}
+              onClick={() => {
+                setResult(null);
+                mutation.mutate(
+                  { subject, body, test: testMode },
+                  { onSuccess: (data) => setResult(data) },
+                );
+              }}
+            >
+              <Mail className="h-4 w-4 mr-2" />
+              {testMode ? 'Send test' : `Send to ${recipientCount} parent${recipientCount === 1 ? '' : 's'}`}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
