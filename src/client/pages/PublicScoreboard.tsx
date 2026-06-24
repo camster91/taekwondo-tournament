@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Trophy, Clock, Users, ChevronRight, Award, Zap, Radio, MapPin, Loader2, AlertCircle } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Card, CardBody } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { Button } from '../components/ui';
@@ -216,8 +217,11 @@ export default function PublicScoreboard() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold tracking-tight">{tournament?.name || 'Tournament'}</h1>
-                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-300 text-[10px] font-semibold uppercase tracking-wider">
-                  <Radio className="h-2.5 w-2.5" /> Live
+                <span
+                  data-testid="live-badge"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 border border-red-500/40 text-red-200 text-xs font-bold uppercase tracking-wider"
+                >
+                  <span className="h-2 w-2 rounded-full bg-red-400 animate-pulse" /> Live
                 </span>
               </div>
               <p className="text-slate-300 text-sm flex items-center gap-1.5">
@@ -233,6 +237,21 @@ export default function PublicScoreboard() {
               </div>
               <div className="text-slate-300 text-xs">
                 {stats.completed} / {stats.totalMatches} matches complete
+              </div>
+            </div>
+            {/* Mobile-view QR code. Spectators standing by the TV can scan
+                this to get the same scoreboard on their phone without
+                typing the long URL. Closes M5 from the UI audit. */}
+            <div className="hidden md:flex flex-col items-center gap-1" data-testid="mobile-qr">
+              <div className="bg-white p-1.5 rounded-md">
+                <QRCodeSVG
+                  value={typeof window !== 'undefined' ? window.location.href : `https://tkd.ashbi.ca/display/${tournament?.id ?? ''}`}
+                  size={64}
+                  level="M"
+                />
+              </div>
+              <div className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">
+                Scan to view on phone
               </div>
             </div>
           </div>

@@ -8,6 +8,7 @@ import {
   Download,
   RefreshCw,
   AlertTriangle,
+  Monitor,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { CardSkeleton } from '../components/ui/Skeleton';
@@ -235,6 +236,16 @@ export default function Schedule() {
         description={`${schedule?.schedule.length || 0} divisions scheduled`}
         actions={
           <div className="flex gap-2 sm:gap-3">
+            <Button
+              as={Link}
+              to={`/display/${id}`}
+              target="_blank"
+              variant="secondary"
+              aria-label="Open public display in new tab"
+            >
+              <Monitor className="h-4 w-4 mr-2" aria-hidden="true" />
+              <span className="hidden sm:inline">Public Display</span>
+            </Button>
             <Button
               variant="secondary"
               onClick={() => regenerateMutation.mutate()}

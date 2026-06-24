@@ -8,6 +8,7 @@ import {
   Users,
   Trophy,
   Shuffle,
+  Printer,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -367,6 +368,15 @@ export default function BracketEditor() {
                 >
                   <Download className="h-4 w-4 mr-2" aria-hidden="true" />
                   <span className="hidden sm:inline">Export PDF</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => window.print()}
+                  aria-label={`Print ${division.name} bracket`}
+                >
+                  <Printer className="h-4 w-4 mr-2" aria-hidden="true" />
+                  <span className="hidden sm:inline">Print</span>
                 </Button>
               </>
             ) : (
