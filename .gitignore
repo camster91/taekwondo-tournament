@@ -12,6 +12,8 @@ playwright-report/
 .hermes/
 # Debug-helper files that get created during dev — never commit
 _debug_loader.cjs
-
 _qa-*.cjs
 _inspect-*.cjs
+_test-*.cjs
+_verify-*.cjs
+_audit-*.cjs
