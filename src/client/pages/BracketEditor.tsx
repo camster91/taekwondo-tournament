@@ -9,6 +9,9 @@ import {
   Trophy,
   Shuffle,
   Printer,
+  Plus,
+  X,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -139,6 +142,91 @@ export default function BracketEditor() {
     },
     onError: (error: Error) => {
       addToast(error.message || 'Operation failed', 'error');
+    },
+  });
+
+  // Swap the two competitors in a match. Closes H2 from the UI audit —
+  // directors can now manually fix a bad auto-seed (e.g. two best
+  // kids landing in the same half of the bracket) without losing all
+  // completed matches. Backend at POST /api/brackets/match/:id/swap
+  // just exchanges competitor1Id and competitor2Id.
+  const swapMutation = useMutation({
+    mutationFn: async (matchId: string) => {
+      const res = await fetch(`/api/brackets/match/${matchId}/swap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      });
+      if (!res.ok) throw new Error('Failed to swap competitors');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
+      addToast?.('Competitors swapped.', 'success');
+    },
+    onError: (error: Error) => {
+      addToast(error.message || 'Swap failed', 'error');
+    },
+  });
+
+  // Pull all the tournament's registrations that AREN'T already
+  // assigned to this division, so the director can drop late entries
+  // into the bracket via the "+ Add" picker.
+  const { data: unassignedData } = useQuery<{ registrations: Array<{ id: string; competitor: Competitor }> }>({
+    queryKey: ['unassigned-registrations', tournamentId, divisionId],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/tournaments/${tournamentId}/registrations?notInDivision=${divisionId}`,
+        { headers: getAuthHeaders() },
+      );
+      if (!r.ok) return { registrations: [] };
+      return r.json();
+    },
+    enabled: !!division && !!tournamentId,
+  });
+
+  const [showAddPicker, setShowAddPicker] = useState(false);
+  const addCompetitorMutation = useMutation({
+    mutationFn: async (registrationId: string) => {
+      const res = await fetch(`/api/divisions/${divisionId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ registrationId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Add failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
+      queryClient.invalidateQueries({ queryKey: ['unassigned-registrations', tournamentId, divisionId] });
+      addToast?.('Competitor added to division. Regenerate bracket to include them.', 'success');
+    },
+    onError: (error: Error) => {
+      addToast(error.message || 'Add failed', 'error');
+    },
+  });
+
+  const removeCompetitorMutation = useMutation({
+    mutationFn: async (assignmentId: string) => {
+      const res = await fetch(`/api/divisions/${divisionId}/assign/${assignmentId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Remove failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
+      queryClient.invalidateQueries({ queryKey: ['unassigned-registrations', tournamentId, divisionId] });
+      addToast?.('Removed from division. Regenerate bracket if needed.', 'success');
+    },
+    onError: (error: Error) => {
+      addToast(error.message || 'Remove failed', 'error');
     },
   });
 
@@ -405,13 +493,60 @@ export default function BracketEditor() {
 
       {/* Competitors List */}
       <Card>
-        <CardHeader title={`Competitors (${division.assignments.length})`} action={<Users className="h-5 w-5 text-primary-600 dark:text-primary-400" />} />
+        <CardHeader
+          title={`Competitors (${division.assignments.length})`}
+          action={
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setShowAddPicker((v) => !v)}
+                aria-label="Add a competitor from the tournament's unassigned registrations"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add
+              </Button>
+              <Users className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+            </div>
+          }
+        />
         <CardBody>
+          {/* Inline "Add competitor" picker. Shows registrations registered
+              to the same tournament but not yet assigned to this division.
+              Closes H2 from the UI audit — directors can fix a kid who
+              showed up unregistered without rebuilding everything. */}
+          {showAddPicker && (
+            <div className="mb-3 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30">
+              <div className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mb-2">
+                Add from this tournament
+              </div>
+              {unassignedData?.registrations && unassignedData.registrations.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {unassignedData.registrations.map((r) => (
+                    <Button
+                      key={r.id}
+                      size="sm"
+                      variant="secondary"
+                      loading={addCompetitorMutation.isPending && addCompetitorMutation.variables === r.id}
+                      onClick={() => addCompetitorMutation.mutate(r.id)}
+                    >
+                      + {r.competitor.firstName} {r.competitor.lastName}
+                      {r.competitor.schoolDojang && <span className="text-xs ml-1 opacity-70">({r.competitor.schoolDojang})</span>}
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  Every registered competitor is already assigned to a division.
+                </p>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             {division.assignments.map((a, i) => (
               <span
                 key={a.id}
-                className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 gap-2"
               >
                 <span className="font-medium mr-1">{i + 1}.</span>
                 {a.registration.competitor.firstName}{' '}
@@ -421,6 +556,18 @@ export default function BracketEditor() {
                     ({a.registration.competitor.schoolDojang})
                   </span>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Remove ${a.registration.competitor.firstName} ${a.registration.competitor.lastName} from this division? Their bracket slot will be freed; regenerate the bracket to refill.`)) {
+                      removeCompetitorMutation.mutate(a.id);
+                    }
+                  }}
+                  aria-label={`Remove ${a.registration.competitor.firstName} ${a.registration.competitor.lastName} from this division`}
+                  className="ml-1 text-gray-500 hover:text-red-600 dark:hover:text-red-400 focus:outline-none focus:ring-2 focus:ring-red-500 rounded-full"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
               </span>
             ))}
           </div>
@@ -455,6 +602,11 @@ export default function BracketEditor() {
               colOffset={0}
               getMatchLabel={getMatchLabel}
               onSelectWinner={handleSelectWinner}
+              onSwap={(matchId) => {
+                if (confirm('Swap the two competitors in this match? Used to fix a bad auto-seed (e.g. two best kids landing in the same half).')) {
+                  swapMutation.mutate(matchId);
+                }
+              }}
             />
 
             {losersRounds.length > 0 && (
@@ -466,6 +618,11 @@ export default function BracketEditor() {
                 colOffset={winnersRounds.length}
                 getMatchLabel={getMatchLabel}
                 onSelectWinner={handleSelectWinner}
+                onSwap={(matchId) => {
+                  if (confirm('Swap the two competitors in this match?')) {
+                    swapMutation.mutate(matchId);
+                  }
+                }}
               />
             )}
 
@@ -479,6 +636,11 @@ export default function BracketEditor() {
                 colOffset={winnersRounds.length + losersRounds.length}
                 getMatchLabel={getMatchLabel}
                 onSelectWinner={handleSelectWinner}
+                onSwap={(matchId) => {
+                  if (confirm('Swap the two competitors in this match?')) {
+                    swapMutation.mutate(matchId);
+                  }
+                }}
                 showMatchLabels
                 matchLabelPrefix="Match"
               />
@@ -566,6 +728,7 @@ function BracketSection({
   colOffset,
   getMatchLabel,
   onSelectWinner,
+  onSwap,
   showMatchLabels = false,
   matchLabelPrefix = 'Match',
 }: {
@@ -577,6 +740,7 @@ function BracketSection({
   colOffset: number;
   getMatchLabel: (match: Match) => string;
   onSelectWinner: (matchId: string, winnerId: string, match: Match) => void;
+  onSwap?: (matchId: string) => void;
   showMatchLabels?: boolean;
   matchLabelPrefix?: string;
 }) {
@@ -630,6 +794,7 @@ function BracketSection({
                   onSelectWinner={(winnerId) =>
                     onSelectWinner(match.id, winnerId, match)
                   }
+                  onSwap={onSwap ? () => onSwap(match.id) : undefined}
                 />
               ))}
             </div>
@@ -644,11 +809,13 @@ function MatchCard({
   match,
   bracketCol,
   onSelectWinner,
+  onSwap,
   label,
 }: {
   match: Match;
   bracketCol: number;
   onSelectWinner: (winnerId: string) => void;
+  onSwap?: () => void;
   label: string;
 }) {
   const name1 = match.competitor1
@@ -741,6 +908,17 @@ function MatchCard({
           )}
         </button>
       </div>
+      {onSwap && match.competitor1Id && match.competitor2Id && (
+        <button
+          onClick={onSwap}
+          aria-label={`Swap competitors in match ${label}`}
+          title="Swap competitors (useful for fixing a bad auto-seed)"
+          className="w-full px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center justify-center gap-1"
+        >
+          <ArrowLeftRight className="h-3 w-3" aria-hidden="true" />
+          Swap
+        </button>
+      )}
     </div>
   );
 }
