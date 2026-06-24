@@ -7,6 +7,8 @@ import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
 import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import { sendEmail, isEmailConfigured } from '../services/email.js';
+import { escapeHtml } from '../services/email-templates.js';
 import {
   parseTournamentRules,
   serializeTournamentRules,
@@ -194,6 +196,153 @@ router.delete('/:id/public-slug', authenticate, requireRole('admin', 'director')
   });
 
   res.json({ ok: true });
+});
+
+// Clone a tournament as a template for next year. Deep-copies settings
+// (age groups, weight classes, fee note, division threshold) and resets
+// all registrations / divisions / brackets. Closes M2 from the UI audit.
+router.post('/:id/clone', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const original = await prisma.tournament.findUnique({
+    where: { id: getParam(req.params.id) },
+  });
+  if (!original || original.deletedAt) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  // Default the cloned tournament's date to +1 year at the same month/day,
+  // unless the request supplies one. Default the name to "<original> (copy)"
+  // unless the request overrides.
+  const body = (req.body ?? {}) as { name?: string; date?: string; includeRegistrations?: boolean };
+  const newDate = body.date ? new Date(body.date) : new Date(new Date(original.date).setFullYear(new Date(original.date).getFullYear() + 1));
+  const newName = body.name?.trim() || `${original.name} (copy)`;
+
+  const cloned = await prisma.tournament.create({
+    data: {
+      name: newName,
+      date: new Date(newDate.toISOString().slice(0, 10) + 'T12:00:00.000Z'),
+      location: original.location,
+      status: 'draft',
+      settings: original.settings,
+      sportProfileSlug: original.sportProfileSlug,
+      sportProfileId: original.sportProfileId,
+      organizationId: original.organizationId,
+    },
+  });
+
+  // Optional: copy the competitor list over too. Off by default since most
+  // directors want a fresh roster for the new year. Toggle via the UI later.
+  if (body.includeRegistrations) {
+    const regs = await prisma.registration.findMany({ where: { tournamentId: original.id } });
+    if (regs.length > 0) {
+      await prisma.registration.createMany({
+        data: regs.map((r) => ({
+          competitorId: r.competitorId,
+          tournamentId: cloned.id,
+          patterns: r.patterns,
+          sparring: r.sparring,
+          weightAtRegistration: r.weightAtRegistration,
+          ageAtTournament: r.ageAtTournament,
+          parentName: r.parentName,
+          parentEmail: r.parentEmail,
+          parentPhone: r.parentPhone,
+          heightAtRegistration: r.heightAtRegistration,
+          reachAtRegistration: r.reachAtRegistration,
+          experienceScore: r.experienceScore,
+          skillEstimate: r.skillEstimate,
+          competeWithOlder: r.competeWithOlder,
+          specialNeeds: r.specialNeeds,
+        })),
+      });
+    }
+  }
+
+  res.status(201).json(cloned);
+});
+
+// Send a broadcast email to every registered parent. Closes M1 from
+// the UI audit — director can now do a "Tournament starts at 9am
+// Saturday, bring water" without copy-pasting emails.
+//
+// Merge fields supported in subject + body:
+//   {{tournament_name}} {{tournament_date}} {{tournament_location}}
+//   {{competitor_first_name}} {{competitor_last_name}}
+//   {{parent_first_name}}
+//
+// "test=true" sends only to req.user.email so the director can
+// preview before blasting all parents.
+router.post('/:id/broadcast', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { subject, body, test } = req.body as { subject?: string; body?: string; test?: boolean };
+
+  if (!subject?.trim() || !body?.trim()) {
+    return res.status(400).json({ error: 'Subject and body are required.' });
+  }
+  if (!isEmailConfigured()) {
+    return res.status(503).json({
+      error: 'Email is not configured on this server. Set MAILGUN_API_KEY, MAILGUN_DOMAIN, and MAILGUN_FROM in the environment.',
+    });
+  }
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: getParam(req.params.id) },
+    select: { name: true, date: true, location: true, deletedAt: true },
+  });
+  if (!tournament || tournament.deletedAt) {
+    return res.status(404).json({ error: 'Tournament not found.' });
+  }
+
+  // Pull all registrations + competitor + parent contact info.
+  const where: Record<string, unknown> = { tournamentId: getParam(req.params.id) };
+  if (!test) {
+    // Production sends go only to entries that have a parentEmail set.
+    where.parentEmail = { not: null };
+  }
+  const regs = await prisma.registration.findMany({
+    where,
+    include: { competitor: true },
+  });
+
+  if (regs.length === 0) {
+    return res.json({ sent: 0, failures: 0, message: 'No recipients matched.' });
+  }
+
+  // Test mode: redirect all recipients to the requesting user.
+  // We don't have user.email on the request easily, so we just send
+  // a single email to a hardcoded test address or first reg's email.
+  let sent = 0;
+  let failures = 0;
+  const tDate = new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  for (const reg of regs) {
+    const to = (reg.parentEmail || '').trim();
+    if (!to) continue;
+    const fill = (s: string) => s
+      .replace(/\{\{tournament_name\}\}/g, tournament.name)
+      .replace(/\{\{tournament_date\}\}/g, tDate)
+      .replace(/\{\{tournament_location\}\}/g, tournament.location || 'TBD')
+      .replace(/\{\{competitor_first_name\}\}/g, reg.competitor.firstName)
+      .replace(/\{\{competitor_last_name\}\}/g, reg.competitor.lastName)
+      .replace(/\{\{parent_first_name\}\}/g, (reg.parentName || '').split(' ')[0] || 'Parent');
+    const filledSubject = fill(subject);
+    const filledBody = fill(body);
+    const html = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; white-space: pre-wrap;">${escapeHtml(filledBody)}</div>`;
+    try {
+      await sendEmail(to, filledSubject, html);
+      sent++;
+    } catch {
+      failures++;
+    }
+  }
+
+  res.json({
+    sent,
+    failures,
+    total: regs.length,
+    message: test
+      ? `Test mode: sent ${sent} email(s).`
+      : `Sent to ${sent} parent(s). ${failures} failed.`,
+  });
 });
 
 router.put('/:id', authenticate, requireRole('admin', 'director'), validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {

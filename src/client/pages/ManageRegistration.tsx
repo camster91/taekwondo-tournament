@@ -1,0 +1,591 @@
+// Parent-facing "Manage Registration" page. The parent enters their
+// confirmation code + last name + DOB (3-factor verify), then sees
+// their kid's full registration and can:
+//   - fix a typo in the name or school
+//   - change the belt rank
+//   - toggle which events (patterns/sparring) they're entered in
+//   - update weight / specialNeeds / competeWithOlder
+//   - withdraw the registration entirely (kid is sick, etc.)
+//
+// This closes H1 from the UI audit — the #1 missing feature.
+// Backend at /api/public/registrations/:code (GET/PATCH/DELETE).
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  AlertCircle,
+  Edit3,
+  Trash2,
+  Save,
+  X,
+  UserX,
+  Calendar,
+  MapPin,
+  ShieldOff,
+} from 'lucide-react';
+import { Card, CardBody } from '../components/ui';
+import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
+import Label from '../components/ui/Label';
+import Select from '../components/ui/Select';
+
+interface ManageRegistration {
+  confirmationCode: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender: string;
+  belt: string;
+  weight: number | null;
+  school: string | null;
+  specialNeeds: string | null;
+  competeWithOlder: boolean;
+  patterns: boolean;
+  sparring: boolean;
+  tournamentId: string;
+  tournamentName: string;
+  tournamentDate: string;
+  tournamentStatus: string;
+  checkedIn: boolean;
+}
+
+const TKD_BELT_OPTIONS = [
+  'White', 'White / Single Yellow Stripe', 'White / Double Yellow Stripe',
+  'Yellow', 'Yellow / Single Green Stripe', 'Yellow / Double Green Stripe',
+  'Green', 'Green / Single Blue Stripe', 'Green / Double Blue Stripe',
+  'Blue', 'Blue / Single Red Stripe', 'Blue / Double Red Stripe',
+  'Red', 'Red / Single Black Stripe', 'Red / Double Black Stripe',
+  'Brown', 'Brown / Single Black Stripe', 'Brown / Double Black Stripe',
+  'Black',
+];
+
+export default function ManageRegistration() {
+  const [searchParams] = useSearchParams();
+  const initialCode = searchParams.get('code') || '';
+
+  // Step 1: lookup form
+  const [code, setCode] = useState(initialCode);
+  const [lastName, setLastName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [registration, setRegistration] = useState<ManageRegistration | null>(null);
+
+  // Step 2: edit form
+  const [editMode, setEditMode] = useState(false);
+  const [form, setForm] = useState<Partial<ManageRegistration>>({});
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [globalError, setGlobalError] = useState<string | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawn, setWithdrawn] = useState(false);
+
+  useEffect(() => {
+    if (initialCode && !registration) {
+      // Auto-fill only the code; user still needs lastName + DOB
+      setCode(initialCode.toUpperCase());
+    }
+  }, [initialCode, registration]);
+
+  const handleLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLookupError(null);
+    setRegistration(null);
+    setSavedAt(null);
+
+    if (!code.trim() || !lastName.trim() || !dateOfBirth) {
+      setLookupError('Please fill in all three fields.');
+      return;
+    }
+
+    setLookupLoading(true);
+    try {
+      const params = new URLSearchParams({
+        lastName: lastName.trim(),
+        dateOfBirth,
+      });
+      const res = await fetch(
+        `/api/public/registrations/${encodeURIComponent(code.trim().toLowerCase())}?${params}`,
+      );
+      if (res.status === 404) {
+        setLookupError(
+          'No matching registration found. Check the confirmation code, spelling, and date of birth.'
+        );
+        return;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Lookup failed.' }));
+        throw new Error(body.error || 'Lookup failed.');
+      }
+      const data = await res.json();
+      setRegistration(data.registration);
+      setForm(data.registration);
+    } catch (err) {
+      setLookupError(err instanceof Error ? err.message : 'Lookup failed. Please try again.');
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!registration) return;
+    setGlobalError(null);
+    setSaving(true);
+    try {
+      const res = await fetch(
+        `/api/public/registrations/${encodeURIComponent(registration.confirmationCode)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lastName,
+            dateOfBirth,
+            firstName: form.firstName,
+            gender: form.gender,
+            belt: form.belt,
+            school: form.school,
+            weight: form.weight,
+            specialNeeds: form.specialNeeds,
+            competeWithOlder: form.competeWithOlder,
+            patterns: form.patterns,
+            sparring: form.sparring,
+          }),
+        },
+      );
+      if (res.status === 404) {
+        setGlobalError('Registration not found. The lookup data may be stale — start over.');
+        setRegistration(null);
+        return;
+      }
+      if (res.status === 409) {
+        const body = await res.json().catch(() => ({ error: 'Conflict' }));
+        setGlobalError(body.error || 'Cannot edit this registration.');
+        return;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Save failed.' }));
+        throw new Error(body.error || 'Save failed.');
+      }
+      // Re-fetch the registration to get the fresh state
+      const params = new URLSearchParams({ lastName, dateOfBirth });
+      const refreshed = await fetch(
+        `/api/public/registrations/${encodeURIComponent(registration.confirmationCode)}?${params}`,
+      );
+      const fresh = await refreshed.json();
+      setRegistration(fresh.registration);
+      setForm(fresh.registration);
+      setEditMode(false);
+      setSavedAt(new Date());
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : 'Save failed.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!registration) return;
+    if (!confirm(
+      `Withdraw ${registration.firstName} from ${registration.tournamentName}? This permanently removes the registration. The director will need to regenerate brackets.`
+    )) return;
+    setGlobalError(null);
+    setWithdrawing(true);
+    try {
+      const res = await fetch(
+        `/api/public/registrations/${encodeURIComponent(registration.confirmationCode)}`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lastName, dateOfBirth }),
+        },
+      );
+      if (res.status === 404) {
+        setGlobalError('Already withdrawn or not found.');
+        setWithdrawn(true);
+        return;
+      }
+      if (res.status === 409) {
+        const body = await res.json().catch(() => ({ error: 'Conflict' }));
+        setGlobalError(body.error || 'Cannot withdraw.');
+        return;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Withdraw failed.' }));
+        throw new Error(body.error || 'Withdraw failed.');
+      }
+      setWithdrawn(true);
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : 'Withdraw failed.');
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  const reset = () => {
+    setRegistration(null);
+    setEditMode(false);
+    setForm({});
+    setSavedAt(null);
+    setGlobalError(null);
+    setLookupError(null);
+    setWithdrawn(false);
+  };
+
+  // ── Render: withdrawn confirmation
+  if (withdrawn) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+        <div className="max-w-md mx-auto">
+          <Card>
+            <CardBody className="p-8 text-center">
+              <ShieldOff className="h-16 w-16 text-amber-500 mx-auto mb-4" aria-hidden="true" />
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Registration withdrawn</h1>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                {registration?.firstName} has been removed from {registration?.tournamentName}. A confirmation email will follow.
+              </p>
+              <Button variant="primary" onClick={reset}>Look up another</Button>
+            </CardBody>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: edit / view form (after lookup)
+  if (registration) {
+    const isLocked = registration.checkedIn || ['in_progress', 'completed'].includes(registration.tournamentStatus);
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+        <div className="max-w-2xl mx-auto">
+          <button
+            type="button"
+            onClick={reset}
+            className="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Look up another registration
+          </button>
+
+          {/* Tournament context */}
+          <div className="mb-4 p-4 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700">
+            <div className="flex items-center gap-2 text-indigo-800 dark:text-indigo-200">
+              <Calendar className="h-4 w-4" />
+              <span className="font-medium">{registration.tournamentName}</span>
+              <span className="text-sm">·</span>
+              <span className="text-sm">
+                {new Date(registration.tournamentDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+              </span>
+            </div>
+            <div className="text-xs text-indigo-700 dark:text-indigo-300 mt-1">
+              Confirmation code: <span className="font-mono font-bold">{registration.confirmationCode}</span>
+              {registration.checkedIn && (
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                  CHECKED IN
+                </span>
+              )}
+            </div>
+          </div>
+
+          {isLocked && (
+            <div
+              role="alert"
+              className="mb-4 p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2"
+            >
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <span>
+                {registration.checkedIn
+                  ? 'This registration is checked in — no edits can be made. Talk to the director at the venue if something needs to change.'
+                  : 'The tournament has started. No edits or withdrawals are possible from here.'}
+              </span>
+            </div>
+          )}
+
+          {savedAt && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mb-4 p-3 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm text-green-800 dark:text-green-300 flex items-start gap-2"
+            >
+              <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <span>
+                Saved at {savedAt.toLocaleTimeString()}. The director may need to regenerate brackets if you changed your belt or weight.
+              </span>
+            </div>
+          )}
+
+          {globalError && (
+            <div
+              role="alert"
+              className="mb-4 p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-start gap-2"
+            >
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <span>{globalError}</span>
+            </div>
+          )}
+
+          <Card>
+            <CardBody className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {registration.firstName} {registration.lastName}
+                </h2>
+                {!isLocked && (
+                  <div className="flex gap-2">
+                    {editMode ? (
+                      <>
+                        <Button variant="secondary" size="sm" onClick={() => { setEditMode(false); setForm(registration); }} disabled={saving}>
+                          <X className="h-4 w-4 mr-1" /> Cancel
+                        </Button>
+                        <Button variant="primary" size="sm" onClick={handleSave} loading={saving}>
+                          <Save className="h-4 w-4 mr-1" /> Save changes
+                        </Button>
+                      </>
+                    ) : (
+                      <Button variant="secondary" size="sm" onClick={() => setEditMode(true)}>
+                        <Edit3 className="h-4 w-4 mr-1" /> Edit
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="m-firstName">First name</Label>
+                  {editMode ? (
+                    <Input id="m-firstName" value={form.firstName || ''} onChange={(e) => setForm({ ...form, firstName: e.target.value })} />
+                  ) : (
+                    <ReadonlyField value={registration.firstName} />
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="m-lastName">Last name</Label>
+                  <ReadonlyField value={registration.lastName} />
+                  <p className="text-xs text-gray-500 mt-1">Last name is locked for verification — can't be changed.</p>
+                </div>
+                <div>
+                  <Label htmlFor="m-dob">Date of birth</Label>
+                  <ReadonlyField value={new Date(registration.dateOfBirth).toLocaleDateString()} />
+                  <p className="text-xs text-gray-500 mt-1">Locked for verification — can't be changed.</p>
+                </div>
+                <div>
+                  <Label htmlFor="m-gender">Gender</Label>
+                  {editMode ? (
+                    <Select id="m-gender" value={form.gender || 'M'} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+                      <option value="M">Male</option>
+                      <option value="F">Female</option>
+                      <option value="Other">Other</option>
+                    </Select>
+                  ) : (
+                    <ReadonlyField value={registration.gender === 'M' ? 'Male' : registration.gender === 'F' ? 'Female' : registration.gender} />
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="m-belt">Belt rank</Label>
+                  {editMode ? (
+                    <Select id="m-belt" value={form.belt || ''} onChange={(e) => setForm({ ...form, belt: e.target.value })}>
+                      {TKD_BELT_OPTIONS.map((b) => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <ReadonlyField value={registration.belt} />
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="m-weight">Weight (lbs)</Label>
+                  {editMode ? (
+                    <Input
+                      id="m-weight"
+                      type="number"
+                      min={20}
+                      max={400}
+                      value={form.weight ?? ''}
+                      onChange={(e) => setForm({ ...form, weight: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                    />
+                  ) : (
+                    <ReadonlyField value={registration.weight != null ? `${registration.weight} lbs` : 'Not recorded'} />
+                  )}
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="m-school">School / Dojang</Label>
+                  {editMode ? (
+                    <Input id="m-school" value={form.school || ''} onChange={(e) => setForm({ ...form, school: e.target.value })} />
+                  ) : (
+                    <ReadonlyField value={registration.school || 'Independent'} />
+                  )}
+                </div>
+                <div className="sm:col-span-2">
+                  <Label className="mb-2">Events</Label>
+                  <div className="flex gap-4">
+                    {['patterns', 'sparring'].map((evt) => (
+                      <label key={evt} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={!!form[evt as keyof ManageRegistration]}
+                          disabled={!editMode}
+                          onChange={(e) => setForm({ ...form, [evt]: e.target.checked })}
+                          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="capitalize">{evt}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 mt-2">
+                    <input
+                      type="checkbox"
+                      checked={!!form.competeWithOlder}
+                      disabled={!editMode}
+                      onChange={(e) => setForm({ ...form, competeWithOlder: e.target.checked })}
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>
+                      <span className="font-medium">Compete in older age band</span>
+                      <span className="block text-xs text-gray-500">
+                        Subject to the tournament's age-flex rules.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="m-sn">Special considerations / accommodations</Label>
+                  {editMode ? (
+                    <textarea
+                      id="m-sn"
+                      value={form.specialNeeds || ''}
+                      onChange={(e) => setForm({ ...form, specialNeeds: e.target.value })}
+                      rows={3}
+                      placeholder="Any accommodations or medical info the director should know."
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+                    />
+                  ) : (
+                    <ReadonlyField value={registration.specialNeeds || 'None'} />
+                  )}
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+
+          {!isLocked && !editMode && (
+            <div className="mt-4 p-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-red-900 dark:text-red-200">Withdraw registration</p>
+                  <p className="text-sm text-red-700 dark:text-red-300 mt-0.5">
+                    Use this if your kid is sick, has a schedule conflict, or you no longer want to compete. The director will be notified.
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleWithdraw}
+                  loading={withdrawing}
+                  className="text-red-700 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-900/40 border-red-300 dark:border-red-700 flex-shrink-0"
+                >
+                  <UserX className="h-4 w-4 mr-1" /> Withdraw
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: lookup form (initial)
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+      <div className="max-w-md mx-auto">
+        <Link
+          to="/register"
+          className="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Back to register
+        </Link>
+        <Card>
+          <CardBody className="p-8">
+            <div className="text-center mb-6">
+              <Edit3 className="h-12 w-12 text-indigo-500 mx-auto mb-3" aria-hidden="true" />
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Manage registration</h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Update your kid's details or withdraw. We need 3 things to verify it's you.
+              </p>
+            </div>
+
+            <form onSubmit={handleLookup} className="space-y-4" aria-describedby={lookupError ? 'lookup-error' : undefined}>
+              <div>
+                <Label htmlFor="m-code" required>Confirmation code</Label>
+                <Input
+                  id="m-code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="8-character code"
+                  required
+                  aria-required="true"
+                  maxLength={8}
+                  className="font-mono uppercase tracking-widest"
+                />
+                <p className="text-xs text-gray-500 mt-1">From the success screen or your confirmation email.</p>
+              </div>
+              <div>
+                <Label htmlFor="m-last" required>Last name</Label>
+                <Input
+                  id="m-last"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                  aria-required="true"
+                  autoComplete="family-name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="m-dob" required>Date of birth</Label>
+                <Input
+                  id="m-dob"
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  required
+                  aria-required="true"
+                  autoComplete="bday"
+                />
+              </div>
+
+              {lookupError && (
+                <div
+                  role="alert"
+                  className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-start gap-2"
+                >
+                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                  <span>{lookupError}</span>
+                </div>
+              )}
+
+              <Button type="submit" variant="primary" loading={lookupLoading} className="w-full">
+                Find registration
+              </Button>
+            </form>
+
+            <p className="text-xs text-gray-500 mt-6 text-center">
+              Don't have a confirmation code?{' '}
+              <Link to="/check-registration" className="underline">Look it up by tournament + name + DOB</Link>
+              {' '}first.
+            </p>
+          </CardBody>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function ReadonlyField({ value }: { value: string | number | null | undefined }) {
+  return (
+    <div className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-sm text-slate-900 dark:text-slate-100 flex items-center">
+      {value ?? '—'}
+    </div>
+  );
+}

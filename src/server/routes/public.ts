@@ -486,6 +486,210 @@ router.get('/check-registration', checkRegistrationLimiter, async (req: Request,
   });
 });
 
+// Lookup a registration by confirmation code + last name + DOB (3-factor).
+// Used by the parent-facing "Manage Registration" page so they can
+// edit / withdraw their kid's entry without an account.
+//
+// Returns the FULL registration + competitor + tournament data when
+// all three factors match. 404 if any factor is wrong (same shape as
+// check-registration, no enumeration via differential responses).
+const manageLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: 'Too many lookups. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => rateLimitDisabled,
+});
+
+router.get('/registrations/:code', manageLimiter, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const code = String(req.params.code || '').slice(0, 8);
+  const lastName = String(req.query.lastName || '').trim();
+  const dob = String(req.query.dateOfBirth || '');
+
+  if (code.length < 6 || !lastName || !dob) {
+    return res.status(400).json({ error: 'Missing required parameters' });
+  }
+
+  // Match by registration.id prefix (first 8 chars)
+  const registration = await prisma.registration.findFirst({
+    where: {
+      id: { startsWith: code },
+      competitor: { lastName, dateOfBirth: new Date(dob) },
+    },
+    include: {
+      competitor: true,
+      tournament: { select: { id: true, name: true, date: true, status: true } },
+    },
+  });
+
+  if (!registration) {
+    return res.status(404).json({ error: 'No matching registration found.' });
+  }
+
+  res.json({
+    registration: {
+      confirmationCode: registration.id.slice(0, 8),
+      firstName: registration.competitor.firstName,
+      lastName: registration.competitor.lastName,
+      dateOfBirth: registration.competitor.dateOfBirth,
+      gender: registration.competitor.gender,
+      belt: registration.competitor.belt,
+      weight: registration.weightAtRegistration,
+      school: registration.competitor.schoolDojang,
+      specialNeeds: registration.specialNeeds,
+      competeWithOlder: registration.competeWithOlder,
+      patterns: registration.patterns,
+      sparring: registration.sparring,
+      tournamentId: registration.tournamentId,
+      tournamentName: registration.tournament.name,
+      tournamentDate: registration.tournament.date,
+      tournamentStatus: registration.tournament.status,
+      checkedIn: registration.checkedIn,
+    },
+  });
+});
+
+const manageUpdateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many updates. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => rateLimitDisabled,
+});
+
+// Update a registration by confirmation code. Parents can fix typos,
+// change belts, toggle which events they're entered in. Director-side
+// changes go through /api/tournaments/:id/registrations/:id.
+router.patch('/registrations/:code', manageUpdateLimiter, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const code = String(req.params.code || '').slice(0, 8);
+  const lastName = String(req.body?.lastName || '').trim();
+  const dob = String(req.body?.dateOfBirth || '');
+
+  if (code.length < 6 || !lastName || !dob) {
+    return res.status(400).json({ error: 'Missing required parameters' });
+  }
+
+  const registration = await prisma.registration.findFirst({
+    where: {
+      id: { startsWith: code },
+      competitor: { lastName, dateOfBirth: new Date(dob) },
+    },
+    include: { tournament: { select: { status: true, date: true } } },
+  });
+
+  if (!registration) {
+    return res.status(404).json({ error: 'No matching registration found.' });
+  }
+
+  // Hard rules: can't edit a checked-in registration, can't edit a
+  // tournament that's already in_progress or later.
+  if (registration.checkedIn) {
+    return res.status(409).json({ error: 'Cannot edit a checked-in registration. Talk to the director at the venue.' });
+  }
+  if (['in_progress', 'completed'].includes(registration.tournament.status)) {
+    return res.status(409).json({ error: 'Cannot edit a registration once the tournament has started.' });
+  }
+
+  // Build the patch object. Only allow fields the parent can change.
+  const data: Record<string, unknown> = {};
+
+  if (req.body?.firstName !== undefined) {
+    const v = String(req.body.firstName).trim();
+    if (!v) return res.status(400).json({ error: 'First name cannot be empty.' });
+    data.firstName = v;
+  }
+  if (req.body?.gender !== undefined) {
+    data.gender = String(req.body.gender).trim();
+  }
+  if (req.body?.belt !== undefined) {
+    data.belt = String(req.body.belt).trim();
+  }
+  if (req.body?.school !== undefined) {
+    data.schoolDojang = String(req.body.school).trim() || null;
+  }
+  if (req.body?.specialNeeds !== undefined) {
+    data.specialNeeds = String(req.body.specialNeeds).trim() || null;
+  }
+  if (req.body?.competeWithOlder !== undefined) {
+    data.competeWithOlder = !!req.body.competeWithOlder;
+  }
+
+  // Registration-level changes
+  const regData: Record<string, unknown> = {};
+  if (req.body?.patterns !== undefined) regData.patterns = !!req.body.patterns;
+  if (req.body?.sparring !== undefined) regData.sparring = !!req.body.sparring;
+  if (req.body?.weight !== undefined) {
+    const w = parseFloat(String(req.body.weight));
+    if (!isNaN(w) && w > 0) regData.weightAtRegistration = w;
+  }
+
+  if (Object.keys(data).length === 0 && Object.keys(regData).length === 0) {
+    return res.status(400).json({ error: 'No editable fields supplied.' });
+  }
+
+  // Use a transaction so competitor + registration stay consistent.
+  await prisma.$transaction(async (tx) => {
+    if (Object.keys(data).length > 0) {
+      await tx.competitor.update({ where: { id: registration.competitorId }, data });
+    }
+    if (Object.keys(regData).length > 0) {
+      await tx.registration.update({ where: { id: registration.id }, data: regData });
+    }
+  });
+
+  // Invalidate bracket regeneration since the data changed.
+  await prisma.divisionAssignment.deleteMany({ where: { registrationId: registration.id } });
+  await prisma.match.deleteMany({ where: { OR: [{ competitor1Id: registration.id }, { competitor2Id: registration.id }] } });
+  await prisma.bracket.deleteMany({ where: { division: { assignments: { some: { registrationId: registration.id } } } } }).catch(() => null);
+
+  res.json({ success: true, message: 'Registration updated. Your division assignment may change when brackets are regenerated.' });
+});
+
+// Withdraw a registration by confirmation code. Parents can do this
+// when their kid is sick, has a schedule conflict, etc.
+router.delete('/registrations/:code', manageUpdateLimiter, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const code = String(req.params.code || '').slice(0, 8);
+  const lastName = String(req.body?.lastName || '').trim();
+  const dob = String(req.body?.dateOfBirth || '');
+
+  if (code.length < 6 || !lastName || !dob) {
+    return res.status(400).json({ error: 'Missing required parameters' });
+  }
+
+  const registration = await prisma.registration.findFirst({
+    where: {
+      id: { startsWith: code },
+      competitor: { lastName, dateOfBirth: new Date(dob) },
+    },
+    include: { tournament: { select: { status: true } } },
+  });
+
+  if (!registration) {
+    return res.status(404).json({ error: 'No matching registration found.' });
+  }
+
+  if (registration.checkedIn) {
+    return res.status(409).json({ error: 'Cannot withdraw a checked-in registration. Talk to the director at the venue.' });
+  }
+  if (['in_progress', 'completed'].includes(registration.tournament.status)) {
+    return res.status(409).json({ error: 'Cannot withdraw once the tournament has started.' });
+  }
+
+  // Cascade-delete related rows before removing the registration.
+  await prisma.$transaction(async (tx) => {
+    await tx.divisionAssignment.deleteMany({ where: { registrationId: registration.id } });
+    await tx.match.deleteMany({ where: { OR: [{ competitor1Id: registration.id }, { competitor2Id: registration.id }] } });
+    await tx.registration.delete({ where: { id: registration.id } });
+  });
+
+  res.json({ success: true, message: 'Registration withdrawn.' });
+});
+
 function getAgeGroupLabel(age: number): string {
   if (age <= 5) return '4-5';
   if (age <= 7) return '6-7';
