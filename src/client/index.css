@@ -494,4 +494,29 @@ a:focus:not(:focus-visible) {
 @media print {
   .no-print { display: none !important; }
   body { background: white; }
+
+  /* Bracket print layout: collapse the horizontal scroller so the
+     whole bracket fits on letter paper. Loses the dark theme,
+     keeps competitor names + scores + winner markers readable. */
+  .bracket-print-root {
+    background: white !important;
+    color: #111 !important;
+  }
+  .bracket-print-root .dark\:bg-gray-800,
+  .bracket-print-root .dark\:bg-gray-900,
+  .bracket-print-root .dark\:bg-slate-900 {
+    background-color: white !important;
+  }
+  .bracket-print-root .dark\:text-white,
+  .bracket-print-root .dark\:text-gray-100,
+  .bracket-print-root .dark\:text-gray-300 {
+    color: #111 !important;
+  }
+  /* The Bracket Editor uses a wide horizontal layout that won't fit
+     on a printed page. Allow it to wrap to multiple rows so each
+     round prints on its own line. */
+  .bracket-print-root [data-bracket-section="true"] {
+    flex-direction: column !important;
+    gap: 1.5rem !important;
+  }
 }
