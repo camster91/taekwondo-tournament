@@ -253,7 +253,7 @@ export default function CheckIn() {
         </div>
 
         {/* Stats Bar */}
-        <div className="px-4 pb-2 grid grid-cols-4 gap-2">
+        <div className="px-4 pb-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
           <StatTile label="Registered" value={stats.total} accent="blue" />
           <StatTile label="Checked In" value={stats.checkedIn} accent="green" />
           <StatTile label="Missing" value={stats.total - stats.checkedIn} accent="yellow" />
