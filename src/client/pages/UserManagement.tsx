@@ -24,6 +24,7 @@ import Spinner from '../components/ui/Spinner';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import { Card, CardHeader, CardBody } from '../components/ui';
+import { StatTile } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
@@ -273,10 +274,15 @@ export default function UserManagement() {
           to="/"
           className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
         >
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Dashboard
+          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Dashboard
         </Link>
       </PageHeader>
+
+      {/* Usage Stats — L3 from the UI audit. Quick "is the platform
+          actually being used" indicators an admin would want at a
+          glance. Reuses the existing /api/analytics/dashboard
+          endpoint. */}
+      <AnalyticsSummary />
 
       {/* Notifications */}
       {error && (
@@ -672,6 +678,44 @@ export default function UserManagement() {
           </form>
         </Modal>
       )}
+    </div>
+  );
+}
+
+// AnalyticsSummary — small usage-stats panel for the User Management page.
+// Reuses the existing /api/analytics/dashboard endpoint so we don't add a
+// new server route. Closes L3 from the UI audit (usage stats on the
+// admin page). Audit log itself is out of scope (deferred per brief).
+function AnalyticsSummary() {
+  const { data: analytics, isLoading } = useQuery<{
+    totals: { competitors: number; tournaments: number; matches: number };
+    completedMatches: number;
+    recentRegistrations: number;
+    activeUsersLast30Days?: number;
+  }>({
+    queryKey: ['analytics', 'dashboard'],
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/dashboard', { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch analytics');
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <StatTile label="Total competitors" value={isLoading ? '…' : analytics?.totals.competitors ?? 0} />
+      <StatTile label="Tournaments" value={isLoading ? '…' : analytics?.totals.tournaments ?? 0} />
+      <StatTile
+        label="Matches completed"
+        value={isLoading ? '…' : analytics?.completedMatches ?? 0}
+        trend={`${analytics?.totals.matches ?? 0} total`}
+      />
+      <StatTile
+        label="Registrations (30d)"
+        value={isLoading ? '…' : analytics?.recentRegistrations ?? 0}
+        trend={analytics?.activeUsersLast30Days != null ? `${analytics.activeUsersLast30Days} active directors` : undefined}
+      />
     </div>
   );
 }
