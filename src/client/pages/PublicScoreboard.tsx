@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Trophy, Clock, Users, ChevronRight, Award, Zap, Radio, MapPin, Loader2, AlertCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -274,9 +274,22 @@ export default function PublicScoreboard() {
           </div>
         </div>
 
-        {/* Ring tabs — using Button components */}
-        <div className="px-4 md:px-8 pb-0 flex items-end justify-between border-t border-white/5 pt-2 overflow-x-auto">
-          <div className="flex items-end gap-1">
+        {/* Mobile-only banner: point parents to the simpler mobile view.
+            On the venue TV this banner hides (md:hidden). */}
+        <div className="md:hidden px-4 py-2 bg-indigo-950/40 border-b border-white/5">
+          <Link
+            to={`/scoreboard/parent/${tournamentId}`}
+            className="text-xs text-indigo-300 hover:text-indigo-200 underline"
+          >
+            📱 Better view for phones →
+          </Link>
+        </div>
+
+        {/* Ring tabs — using Button components. Hidden on mobile since
+            parents should be on the dedicated /scoreboard/parent view. */}
+        <div className="hidden md:block px-4 md:px-8 pb-0">
+          <div className="flex items-end justify-between border-t border-white/5 pt-2 overflow-x-auto">
+            <div className="flex items-end gap-1">
             <Button
               variant="ghost"
               size="sm"
@@ -310,6 +323,7 @@ export default function PublicScoreboard() {
                 Resume auto-cycle
               </Button>
             )}
+          </div>
           </div>
           <div className={`text-xs pb-3 flex items-center gap-2 ${isStale ? 'text-amber-400' : 'text-slate-300'}`}>
             <span className={`h-2 w-2 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
