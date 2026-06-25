@@ -17,7 +17,27 @@ interface Tournament {
   date: string;
   location: string | null;
   sportProfileSlug: string | null;
+  // JSON-stringified settings blob from the Tournament model. The public
+  // route returns the raw `settings` column; we only read the fee fields
+  // (F9) and ignore the rest (most are director-only).
+  settings?: string | null;
   _count: { registrations: number };
+}
+
+interface TournamentSettings {
+  tournamentFeeCents?: number;
+  feeNotes?: string;
+  [key: string]: unknown;
+}
+
+function parseTournamentSettings(raw: string | null | undefined): TournamentSettings {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as TournamentSettings) : {};
+  } catch {
+    return {};
+  }
 }
 
 interface RegistrationResult {
@@ -204,6 +224,16 @@ export default function PublicRegister() {
   // Map sport event types to the two boolean fields (patterns = first event, sparring = second)
   const eventType0 = sportProfile.eventTypes[0];
   const eventType1 = sportProfile.eventTypes[1];
+
+  // F9: fee info for the currently-selected tournament. We reuse the
+  // existing `selectedTournament` (declared at line ~138) and just
+  // parse its settings blob for the structured fee fields.
+  const selectedTournamentSettings = useMemo(
+    () => parseTournamentSettings(selectedTournament?.settings),
+    [selectedTournament]
+  );
+  const selectedTournamentFeeCents = selectedTournamentSettings.tournamentFeeCents ?? 0;
+  const selectedTournamentFeeNotes = selectedTournamentSettings.feeNotes ?? '';
 
   useEffect(() => {
     fetch('/api/public/tournaments')
@@ -626,13 +656,39 @@ export default function PublicRegister() {
                   aria-required="true"
                 >
                   <option value="">-- Select a Tournament --</option>
-                  {tournaments.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} - {new Date(t.date).toLocaleDateString()}
-                      {t.location && ` (${t.location})`}
-                    </option>
-                  ))}
+                  {tournaments.map((t) => {
+                    const tSettings = parseTournamentSettings(t.settings);
+                    const feeCents = tSettings.tournamentFeeCents ?? 0;
+                    return (
+                      <option key={t.id} value={t.id}>
+                        {t.name} - {new Date(t.date).toLocaleDateString()}
+                        {t.location && ` (${t.location})`}
+                        {feeCents > 0 ? ` — $${(feeCents / 100).toFixed(2)}` : ''}
+                      </option>
+                    );
+                  })}
                 </Select>
+                {/* F9: fee notice for the selected tournament. Hidden until a
+                    tournament is picked so we don't display a "0" placeholder
+                    before the parent has chosen. The notes line is only
+                    rendered if the director actually wrote a note. */}
+                {selectedTournament && selectedTournamentFeeCents > 0 && (
+                  <div
+                    data-testid="tournament-fee-notice"
+                    className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30 p-3 text-sm text-amber-900 dark:text-amber-200"
+                    role="note"
+                  >
+                    <CreditCard className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                    <div>
+                      <div className="font-semibold">
+                        Tournament fee: ${(selectedTournamentFeeCents / 100).toFixed(2)}
+                      </div>
+                      {selectedTournamentFeeNotes && (
+                        <div className="mt-0.5 text-xs">{selectedTournamentFeeNotes}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Competitor Information */}
