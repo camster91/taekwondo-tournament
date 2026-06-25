@@ -51,6 +51,7 @@ export default function PublicScoreboard() {
   const [activeRing, setActiveRing] = useState<number | 'all'>('all');
   const [cycleEnabled, setCycleEnabled] = useState(true);
   const [cycleIndex, setCycleIndex] = useState(0);
+  const [lastFetchAt, setLastFetchAt] = useState<Date | null>(null);
 
   // Update time every second
   useEffect(() => {
@@ -98,6 +99,7 @@ export default function PublicScoreboard() {
     queryFn: async () => {
       const res = await fetch(`/api/public/tournaments/${tournamentId}/scoreboard`);
       if (!res.ok) throw new Error('Failed to fetch scoreboard');
+      setLastFetchAt(new Date());
       return res.json();
     },
     refetchInterval: 3000, // TV mode: refresh every 3s
@@ -105,6 +107,13 @@ export default function PublicScoreboard() {
   });
   const divisions = scoreboardData?.divisions;
   const displaySettings = scoreboardData?.displaySettings;
+
+  // Stale-data warning. If 15+ seconds have passed since the last successful
+  // fetch, the venue Wi-Fi may be flaky or the backend is down. Show an
+  // explicit warning in the header so the director notices. Closes the
+  // polish tail of M10 from the UI audit.
+  const staleSeconds = lastFetchAt ? Math.floor((currentTime.getTime() - lastFetchAt.getTime()) / 1000) : null;
+  const isStale = staleSeconds != null && staleSeconds > 15;
 
   // Group by ring. Matches without a ringNumber are NOT bucketed into a
   // default ring — they go into a separate "unassigned" bucket so the LIVE
@@ -302,8 +311,13 @@ export default function PublicScoreboard() {
               </Button>
             )}
           </div>
-          <div className="text-xs text-slate-300 pb-3">
-            Auto-refresh every 3s · Last update {currentTime.toLocaleTimeString()}
+          <div className={`text-xs pb-3 flex items-center gap-2 ${isStale ? 'text-amber-400' : 'text-slate-300'}`}>
+            <span className={`h-2 w-2 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
+            <span data-testid="auto-refresh-status">
+              {isStale
+                ? `STALE — no update for ${staleSeconds}s. Check venue Wi-Fi.`
+                : `Auto-refresh every 3s · Last update ${lastFetchAt ? lastFetchAt.toLocaleTimeString() : currentTime.toLocaleTimeString()}`}
+            </span>
           </div>
         </div>
 
