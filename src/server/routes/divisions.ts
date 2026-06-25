@@ -408,6 +408,48 @@ router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req
   res.json({ deleted: true, name: division.name });
 });
 
+// Bulk reorder divisions for a tournament — used by drag-to-reorder in
+// the Schedule page. Accepts an ordered array of division IDs; assigns
+// displayOrder = index. Closes L7 from the UI audit (drag-to-reorder
+// ring assignment).
+router.post('/tournament/:tournamentId/reorder', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = getParam(req.params.tournamentId);
+  const { divisionIds } = req.body as { divisionIds?: string[] };
+
+  if (!Array.isArray(divisionIds) || divisionIds.length === 0) {
+    return res.status(400).json({ error: 'divisionIds must be a non-empty array' });
+  }
+
+  // All IDs must belong to this tournament — refuse anything else so
+  // a director can't accidentally reorder someone else's divisions.
+  const validDivisions = await prisma.division.findMany({
+    where: { tournamentId, id: { in: divisionIds } },
+    select: { id: true },
+  });
+  if (validDivisions.length !== divisionIds.length) {
+    return res.status(400).json({
+      error: 'Some division IDs do not belong to this tournament.',
+      expected: divisionIds.length,
+      found: validDivisions.length,
+    });
+  }
+
+  // Use a transaction so partial failures don't leave the list in a
+  // half-reordered state. Each update sets displayOrder to its index
+  // in the new ordering.
+  await prisma.$transaction(
+    divisionIds.map((id, index) =>
+      prisma.division.update({
+        where: { id },
+        data: { displayOrder: index },
+      }),
+    ),
+  );
+
+  res.json({ success: true, count: divisionIds.length });
+});
+
 // Clear all divisions for a tournament (requires authentication)
 router.delete('/tournament/:tournamentId/all', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
