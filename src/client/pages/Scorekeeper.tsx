@@ -286,6 +286,8 @@ export default function Scorekeeper() {
           if (currentMatch.competitor2) setSelectedWinner(currentMatch.competitor2.id);
           break;
         case 'ArrowLeft':
+        case 'j':  // F8: vim-style alias for prev match
+        case 'J':
           e.preventDefault();
           setCurrentMatchIndex((prev) => {
             if (prev > 0) {
@@ -296,6 +298,8 @@ export default function Scorekeeper() {
           });
           break;
         case 'ArrowRight':
+        case 'k':  // F8: vim-style alias for next match
+        case 'K':
           e.preventDefault();
           setCurrentMatchIndex((prev) => {
             if (prev < readyMatches.length - 1) {
@@ -1019,10 +1023,10 @@ export default function Scorekeeper() {
                 <div className="text-sm text-gray-600 mb-2">Navigation</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
-                    <span>Previous match</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">←</kbd>
+                    <span>Previous match</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">← / J</kbd>
                   </div>
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
-                    <span>Next match</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">→</kbd>
+                    <span>Next match</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">→ / K</kbd>
                   </div>
                 </div>
               </div>
