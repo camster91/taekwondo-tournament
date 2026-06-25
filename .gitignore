@@ -17,3 +17,7 @@ _inspect-*.cjs
 _test-*.cjs
 _verify-*.cjs
 _audit-*.cjs
+_p*-*.cjs
+_screenshot*.cjs
+_scorekeeper-check.cjs
+_walk.cjs
