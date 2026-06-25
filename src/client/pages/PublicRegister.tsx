@@ -627,15 +627,20 @@ export default function PublicRegister() {
               noValidate
             >
               {/* Step Indicator */}
-              <div className="flex items-center gap-2 mb-2 overflow-x-auto">
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-700'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-700'}`}>
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px]">1</span>
-                  Athlete
+                  <span>Athlete</span>
                 </div>
                 <div className={`h-px flex-1 min-w-[1rem] ${step >= 2 ? 'bg-indigo-400' : 'bg-gray-200 dark:bg-gray-700'}`} />
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 2 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-700'}`}>
+                <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 2 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-700'}`}>
                   <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-indigo-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
-                  Parent & Consent
+                  {/* Show "Parent" on small screens, "Parent & Consent" on
+                      sm+ — both labels fit in the pill without truncating. */}
+                  <span>
+                    <span className="sm:hidden">Parent</span>
+                    <span className="hidden sm:inline">Parent &amp; Consent</span>
+                  </span>
                 </div>
               </div>
 
