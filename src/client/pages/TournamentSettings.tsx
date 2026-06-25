@@ -58,6 +58,12 @@ interface TournamentSettings {
   ageGroups: AgeGroup[];
   weightClasses: WeightClass[];
   registrationFee: string;
+  // F9: structured fee fields. tournamentFeeCents is a positive integer
+  // (e.g. 2500 = $25.00). feeNotes is the free-text "pay at door" hint
+  // that shows under the dollar amount on PublicRegister. These live
+  // alongside the legacy free-text `registrationFee` field for back-compat.
+  tournamentFeeCents?: number;
+  feeNotes?: string;
 }
 
 const DEFAULT_AGE_GROUPS: AgeGroup[] = [
@@ -76,6 +82,8 @@ const DEFAULT_SETTINGS: TournamentSettings = {
   ageGroups: DEFAULT_AGE_GROUPS,
   weightClasses: [],
   registrationFee: '',
+  tournamentFeeCents: 0,
+  feeNotes: '',
 };
 
 type SettingsTab = 'setup' | 'rules';
@@ -419,6 +427,59 @@ export default function TournamentSettings() {
                 process payment here — this is a "pay at the door" or "free event"
                 hint.
               </p>
+            </div>
+
+            {/* F9: structured fee display. The amount is shown as "$25.00"
+                on the public registration form; the notes line is the
+                "pay at door" hint. Leave both blank for a free event. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="tournamentFeeCents">
+                  Tournament Fee ($)
+                </Label>
+                <Input
+                  id="tournamentFeeCents"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  data-testid="tournament-fee-cents"
+                  value={
+                    settings.tournamentFeeCents && settings.tournamentFeeCents > 0
+                      ? (settings.tournamentFeeCents / 100).toFixed(2)
+                      : ''
+                  }
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    const dollars = raw === '' ? 0 : Number(raw);
+                    const cents = Number.isFinite(dollars) && dollars > 0
+                      ? Math.round(dollars * 100)
+                      : 0;
+                    updateSettings({ tournamentFeeCents: cents });
+                  }}
+                  placeholder="0.00"
+                />
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Shown to parents as a fee notice on the registration form.
+                  Set to 0 (or leave blank) to hide the notice.
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="feeNotes">
+                  Fee Notes
+                </Label>
+                <Input
+                  id="feeNotes"
+                  type="text"
+                  data-testid="tournament-fee-notes"
+                  value={settings.feeNotes ?? ''}
+                  onChange={(e) => updateSettings({ feeNotes: e.target.value })}
+                  placeholder="e.g. Pay at door, cash or cheque"
+                  maxLength={200}
+                />
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Optional one-liner shown under the fee amount.
+                </p>
+              </div>
             </div>
           </div>
         </CardBody>
