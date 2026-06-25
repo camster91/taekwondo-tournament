@@ -103,6 +103,11 @@ echo "DATABASE_URL=postgresql://markup:${DB_PW}@markup-postgres:5432/taekwondo?s
 # prod deployment can disable it via a single env var without
 # a code change.
 echo "ENABLE_DEMO_LOGIN=1" >> "$ENV_FILE"
+# Magic-link emails must point at the public URL so the link
+# the parent clicks opens the verify page on tkd.ashbi.ca,
+# not the dev origin. Used by /api/auth/request-magic-link
+# to build the magicUrl.
+echo "PUBLIC_APP_URL=https://tkd.ashbi.ca" >> "$ENV_FILE"
 trap "rm -f $ENV_FILE" EXIT
 
 echo "==> Starting container"

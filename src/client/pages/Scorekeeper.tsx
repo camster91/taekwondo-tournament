@@ -577,11 +577,20 @@ export default function Scorekeeper() {
         </div>
       </div>
 
-      {/* Match Timer */}
-      {showTimer && division?.eventType === 'sparring' && sportProfile.eventTypes[1]?.isCombat && (
-        <div className="p-4 border-b border-gray-800">
-          <MatchTimer defaultRoundTime={120} defaultRounds={2} defaultBreakTime={30} />
-        </div>
+      {/* Match Timer — visible by default for sparring (combat) divisions.
+          Also shown for patterns when the scorekeeper explicitly opens it
+          (Toggle button in the header). Default round length scales by
+          event type: sparring = 2 min × 2 rounds, patterns = 3 min. */}
+      {showTimer && division && (
+        (division.eventType === 'sparring' && sportProfile.eventTypes[1]?.isCombat) ? (
+          <div className="p-4 border-b border-gray-800">
+            <MatchTimer defaultRoundTime={120} defaultRounds={2} defaultBreakTime={30} />
+          </div>
+        ) : (division.eventType === 'patterns' ? (
+          <div className="p-4 border-b border-gray-800">
+            <MatchTimer defaultRoundTime={180} defaultRounds={1} defaultBreakTime={0} onMatchEnd={undefined} />
+          </div>
+        ) : null)
       )}
 
       {!currentMatch ? (
