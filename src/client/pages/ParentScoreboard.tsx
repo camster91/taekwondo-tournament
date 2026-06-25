@@ -1,0 +1,262 @@
+// ParentScoreboard - mobile-first view of the tournament scoreboard.
+// Distinct from PublicScoreboard which is designed for the venue TV
+// (oversized time, ring dashboard, auto-cycle). This view is for the
+// parent in the stands checking on their kid: vertical scroll, one
+// column, focus on NOW COMPETING + UP NEXT in plain English, no QR
+// code (they're already on the phone), no ring cycling.
+//
+// Reachable at /scoreboard/parent/:tournamentId. No auth required -
+// this is intentionally a public URL a parent can bookmark.
+import { useState, useEffect, useMemo } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { Trophy, Clock, Users, ChevronRight, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
+import { Card, CardBody } from '../components/ui';
+
+interface Match {
+  id: string;
+  matchNumber: number;
+  roundNumber: number;
+  bracketType: string;
+  ringNumber?: number | null;
+  status: string;
+  score1: number | null;
+  score2: number | null;
+  winnerId: string | null;
+  competitor1: {
+    id: string;
+    competitor: { firstName: string; lastName: string; schoolDojang: string | null };
+  } | null;
+  competitor2: {
+    id: string;
+    competitor: { firstName: string; lastName: string; schoolDojang: string | null };
+  } | null;
+}
+
+interface Division {
+  id: string;
+  name: string;
+  eventType: string;
+  bracket: { id: string; matches: Match[] } | null;
+}
+
+interface Tournament {
+  id: string;
+  name: string;
+  date: string;
+  location: string | null;
+  status: string;
+}
+
+export default function ParentScoreboard() {
+  const { tournamentId } = useParams();
+
+  // Refresh every 5s - slower than the TV version (3s) to save battery
+  // on the parent's phone.
+  const { data: tournament, error: tournamentError } = useQuery<Tournament>({
+    queryKey: ['parent-scoreboard-tournament', tournamentId],
+    queryFn: async () => {
+      const res = await fetch(`/api/public/tournaments/${tournamentId}`);
+      if (!res.ok) throw new Error('Tournament not found');
+      return res.json();
+    },
+    refetchInterval: 10_000,
+    retry: false,
+  });
+
+  const { data: scoreboardData } = useQuery<{
+    divisions: Division[];
+    displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
+  }>({
+    queryKey: ['parent-scoreboard-data', tournamentId],
+    queryFn: async () => {
+      const res = await fetch(`/api/public/tournaments/${tournamentId}/scoreboard`);
+      if (!res.ok) throw new Error('Scoreboard fetch failed');
+      return res.json();
+    },
+    refetchInterval: 5_000,
+    enabled: !!tournament && !tournamentError,
+    retry: false,
+  });
+
+  const divisions = scoreboardData?.divisions || [];
+  const displaySettings = scoreboardData?.displaySettings;
+
+  // Pick "now competing" + "up next" matches. Status values from the
+  // bracket-generator: 'ready', 'in_progress', 'completed'.
+  const allMatches = useMemo(() => {
+    const matches: Array<Match & { divisionName: string; eventType: string }> = [];
+    for (const d of divisions) {
+      if (!d.bracket?.matches) continue;
+      for (const m of d.bracket.matches) {
+        matches.push({ ...m, divisionName: d.name, eventType: d.eventType });
+      }
+    }
+    return matches;
+  }, [divisions]);
+
+  const nowCompeting = allMatches
+    .filter((m) => m.status === 'in_progress')
+    .sort((a, b) => a.roundNumber - b.roundNumber || a.matchNumber - b.matchNumber);
+  const upNext = allMatches
+    .filter((m) => m.status === 'ready')
+    .sort((a, b) => a.roundNumber - b.roundNumber || a.matchNumber - b.matchNumber)
+    .slice(0, 5);
+  const recent = allMatches
+    .filter((m) => m.status === 'completed')
+    .sort((a, b) => a.roundNumber - b.roundNumber || a.matchNumber - b.matchNumber)
+    .slice(-3)
+    .reverse();
+
+  // If director set featuredMatchId, override the "now competing" with
+  // that match (even if it's not in_progress). Used for finals.
+  let featured: (Match & { divisionName: string; eventType: string }) | null = null;
+  if (displaySettings?.featuredMatchId) {
+    featured = allMatches.find((m) => m.id === displaySettings.featuredMatchId) || null;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Header - tournament context */}
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
+        <div className="max-w-2xl mx-auto px-4 py-3">
+          <Link
+            to="/"
+            className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 inline-flex items-center mb-1"
+          >
+            <ArrowLeft className="h-3 w-3 mr-1" />
+            Back
+          </Link>
+          {tournament ? (
+            <>
+              <h1 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                {tournament.name}
+              </h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                {tournament.location && ` · ${tournament.location}`}
+              </p>
+            </>
+          ) : tournamentError ? (
+            <p className="text-sm text-red-600">Tournament not found</p>
+          ) : (
+            <p className="text-sm text-gray-500">Loading...</p>
+          )}
+        </div>
+      </header>
+
+      <main className="max-w-2xl mx-auto px-4 py-4 space-y-4">
+        {/* NOW COMPETING - most attention-grabbing block */}
+        <section>
+          <h2 className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+            Now Competing
+          </h2>
+          {featured ? (
+            <MatchCard m={featured} highlight />
+          ) : nowCompeting.length === 0 ? (
+            <EmptyBlock message="No matches in progress right now." />
+          ) : (
+            <div className="space-y-2">
+              {nowCompeting.map((m) => <MatchCard key={m.id} m={m} highlight />)}
+            </div>
+          )}
+        </section>
+
+        {/* UP NEXT */}
+        {upNext.length > 0 && (
+          <section>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 mb-2">
+              Up Next
+            </h2>
+            <div className="space-y-2">
+              {upNext.map((m) => <MatchCard key={m.id} m={m} />)}
+            </div>
+          </section>
+        )}
+
+        {/* RECENT RESULTS */}
+        {recent.length > 0 && (
+          <section>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-green-700 dark:text-green-400 mb-2">
+              Recent Results
+            </h2>
+            <div className="space-y-2">
+              {recent.map((m) => <MatchCard key={m.id} m={m} />)}
+            </div>
+          </section>
+        )}
+
+        {/* Empty state when nothing is happening at all */}
+        {!tournamentError && nowCompeting.length === 0 && upNext.length === 0 && recent.length === 0 && tournament && (
+          <Card>
+            <CardBody className="p-6 text-center">
+              <Clock className="h-10 w-10 text-gray-400 mx-auto mb-2" aria-hidden="true" />
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                The tournament hasn't started yet. Check back when divisions begin.
+              </p>
+            </CardBody>
+          </Card>
+        )}
+
+        <p className="text-[10px] text-gray-400 text-center pt-4">
+          Refreshes every 5 seconds. <RefreshCw className="inline h-2.5 w-2.5" />
+        </p>
+      </main>
+    </div>
+  );
+}
+
+function MatchCard({ m, highlight }: { m: Match & { divisionName: string; eventType: string }; highlight?: boolean }) {
+  const name1 = m.competitor1?.competitor
+    ? `${m.competitor1.competitor.firstName} ${m.competitor1.competitor.lastName}`
+    : 'TBD';
+  const name2 = m.competitor2?.competitor
+    ? `${m.competitor2.competitor.firstName} ${m.competitor2.competitor.lastName}`
+    : 'TBD';
+  const winner1 = m.winnerId === m.competitor1?.id;
+  const winner2 = m.winnerId === m.competitor2?.id;
+  const eventLabel = m.eventType === 'patterns' ? 'Patterns' : 'Sparring';
+
+  return (
+    <Card className={highlight ? 'border-2 border-amber-400 shadow-md' : ''}>
+      <CardBody className="p-3">
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">
+            {m.divisionName}
+          </div>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded ${m.eventType === 'patterns'
+              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+              : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'}`}>
+            {eventLabel}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <div className={`flex-1 text-right text-sm font-semibold ${winner1 ? 'text-green-700 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
+            {name1}
+          </div>
+          <div className="flex flex-col items-center min-w-[60px]">
+            {m.status === 'completed' ? (
+              <div className="text-lg font-bold tabular-nums text-gray-900 dark:text-white">
+                {m.score1 ?? 0} - {m.score2 ?? 0}
+              </div>
+            ) : (
+              <div className="text-xs text-gray-400">vs</div>
+            )}
+          </div>
+          <div className={`flex-1 text-left text-sm font-semibold ${winner2 ? 'text-green-700 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
+            {name2}
+          </div>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function EmptyBlock({ message }: { message: string }) {
+  return (
+    <div className="rounded-lg bg-gray-100 dark:bg-gray-800 p-4 text-center text-sm text-gray-600 dark:text-gray-400">
+      {message}
+    </div>
+  );
+}

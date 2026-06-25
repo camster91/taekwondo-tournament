@@ -48,6 +48,7 @@ import Scorekeeper from './pages/Scorekeeper';
 import CheckIn from './pages/CheckIn';
 import PublicScoreboard from './pages/PublicScoreboard';
 import PublicScoreboardBySlug from './pages/PublicScoreboardBySlug';
+import ParentScoreboard from './pages/ParentScoreboard';
 import Results from './pages/Results';
 import UserManagement from './pages/UserManagement';
 import Profile from './pages/Profile';
@@ -498,6 +499,7 @@ function AppRoutes() {
         <Route path="/scorekeeper/:tournamentId" element={<ProtectedRoute><Scorekeeper /></ProtectedRoute>} />
         <Route path="/checkin/:tournamentId" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
         <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
+        <Route path="/scoreboard/parent/:tournamentId" element={<ParentScoreboard />} />
         <Route path="/scoreboard/:publicSlug" element={<PublicScoreboardBySlug />} />
         {/* Legacy URL redirects — old paths used /tournaments/:id/<page>.
             Closes #39 where a stale URL or bookmark hit a 404. */}
