@@ -18,6 +18,7 @@ import {
   X,
   UserPlus,
   Search,
+  Undo2,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -533,6 +534,13 @@ export default function Divisions() {
         </CardBody>
       </Card>
 
+      {/* Backup / Restore — L4 from the UI audit. Closes the
+          "no way to roll back" complaint. Backups are auto-created
+          before every auto-generate + clear-all (see the server-side
+          backup-recovery service). Director sees the last backup
+          timestamp + a Restore button if a backup exists. */}
+      <BackupRestoreCard tournamentId={id || ''} hasDivisions={!!divisions?.length} />
+
       {/* Warnings */}
       {(stats.smallDivisions > 0 || stats.largeDivisions > 0 || stats.emptyDivisions > 0) && (
         <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
@@ -1027,5 +1035,94 @@ export default function Divisions() {
         </Modal>
       )}
     </div>
+  );
+}
+
+// BackupRestoreCard — shows the last auto-backup timestamp (if any) and
+// exposes a Restore button. Closes L4 from the UI audit. Backups are
+// created automatically before destructive operations (auto-generate,
+// clear-all) by the server-side backup-recovery service. The restore
+// endpoint will reject if the backup structure no longer matches the
+// current schema.
+function BackupRestoreCard({ tournamentId, hasDivisions }: { tournamentId: string; hasDivisions: boolean }) {
+  const { addToast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: backup, isLoading } = useQuery<{
+    tournamentId: string;
+    timestamp: string;
+    divisionCount: number;
+  } | null>({
+    queryKey: ['tournament-backup', tournamentId],
+    queryFn: async () => {
+      const res = await fetch(`/api/divisions/tournament/${tournamentId}/backup`, {
+        headers: getAuthHeaders(),
+      });
+      if (res.status === 404) return null; // no backup yet
+      if (!res.ok) throw new Error('Failed to load backup info');
+      return res.json();
+    },
+    enabled: !!tournamentId,
+    retry: false,
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/divisions/tournament/${tournamentId}/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Restore failed');
+      return body;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['divisions'] });
+      queryClient.invalidateQueries({ queryKey: ['tournament-backup', tournamentId] });
+      addToast?.('Divisions restored from backup.', 'success');
+    },
+    onError: (err: Error) => addToast?.(err.message, 'error'),
+  });
+
+  return (
+    <Card className="mb-6">
+      <CardBody>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <Undo2 className="h-5 w-5 text-slate-600 dark:text-slate-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Backup &amp; Restore</h3>
+              {isLoading ? (
+                <p className="text-xs text-gray-600 dark:text-gray-400">Loading backup info…</p>
+              ) : backup ? (
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  Last backup: <span className="font-medium text-gray-900 dark:text-white">{new Date(backup.timestamp).toLocaleString()}</span> · {backup.divisionCount} division{backup.divisionCount === 1 ? '' : 's'}
+                </p>
+              ) : (
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  No backup yet. A backup is created automatically before auto-generating or clearing divisions.
+                </p>
+              )}
+            </div>
+          </div>
+          {backup && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                if (hasDivisions && !confirm('Restoring will REPLACE all current divisions with the backup. Continue?')) return;
+                restoreMutation.mutate();
+              }}
+              loading={restoreMutation.isPending}
+              disabled={restoreMutation.isPending}
+              aria-label="Restore divisions from last backup"
+            >
+              <Undo2 className="h-4 w-4 mr-1" />
+              Restore from backup
+            </Button>
+          )}
+        </div>
+      </CardBody>
+    </Card>
   );
 }
