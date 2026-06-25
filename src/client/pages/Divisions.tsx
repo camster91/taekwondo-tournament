@@ -2,6 +2,23 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   Wand2,
   FileDown,
   LayoutGrid,
@@ -19,6 +36,7 @@ import {
   UserPlus,
   Search,
   Undo2,
+  GripVertical,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -373,6 +391,41 @@ export default function Divisions() {
     {} as Record<string, Division[]>
   );
 
+  // DnD-kit sensor setup. PointerSensor activates on drag; KeyboardSensor
+  // lets keyboard-only users reorder via Space + arrow keys.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  // Drag-end handler. Each category (belt+gender+event) gets its own
+  // SortableContext, so the drag stays within the category. After a
+  // successful reorder, persist via POST /api/divisions/tournament/:id/reorder.
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const category = Object.entries(groupedDivisions || {}).find(
+      ([, divs]) => divs.some((d) => d.id === active.id) && divs.some((d) => d.id === over.id),
+    )?.[0];
+    if (!category) return;
+    const divs = groupedDivisions![category];
+    const oldIndex = divs.findIndex((d) => d.id === active.id);
+    const newIndex = divs.findIndex((d) => d.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(divs, oldIndex, newIndex).map((d) => d.id);
+    // Send the FULL tournament ordering so displayOrder is globally consistent.
+    // Build it: take all divisions in original order, then swap the moved block.
+    const orderedIds: string[] = [];
+    for (const [cat, ds] of Object.entries(groupedDivisions || {})) {
+      if (cat === category) {
+        orderedIds.push(...reordered);
+      } else {
+        orderedIds.push(...ds.map((d) => d.id));
+      }
+    }
+    reorderMutation.mutate(orderedIds);
+  };
+
   const exportAllPDFs = async () => {
     if (!divisions || divisions.length === 0) return;
 
@@ -410,6 +463,11 @@ export default function Divisions() {
   };
 
   return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
     <div>
       {/* Page Header */}
       <PageHeader
@@ -617,81 +675,18 @@ export default function Divisions() {
                 </div>
               </CardHeader>
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {divs.map((div) => (
-                  <div
-                    key={div.id}
-                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                  >
-                    <div className="flex items-center">
-                      <LayoutGrid className="h-5 w-5 text-gray-600 dark:text-gray-500 mr-3 flex-shrink-0" />
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white">{div.name}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {div.ageMin}-{div.ageMax} years
-                          {div.weightClass && ` • ${div.weightClass}`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
-                      <div className={`flex items-center text-sm ${
-                        div._count.assignments === 0 ? 'text-red-500 dark:text-red-400' :
-                        div._count.assignments < 3 ? 'text-yellow-600 dark:text-yellow-400' :
-                        div._count.assignments > 8 ? 'text-orange-600 dark:text-orange-400' :
-                        'text-gray-500 dark:text-gray-400'
-                      }`}>
-                        <Users className="h-4 w-4 mr-1" />
-                        {div._count.assignments}
-                      </div>
-                      {div._count.assignments === 0 && (
-                        <span className="badge bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">Empty</span>
-                      )}
-                      {div._count.assignments > 0 && div._count.assignments < 3 && (
-                        <span className="badge bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">Small</span>
-                      )}
-                      {div._count.assignments > 8 && (
-                        <span className="badge bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">Large</span>
-                      )}
-                      <span
-                        className={`badge ${
-                          div.bracket ? 'badge-green' : 'badge-gray'
-                        }`}
-                      >
-                        {div.bracket ? 'Ready' : 'No Bracket'}
-                      </span>
-                      <button
-                        onClick={() => setAssignTarget(div)}
-                        className="text-gray-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
-                        title="Manage Competitors"
-                        aria-label={`Manage competitors in ${div.name}`}
-                      >
-                        <UserPlus className="h-4 w-4" />
-                      </button>
-                      {div._count.assignments > 8 && (
-                        <button
-                          onClick={() => setSplitTarget(div)}
-                          className="text-gray-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
-                          title="Split Division"
-                        >
-                          <Scissors className="h-4 w-4" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setDeleteTarget(div)}
-                        className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 touch-target"
-                        title="Delete Division"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                      <Link
-                        to={`/tournaments/${id}/divisions/${div.id}/bracket`}
-                        className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 flex items-center touch-target"
-                      >
-                        View
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Link>
-                    </div>
-                  </div>
-                ))}
+                <SortableContext items={divs.map((d) => d.id)} strategy={verticalListSortingStrategy}>
+                  {divs.map((div) => (
+                    <SortableDivisionRow
+                      key={div.id}
+                      div={div}
+                      tournamentId={id || ''}
+                      onManageCompetitors={() => setAssignTarget(div)}
+                      onSplit={() => setSplitTarget(div)}
+                      onDelete={() => setDeleteTarget(div)}
+                    />
+                  ))}
+                </SortableContext>
               </div>
             </Card>
           ))}
@@ -1035,6 +1030,7 @@ export default function Divisions() {
         </Modal>
       )}
     </div>
+    </DndContext>
   );
 }
 
@@ -1124,5 +1120,121 @@ function BackupRestoreCard({ tournamentId, hasDivisions }: { tournamentId: strin
         </div>
       </CardBody>
     </Card>
+  );
+}
+
+// SortableDivisionRow — one row in the Divisions page list. Wrapped with
+// @dnd-kit's useSortable so it can be dragged to reorder. The drag handle
+// is the leftmost GripVertical icon (keyboard users can Tab to the row and
+// press Space to grab, then arrows to move).
+function SortableDivisionRow({
+  div,
+  tournamentId,
+  onManageCompetitors,
+  onSplit,
+  onDelete,
+}: {
+  div: Division;
+  tournamentId: string;
+  onManageCompetitors: () => void;
+  onSplit: () => void;
+  onDelete: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: div.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isDragging ? 'bg-indigo-50 dark:bg-indigo-900/20 shadow-lg z-10' : ''}`}
+    >
+      <div className="flex items-center min-w-0 flex-1">
+        <button
+          {...attributes}
+          {...listeners}
+          type="button"
+          aria-label={`Drag to reorder ${div.name}. Or use Tab + Space + arrow keys.`}
+          title="Drag to reorder"
+          className="touch-target flex-shrink-0 mr-3 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
+        >
+          <GripVertical className="h-5 w-5" aria-hidden="true" />
+        </button>
+        <LayoutGrid className="h-5 w-5 text-gray-600 dark:text-gray-500 mr-3 flex-shrink-0" />
+        <div className="min-w-0">
+          <p className="font-medium text-gray-900 dark:text-white">{div.name}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            {div.ageMin}-{div.ageMax} years
+            {div.weightClass && ` • ${div.weightClass}`}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+        <div className={`flex items-center text-sm ${
+          div._count.assignments === 0 ? 'text-red-500 dark:text-red-400' :
+          div._count.assignments < 3 ? 'text-yellow-600 dark:text-yellow-400' :
+          div._count.assignments > 8 ? 'text-orange-600 dark:text-orange-400' :
+          'text-gray-500 dark:text-gray-400'
+        }`}>
+          <Users className="h-4 w-4 mr-1" />
+          {div._count.assignments}
+        </div>
+        {div._count.assignments === 0 && (
+          <span className="badge bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">Empty</span>
+        )}
+        {div._count.assignments > 0 && div._count.assignments < 3 && (
+          <span className="badge bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">Small</span>
+        )}
+        {div._count.assignments > 8 && (
+          <span className="badge bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">Large</span>
+        )}
+        <span className={`badge ${div.bracket ? 'badge-green' : 'badge-gray'}`}>
+          {div.bracket ? 'Ready' : 'No Bracket'}
+        </span>
+        <button
+          onClick={onManageCompetitors}
+          className="text-gray-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
+          title="Manage Competitors"
+          aria-label={`Manage competitors in ${div.name}`}
+        >
+          <UserPlus className="h-4 w-4" />
+        </button>
+        {div._count.assignments > 8 && (
+          <button
+            onClick={onSplit}
+            className="text-gray-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
+            title="Split Division"
+          >
+            <Scissors className="h-4 w-4" />
+          </button>
+        )}
+        <button
+          onClick={onDelete}
+          className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 touch-target"
+          title="Delete Division"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+        <Link
+          to={`/tournaments/${tournamentId}/divisions/${div.id}/bracket`}
+          className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 flex items-center touch-target"
+        >
+          View
+          <ChevronRight className="h-4 w-4 ml-1" />
+        </Link>
+      </div>
+    </div>
   );
 }
