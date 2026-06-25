@@ -439,8 +439,23 @@ export default function Scorekeeper() {
                     <Trophy className="h-12 w-12 mx-auto mb-3 text-gray-600" aria-hidden="true" />
                     <p className="text-base font-medium mb-1">No divisions to score yet</p>
                     <p className="text-sm text-gray-600 mb-4">
-                      Brackets need to be generated before matches can be scored.
+                      Divisions need to be created before matches can be scored.
                     </p>
+                  </div>
+                )}
+                {divisions && divisions.length > 0 && divisions.every((d) => !d.bracket) && (
+                  <div className="text-center py-12 text-gray-600">
+                    <Trophy className="h-12 w-12 mx-auto mb-3 text-gray-600" aria-hidden="true" />
+                    <p className="text-base font-medium mb-1">No brackets generated yet</p>
+                    <p className="text-sm text-gray-600 mb-4">
+                      {divisions.length} {divisions.length === 1 ? 'division exists' : 'divisions exist'} but no brackets have been generated. Go to the Divisions page to generate a bracket for each one.
+                    </p>
+                    <Link
+                      to={`/tournaments/${tournamentId}/divisions`}
+                      className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                    >
+                      Go to Divisions →
+                    </Link>
                   </div>
                 )}
                 {divisions
