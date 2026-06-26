@@ -77,7 +77,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set timer to logout when token expires (with 10 second buffer)
     const timerMs = Math.max(timeUntilExpiry - 10000, 1000);
     logoutTimerRef.current = setTimeout(() => {
-      console.log('Session expired, logging out...');
       logout();
       // Dispatch a custom event so the toast system (mounted as a child) can display a message
       window.dispatchEvent(new CustomEvent('session-expired'));

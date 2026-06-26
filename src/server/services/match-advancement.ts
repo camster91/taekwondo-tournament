@@ -146,8 +146,13 @@ async function advanceToMatch(
   } else if (!match.competitor2Id) {
     updateData.competitor2Id = competitorId;
   } else {
-    // Both slots filled - this shouldn't happen in normal flow
-    console.warn(`Match ${matchId} already has both competitors`);
+    // Both slots filled - this can happen on legitimate re-runs of
+    // the bracket generator, so we log at debug rather than warn to
+    // avoid spamming logs in normal operation. Operators investigating
+    // an actual bug can enable DEBUG to see it.
+    if (process.env.DEBUG) {
+      console.log(`[match-advancement] Match ${matchId} already has both competitors`);
+    }
     return;
   }
 

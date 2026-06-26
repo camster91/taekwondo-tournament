@@ -158,9 +158,17 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
     // The public response must look identical to the production response
     // (always 200 with a generic message) to avoid information leakage.
     if (!emailResult.success && !isEmailConfigured()) {
-      console.log(
-        `[dev-auth] magic link for ${activeUser.email}: ${magicUrl} (code: ${code})`,
-      );
+      // Only log the link in development. In production with email
+      // configured, no log line fires; in dev without email we print
+      // to the server console so the operator can grab the link.
+      // The link + 6-digit code are auth credentials, so we never echo
+      // them in the JSON response — only the generic "check your email"
+      // message goes to the client.
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(
+          `[dev-auth] magic link for ${activeUser.email}: ${magicUrl} (code: ${code})`,
+        );
+      }
       // E2E test bypass: when ENABLE_E2E_AUTH_BYPASS is set, include
       // the code and magicUrl in the response so the Playwright suite
       // can read them. NEVER set this in production. The e2e setup

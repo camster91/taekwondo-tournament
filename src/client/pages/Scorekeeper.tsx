@@ -411,7 +411,7 @@ export default function Scorekeeper() {
           break;
       }
     }
-  }, [showConfirm, selectedDivision, currentMatch, selectedWinner, readyMatches.length]);
+  }, [showConfirm, selectedDivision, currentMatch, selectedWinner, readyMatches]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
