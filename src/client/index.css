@@ -144,7 +144,11 @@ h4 { font-size: 1rem; font-weight: 600; }
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
   border-radius: 6px;
 }
-input, textarea, select, button { border-radius: inherit; }
+/* Form element border-radius: Tailwind preflight does not set one, so we leave
+   these unset too. Originally this rule used `border-radius: inherit`, which made
+   buttons render at 0px whenever their parent had no explicit radius — masking
+   Tailwind utilities. Replacing with no rule lets .rounded-lg / .rounded-xl / etc.
+   set the radius directly. */
 
 /* Global keyboard focus ring — a11y requirement */
 :focus-visible {
