@@ -55,6 +55,8 @@ import Profile from './pages/Profile';
 import DirectorDashboard from './pages/DirectorDashboard';
 import AcceptInvite from './pages/AcceptInvite';
 import NotFound from './pages/NotFound';
+import FairnessRules from './pages/FairnessRules';
+import SchoolPortal from './pages/SchoolPortal';
 
 // Navigation: top-level workspace items
 const primaryNav = [
@@ -485,7 +487,7 @@ function AppRoutes() {
     // Legacy nested paths — matched here so the redirect routes can fire
     // (and render without the AdminLayout) before falling into the admin
     // Route tree that would otherwise show a 404.
-    /^\/tournaments\/[^/]+\/(scorekeeper|checkin|display)(\/|$)/.test(location.pathname);
+    /^\/tournaments\/[^/]+\/(scorekeeper|checkin|display|school)(\/|$)/.test(location.pathname);
 
   if (isPublicPage) {
     return (
@@ -501,6 +503,11 @@ function AppRoutes() {
         <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
         <Route path="/scoreboard/parent/:tournamentId" element={<ParentScoreboard />} />
         <Route path="/scoreboard/:publicSlug" element={<PublicScoreboardBySlug />} />
+        {/* School portal — share a read-only link with parents/directors
+            so they can see the live bracket without needing to log in.
+            Lives in the public route tree so the AdminLayout doesn't
+            wrap it. */}
+        <Route path="/tournaments/:tournamentId/school" element={<SchoolPortal />} />
         {/* Legacy URL redirects — old paths used /tournaments/:id/<page>.
             Closes #39 where a stale URL or bookmark hit a 404. */}
         <Route path="/tournaments/:id/scorekeeper" element={<LegacyRedirect toKey="scorekeeper" />} />
@@ -558,6 +565,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute requiredRoles={['admin', 'director']}>
                 <DirectorDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tournaments/:tournamentId/fairness"
+            element={
+              <ProtectedRoute requiredRoles={['admin', 'director']}>
+                <FairnessRules />
               </ProtectedRoute>
             }
           />

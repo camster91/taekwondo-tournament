@@ -75,6 +75,7 @@ model Tournament {
   divisions     Division[]
   weightClasses WeightClass[]
   userAccess    UserTournamentAccess[]
+  rules         TournamentRule[]
   organization Organization? @relation(fields: [organizationId], references: [id])
   sportProfile SportProfile? @relation(fields: [sportProfileId], references: [id])
 }
@@ -423,4 +424,47 @@ model SportProfile {
   tournaments    Tournament[]
 
   @@unique([slug])
+}
+
+// Medical/incident tracking
+model Incident {
+  id              String   @id @default(uuid())
+  tournamentId    String
+  matchId         String?
+  registrationId  String?
+  type            String   // injury, disqualification, medical, equipment, conduct
+  severity        String   // minor, moderate, serious
+  description     String
+  actionTaken     String?  // first_aid, withdrawn, continued, ambulance
+  reportedBy      String?  // userId of reporter
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tournamentId])
+  @@index([matchId])
+  @@index([registrationId])
+}
+
+// Tournament fairness rules (configurable per tournament)
+model TournamentRule {
+  id           String   @id @default(uuid())
+  tournamentId String
+  name         String   // Human-readable name: "Same-school avoidance"
+  description  String?  // Why this rule exists
+  category     String   // "bracket", "division", "weight", "seeding", "custom"
+  ruleType     String   // "same_school_avoidance", "weight_tolerance", "height_limit", "experience_grouping", "custom_constraint"
+  enforcement  String   @default("hard") // "hard" (must comply), "soft" (warning), "info" (log only)
+  parameters   String   // JSON: rule-specific parameters
+  priority     Int      @default(50) // Higher = evaluated first (0-100)
+  isActive     Boolean  @default(true)
+  source       String   @default("manual") // "manual", "llm_suggested", "system_default"
+  createdBy    String?  // User ID who created/approved
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId])
+  @@index([tournamentId, category])
+  @@index([ruleType])
 }
