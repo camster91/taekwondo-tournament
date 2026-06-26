@@ -153,6 +153,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 router.get('/meta/aggregates', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const all = await prisma.competitor.findMany({
+    where: { deletedAt: null },
     select: { belt: true, gender: true, schoolDojang: true, dateOfBirth: true, weightLbs: true },
   });
 
@@ -227,6 +228,7 @@ router.get('/meta/schools', authenticate, async (req: Request, res: Response) =>
 router.get('/meta/belts', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const belts = await prisma.competitor.findMany({
+    where: { deletedAt: null },
     select: { belt: true },
     distinct: ['belt'],
     orderBy: { belt: 'asc' },
@@ -238,8 +240,12 @@ router.get('/meta/belts', authenticate, async (req: Request, res: Response) => {
 // Get single competitor (requires authentication)
 router.get('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const competitor = await prisma.competitor.findUnique({
-    where: { id: getParam(req.params.id) },
+  // Soft-deleted competitors are not accessible via direct ID — restore
+  // them via POST /:id/restore first. findUnique with a deletedAt filter
+  // returns null for the trash; we return 404 so the UI doesn't render
+  // a competitor the operator already removed.
+  const competitor = await prisma.competitor.findFirst({
+    where: { id: getParam(req.params.id), deletedAt: null },
     include: {
       registrations: {
         include: {

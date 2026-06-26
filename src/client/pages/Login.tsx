@@ -201,7 +201,7 @@ export default function Login() {
           <div className="relative max-w-xl mx-auto lg:mx-0 lg:ml-auto lg:mr-12 px-6 lg:px-0 py-16 lg:py-24 flex flex-col justify-center min-h-full">
             <div className="inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-full bg-white/10 border border-white/10 text-xs font-medium text-white/80 backdrop-blur-sm mb-6 animate-fade-in">
               <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-              <span>Trusted by 30+ Ontario dojangs</span>
+              <span>Built for Ontario dojangs</span>
             </div>
 
             <h2 className="text-4xl lg:text-5xl font-bold tracking-tight leading-[1.1] animate-slide-up">
@@ -245,7 +245,7 @@ export default function Login() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Users className="h-3.5 w-3.5" />
-                  <span>1,248 kids / 33 schools on demo</span>
+                  <span>Live demo data, fully featured</span>
                 </div>
               </div>
             </div>

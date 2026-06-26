@@ -11,10 +11,16 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
   const prisma: PrismaClient = req.app.locals.prisma;
 
   try {
+    // Filter soft-deleted rows out of the public dashboard analytics.
+    // The Competitor / Tournament models use deletedAt as a 7-day trash
+    // window; without this filter, soft-deleted demo rows leak into the
+    // dashboard counts and charts.
+    const notDeleted = { deletedAt: null };
+
     // Get total counts
     const [totalCompetitors, totalTournaments, totalMatches] = await Promise.all([
-      prisma.competitor.count(),
-      prisma.tournament.count(),
+      prisma.competitor.count({ where: notDeleted }),
+      prisma.tournament.count({ where: notDeleted }),
       prisma.match.count(),
     ]);
 
@@ -26,6 +32,7 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
     // Get competitors by belt level
     const beltDistribution = await prisma.competitor.groupBy({
       by: ['belt'],
+      where: notDeleted,
       _count: true,
       orderBy: { _count: { belt: 'desc' } },
     });
@@ -33,16 +40,17 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
     // Get competitors by gender
     const genderDistribution = await prisma.competitor.groupBy({
       by: ['gender'],
+      where: notDeleted,
       _count: true,
     });
 
     // Get top schools by competitor count
     const topSchools = await prisma.competitor.groupBy({
       by: ['schoolDojang'],
+      where: { ...notDeleted, schoolDojang: { not: null } },
       _count: true,
       orderBy: { _count: { schoolDojang: 'desc' } },
       take: 10,
-      where: { schoolDojang: { not: null } },
     });
 
     // Get recent activity (registrations in last 30 days)
@@ -61,6 +69,7 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
 
     // Get age distribution (approximate using birth year)
     const competitors = await prisma.competitor.findMany({
+      where: notDeleted,
       select: { dateOfBirth: true },
     });
 
@@ -126,7 +135,7 @@ router.get('/tournament/:tournamentId', authenticate, async (req: AuthenticatedR
 
   try {
     const tournament = await prisma.tournament.findUnique({
-      where: { id: tournamentId },
+      where: { id: tournamentId, deletedAt: null },
       include: {
         registrations: {
           include: { competitor: true },
