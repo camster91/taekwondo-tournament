@@ -187,7 +187,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           </div>
           {!sidebarCollapsed && (
             <div className="flex flex-col leading-tight min-w-0">
-              <span className="text-sm font-semibold text-white tracking-tight truncate">Martial Arts TM</span>
+              <span className="text-sm font-semibold text-white tracking-tight truncate">Ashbi TKD</span>
               <span className="text-[10px] uppercase tracking-widest text-white/40 font-medium">Tournament OS</span>
             </div>
           )}

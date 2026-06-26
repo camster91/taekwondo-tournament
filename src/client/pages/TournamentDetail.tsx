@@ -482,8 +482,16 @@ export default function TournamentDetail() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex items-center gap-2 text-green-700 dark:text-green-300 flex-1 min-w-0">
               <Globe className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium">Open for Registration</span>
-              <span className="text-sm truncate hidden sm:block">{registrationUrl}</span>
+              <span className="font-medium whitespace-nowrap">Open for Registration</span>
+              <a
+                href={registrationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={registrationUrl}
+                className="hidden sm:inline-flex text-sm font-mono text-green-700/80 dark:text-green-300/80 hover:text-green-900 dark:hover:text-green-100 hover:underline truncate min-w-0"
+              >
+                {registrationUrl}
+              </a>
             </div>
             <div className="flex gap-2 flex-shrink-0">
               <Button variant="secondary" size="sm" onClick={copyRegistrationLink}>
@@ -613,9 +621,9 @@ export default function TournamentDetail() {
           ) : filteredRegistrations && filteredRegistrations.length > 0 ? (
             <>
               {/* Mobile View */}
-              <div className="mobile-cards p-4 space-y-3">
+              <div className="md:hidden p-4 space-y-3">
                 {filteredRegistrations.map((reg) => (
-                  <div key={reg.id} className="mobile-card">
+                  <div key={reg.id}>
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <div className="font-semibold text-gray-900 dark:text-white">
@@ -695,7 +703,7 @@ export default function TournamentDetail() {
               </div>
 
               {/* Desktop Table */}
-              <div className="desktop-table">
+              <div className="hidden md:block">
                 <DataTable>
                   <TableHead>
                     <tr>

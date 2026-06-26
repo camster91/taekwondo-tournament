@@ -174,7 +174,7 @@ export default function Login() {
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-md">
               <Trophy className="h-4.5 w-4.5 text-white" strokeWidth={2.5} />
             </div>
-            <span className="text-base font-semibold tracking-tight">Martial Arts TM</span>
+            <span className="text-base font-semibold tracking-tight">Ashbi TKD</span>
           </Link>
           <div className="flex items-center gap-4 text-sm">
             <span className="text-slate-600 hidden sm:inline">Real tournament management, end-to-end.</span>
@@ -204,12 +204,12 @@ export default function Login() {
               <span>Trusted by 30+ Ontario dojangs</span>
             </div>
 
-            <h1 className="text-4xl lg:text-5xl font-bold tracking-tight leading-[1.1] animate-slide-up">
+            <h2 className="text-4xl lg:text-5xl font-bold tracking-tight leading-[1.1] animate-slide-up">
               Run a real tournament.{' '}
               <span className="bg-gradient-to-r from-indigo-300 via-violet-300 to-pink-300 bg-clip-text text-transparent">
                 Not a spreadsheet.
               </span>
-            </h1>
+            </h2>
 
             <p className="mt-5 text-lg text-white/70 leading-relaxed animate-slide-up animate-in-1">
               Register kids, build divisions the way a real tournament director thinks, run round-robins and brackets, and print certificates — all from one app, in 20 minutes.
@@ -271,10 +271,9 @@ export default function Login() {
                   </div>
                 )}
 
-                <h1 className="sr-only">Sign in</h1>
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white mb-6">
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white mb-6">
                   Sign in
-                </h2>
+                </h1>
 
                 {step === 'email' ? (
                   <EmailForm
@@ -307,7 +306,7 @@ export default function Login() {
       {/* Footer */}
       <footer className="border-t border-slate-200/60 dark:border-slate-800/60 py-4 px-6">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600">
-          <div>Martial Arts Tournament Manager · v1.0</div>
+          <div>Ashbi TKD · Tournament Manager v1.0</div>
           <div className="flex items-center gap-4">
             <a href="/register" className="hover:text-slate-900 dark:hover:text-white">Public Registration</a>
             <a href="/api/health" target="_blank" rel="noopener" className="hover:text-slate-900 dark:hover:text-white">Status</a>
