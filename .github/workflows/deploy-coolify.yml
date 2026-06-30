@@ -8,6 +8,7 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -42,9 +43,23 @@ jobs:
           COOLIFY_APP_UUID: ${{ secrets.COOLIFY_APP_UUID }}
         run: |
           printf 'Triggering Coolify deploy for app %s\n' "${COOLIFY_APP_UUID}"
-          HTTP_CODE=$(curl -s -o /tmp/coolify-resp.txt -w '%{http_code}' --max-time 30 \
-            -X POST -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
-            "${COOLIFY_URL}/api/v1/applications/${COOLIFY_APP_UUID}/start")
+
+          # Fail fast with a clear error if any required secret is missing.
+          if [ -z "$COOLIFY_URL" ] || [ -z "$COOLIFY_TOKEN" ] || [ -z "$COOLIFY_APP_UUID" ]; then
+            echo "::error::Missing one of COOLIFY_URL / COOLIFY_TOKEN / COOLIFY_APP_UUID. Add them in repo Settings -> Secrets -> Actions."
+            exit 1
+          fi
+
+          # 120s timeout (was 30s — too tight for cold Coolify API).
+          # --fail-with-body surfaces HTTP errors instead of returning 0 with a body.
+          HTTP_CODE=$(curl -s --max-time 120 --fail-with-body \
+            -o /tmp/coolify-resp.txt \
+            -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${COOLIFY_URL}/api/v1/applications/${COOLIFY_APP_UUID}/start" 2>&1) || HTTP_CODE=$?
+
           echo "Response body:"
           cat /tmp/coolify-resp.txt
           echo ""
