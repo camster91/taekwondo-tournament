@@ -30,10 +30,10 @@ on:
         type: string
         default: 'Dockerfile'
       platforms:
-        description: 'Buildx platforms (default: amd64 + arm64)'
+        description: 'Buildx platforms (default: amd64 only)'
         required: false
         type: string
-        default: 'linux/amd64,linux/arm64'
+        default: 'linux/amd64'
 permissions:
   contents: read
   packages: write
