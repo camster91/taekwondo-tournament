@@ -51,17 +51,20 @@ jobs:
           fi
 
           # 120s timeout (was 30s — too tight for cold Coolify API).
-          # --fail-with-body surfaces HTTP errors instead of returning 0 with a body.
-          HTTP_CODE=$(curl -s --max-time 120 --fail-with-body \
+          # Don't use --fail-with-body: it makes curl exit non-zero on HTTP 4xx/5xx,
+          # which breaks the `cat /tmp/coolify-resp.txt` below (file never written).
+          # Without --fail-with-body, curl exits 0 on any reachable response and
+          # HTTP_CODE from -w is reliable.
+          HTTP_CODE=$(curl -s --max-time 120 --connect-timeout 10 \
             -o /tmp/coolify-resp.txt \
             -w '%{http_code}' \
             -X POST \
             -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
             -H "Content-Type: application/json" \
-            "${COOLIFY_URL}/api/v1/applications/${COOLIFY_APP_UUID}/start" 2>&1) || HTTP_CODE=$?
+            "${COOLIFY_URL}/api/v1/applications/${COOLIFY_APP_UUID}/start" 2>/dev/null) || HTTP_CODE=$?
 
           echo "Response body:"
-          cat /tmp/coolify-resp.txt
+          cat /tmp/coolify-resp.txt 2>/dev/null || true
           echo ""
           echo "HTTP ${HTTP_CODE}"
           if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 400 ]; then
