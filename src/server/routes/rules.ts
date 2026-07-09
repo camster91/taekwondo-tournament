@@ -336,7 +336,6 @@ router.delete(
     if (!access.ok) {
       return res.status(access.status || 403).json({ error: access.error });
     }
-    }
 
     await prisma.tournamentRule.delete({
       where: { id: ruleId },
@@ -448,33 +447,35 @@ router.post(
         matches: {
           include: {
             competitor1: {
-              select: {
-                id: true,
-                ageAtTournament: true,
-                competitor: {
-                  select: {
-                    id: true,
-                    schoolDojang: true,
-                    weightLbs: true,
-                    heightInches: true,
+                select: {
+                  id: true,
+                  competitorId: true,
+                  ageAtTournament: true,
+                  competitor: {
+                    select: {
+                      id: true,
+                      schoolDojang: true,
+                      weightLbs: true,
+                      heightInches: true,
+                    },
                   },
                 },
               },
-            },
             competitor2: {
-              select: {
-                id: true,
-                ageAtTournament: true,
-                competitor: {
-                  select: {
-                    id: true,
-                    schoolDojang: true,
-                    weightLbs: true,
-                    heightInches: true,
+                select: {
+                  id: true,
+                  competitorId: true,
+                  ageAtTournament: true,
+                  competitor: {
+                    select: {
+                      id: true,
+                      schoolDojang: true,
+                      weightLbs: true,
+                      heightInches: true,
+                    },
                   },
                 },
               },
-            },
           },
         },
       },

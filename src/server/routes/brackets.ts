@@ -687,7 +687,7 @@ router.get('/division/:divisionId/pdf', authenticate, async (req: AuthenticatedR
 });
 
 // Export all brackets for tournament
-router.get('/tournament/:tournamentId/pdf', authenticate, requireTournamentAccess('viewer')), async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/pdf', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const showResults = req.query.results === 'true';
 
@@ -783,7 +783,7 @@ router.get('/tournament/:tournamentId/pdf', authenticate, requireTournamentAcces
 });
 
 // Export tournament results PDF
-router.get('/tournament/:tournamentId/results/pdf', authenticate, requireTournamentAccess('viewer')), async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/results/pdf', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const tournament = await prisma.tournament.findUnique({
@@ -936,7 +936,7 @@ router.get('/division/:divisionId/certificate/:place', authenticate, async (req:
 });
 
 // Generate all certificates for tournament
-router.get('/tournament/:tournamentId/certificates', authenticate, requireTournamentAccess('viewer')), async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/certificates', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const placeFilter = req.query.place ? parseInt(req.query.place as string) : null;
 
@@ -1022,7 +1022,7 @@ router.get('/tournament/:tournamentId/certificates', authenticate, requireTourna
 });
 
 // Generate school-specific results report
-router.get('/tournament/:tournamentId/school-report', authenticate, requireTournamentAccess('viewer')), async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/school-report', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const schoolName = req.query.school as string;
 
