@@ -13,7 +13,12 @@ import {
   getBackup,
   restoreDivisionState,
 } from '../services/backup-recovery.js';
-import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import {
+  authenticate,
+  requireTournamentAccess,
+  checkTournamentAccess,
+  type AuthenticatedRequest,
+} from '../middleware/auth.js';
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validate.js';
 
@@ -152,7 +157,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
 });
 
 // Preview divisions before generating (requires authentication + admin/director role)
-router.post('/tournament/:tournamentId/preview', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/tournament/:tournamentId/preview', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { config } = req.body;
 
@@ -211,7 +216,7 @@ router.get('/tournament/:tournamentId/check-data-loss', authenticate, async (req
 });
 
 // Auto-generate divisions for tournament (requires authentication + admin/director role)
-router.post('/tournament/:tournamentId/auto-generate', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/tournament/:tournamentId/auto-generate', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
   const { config, force = false } = req.body;
@@ -295,7 +300,9 @@ router.post('/tournament/:tournamentId/auto-generate', authenticate, requireRole
 });
 
 // Create manual division (requires authentication + admin/director role)
-router.post('/', authenticate, requireRole('admin', 'director'), validateRequest(divisionCreateSchema), async (req: Request, res: Response) => {
+// tournamentId comes from the body — auth is checked inline after
+// validation so we can enforce per-tournament access.
+router.post('/', authenticate, validateRequest(divisionCreateSchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const {
     tournamentId,
@@ -312,6 +319,11 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
     divisionNumber,
     isSpecialNeeds,
   } = req.body;
+
+  const access = await checkTournamentAccess(req, prisma, tournamentId, 'director');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
 
   const division = await prisma.division.create({
     data: {
@@ -335,8 +347,25 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
 });
 
 // Update division (requires authentication + admin/director role)
-router.put('/:id', authenticate, requireRole('admin', 'director'), validateRequest(divisionUpdateSchema), async (req: Request, res: Response) => {
+// `:id` is the division id — resolve to its parent tournamentId
+// for the per-tournament access check before mutating.
+router.put('/:id', authenticate, validateRequest(divisionUpdateSchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.id);
+
+  const existing = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { tournamentId: true },
+  });
+  if (!existing) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+
+  const access = await checkTournamentAccess(req, prisma, existing.tournamentId, 'director');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+
   const {
     name,
     ageMin,
@@ -351,7 +380,7 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
   } = req.body;
 
   const division = await prisma.division.update({
-    where: { id: getParam(req.params.id) },
+    where: { id: divisionId },
     data: {
       name,
       ageMin,
@@ -370,7 +399,7 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
 });
 
 // Delete division (requires authentication + admin/director role)
-router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.id);
   const force = req.query.force === 'true';
@@ -387,7 +416,12 @@ router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req
   });
 
   if (!division) {
-    throw Errors.divisionNotFound(divisionId);
+    return res.status(404).json({ error: 'Division not found' });
+  }
+
+  const access = await checkTournamentAccess(req, prisma, division.tournamentId, 'director');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
   }
 
   // Check if bracket has results
@@ -412,7 +446,7 @@ router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req
 // the Schedule page. Accepts an ordered array of division IDs; assigns
 // displayOrder = index. Closes L7 from the UI audit (drag-to-reorder
 // ring assignment).
-router.post('/tournament/:tournamentId/reorder', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/tournament/:tournamentId/reorder', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
   const { divisionIds } = req.body as { divisionIds?: string[] };
@@ -451,7 +485,7 @@ router.post('/tournament/:tournamentId/reorder', authenticate, requireRole('admi
 });
 
 // Clear all divisions for a tournament (requires authentication)
-router.delete('/tournament/:tournamentId/all', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.delete('/tournament/:tournamentId/all', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
   const force = req.query.force === 'true';
@@ -487,13 +521,28 @@ router.delete('/tournament/:tournamentId/all', authenticate, requireRole('admin'
 });
 
 // Assign competitor to division (requires authentication)
-router.post('/:id/assign', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
+router.post('/:id/assign', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.id);
+
+  // Resolve the parent tournament for the per-tournament check.
+  const division = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { tournamentId: true },
+  });
+  if (!division) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, division.tournamentId, 'scorekeeper');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+
   const { registrationId, seedPosition, manualOverride } = req.body;
 
   const assignment = await prisma.divisionAssignment.create({
     data: {
-      divisionId: getParam(req.params.id),
+      divisionId,
       registrationId,
       seedPosition,
       manualOverride: manualOverride ?? true,
@@ -509,20 +558,49 @@ router.post('/:id/assign', authenticate, requireRole('admin', 'director', 'score
 });
 
 // Remove competitor from division (requires authentication)
-router.delete('/:id/assign/:assignmentId', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
+router.delete('/:id/assign/:assignmentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const assignmentId = getParam(req.params.assignmentId);
+
+  // Resolve the assignment's division → parent tournament for the
+  // per-tournament access check before deleting.
+  const assignment = await prisma.divisionAssignment.findUnique({
+    where: { id: assignmentId },
+    select: { division: { select: { tournamentId: true } } },
+  });
+  if (!assignment) {
+    return res.status(404).json({ error: 'Assignment not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, assignment.division.tournamentId, 'scorekeeper');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
 
   await prisma.divisionAssignment.delete({
-    where: { id: getParam(req.params.assignmentId) },
+    where: { id: assignmentId },
   });
 
   res.status(204).send();
 });
 
 // Move competitor between divisions (requires authentication)
-router.post('/:id/move', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
+router.post('/:id/move', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { assignmentId, toDivisionId } = req.body;
+
+  // Resolve the assignment's current division → parent tournament
+  // for the per-tournament access check.
+  const current = await prisma.divisionAssignment.findUnique({
+    where: { id: assignmentId },
+    select: { division: { select: { tournamentId: true } } },
+  });
+  if (!current) {
+    return res.status(404).json({ error: 'Assignment not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, current.division.tournamentId, 'scorekeeper');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
 
   const assignment = await prisma.divisionAssignment.update({
     where: { id: assignmentId },
@@ -541,12 +619,13 @@ router.post('/:id/move', authenticate, requireRole('admin', 'director', 'scoreke
 });
 
 // Split division (requires authentication + admin/director role)
-router.post('/:id/split', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/:id/split', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.id);
   const { splitCount = 2 } = req.body;
 
   const division = await prisma.division.findUnique({
-    where: { id: getParam(req.params.id) },
+    where: { id: divisionId },
     include: {
       assignments: {
         include: {
@@ -558,6 +637,11 @@ router.post('/:id/split', authenticate, requireRole('admin', 'director'), async 
 
   if (!division) {
     return res.status(404).json({ error: 'Division not found' });
+  }
+
+  const access = await checkTournamentAccess(req, prisma, division.tournamentId, 'director');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
   }
 
   const assignments = division.assignments;
@@ -635,7 +719,7 @@ router.get('/tournament/:tournamentId/backup', authenticate, async (req: Request
 });
 
 // Restore tournament divisions from backup (requires authentication + admin/director role)
-router.post('/tournament/:tournamentId/restore', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/tournament/:tournamentId/restore', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
 
