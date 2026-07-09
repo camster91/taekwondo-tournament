@@ -93,6 +93,11 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
   // fall through to `null` which we spread as no-op.
   const accessFilter = await buildTournamentAccessFilter(req, prisma);
 
+  // Hard server-side cap on the page size so a single request can't
+  // fan out into a multi-megabyte payload. Response keeps the array
+  // shape every client expects — pagination metadata can be added
+  // later as an additive change once Dashboard / Tournaments have
+  // a load-more control. 200 is comfortably above any real install.
   const tournaments = await prisma.tournament.findMany({
     where: {
       ...trashFilter,
@@ -107,6 +112,7 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
       },
     },
     orderBy: { date: 'desc' },
+    take: 200,
   });
 
   res.json(tournaments);
