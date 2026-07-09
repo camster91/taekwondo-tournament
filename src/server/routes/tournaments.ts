@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
-import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import { authenticate, requireRole, requireTournamentAccess, type AuthenticatedRequest } from '../middleware/auth.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { escapeHtml } from '../services/email-templates.js';
 import {
@@ -69,6 +69,15 @@ const weightClassesSchema = z.object({
     weightMaxLbs: z.number().optional(),
     displayOrder: z.number().int().optional(),
   })),
+});
+
+// Ring reassignment body — moves a division's matches to a different
+// ring number. Closes the hand-rolled `if (!divisionId || !ring ||
+// ring < 1)` validation that the audit flagged as inconsistent with
+// the rest of the codebase (everything else uses validateRequest).
+const ringReassignSchema = z.object({
+  divisionId: z.string().uuid(),
+  ring: z.number().int().min(1),
 });
 
 // Helper to safely get string param
@@ -801,17 +810,25 @@ router.get('/:id/day-of', authenticate, async (req: Request, res: Response) => {
 // editor to move a fight that's running long onto a less-busy ring, or
 // to consolidate when one ring falls behind. Closes the ring-reassignment
 // gap from the abandoned code-review branch.
-router.put('/:id/schedule/reassign', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const { divisionId, ring } = req.body;
+router.put(
+  '/:id/schedule/reassign',
+  authenticate,
+  requireTournamentAccess('director'),
+  validateRequest(ringReassignSchema),
+  async (req: Request, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const tournamentId = req.params.id;
+    const { divisionId, ring } = req.body;
 
-  if (!divisionId || !ring || ring < 1) {
-    return res.status(400).json({ error: 'divisionId and ring (>= 1) are required' });
-  }
-
-  try {
-    const bracket = await prisma.bracket.findUnique({
-      where: { divisionId },
+    // Look up the bracket scoped to this tournament AND to a non
+    // soft-deleted tournament — a director who knows a bracketId
+    // that belonged to a soft-deleted tournament should not be
+    // able to reassign its matches.
+    const bracket = await prisma.bracket.findFirst({
+      where: {
+        divisionId,
+        division: { tournamentId, tournament: { deletedAt: null } },
+      },
     });
 
     if (!bracket) {
@@ -824,9 +841,7 @@ router.put('/:id/schedule/reassign', authenticate, requireRole('admin', 'directo
     });
 
     res.json({ success: true, divisionId, ring });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
   }
-});
+);
 
 export default router;
