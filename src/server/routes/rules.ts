@@ -448,7 +448,9 @@ router.post(
         matches: {
           include: {
             competitor1: {
-              include: {
+              select: {
+                id: true,
+                ageAtTournament: true,
                 competitor: {
                   select: {
                     id: true,
@@ -460,7 +462,9 @@ router.post(
               },
             },
             competitor2: {
-              include: {
+              select: {
+                id: true,
+                ageAtTournament: true,
                 competitor: {
                   select: {
                     id: true,
@@ -505,6 +509,7 @@ router.post(
         competitor1: match.competitor1 ? {
           id: match.competitor1.id,
           competitorId: match.competitor1.competitorId,
+          ageAtTournament: match.competitor1.ageAtTournament,
           competitor: {
             schoolDojang: match.competitor1.competitor.schoolDojang,
             weightLbs: match.competitor1.competitor.weightLbs,
@@ -514,6 +519,7 @@ router.post(
         competitor2: match.competitor2 ? {
           id: match.competitor2.id,
           competitorId: match.competitor2.competitorId,
+          ageAtTournament: match.competitor2.ageAtTournament,
           competitor: {
             schoolDojang: match.competitor2.competitor.schoolDojang,
             weightLbs: match.competitor2.competitor.weightLbs,

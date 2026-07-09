@@ -8,6 +8,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { getAgeGroup } from '../../shared/constants/age-groups.js';
 
 // Rule parameter types for each rule type
 export interface SameSchoolAvoidanceParams {
@@ -91,11 +92,63 @@ export interface TournamentRule {
   description: string | null;
   category: string;
   ruleType: string;
-  enforcement: string;
+  enforcement: EnforcementLevel;
   parameters: RuleParameters;
   priority: number;
   isActive: boolean;
   source: string;
+}
+
+export type EnforcementLevel = 'hard' | 'soft' | 'info';
+
+/**
+ * Coerce a raw `enforcement` value from the DB to the validated union.
+ * Unknown / empty values fall back to `info` so a hard rule can't be
+ * silently downgraded to nothing by a manual SQL edit. The caller logs
+ * the original value so the mismatch is visible in server logs.
+ *
+ * Note: createRuleSchema + updateRuleSchema already enforce the union
+ * via zod, so this is purely a defense-in-depth check for old rows.
+ */
+function coerceEnforcement(raw: string, ruleId: string, ruleName: string): EnforcementLevel {
+  if (raw === 'hard' || raw === 'soft' || raw === 'info') return raw;
+  console.warn(
+    `[rule-engine] rule ${ruleId} ("${ruleName}") has unrecognized enforcement "${raw}"; coercing to "info"`
+  );
+  return 'info';
+}
+
+/**
+ * Resolve the effective per-match tolerance for a weight/height rule
+ * that ships per-age-group overrides. The stricter (smaller) of the
+ * two competitors' applicable overrides wins — protects kids from being
+ * paired against a heavier/larger opponent just because they're in the
+ * same division.
+ *
+ * Defaults to the rule's base limit when no override is configured,
+ * when either age is missing, or when either competitor doesn't fit a
+ * known age group.
+ */
+function resolveAgeGroupOverride(
+  baseLimit: number,
+  ageGroupOverrides: Record<string, number> | undefined,
+  competitorAges: Array<number | null | undefined>
+): number {
+  if (!ageGroupOverrides) return baseLimit;
+  const applicable: number[] = [];
+  for (const age of competitorAges) {
+    if (age == null) {
+      applicable.push(baseLimit);
+      continue;
+    }
+    const group = getAgeGroup(age);
+    if (group && ageGroupOverrides[group.label] !== undefined) {
+      applicable.push(ageGroupOverrides[group.label]);
+    } else {
+      applicable.push(baseLimit);
+    }
+  }
+  return applicable.length === 0 ? baseLimit : Math.min(...applicable);
 }
 
 export interface RuleViolation {
@@ -138,6 +191,7 @@ export async function loadTournamentRules(prisma: PrismaClient, tournamentId: st
       parsed.push({
         ...rule,
         parameters: JSON.parse(rule.parameters) as RuleParameters,
+        enforcement: coerceEnforcement(rule.enforcement, rule.id, rule.name),
       });
     } catch (err) {
       console.warn(`[rule-engine] skipping rule ${rule.id} ("${rule.name}"): parameters is not valid JSON`);
@@ -155,8 +209,18 @@ export function evaluateBracketRules(
     id: string;
     roundNumber: number;
     matchNumber: number;
-    competitor1?: { id: string; competitorId: string; competitor: { schoolDojang?: string | null; weightLbs?: number | null; heightInches?: number | null } } | null;
-    competitor2?: { id: string; competitorId: string; competitor: { schoolDojang?: string | null; weightLbs?: number | null; heightInches?: number | null } } | null;
+    competitor1?: {
+      id: string;
+      competitorId: string;
+      ageAtTournament?: number | null;
+      competitor: { schoolDojang?: string | null; weightLbs?: number | null; heightInches?: number | null };
+    } | null;
+    competitor2?: {
+      id: string;
+      competitorId: string;
+      ageAtTournament?: number | null;
+      competitor: { schoolDojang?: string | null; weightLbs?: number | null; heightInches?: number | null };
+    } | null;
   }>
 ): RuleEvaluationResult {
   const violations: RuleViolation[] = [];
@@ -179,7 +243,7 @@ export function evaluateBracketRules(
                 ruleId: rule.id,
                 ruleName: rule.name,
                 ruleType: rule.ruleType,
-                enforcement: rule.enforcement as 'hard' | 'soft' | 'info',
+                enforcement: rule.enforcement,
                 description: `Same-school matchup in round ${match.roundNumber}: both from "${school1}"`,
                 affectedCompetitors: [match.competitor1.competitorId, match.competitor2.competitorId],
                 affectedMatch: match.id,
@@ -202,17 +266,22 @@ export function evaluateBracketRules(
           const w2 = match.competitor2.competitor.weightLbs;
           if (w1 != null && w2 != null) {
             const diff = Math.abs(w1 - w2);
-            if (diff > params.maxDifferenceLbs) {
+            const limit = resolveAgeGroupOverride(
+              params.maxDifferenceLbs,
+              params.ageGroupOverrides,
+              [match.competitor1.ageAtTournament, match.competitor2.ageAtTournament]
+            );
+            if (diff > limit) {
               const violation: RuleViolation = {
                 ruleId: rule.id,
                 ruleName: rule.name,
                 ruleType: rule.ruleType,
-                enforcement: rule.enforcement as 'hard' | 'soft' | 'info',
-                description: `Weight difference of ${diff.toFixed(1)} lbs exceeds ${params.maxDifferenceLbs} lb limit`,
+                enforcement: rule.enforcement,
+                description: `Weight difference of ${diff.toFixed(1)} lbs exceeds ${limit} lb limit`,
                 affectedCompetitors: [match.competitor1.competitorId, match.competitor2.competitorId],
                 affectedMatch: match.id,
                 suggestion: 'Consider moving the heavier competitor to a higher weight division',
-                severity: Math.min(100, (diff / params.maxDifferenceLbs) * 80),
+                severity: Math.min(100, (diff / limit) * 80),
               };
               if (rule.enforcement === 'hard') violations.push(violation);
               else if (rule.enforcement === 'soft') warnings.push(violation);
@@ -230,17 +299,22 @@ export function evaluateBracketRules(
           const h2 = match.competitor2.competitor.heightInches;
           if (h1 != null && h2 != null) {
             const diff = Math.abs(h1 - h2);
-            if (diff > params.maxDifferenceInches) {
+            const limit = resolveAgeGroupOverride(
+              params.maxDifferenceInches,
+              params.ageGroupOverrides,
+              [match.competitor1.ageAtTournament, match.competitor2.ageAtTournament]
+            );
+            if (diff > limit) {
               const violation: RuleViolation = {
                 ruleId: rule.id,
                 ruleName: rule.name,
                 ruleType: rule.ruleType,
-                enforcement: rule.enforcement as 'hard' | 'soft' | 'info',
-                description: `Height difference of ${diff.toFixed(1)} inches exceeds ${params.maxDifferenceInches} inch limit`,
+                enforcement: rule.enforcement,
+                description: `Height difference of ${diff.toFixed(1)} inches exceeds ${limit} inch limit`,
                 affectedCompetitors: [match.competitor1.competitorId, match.competitor2.competitorId],
                 affectedMatch: match.id,
                 suggestion: 'Review matchup — significant height advantage may be unfair',
-                severity: Math.min(100, (diff / params.maxDifferenceInches) * 70),
+                severity: Math.min(100, (diff / limit) * 70),
               };
               if (rule.enforcement === 'hard') violations.push(violation);
               else if (rule.enforcement === 'soft') warnings.push(violation);
@@ -319,7 +393,7 @@ export function evaluateDivisionRules(
               ruleId: rule.id,
               ruleName: rule.name,
               ruleType: rule.ruleType,
-              enforcement: rule.enforcement as 'hard' | 'soft' | 'info',
+              enforcement: rule.enforcement,
               description: `Division "${div.name}" has only ${size} competitor(s), below minimum of ${params.minCompetitors}`,
               affectedCompetitors: div.assignments.map(a => a.registration.competitorId),
               affectedDivision: div.id,
@@ -335,7 +409,7 @@ export function evaluateDivisionRules(
               ruleId: rule.id,
               ruleName: rule.name,
               ruleType: rule.ruleType,
-              enforcement: rule.enforcement as 'hard' | 'soft' | 'info',
+              enforcement: rule.enforcement,
               description: `Division "${div.name}" has ${size} competitors, exceeding maximum of ${params.maxCompetitors}`,
               affectedCompetitors: div.assignments.map(a => a.registration.competitorId),
               affectedDivision: div.id,

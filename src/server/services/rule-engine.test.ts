@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeFairnessScore } from './rule-engine.js';
+import { computeFairnessScore, loadTournamentRules } from './rule-engine.js';
 
 describe('computeFairnessScore', () => {
   it('returns 100 when there are no violations or warnings', () => {
@@ -38,5 +38,57 @@ describe('computeFairnessScore', () => {
     // NEW: 100 - 5 * 2 = 90 (real signal)
     expect(computeFairnessScore({ violations: 2, warnings: 0 })).not.toBe(100);
     expect(computeFairnessScore({ violations: 2, warnings: 0 })).toBe(90);
+  });
+});
+
+describe('loadTournamentRules enforcement coercion', () => {
+  // Helper that builds a fake Prisma client returning a single row with
+  // the given raw enforcement value. Lets us test coerceEnforcement in
+  // isolation without booting the real Prisma adapter.
+  function fakePrismaWithEnforcement(raw: string) {
+    return {
+      tournamentRule: {
+        findMany: async () => [
+          {
+            id: 'rule-1',
+            tournamentId: 't-1',
+            name: 'Test rule',
+            description: null,
+            category: 'bracket',
+            ruleType: 'weight_tolerance',
+            enforcement: raw,
+            parameters: JSON.stringify({ maxDifferenceLbs: 10, ageGroupOverrides: {} }),
+            priority: 50,
+            isActive: true,
+            source: 'manual',
+          },
+        ],
+      },
+    } as unknown as Parameters<typeof loadTournamentRules>[0];
+  }
+
+  it('passes through canonical values unchanged', async () => {
+    for (const v of ['hard', 'soft', 'info'] as const) {
+      const rules = await loadTournamentRules(fakePrismaWithEnforcement(v), 't-1');
+      expect(rules[0].enforcement).toBe(v);
+    }
+  });
+
+  it('coerces unknown values to info and logs a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const rules = await loadTournamentRules(fakePrismaWithEnforcement('HARD'), 't-1');
+    expect(rules[0].enforcement).toBe('info');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('unrecognized enforcement "HARD"')
+    );
+    warn.mockRestore();
+  });
+
+  it('coerces empty string to info', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const rules = await loadTournamentRules(fakePrismaWithEnforcement(''), 't-1');
+    expect(rules[0].enforcement).toBe('info');
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
