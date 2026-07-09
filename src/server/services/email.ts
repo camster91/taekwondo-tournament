@@ -31,7 +31,7 @@ export async function sendEmail(
     return { success: false, error: 'Email not configured' };
   }
 
-  const fromName = process.env.EMAIL_FROM_NAME || 'TKD Tournament Manager';
+  const fromName = process.env.EMAIL_FROM_NAME || 'Ashbi TKD';
   const fromAddress = process.env.EMAIL_FROM_ADDRESS || `noreply@${MAILGUN_DOMAIN}`;
 
   try {
