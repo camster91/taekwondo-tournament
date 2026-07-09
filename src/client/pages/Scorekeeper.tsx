@@ -1088,16 +1088,22 @@ export default function Scorekeeper() {
 
       {/* Incident Report Modal */}
       {showIncidentModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="incident-modal-title"
+        >
           <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold flex items-center gap-2">
+              <h3 id="incident-modal-title" className="text-xl font-bold flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-orange-400" />
                 Report Incident
               </h3>
               <button
                 onClick={() => setShowIncidentModal(false)}
                 className="text-gray-400 hover:text-white"
+                aria-label="Close incident report dialog"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1111,8 +1117,9 @@ export default function Scorekeeper() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Type</label>
+                <label htmlFor="incident-type" className="block text-sm text-gray-400 mb-1">Type</label>
                 <select
+                  id="incident-type"
                   value={incidentType}
                   onChange={(e) => setIncidentType(e.target.value)}
                   className="w-full p-3 bg-gray-700 rounded-lg text-white"
@@ -1126,8 +1133,9 @@ export default function Scorekeeper() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Severity</label>
+                <label htmlFor="incident-severity" className="block text-sm text-gray-400 mb-1">Severity</label>
                 <select
+                  id="incident-severity"
                   value={incidentSeverity}
                   onChange={(e) => setIncidentSeverity(e.target.value)}
                   className="w-full p-3 bg-gray-700 rounded-lg text-white"
@@ -1139,8 +1147,9 @@ export default function Scorekeeper() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <label htmlFor="incident-description" className="block text-sm text-gray-400 mb-1">Description</label>
                 <textarea
+                  id="incident-description"
                   value={incidentDescription}
                   onChange={(e) => setIncidentDescription(e.target.value)}
                   placeholder="Describe the incident..."
@@ -1150,8 +1159,9 @@ export default function Scorekeeper() {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Action Taken</label>
+                <label htmlFor="incident-action" className="block text-sm text-gray-400 mb-1">Action Taken</label>
                 <select
+                  id="incident-action"
                   value={incidentAction}
                   onChange={(e) => setIncidentAction(e.target.value)}
                   className="w-full p-3 bg-gray-700 rounded-lg text-white"
