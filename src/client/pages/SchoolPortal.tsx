@@ -16,6 +16,7 @@ import {
   Building2,
   Zap,
   ArrowRight,
+  AlertCircle,
 } from 'lucide-react';
 import Badge, { StatusBadge } from '../components/ui/Badge';
 import { PageLoader } from '../components/ui/Spinner';
@@ -110,7 +111,7 @@ export default function SchoolPortal() {
   const [competitorSearch, setCompetitorSearch] = useState('');
 
   // Fetch schools list
-  const { data: schoolList, isLoading: schoolsLoading } = useQuery<SchoolListData>({
+  const { data: schoolList, isLoading: schoolsLoading, error: schoolsError } = useQuery<SchoolListData>({
     queryKey: ['school-list', tournamentId],
     queryFn: async () => {
       const res = await fetch(`/api/public/tournaments/${tournamentId}/schools`);
@@ -120,7 +121,7 @@ export default function SchoolPortal() {
   });
 
   // Fetch school data when a school is selected
-  const { data: schoolData, isLoading: dataLoading } = useQuery<SchoolData>({
+  const { data: schoolData, isLoading: dataLoading, error: schoolDataError } = useQuery<SchoolData>({
     queryKey: ['school-portal', tournamentId, schoolName],
     queryFn: async () => {
       const res = await fetch(
@@ -215,6 +216,14 @@ export default function SchoolPortal() {
         <div className="max-w-4xl mx-auto px-6 py-8">
           {schoolsLoading ? (
             <PageLoader />
+          ) : schoolsError ? (
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8">
+              <EmptyState
+                icon={AlertCircle}
+                title="Couldn't load the school list"
+                description="The server returned an error. Try refreshing in a moment."
+              />
+            </div>
           ) : !schoolList || schoolList.schools.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8">
               <EmptyState
@@ -236,6 +245,7 @@ export default function SchoolPortal() {
                     placeholder="Search schools..."
                     value={schoolSearch}
                     onChange={(e) => setSchoolSearch(e.target.value)}
+                    aria-label="Search schools"
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   />
                 </div>
@@ -289,6 +299,24 @@ export default function SchoolPortal() {
   }
 
   if (!schoolData) {
+    // Distinguish "the school genuinely has no competitors" from
+    // "the API 500'd and we have no data". Without this branch both
+    // cases render "School not found" which is misleading when the
+    // real problem is a server outage or rate-limit.
+    if (schoolDataError) {
+      return (
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8">
+            <EmptyState
+              icon={AlertCircle}
+              title="Couldn't load school data"
+              description="The server returned an error. Try refreshing in a moment."
+              action={{ label: 'Choose another school', onClick: () => setSearchParams({}) }}
+            />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8">
@@ -474,6 +502,7 @@ export default function SchoolPortal() {
                     placeholder="Search competitors..."
                     value={competitorSearch}
                     onChange={(e) => setCompetitorSearch(e.target.value)}
+                    aria-label="Search competitors"
                     className="pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-56"
                   />
                 </div>

@@ -220,6 +220,7 @@ export default function FairnessRules() {
   const {
     data: rules,
     isLoading: rulesLoading,
+    error: rulesError,
   } = useQuery<FairnessRule[]>({
     queryKey: ['fairness-rules', tournamentId],
     queryFn: async () => {
@@ -435,6 +436,17 @@ export default function FairnessRules() {
               <CardSkeleton />
               <CardSkeleton />
             </div>
+          ) : rulesError ? (
+            <EmptyState
+              icon={AlertCircle}
+              title="Couldn't load rules"
+              description="The server returned an error. Try refreshing the page."
+              action={{
+                label: 'Retry',
+                onClick: () =>
+                  queryClient.invalidateQueries({ queryKey: ['fairness-rules', tournamentId] }),
+              }}
+            />
           ) : !rules || rules.length === 0 ? (
             <EmptyState
               icon={Shield}
