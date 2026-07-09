@@ -198,7 +198,7 @@ export default function SchoolPortal() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-purple-600 px-6 py-8">
+        <div className="bg-gradient-to-r from-indigo-500 to-violet-500 px-6 py-8">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center gap-3 mb-2">
               <Building2 className="h-8 w-8 text-white/90" />
@@ -272,7 +272,7 @@ export default function SchoolPortal() {
   if (dataLoading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-        <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-purple-600 px-6 py-8">
+        <div className="bg-gradient-to-r from-indigo-500 to-violet-500 px-6 py-8">
           <div className="max-w-6xl mx-auto">
             <h1 className="text-2xl font-bold text-white">Loading...</h1>
           </div>
@@ -302,7 +302,7 @@ export default function SchoolPortal() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-purple-600 px-6 py-6">
+      <div className="bg-gradient-to-r from-indigo-500 to-violet-500 px-6 py-6">
         <div className="max-w-6xl mx-auto">
           <button
             onClick={() => setSearchParams({})}

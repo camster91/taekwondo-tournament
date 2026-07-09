@@ -1159,7 +1159,7 @@ export default function Scorekeeper() {
                   <option value="">-- Select --</option>
                   <option value="first_aid">First Aid</option>
                   <option value="withdrawn">Withdrawn</option>
-                  <option value="continued">Continued</option>
+                  <option value="continued">Continued match</option>
                   <option value="ambulance">Ambulance</option>
                 </select>
               </div>
