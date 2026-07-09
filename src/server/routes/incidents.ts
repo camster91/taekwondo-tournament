@@ -2,8 +2,12 @@ import { Router } from 'express';
 import type { Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
-import { authenticate, requireRole } from '../middleware/auth.js';
-import type { AuthenticatedRequest } from '../middleware/auth.js';
+import {
+  authenticate,
+  requireRole,
+  checkTournamentAccess,
+  type AuthenticatedRequest,
+} from '../middleware/auth.js';
 
 const router = Router();
 
@@ -25,6 +29,9 @@ const updateIncidentSchema = z.object({
 });
 
 // POST /api/incidents - Create incident
+// Note: the parent tournamentId lives in the request body, so auth
+// is checked inline after parsing to avoid a misroute where the
+// middleware would otherwise read the wrong param.
 router.post(
   '/',
   authenticate,
@@ -39,29 +46,29 @@ router.post(
 
     const data = parsed.data;
 
-    try {
-      const incident = await prisma.incident.create({
-        data: {
-          tournamentId: data.tournamentId,
-          matchId: data.matchId ?? null,
-          registrationId: data.registrationId ?? null,
-          type: data.type,
-          severity: data.severity,
-          description: data.description,
-          actionTaken: data.actionTaken ?? null,
-          reportedBy: req.user?.id ?? null,
-        },
-      });
-
-      res.status(201).json(incident);
-    } catch (error) {
-      console.error('Failed to create incident:', error);
-      res.status(500).json({ error: 'Failed to create incident' });
+    const access = await checkTournamentAccess(req, prisma, data.tournamentId, 'scorekeeper');
+    if (!access.ok) {
+      return res.status(access.status || 403).json({ error: access.error });
     }
+
+    const incident = await prisma.incident.create({
+      data: {
+        tournamentId: data.tournamentId,
+        matchId: data.matchId ?? null,
+        registrationId: data.registrationId ?? null,
+        type: data.type,
+        severity: data.severity,
+        description: data.description,
+        actionTaken: data.actionTaken ?? null,
+        reportedBy: req.user?.id ?? null,
+      },
+    });
+
+    res.status(201).json(incident);
   }
 );
 
-// GET /api/incidents/tournament/:id - List incidents for tournament
+// GET /api/incidents/tournament/:tournamentId - List incidents for tournament
 router.get(
   '/tournament/:id',
   authenticate,
@@ -70,21 +77,23 @@ router.get(
     const prisma: PrismaClient = req.app.locals.prisma;
     const tournamentId = req.params.id;
 
-    try {
-      const incidents = await prisma.incident.findMany({
-        where: { tournamentId },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      res.json(incidents);
-    } catch (error) {
-      console.error('Failed to fetch incidents:', error);
-      res.status(500).json({ error: 'Failed to fetch incidents' });
+    const access = await checkTournamentAccess(req, prisma, tournamentId, 'director');
+    if (!access.ok) {
+      return res.status(access.status || 403).json({ error: access.error });
     }
+
+    const incidents = await prisma.incident.findMany({
+      where: { tournamentId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(incidents);
   }
 );
 
 // GET /api/incidents/:id - Get incident detail
+// `:id` here is the incident's id, not a tournament id — so we fetch
+// the incident first and authorize against its parent tournamentId.
 router.get(
   '/:id',
   authenticate,
@@ -93,20 +102,20 @@ router.get(
     const prisma: PrismaClient = req.app.locals.prisma;
     const incidentId = req.params.id;
 
-    try {
-      const incident = await prisma.incident.findUnique({
-        where: { id: incidentId },
-      });
+    const incident = await prisma.incident.findUnique({
+      where: { id: incidentId },
+    });
 
-      if (!incident) {
-        return res.status(404).json({ error: 'Incident not found' });
-      }
-
-      res.json(incident);
-    } catch (error) {
-      console.error('Failed to fetch incident:', error);
-      res.status(500).json({ error: 'Failed to fetch incident' });
+    if (!incident) {
+      return res.status(404).json({ error: 'Incident not found' });
     }
+
+    const access = await checkTournamentAccess(req, prisma, incident.tournamentId, 'director');
+    if (!access.ok) {
+      return res.status(access.status || 403).json({ error: access.error });
+    }
+
+    res.json(incident);
   }
 );
 
@@ -124,25 +133,25 @@ router.put(
       return res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
     }
 
-    try {
-      const existing = await prisma.incident.findUnique({
-        where: { id: incidentId },
-      });
+    const existing = await prisma.incident.findUnique({
+      where: { id: incidentId },
+    });
 
-      if (!existing) {
-        return res.status(404).json({ error: 'Incident not found' });
-      }
-
-      const incident = await prisma.incident.update({
-        where: { id: incidentId },
-        data: parsed.data,
-      });
-
-      res.json(incident);
-    } catch (error) {
-      console.error('Failed to update incident:', error);
-      res.status(500).json({ error: 'Failed to update incident' });
+    if (!existing) {
+      return res.status(404).json({ error: 'Incident not found' });
     }
+
+    const access = await checkTournamentAccess(req, prisma, existing.tournamentId, 'director');
+    if (!access.ok) {
+      return res.status(access.status || 403).json({ error: access.error });
+    }
+
+    const incident = await prisma.incident.update({
+      where: { id: incidentId },
+      data: parsed.data,
+    });
+
+    res.json(incident);
   }
 );
 

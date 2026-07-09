@@ -59,6 +59,31 @@ export type RuleParameters =
   | MinDivisionSizeParams
   | CustomConstraintParams;
 
+/**
+ * Penalty per enforcement level when computing the fairness score.
+ * Each hard violation costs 5 points, each soft warning 2 points,
+ * info items are advisory and don't affect the score (they're still
+ * returned in `result.info` for surfacing in the UI). Result is
+ * clamped 0–100.
+ *
+ * Previous formula used `totalViolations / (entities * rules)` as a
+ * fraction-of-possible-violations denominator, which collapsed to ~100
+ * for realistic tournament sizes because the denominator grew with the
+ * number of configured rules but the numerator was bounded by the
+ * actual violation count. Two hard violations in a 100-match × 5-rule
+ * tournament returned score 100 with passed: false — a contradictory
+ * signal the evaluator reported in the 2026-07-09 audit.
+ */
+const HARD_VIOLATION_PENALTY = 5;
+const SOFT_WARNING_PENALTY = 2;
+
+export function computeFairnessScore(counts: { violations: number; warnings: number }): number {
+  const raw = 100
+    - HARD_VIOLATION_PENALTY * counts.violations
+    - SOFT_WARNING_PENALTY * counts.warnings;
+  return Math.max(0, Math.min(100, Math.round(raw)));
+}
+
 export interface TournamentRule {
   id: string;
   tournamentId: string;
@@ -95,7 +120,11 @@ export interface RuleEvaluationResult {
 }
 
 /**
- * Load active rules for a tournament, parsed and sorted by priority
+ * Load active rules for a tournament, parsed and sorted by priority.
+ *
+ * Corrupt or malformed `parameters` JSON (manual SQL edit, half-applied
+ * migration) is logged and skipped — one bad row never 500s the whole
+ * tournament's evaluation report.
  */
 export async function loadTournamentRules(prisma: PrismaClient, tournamentId: string): Promise<TournamentRule[]> {
   const rawRules = await prisma.tournamentRule.findMany({
@@ -103,10 +132,18 @@ export async function loadTournamentRules(prisma: PrismaClient, tournamentId: st
     orderBy: { priority: 'desc' },
   });
 
-  return rawRules.map(rule => ({
-    ...rule,
-    parameters: JSON.parse(rule.parameters) as RuleParameters,
-  }));
+  const parsed: TournamentRule[] = [];
+  for (const rule of rawRules) {
+    try {
+      parsed.push({
+        ...rule,
+        parameters: JSON.parse(rule.parameters) as RuleParameters,
+      });
+    } catch (err) {
+      console.warn(`[rule-engine] skipping rule ${rule.id} ("${rule.name}"): parameters is not valid JSON`);
+    }
+  }
+  return parsed;
 }
 
 /**
@@ -216,16 +253,14 @@ export function evaluateBracketRules(
     }
   }
 
-  const totalViolations = violations.length + warnings.length;
-  const maxPossible = matches.length * rules.length;
-  const score = maxPossible > 0 ? Math.round(100 - (totalViolations / maxPossible) * 100) : 100;
+  const score = computeFairnessScore({ violations: violations.length, warnings: warnings.length });
 
   return {
     passed: violations.length === 0,
     violations,
     warnings,
     info,
-    score: Math.max(0, Math.min(100, score)),
+    score,
   };
 }
 
@@ -260,7 +295,19 @@ export function evaluateDivisionRules(
   for (const rule of rules.filter(r => r.category === 'division')) {
     switch (rule.ruleType) {
       case 'experience_grouping': {
-        // This would need tournament history data - mark as info for now
+        // Surfacing the not-yet-implemented state as a structured info
+        // item keeps the rule visible in the evaluation report so a
+        // director activating this rule sees an explicit "not enforced"
+        // signal rather than a silent green light.
+        info.push({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          ruleType: rule.ruleType,
+          enforcement: 'info',
+          description: 'experience_grouping enforcement is not yet implemented; this rule is informational only',
+          affectedCompetitors: [],
+          severity: 0,
+        });
         break;
       }
       case 'min_division_size': {
@@ -305,16 +352,14 @@ export function evaluateDivisionRules(
     }
   }
 
-  const totalViolations = violations.length + warnings.length;
-  const maxPossible = divisions.length * rules.length;
-  const score = maxPossible > 0 ? Math.round(100 - (totalViolations / maxPossible) * 100) : 100;
+  const score = computeFairnessScore({ violations: violations.length, warnings: warnings.length });
 
   return {
     passed: violations.length === 0,
     violations,
     warnings,
     info,
-    score: Math.max(0, Math.min(100, score)),
+    score,
   };
 }
 
