@@ -27,6 +27,21 @@ const registrationLimiter = rateLimit({
   skip: () => rateLimitDisabled,
 });
 
+// School portal share-link reads can dump a school's full roster and
+// match history, but they're public-by-design so parents don't need to
+// log in. Limit to 30 per minute per IP — the SchoolPortal.tsx page
+// polls every 15s when a school is selected (4 polls/minute per
+// browser) so this leaves headroom for a handful of concurrent viewers
+// while blocking scripted scrapes that enumerate schoolNames.
+const schoolPortalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => rateLimitDisabled,
+});
+
 // Get open tournaments (status = 'registration')
 router.get('/tournaments', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
@@ -721,82 +736,132 @@ function getAgeGroupLabel(age: number): string {
 // School portal — read-only data for /tournaments/:id/school and the
 // SchoolPortal.tsx public page. Used by directors sharing a link with
 // parents so they can see their school's brackets without needing to
-// log in. Soft-delete aware (only counts competitors and registrations
-// whose parent tournament is not deleted).
-router.get('/tournaments/:id/schools', async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
+// log in. Soft-delete aware (404s for soft-deleted tournaments with
+// the same shape as "not found"). Rate-limited 30/min/IP to prevent
+// scripted scrapes that enumerate schoolNames.
+router.get(
+  '/tournaments/:id/schools',
+  schoolPortalLimiter,
+  async (req: Request, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
 
-  const tournament = await prisma.tournament.findUnique({
-    where: { id: req.params.id },
-    select: { id: true, name: true },
-  });
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, name: true, deletedAt: true },
+    });
 
-  if (!tournament) {
-    return res.status(404).json({ error: 'Tournament not found' });
+    if (!tournament || tournament.deletedAt) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    const registrations = await prisma.registration.findMany({
+      where: { tournamentId: req.params.id },
+      select: { competitor: { select: { schoolDojang: true } } },
+    });
+
+    const schools = [
+      ...new Set(
+        registrations
+          .map((r) => r.competitor.schoolDojang)
+          .filter((s): s is string => !!s && s.trim().length > 0)
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+
+    res.json({ tournament: { id: tournament.id, name: tournament.name }, schools });
   }
+);
 
-  const registrations = await prisma.registration.findMany({
-    where: { tournamentId: req.params.id },
-    include: {
-      competitor: {
-        select: { schoolDojang: true },
+router.get(
+  '/tournaments/:id/school/:schoolName',
+  schoolPortalLimiter,
+  async (req: Request, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const schoolName = decodeURIComponent(req.params.schoolName);
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, name: true, date: true, location: true, status: true, sportProfileSlug: true, deletedAt: true },
+    });
+
+    if (!tournament || tournament.deletedAt) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    // Push the school filter into Prisma so we don't fetch every
+    // registration for the tournament only to drop most of them in
+    // JS. The `competitor` `select` is intentionally narrow to avoid
+    // leaking parent contact fields (parentName / parentEmail /
+    // parentPhone) on this public endpoint.
+    const registrations = await prisma.registration.findMany({
+      where: {
+        tournamentId: req.params.id,
+        competitor: {
+          schoolDojang: { equals: schoolName, mode: 'insensitive' },
+        },
       },
-    },
-  });
-
-  const schools = [
-    ...new Set(
-      registrations
-        .map((r) => r.competitor.schoolDojang)
-        .filter((s): s is string => !!s && s.trim().length > 0)
-    ),
-  ].sort((a, b) => a.localeCompare(b));
-
-  res.json({ tournament: { id: tournament.id, name: tournament.name }, schools });
-});
-
-router.get('/tournaments/:id/school/:schoolName', async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const schoolName = decodeURIComponent(req.params.schoolName);
-
-  const tournament = await prisma.tournament.findUnique({
-    where: { id: req.params.id },
-    select: { id: true, name: true, date: true, location: true, status: true, sportProfileSlug: true },
-  });
-
-  if (!tournament) {
-    return res.status(404).json({ error: 'Tournament not found' });
-  }
-
-  // Find all registrations for this tournament where competitor's school matches (case-insensitive)
-  const registrations = await prisma.registration.findMany({
-    where: { tournamentId: req.params.id },
-    include: {
-      competitor: true,
-      assignments: {
-        include: {
-          division: {
-            include: {
-              bracket: {
-                include: {
-                  matches: {
-                    include: {
-                      competitor1: {
-                        include: {
-                          competitor: {
-                            select: { firstName: true, lastName: true, schoolDojang: true },
+      select: {
+        id: true,
+        ageAtTournament: true,
+        patterns: true,
+        sparring: true,
+        checkedIn: true,
+        checkInTime: true,
+        competitor: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            belt: true,
+            danRank: true,
+            gender: true,
+            schoolDojang: true,
+          },
+        },
+        assignments: {
+          select: {
+            seedPosition: true,
+            division: {
+              select: {
+                id: true,
+                name: true,
+                eventType: true,
+                bracket: {
+                  select: {
+                    matches: {
+                      select: {
+                        id: true,
+                        matchNumber: true,
+                        roundNumber: true,
+                        bracketType: true,
+                        status: true,
+                        score1: true,
+                        score2: true,
+                        winnerId: true,
+                        ringNumber: true,
+                        scheduledTime: true,
+                        competitor1Id: true,
+                        competitor2Id: true,
+                        competitor1: {
+                          select: {
+                            id: true,
+                            competitorId: true,
+                            competitor: {
+                              select: { firstName: true, lastName: true, schoolDojang: true },
+                            },
+                          },
+                        },
+                        competitor2: {
+                          select: {
+                            id: true,
+                            competitorId: true,
+                            competitor: {
+                              select: { firstName: true, lastName: true, schoolDojang: true },
+                            },
                           },
                         },
                       },
-                      competitor2: {
-                        include: {
-                          competitor: {
-                            select: { firstName: true, lastName: true, schoolDojang: true },
-                          },
-                        },
-                      },
+                      orderBy: { matchNumber: 'asc' },
                     },
-                    orderBy: { matchNumber: 'asc' },
                   },
                 },
               },
@@ -804,16 +869,12 @@ router.get('/tournaments/:id/school/:schoolName', async (req: Request, res: Resp
           },
         },
       },
-    },
-  });
+    });
 
-  // Filter registrations by school name (case-insensitive)
-  const schoolRegistrations = registrations.filter(
-    (r) => r.competitor.schoolDojang?.toLowerCase() === schoolName.toLowerCase()
-  );
+    const schoolRegistrations = registrations;
 
-  // Build competitor data
-  const competitors = schoolRegistrations.map((reg) => {
+    // Build competitor data
+    const competitors = schoolRegistrations.map((reg) => {
     const divisions = reg.assignments.map((a) => ({
       id: a.division.id,
       name: a.division.name,
@@ -946,26 +1007,26 @@ router.get('/tournaments/:id/school/:schoolName', async (req: Request, res: Resp
     opponentName: string | null;
     opponentSchool: string | null;
   }> = [];
+  const seenMatchIds = new Set<string>();
 
   for (const comp of competitors) {
     for (const match of comp.matches) {
-      if (match.status === 'ready' || match.status === 'in_progress') {
-        const opponentName = match.isCompetitor1 ? match.competitor2Name : match.competitor1Name;
-        const opponentSchool = match.isCompetitor1 ? match.competitor2School : match.competitor1School;
-        // Avoid duplicates for same-school matchups
-        if (!upcomingMatches.some((m) => m.id === match.id)) {
-          upcomingMatches.push({
-            id: match.id,
-            matchNumber: match.matchNumber,
-            status: match.status,
-            ringNumber: match.ringNumber,
-            divisionName: match.divisionName,
-            competitorName: `${comp.firstName} ${comp.lastName}`,
-            opponentName,
-            opponentSchool,
-          });
-        }
-      }
+      if (match.status !== 'ready' && match.status !== 'in_progress') continue;
+      if (seenMatchIds.has(match.id)) continue;
+      seenMatchIds.add(match.id);
+
+      const opponentName = match.isCompetitor1 ? match.competitor2Name : match.competitor1Name;
+      const opponentSchool = match.isCompetitor1 ? match.competitor2School : match.competitor1School;
+      upcomingMatches.push({
+        id: match.id,
+        matchNumber: match.matchNumber,
+        status: match.status,
+        ringNumber: match.ringNumber,
+        divisionName: match.divisionName,
+        competitorName: `${comp.firstName} ${comp.lastName}`,
+        opponentName,
+        opponentSchool,
+      });
     }
   }
 
