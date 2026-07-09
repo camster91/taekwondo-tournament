@@ -29,13 +29,13 @@ function layout(content: string): string {
 <body>
   <div class="wrapper">
     <div class="header">
-      <h1>TKD Tournament Manager</h1>
+      <h1>Ashbi TKD</h1>
     </div>
     <div class="body">
       ${content}
     </div>
     <div class="footer">
-      <p style="margin:0;">TKD Tournament Manager</p>
+      <p style="margin:0;">Ashbi TKD</p>
     </div>
   </div>
 </body>
@@ -56,10 +56,10 @@ export function invitationEmail(params: {
   const safeInviteUrl = escapeHtml(params.inviteUrl);
 
   return {
-    subject: "You've been invited to TKD Tournament Manager",
+    subject: "You've been invited to Ashbi TKD",
     html: layout(`
       <p>${greeting}</p>
-      <p><strong>${safeInviterName}</strong> has invited you to join TKD Tournament Manager as a <strong>${safeRole}</strong>.</p>
+      <p><strong>${safeInviterName}</strong> has invited you to join Ashbi TKD as a <strong>${safeRole}</strong>.</p>
       <p style="text-align:center; margin: 24px 0;">
         <a href="${safeInviteUrl}" class="btn">Accept Invitation</a>
       </p>
@@ -80,7 +80,7 @@ export function magicLinkEmail(params: {
   const safeCode = escapeHtml(params.code);
 
   return {
-    subject: 'Sign in to TKD Tournament Manager',
+    subject: 'Sign in to Ashbi TKD',
     html: layout(`
       <p>${greetingMagic}</p>
       <p>Click the button below to sign in to your account.</p>
@@ -107,10 +107,10 @@ export function welcomeEmail(params: {
   const safeLoginUrl = escapeHtml(params.loginUrl);
 
   return {
-    subject: 'Welcome to TKD Tournament Manager',
+    subject: 'Welcome to Ashbi TKD',
     html: layout(`
       <p>Hi ${safeRecipientName},</p>
-      <p>Your account has been created! You now have <strong>${safeWelcomeRole}</strong> access to TKD Tournament Manager.</p>
+      <p>Your account has been created! You now have <strong>${safeWelcomeRole}</strong> access to Ashbi TKD.</p>
       <p style="text-align:center; margin: 24px 0;">
         <a href="${safeLoginUrl}" class="btn">Go to Dashboard</a>
       </p>
