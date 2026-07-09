@@ -69,6 +69,7 @@ router.post(
 );
 
 // GET /api/incidents/tournament/:tournamentId - List incidents for tournament
+// Soft-deleted rows are excluded by default; pass ?trash=true to see them.
 router.get(
   '/tournament/:id',
   authenticate,
@@ -76,6 +77,7 @@ router.get(
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
     const tournamentId = req.params.id;
+    const includeTrash = req.query.trash === 'true';
 
     const access = await checkTournamentAccess(req, prisma, tournamentId, 'director');
     if (!access.ok) {
@@ -83,8 +85,12 @@ router.get(
     }
 
     const incidents = await prisma.incident.findMany({
-      where: { tournamentId },
+      where: {
+        tournamentId,
+        ...(includeTrash ? {} : { deletedAt: null }),
+      },
       orderBy: { createdAt: 'desc' },
+      take: 200,
     });
 
     res.json(incidents);
@@ -106,7 +112,7 @@ router.get(
       where: { id: incidentId },
     });
 
-    if (!incident) {
+    if (!incident || incident.deletedAt) {
       return res.status(404).json({ error: 'Incident not found' });
     }
 
@@ -137,7 +143,7 @@ router.put(
       where: { id: incidentId },
     });
 
-    if (!existing) {
+    if (!existing || existing.deletedAt) {
       return res.status(404).json({ error: 'Incident not found' });
     }
 
@@ -149,6 +155,71 @@ router.put(
     const incident = await prisma.incident.update({
       where: { id: incidentId },
       data: parsed.data,
+    });
+
+    res.json(incident);
+  }
+);
+
+// DELETE /api/incidents/:id - Soft-delete incident
+// Sets deletedAt so the report stays in the DB (often required for
+// liability / insurance audit) but is excluded from active lists.
+// Same pattern as Competitor / Tournament / Division.
+router.delete(
+  '/:id',
+  authenticate,
+  requireRole('admin', 'director'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const incidentId = req.params.id;
+
+    const existing = await prisma.incident.findUnique({
+      where: { id: incidentId },
+    });
+
+    if (!existing || existing.deletedAt) {
+      return res.status(404).json({ error: 'Incident not found' });
+    }
+
+    const access = await checkTournamentAccess(req, prisma, existing.tournamentId, 'director');
+    if (!access.ok) {
+      return res.status(access.status || 403).json({ error: access.error });
+    }
+
+    await prisma.incident.update({
+      where: { id: incidentId },
+      data: { deletedAt: new Date() },
+    });
+
+    res.status(204).send();
+  }
+);
+
+// POST /api/incidents/:id/restore - Un-soft-delete a previously-deleted incident
+router.post(
+  '/:id/restore',
+  authenticate,
+  requireRole('admin', 'director'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const incidentId = req.params.id;
+
+    const existing = await prisma.incident.findUnique({
+      where: { id: incidentId },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Incident not found' });
+    }
+
+    const access = await checkTournamentAccess(req, prisma, existing.tournamentId, 'director');
+    if (!access.ok) {
+      return res.status(access.status || 403).json({ error: access.error });
+    }
+
+    const incident = await prisma.incident.update({
+      where: { id: incidentId },
+      data: { deletedAt: null },
     });
 
     res.json(incident);

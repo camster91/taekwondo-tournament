@@ -439,10 +439,15 @@ model Incident {
   reportedBy      String?  // userId of reporter
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  // Soft-delete: keeps incident reports on file (often required
+  // for liability / insurance) without surfacing them in active
+  // dashboards. Same pattern as Competitor / Tournament / Division.
+  deletedAt       DateTime?
 
   @@index([tournamentId])
   @@index([matchId])
   @@index([registrationId])
+  @@index([deletedAt])
 }
 
 // Tournament fairness rules (configurable per tournament)
