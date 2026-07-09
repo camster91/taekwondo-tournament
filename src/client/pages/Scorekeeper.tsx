@@ -629,19 +629,39 @@ export default function Scorekeeper() {
 
       {/* Match Timer — visible by default for sparring (combat) divisions.
           Also shown for patterns when the scorekeeper explicitly opens it
-          (Toggle button in the header). Default round length scales by
-          event type: sparring = 2 min × 2 rounds, patterns = 3 min. */}
-      {showTimer && division && (
-        (division.eventType === 'sparring' && sportProfile.eventTypes[1]?.isCombat) ? (
+          (Toggle button in the header). Round count and duration come
+          from sportProfile.scoringConfig so multi-sport installs get the
+          right defaults instead of the TKD-only values that used to be
+          hardcoded here (2 min × 2 rounds for sparring, 3 min single for
+          patterns). Patterns stay a single round; sparring gets the
+          configured multi-round count with a 30s break between rounds. */}
+      {showTimer && division && (() => {
+        const cfg = sportProfile.scoringConfig;
+        const isCombat = sportProfile.eventTypes[1]?.isCombat ?? false;
+        const isSparring = division.eventType === 'sparring' && isCombat;
+        const isPatterns = division.eventType === 'patterns';
+        if (!isSparring && !isPatterns) return null;
+
+        // Combat events use the sport's configured round count + duration
+        // with a 30s break. Patterns (forms) stay a single round — single
+        // performance, no inter-round break — but cap the round duration
+        // so forms are long enough to be useful (≥ 120s) but don't run
+        // longer than 5 minutes.
+        const rounds = isSparring ? cfg.defaultRounds : 1;
+        const roundTime = isSparring
+          ? cfg.defaultRoundDurationSeconds
+          : Math.min(300, Math.max(cfg.defaultRoundDurationSeconds, 120));
+        const breakTime = isSparring ? 30 : 0;
+        return (
           <div className="p-4 border-b border-gray-800">
-            <MatchTimer defaultRoundTime={120} defaultRounds={2} defaultBreakTime={30} />
+            <MatchTimer
+              defaultRoundTime={roundTime}
+              defaultRounds={rounds}
+              defaultBreakTime={breakTime}
+            />
           </div>
-        ) : (division.eventType === 'patterns' ? (
-          <div className="p-4 border-b border-gray-800">
-            <MatchTimer defaultRoundTime={180} defaultRounds={1} defaultBreakTime={0} onMatchEnd={undefined} />
-          </div>
-        ) : null)
-      )}
+        );
+      })()}
 
       {!currentMatch ? (
         <div className="p-8 text-center">
