@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
-import { authenticate, requireRole, requireTournamentAccess, type AuthenticatedRequest } from '../middleware/auth.js';
+import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
 // requireRole stays in use for POST / (create new tournament) — there's
 // no parent tournament to scope-access yet. All other tournament-scoped
 // mutations use requireTournamentAccess.
@@ -90,18 +90,31 @@ const getParam = (param: string | string[] | undefined): string => {
 };
 
 // Get all tournaments (requires authentication)
-router.get('/', authenticate, async (req: Request, res: Response) => {
+router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   // ?trash=true returns soft-deleted tournaments (for the Trash page);
   // ?trash=all returns both. Default hides soft-deleted.
   const trash = req.query.trash;
-  const where =
+  const trashFilter =
     trash === 'true' ? { deletedAt: { not: null } } :
     trash === 'all' ? {} :
     { deletedAt: null };
 
+  // Per-tournament access scoping — applies in multi-tenant installs.
+  // Admin and single-tenant users (no orgs, no explicit access rows)
+  // fall through to `null` which we spread as no-op.
+  const accessFilter = await buildTournamentAccessFilter(req, prisma);
+
+  // Hard server-side cap on the page size so a single request can't
+  // fan out into a multi-megabyte payload. Response keeps the array
+  // shape every client expects — pagination metadata can be added
+  // later as an additive change once Dashboard / Tournaments have
+  // a load-more control. 200 is comfortably above any real install.
   const tournaments = await prisma.tournament.findMany({
-    where,
+    where: {
+      ...trashFilter,
+      ...(accessFilter ?? {}),
+    },
     include: {
       _count: {
         select: {
@@ -111,6 +124,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       },
     },
     orderBy: { date: 'desc' },
+    take: 200,
   });
 
   res.json(tournaments);
