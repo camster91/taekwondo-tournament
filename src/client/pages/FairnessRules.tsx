@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { memo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import {
@@ -64,6 +65,61 @@ interface EvaluationIssue {
   affectedCompetitors?: string[];
   suggestion?: string;
 }
+
+/**
+ * Isolated input for the natural-language parser.
+ *
+ * Extracted from the parent so per-keystroke re-renders stay local.
+ * Without this split, every character typed into the input re-rendered
+ * the entire 950-LOC FairnessRules component (active-rules list,
+ * evaluation card, IssueSection tree) even though only this small
+ * fragment needed to update. Wrapped in React.memo so the parent
+ * state churn (parse result, rule list, eval result) doesn't push
+ * re-renders back into the input unless props actually change.
+ */
+const NaturalLanguageInput = memo(function NaturalLanguageInput({
+  onSubmit,
+  isPending,
+}: {
+  onSubmit: (text: string) => void;
+  isPending: boolean;
+}) {
+  const [nlInput, setNlInput] = useState('');
+
+  function handleSubmit() {
+    const trimmed = nlInput.trim();
+    if (!trimmed) return;
+    onSubmit(trimmed);
+    // Clear the input immediately on submit. The parent's parse
+    // result panel renders below with the outcome; if the user
+    // wants to retry, they retype.
+    setNlInput('');
+  }
+
+  return (
+    <div className="flex gap-2">
+      <input
+        type="text"
+        value={nlInput}
+        onChange={(e) => setNlInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleSubmit();
+        }}
+        placeholder="e.g. Competitors from the same school should not fight each other in the first round"
+        className="input flex-1"
+        aria-label="Describe a rule in plain English"
+      />
+      <button
+        onClick={handleSubmit}
+        disabled={isPending || !nlInput.trim()}
+        className="btn btn-primary"
+        aria-label="Parse rule"
+      >
+        {isPending ? <Spinner size="sm" /> : <Send className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+});
 
 interface EvaluationResult {
   score: number;
@@ -144,7 +200,9 @@ export default function FairnessRules() {
 
   // ---- State ----
   const [deleteTarget, setDeleteTarget] = useState<FairnessRule | null>(null);
-  const [nlInput, setNlInput] = useState('');
+  // Note: nlInput state lives inside <NaturalLanguageInput/> so
+  // keystrokes don't re-render this 950-LOC component. See the
+  // child component's docs.
   const [parseResult, setParsedResult] = useState<ParseResult | null>(null);
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualRuleType, setManualRuleType] = useState(RULE_TYPE_OPTIONS[0].value);
@@ -260,7 +318,6 @@ export default function FairnessRules() {
       queryClient.invalidateQueries({ queryKey: ['fairness-rules', tournamentId] });
       addToast('Rule created', 'success');
       setParsedResult(null);
-      setNlInput('');
       setManualParams({});
     },
     onError: () => addToast('Failed to create rule', 'error'),
@@ -282,11 +339,6 @@ export default function FairnessRules() {
   });
 
   // ---- Handlers ----
-
-  function handleParseSubmit() {
-    if (!nlInput.trim()) return;
-    parseMutation.mutate(nlInput.trim());
-  }
 
   function handleAcceptParsed() {
     if (!parseResult) return;
@@ -474,29 +526,10 @@ export default function FairnessRules() {
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
               Describe a rule in plain English and we will parse it automatically.
             </p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={nlInput}
-                onChange={(e) => setNlInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleParseSubmit();
-                }}
-                placeholder="e.g. Competitors from the same school should not fight each other in the first round"
-                className="input flex-1"
-              />
-              <button
-                onClick={handleParseSubmit}
-                disabled={parseMutation.isPending || !nlInput.trim()}
-                className="btn btn-primary"
-              >
-                {parseMutation.isPending ? (
-                  <Spinner size="sm" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </button>
-            </div>
+            <NaturalLanguageInput
+              onSubmit={(text) => parseMutation.mutate(text)}
+              isPending={parseMutation.isPending}
+            />
 
             {/* Parse result */}
             {parseResult && (

@@ -829,7 +829,7 @@ export default function Scorekeeper() {
                 >
                   -{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
-                <div className={`text-center text-xl font-bold ${penalties1 > 0 ? 'text-red-400' : 'text-gray-500'}`} aria-live="polite" aria-atomic="true">
+                <div className={`text-center text-xl font-bold ${penalties2 > 0 ? 'text-red-400' : 'text-gray-500'}`} aria-live="polite" aria-atomic="true">
                   {penalties2}
                 </div>
               </div>

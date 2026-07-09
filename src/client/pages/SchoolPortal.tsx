@@ -130,7 +130,11 @@ export default function SchoolPortal() {
       return res.json();
     },
     enabled: !!schoolName,
-    refetchInterval: 15000, // Refresh every 15 seconds
+    refetchInterval: 15000, // Refresh every 15 seconds when visible
+    // Pause polling when the tab is in the background so a director
+    // leaving the page open all day doesn't hammer the API with
+    // ~5,760 polls. Resumes automatically when they refocus.
+    refetchIntervalInBackground: false,
   });
 
   const filteredSchools = useMemo(() => {
