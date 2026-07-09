@@ -15,7 +15,12 @@ import {
   type DivisionInfo,
   type TournamentInfo,
 } from '../services/pdf-export.js';
-import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import {
+  authenticate,
+  requireTournamentAccess,
+  checkTournamentAccess,
+  type AuthenticatedRequest,
+} from '../middleware/auth.js';
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validate.js';
 
@@ -44,13 +49,28 @@ const matchResultSchema = z.object({
 });
 
 // Generate bracket for division (requires authentication + admin/director role)
-router.post('/division/:divisionId/generate', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/division/:divisionId/generate', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.divisionId);
+
+  // Per-tournament access: resolve division → tournamentId first.
+  const divisionMeta = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { tournamentId: true },
+  });
+  if (!divisionMeta) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, divisionMeta.tournamentId, 'director');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+
   // format: 'double_elim' (default) | 'single_elim' | 'round_robin' | 'pool_play'
   const { seedingStrategy = 'school_spread', format = 'double_elim', poolCount, advancePerPool } = req.body;
 
   const division = await prisma.division.findUnique({
-    where: { id: getParam(req.params.divisionId) },
+    where: { id: divisionId },
     include: {
       assignments: {
         include: {
@@ -187,10 +207,25 @@ router.get('/division/:divisionId', authenticate, async (req: Request, res: Resp
 });
 
 // Update match result (requires authentication + admin/director/scorekeeper role)
-router.put('/match/:matchId', authenticate, requireRole('admin', 'director', 'scorekeeper'), validateRequest(matchResultSchema), async (req: Request, res: Response) => {
+router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { winnerId, score1, score2, status, notes} = req.body;
-  const user = (req as any).user;
+  const matchId = getParam(req.params.matchId);
+
+  // Per-tournament access: resolve match → bracket → division → tournamentId.
+  const matchMeta = await prisma.match.findUnique({
+    where: { id: matchId },
+    select: { bracket: { select: { division: { select: { tournamentId: true } } } } },
+  });
+  if (!matchMeta) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, matchMeta.bracket.division.tournamentId, 'scorekeeper');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+
+  const { winnerId, score1, score2, status, notes } = req.body;
+  const user = req.user;
 
   // Get current match state for audit log
   const currentMatch = await prisma.match.findUnique({
@@ -311,11 +346,24 @@ router.get('/division/:divisionId/placements', authenticate, async (req: Request
 // SWAP, UNDO, and RESET mutations were previously only `authenticate` —
 // any logged-in user (including a `viewer`) could swap competitors,
 // undo a match, or reset a bracket. Now require scorekeeper-or-better.
-router.post('/match/:matchId/swap', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
+router.post('/match/:matchId/swap', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const matchId = getParam(req.params.matchId);
+
+  const matchMeta = await prisma.match.findUnique({
+    where: { id: matchId },
+    select: { bracket: { select: { division: { select: { tournamentId: true } } } } },
+  });
+  if (!matchMeta) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, matchMeta.bracket.division.tournamentId, 'scorekeeper');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
 
   const match = await prisma.match.findUnique({
-    where: { id: getParam(req.params.matchId) },
+    where: { id: matchId },
   });
 
   if (!match) {
@@ -351,13 +399,27 @@ router.get('/match/:matchId/audit', authenticate, async (req: Request, res: Resp
 });
 
 // Undo last match change
-router.post('/match/:matchId/undo', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
+router.post('/match/:matchId/undo', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const user = (req as any).user;
+  const matchId = getParam(req.params.matchId);
+
+  const matchMeta = await prisma.match.findUnique({
+    where: { id: matchId },
+    select: { bracket: { select: { division: { select: { tournamentId: true } } } } },
+  });
+  if (!matchMeta) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, matchMeta.bracket.division.tournamentId, 'scorekeeper');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+
+  const user = req.user;
 
   // Get the most recent audit log entry
   const lastLog = await prisma.matchAuditLog.findFirst({
-    where: { matchId: getParam(req.params.matchId) },
+    where: { matchId },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -401,18 +463,31 @@ router.post('/match/:matchId/undo', authenticate, requireRole('admin', 'director
 });
 
 // Reset bracket (requires authentication)
-router.post('/division/:divisionId/reset', authenticate, requireRole('admin', 'director', 'scorekeeper'), async (req: Request, res: Response) => {
+router.post('/division/:divisionId/reset', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.divisionId);
+
+  const divisionMeta = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { tournamentId: true },
+  });
+  if (!divisionMeta) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, divisionMeta.tournamentId, 'scorekeeper');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
 
   await prisma.bracket.deleteMany({
-    where: { divisionId: getParam(req.params.divisionId) },
+    where: { divisionId },
   });
 
   res.status(204).send();
 });
 
 // Generate brackets for all divisions in tournament (requires authentication + admin/director role)
-router.post('/tournament/:tournamentId/generate-all', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/tournament/:tournamentId/generate-all', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   // format defaults to double_elim (matches the historical behavior of this route).
   // Per-division format can also come from req.body.formats[divisionId] for callers
@@ -509,12 +584,25 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireRole(
 // ============ PDF Export Endpoints ============
 
 // Export single bracket PDF
-router.get('/division/:divisionId/pdf', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
+router.get('/division/:divisionId/pdf', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.divisionId);
   const showResults = req.query.results === 'true';
 
+  const divisionMeta = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { tournamentId: true },
+  });
+  if (!divisionMeta) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, divisionMeta.tournamentId, 'viewer');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+
   const division = await prisma.division.findUnique({
-    where: { id: getParam(req.params.divisionId) },
+    where: { id: divisionId },
     include: {
       tournament: true,
       bracket: {
@@ -599,7 +687,7 @@ router.get('/division/:divisionId/pdf', authenticate, requireRole('admin', 'dire
 });
 
 // Export all brackets for tournament
-router.get('/tournament/:tournamentId/pdf', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/pdf', authenticate, requireTournamentAccess('viewer')), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const showResults = req.query.results === 'true';
 
@@ -695,7 +783,7 @@ router.get('/tournament/:tournamentId/pdf', authenticate, requireRole('admin', '
 });
 
 // Export tournament results PDF
-router.get('/tournament/:tournamentId/results/pdf', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/results/pdf', authenticate, requireTournamentAccess('viewer')), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const tournament = await prisma.tournament.findUnique({
@@ -774,16 +862,29 @@ router.get('/tournament/:tournamentId/results/pdf', authenticate, requireRole('a
 });
 
 // Generate certificate for a single placement
-router.get('/division/:divisionId/certificate/:place', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
+router.get('/division/:divisionId/certificate/:place', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.divisionId);
   const place = parseInt(getParam(req.params.place));
 
   if (isNaN(place) || place < 1 || place > 3) {
     return res.status(400).json({ error: 'Place must be 1, 2, or 3' });
   }
 
+  const divisionMeta = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { tournamentId: true },
+  });
+  if (!divisionMeta) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, divisionMeta.tournamentId, 'viewer');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+
   const division = await prisma.division.findUnique({
-    where: { id: getParam(req.params.divisionId) },
+    where: { id: divisionId },
     include: {
       tournament: true,
       bracket: true,
@@ -835,7 +936,7 @@ router.get('/division/:divisionId/certificate/:place', authenticate, requireRole
 });
 
 // Generate all certificates for tournament
-router.get('/tournament/:tournamentId/certificates', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/certificates', authenticate, requireTournamentAccess('viewer')), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const placeFilter = req.query.place ? parseInt(req.query.place as string) : null;
 
@@ -921,7 +1022,7 @@ router.get('/tournament/:tournamentId/certificates', authenticate, requireRole('
 });
 
 // Generate school-specific results report
-router.get('/tournament/:tournamentId/school-report', authenticate, requireRole('admin', 'director', 'scorekeeper', 'viewer'), async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/school-report', authenticate, requireTournamentAccess('viewer')), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const schoolName = req.query.school as string;
 
