@@ -244,6 +244,13 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // JWT tokenVersion: bumped on logout / role change / isActive flip
+  // to invalidate every outstanding token for this user at once.
+  // Without this, a JWT in flight remains valid until its 7-day TTL
+  // expires regardless of who owns it. Default 0 keeps the column
+  // populated for existing rows after `db:push`.
+  tokenVersion Int      @default(0)
+
   // Tournament-specific permissions
   tournamentAccess UserTournamentAccess[]
   organizationMembers OrganizationMember[]
