@@ -6,7 +6,10 @@ import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
-import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import { authenticate, requireRole, requireTournamentAccess, type AuthenticatedRequest } from '../middleware/auth.js';
+// requireRole stays in use for POST / (create new tournament) — there's
+// no parent tournament to scope-access yet. All other tournament-scoped
+// mutations use requireTournamentAccess.
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { escapeHtml } from '../services/email-templates.js';
 import {
@@ -71,6 +74,15 @@ const weightClassesSchema = z.object({
   })),
 });
 
+// Ring reassignment body — moves a division's matches to a different
+// ring number. Closes the hand-rolled `if (!divisionId || !ring ||
+// ring < 1)` validation that the audit flagged as inconsistent with
+// the rest of the codebase (everything else uses validateRequest).
+const ringReassignSchema = z.object({
+  divisionId: z.string().uuid(),
+  ring: z.number().int().min(1),
+});
+
 // Helper to safely get string param
 const getParam = (param: string | string[] | undefined): string => {
   if (Array.isArray(param)) return param[0];
@@ -105,7 +117,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 });
 
 // Get single tournament (requires authentication)
-router.get('/:id', authenticate, async (req: Request, res: Response) => {
+router.get('/:id', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const tournament = await prisma.tournament.findUnique({
@@ -167,7 +179,7 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
 // POST /api/tournaments/:id/public-slug — returns the new slug (or
 // the existing one if the director wants to read it).
 // Director-only; directors regenerate to revoke a leaked link.
-router.post('/:id/public-slug', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/:id/public-slug', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const id = getParam(req.params.id);
 
@@ -185,7 +197,7 @@ router.post('/:id/public-slug', authenticate, requireRole('admin', 'director'), 
 });
 
 // Disable the public scoreboard by clearing the slug.
-router.delete('/:id/public-slug', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.delete('/:id/public-slug', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const id = getParam(req.params.id);
 
@@ -201,7 +213,7 @@ router.delete('/:id/public-slug', authenticate, requireRole('admin', 'director')
 // Clone a tournament as a template for next year. Deep-copies settings
 // (age groups, weight classes, fee note, division threshold) and resets
 // all registrations / divisions / brackets. Closes M2 from the UI audit.
-router.post('/:id/clone', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/:id/clone', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const original = await prisma.tournament.findUnique({
     where: { id: getParam(req.params.id) },
@@ -271,7 +283,7 @@ router.post('/:id/clone', authenticate, requireRole('admin', 'director'), async 
 //
 // "test=true" sends only to req.user.email so the director can
 // preview before blasting all parents.
-router.post('/:id/broadcast', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { subject, body, test } = req.body as { subject?: string; body?: string; test?: boolean };
 
@@ -345,7 +357,7 @@ router.post('/:id/broadcast', authenticate, requireRole('admin', 'director'), as
   });
 });
 
-router.put('/:id', authenticate, requireRole('admin', 'director'), validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
+router.put('/:id', authenticate, requireTournamentAccess('director'), validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, status, settings } = req.body;
 
@@ -365,7 +377,7 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
 
 // ─── Tournament rules (v2) ──────────────────────────────────────────────
 // GET /api/tournaments/:id/rules — returns the rules JSON for this tournament
-router.get('/:id/rules', authenticate, async (req: Request, res: Response) => {
+router.get('/:id/rules', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournament = await prisma.tournament.findUnique({
     where: { id: getParam(req.params.id) },
@@ -377,7 +389,7 @@ router.get('/:id/rules', authenticate, async (req: Request, res: Response) => {
 });
 
 // PUT /api/tournaments/:id/rules — replaces the rules JSON
-router.put('/:id/rules', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.put('/:id/rules', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { rules } = req.body as { rules: TournamentRules };
   // Validate by round-tripping through parse (which merges with defaults)
@@ -391,7 +403,7 @@ router.put('/:id/rules', authenticate, requireRole('admin', 'director'), async (
 });
 
 // POST /api/tournaments/:id/rules/reset — restore defaults
-router.post('/:id/rules/reset', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/:id/rules/reset', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournament = await prisma.tournament.update({
     where: { id: getParam(req.params.id) },
@@ -408,7 +420,7 @@ router.post('/:id/rules/reset', authenticate, requireRole('admin', 'director'), 
 // Registration (cascade-delete) — losing the entire bracket history.
 // The default is therefore a soft-delete that preserves audit trail;
 // a separate ?hard=true flag is required to actually drop the row.
-router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const hard = req.query.hard === 'true';
 
@@ -428,7 +440,7 @@ router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req
 });
 
 // Restore a soft-deleted tournament
-router.post('/:id/restore', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/:id/restore', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   await prisma.tournament.update({
@@ -440,7 +452,7 @@ router.post('/:id/restore', authenticate, requireRole('admin', 'director'), asyn
 });
 
 // Get tournament registrations (requires authentication)
-router.get('/:id/registrations', authenticate, async (req: Request, res: Response) => {
+router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { notInDivision } = req.query;
 
@@ -473,7 +485,7 @@ router.get('/:id/registrations', authenticate, async (req: Request, res: Respons
 });
 
 // Register competitor to tournament (requires authentication + admin/director role)
-router.post('/:id/registrations', authenticate, requireRole('admin', 'director'), validateRequest(registrationSchema), async (req: Request, res: Response) => {
+router.post('/:id/registrations', authenticate, requireTournamentAccess('director'), validateRequest(registrationSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { competitorId, patterns, sparring, weightAtRegistration } = req.body;
 
@@ -515,7 +527,7 @@ router.post('/:id/registrations', authenticate, requireRole('admin', 'director')
 });
 
 // Bulk register competitors (requires authentication + admin/director role)
-router.post('/:id/registrations/bulk', authenticate, requireRole('admin', 'director'), validateRequest(bulkRegistrationSchema), async (req: Request, res: Response) => {
+router.post('/:id/registrations/bulk', authenticate, requireTournamentAccess('director'), validateRequest(bulkRegistrationSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { competitorIds, patterns, sparring } = req.body;
 
@@ -563,7 +575,7 @@ router.post('/:id/registrations/bulk', authenticate, requireRole('admin', 'direc
 });
 
 // Update registration (requires authentication + admin/director role)
-router.put('/:id/registrations/:regId', authenticate, requireRole('admin', 'director'), validateRequest(registrationUpdateSchema), async (req: Request, res: Response) => {
+router.put('/:id/registrations/:regId', authenticate, requireTournamentAccess('director'), validateRequest(registrationUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { patterns, sparring, weightAtRegistration, checkedIn, checkInWeight, competeWithOlder, specialNeeds, manualDivisionId, seeding } = req.body;
 
@@ -602,7 +614,7 @@ router.put('/:id/registrations/:regId', authenticate, requireRole('admin', 'dire
 });
 
 // Remove registration (requires authentication + admin/director role)
-router.delete('/:id/registrations/:regId', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.delete('/:id/registrations/:regId', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   // Verify registration belongs to this tournament
@@ -621,7 +633,7 @@ router.delete('/:id/registrations/:regId', authenticate, requireRole('admin', 'd
 });
 
 // Get weight classes for tournament (requires authentication)
-router.get('/:id/weight-classes', authenticate, async (req: Request, res: Response) => {
+router.get('/:id/weight-classes', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const weightClasses = await prisma.weightClass.findMany({
     where: { tournamentId: getParam(req.params.id) },
@@ -631,7 +643,7 @@ router.get('/:id/weight-classes', authenticate, async (req: Request, res: Respon
 });
 
 // Save weight classes for tournament (bulk replace, requires authentication + admin/director role)
-router.put('/:id/weight-classes', authenticate, requireRole('admin', 'director'), validateRequest(weightClassesSchema), async (req: Request, res: Response) => {
+router.put('/:id/weight-classes', authenticate, requireTournamentAccess('director'), validateRequest(weightClassesSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.id);
   const { weightClasses } = req.body;
@@ -656,7 +668,7 @@ router.put('/:id/weight-classes', authenticate, requireRole('admin', 'director')
 });
 
 // Generate tournament schedule (requires authentication)
-router.post('/:id/schedule', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+router.post('/:id/schedule', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const config = req.body.config || {};
 
@@ -669,7 +681,7 @@ router.post('/:id/schedule', authenticate, requireRole('admin', 'director'), asy
 });
 
 // Get tournament schedule (requires authentication)
-router.get('/:id/schedule', authenticate, async (req: Request, res: Response) => {
+router.get('/:id/schedule', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   try {
@@ -681,7 +693,7 @@ router.get('/:id/schedule', authenticate, async (req: Request, res: Response) =>
 });
 
 // Day-of operations: live stats for the running tournament
-router.get('/:id/day-of', authenticate, async (req: Request, res: Response) => {
+router.get('/:id/day-of', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.id);
 
@@ -801,17 +813,25 @@ router.get('/:id/day-of', authenticate, async (req: Request, res: Response) => {
 // editor to move a fight that's running long onto a less-busy ring, or
 // to consolidate when one ring falls behind. Closes the ring-reassignment
 // gap from the abandoned code-review branch.
-router.put('/:id/schedule/reassign', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const { divisionId, ring } = req.body;
+router.put(
+  '/:id/schedule/reassign',
+  authenticate,
+  requireTournamentAccess('director'),
+  validateRequest(ringReassignSchema),
+  async (req: Request, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const tournamentId = req.params.id;
+    const { divisionId, ring } = req.body;
 
-  if (!divisionId || !ring || ring < 1) {
-    return res.status(400).json({ error: 'divisionId and ring (>= 1) are required' });
-  }
-
-  try {
-    const bracket = await prisma.bracket.findUnique({
-      where: { divisionId },
+    // Look up the bracket scoped to this tournament AND to a non
+    // soft-deleted tournament — a director who knows a bracketId
+    // that belonged to a soft-deleted tournament should not be
+    // able to reassign its matches.
+    const bracket = await prisma.bracket.findFirst({
+      where: {
+        divisionId,
+        division: { tournamentId, tournament: { deletedAt: null } },
+      },
     });
 
     if (!bracket) {
@@ -824,9 +844,7 @@ router.put('/:id/schedule/reassign', authenticate, requireRole('admin', 'directo
     });
 
     res.json({ success: true, divisionId, ring });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
   }
-});
+);
 
 export default router;
