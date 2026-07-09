@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
-import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { escapeHtml } from '../services/email-templates.js';
 import {
@@ -78,18 +78,26 @@ const getParam = (param: string | string[] | undefined): string => {
 };
 
 // Get all tournaments (requires authentication)
-router.get('/', authenticate, async (req: Request, res: Response) => {
+router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   // ?trash=true returns soft-deleted tournaments (for the Trash page);
   // ?trash=all returns both. Default hides soft-deleted.
   const trash = req.query.trash;
-  const where =
+  const trashFilter =
     trash === 'true' ? { deletedAt: { not: null } } :
     trash === 'all' ? {} :
     { deletedAt: null };
 
+  // Per-tournament access scoping — applies in multi-tenant installs.
+  // Admin and single-tenant users (no orgs, no explicit access rows)
+  // fall through to `null` which we spread as no-op.
+  const accessFilter = await buildTournamentAccessFilter(req, prisma);
+
   const tournaments = await prisma.tournament.findMany({
-    where,
+    where: {
+      ...trashFilter,
+      ...(accessFilter ?? {}),
+    },
     include: {
       _count: {
         select: {

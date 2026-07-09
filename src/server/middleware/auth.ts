@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express-serve-static-core';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 // JWT secret - REQUIRED in production
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -317,5 +317,68 @@ export function requireTournamentAccess(minRole: TournamentRole) {
     return res.status(result.status || 403).json({ error: result.error });
   };
 }
+
+/**
+ * Build a Prisma `where` predicate that scopes the `Tournament.findMany`
+ * call to the tournaments the current user can see. Returns `null` if
+ * no scoping is needed (admin user OR legacy single-tenant user with no
+ * org membership and no explicit access rows — sees everything).
+ *
+ * Use on list endpoints where the URL has no `:tournamentId` to feed
+ * `requireTournamentAccess`. Combine with whatever other filters the
+ * caller needs (trash view, status, etc.) via `Prisma.And` or simple
+ * object merge:
+ *
+ *   const accessFilter = await buildTournamentAccessFilter(req, prisma);
+ *   const where = {
+ *     deletedAt: null,
+ *     ...(accessFilter ?? {}),
+ *   };
+ *
+ * Mirrors the precedence in checkTournamentAccess: admins see all,
+ * users with no org and no explicit access see all (legacy fallback),
+ * otherwise restricted to the union of (explicit UserTournamentAccess
+ * rows with role ≥ viewer) + (tournaments in user's orgs) + (org-less
+ * tournaments so legacy single-tenant data stays visible).
+ */
+export async function buildTournamentAccessFilter(
+  req: AuthenticatedRequest,
+  prisma: PrismaClient
+): Promise<Prisma.TournamentWhereInput | null> {
+  if (!req.user) return null;
+  if (req.user.role === 'admin') return null;
+
+  const [orgMemberships, explicitAccess] = await Promise.all([
+    prisma.organizationMember.findMany({
+      where: { userId: req.user.id },
+      select: { organizationId: true },
+    }),
+    prisma.userTournamentAccess.findMany({
+      where: { userId: req.user.id },
+      select: { tournamentId: true, role: true },
+    }),
+  ]);
+
+  const orgIds = orgMemberships.map((m) => m.organizationId);
+  const explicitTournamentIds = explicitAccess
+    .filter((a) => ROLE_HIERARCHY[a.role as TournamentRole] >= ROLE_HIERARCHY.viewer)
+    .map((a) => a.tournamentId);
+
+  // Legacy single-tenant fallback: a user with no orgs and no explicit
+  // access rows sees every tournament. Same fallback used in
+  // checkTournamentAccess so list + per-tournament stay consistent.
+  if (orgIds.length === 0 && explicitTournamentIds.length === 0) {
+    return null;
+  }
+
+  return {
+    OR: [
+      { id: { in: explicitTournamentIds } },
+      { organizationId: { in: orgIds } },
+      { organizationId: null },
+    ],
+  };
+}
+
 
 // Note: JWT_SECRET is no longer exported to prevent accidental exposure
