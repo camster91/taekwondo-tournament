@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate, useParams, Navigate } from 'react-router-dom';
 import {
   Trophy,
@@ -30,33 +30,50 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Tour from './components/Tour';
 import CloseButton from './components/ui/CloseButton';
-import Dashboard from './pages/Dashboard';
-import Competitors from './pages/Competitors';
-import Trash from './pages/Trash';
-import Tournaments from './pages/Tournaments';
-import TournamentDetail from './pages/TournamentDetail';
-import TournamentSettings from './pages/TournamentSettings';
-import Divisions from './pages/Divisions';
-import Schedule from './pages/Schedule';
-import BracketEditor from './pages/BracketEditor';
-import PublicRegister from './pages/PublicRegister';
-import CheckRegistration from './pages/CheckRegistration';
-import ManageRegistration from './pages/ManageRegistration';
-import Login from './pages/Login';
-import VerifyMagicLink from './pages/VerifyMagicLink';
-import Scorekeeper from './pages/Scorekeeper';
-import CheckIn from './pages/CheckIn';
-import PublicScoreboard from './pages/PublicScoreboard';
-import PublicScoreboardBySlug from './pages/PublicScoreboardBySlug';
-import ParentScoreboard from './pages/ParentScoreboard';
-import Results from './pages/Results';
-import UserManagement from './pages/UserManagement';
-import Profile from './pages/Profile';
-import DirectorDashboard from './pages/DirectorDashboard';
-import AcceptInvite from './pages/AcceptInvite';
-import NotFound from './pages/NotFound';
-import FairnessRules from './pages/FairnessRules';
-import SchoolPortal from './pages/SchoolPortal';
+import Spinner from './components/ui/Spinner';
+
+// All page components are loaded lazily so the initial bundle ships
+// only the App shell + chrome. A director who only opens Scorekeeper
+// doesn't download FairnessRules / Divisions / BracketEditor (~3,000 LOC
+// of otherwise-dead JS). Suspense wrapping lives at each <Routes> block.
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Competitors = lazy(() => import('./pages/Competitors'));
+const Trash = lazy(() => import('./pages/Trash'));
+const Tournaments = lazy(() => import('./pages/Tournaments'));
+const TournamentDetail = lazy(() => import('./pages/TournamentDetail'));
+const TournamentSettings = lazy(() => import('./pages/TournamentSettings'));
+const Divisions = lazy(() => import('./pages/Divisions'));
+const Schedule = lazy(() => import('./pages/Schedule'));
+const BracketEditor = lazy(() => import('./pages/BracketEditor'));
+const PublicRegister = lazy(() => import('./pages/PublicRegister'));
+const CheckRegistration = lazy(() => import('./pages/CheckRegistration'));
+const ManageRegistration = lazy(() => import('./pages/ManageRegistration'));
+const Login = lazy(() => import('./pages/Login'));
+const VerifyMagicLink = lazy(() => import('./pages/VerifyMagicLink'));
+const Scorekeeper = lazy(() => import('./pages/Scorekeeper'));
+const CheckIn = lazy(() => import('./pages/CheckIn'));
+const PublicScoreboard = lazy(() => import('./pages/PublicScoreboard'));
+const PublicScoreboardBySlug = lazy(() => import('./pages/PublicScoreboardBySlug'));
+const ParentScoreboard = lazy(() => import('./pages/ParentScoreboard'));
+const Results = lazy(() => import('./pages/Results'));
+const UserManagement = lazy(() => import('./pages/UserManagement'));
+const Profile = lazy(() => import('./pages/Profile'));
+const DirectorDashboard = lazy(() => import('./pages/DirectorDashboard'));
+const AcceptInvite = lazy(() => import('./pages/AcceptInvite'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+const FairnessRules = lazy(() => import('./pages/FairnessRules'));
+const SchoolPortal = lazy(() => import('./pages/SchoolPortal'));
+
+// Fallback rendered while a lazy page chunk is fetched. Centred spinner
+// keeps the chrome stable so the page doesn't reflow when the real
+// content mounts.
+function PageFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]" aria-live="polite" aria-busy="true">
+      <Spinner size="lg" />
+    </div>
+  );
+}
 
 // Navigation: top-level workspace items
 const primaryNav = [
@@ -491,103 +508,107 @@ function AppRoutes() {
 
   if (isPublicPage) {
     return (
-      <Routes>
-        <Route path="/register" element={<PublicRegister />} />
-        <Route path="/check-registration" element={<CheckRegistration />} />
-        <Route path="/manage-registration" element={<ManageRegistration />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/verify" element={<VerifyMagicLink />} />
-        <Route path="/accept-invite" element={<AcceptInvite />} />
-        <Route path="/scorekeeper/:tournamentId" element={<ProtectedRoute><Scorekeeper /></ProtectedRoute>} />
-        <Route path="/checkin/:tournamentId" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
-        <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
-        <Route path="/scoreboard/parent/:tournamentId" element={<ParentScoreboard />} />
-        <Route path="/scoreboard/:publicSlug" element={<PublicScoreboardBySlug />} />
-        {/* School portal — share a read-only link with parents/directors
-            so they can see the live bracket without needing to log in.
-            Lives in the public route tree so the AdminLayout doesn't
-            wrap it. */}
-        <Route path="/tournaments/:tournamentId/school" element={<SchoolPortal />} />
-        {/* Legacy URL redirects — old paths used /tournaments/:id/<page>.
-            Closes #39 where a stale URL or bookmark hit a 404. */}
-        <Route path="/tournaments/:id/scorekeeper" element={<LegacyRedirect toKey="scorekeeper" />} />
-        <Route path="/tournaments/:id/checkin" element={<LegacyRedirect toKey="checkin" />} />
-        <Route path="/tournaments/:id/display" element={<LegacyRedirect toKey="display" />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/register" element={<PublicRegister />} />
+          <Route path="/check-registration" element={<CheckRegistration />} />
+          <Route path="/manage-registration" element={<ManageRegistration />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/verify" element={<VerifyMagicLink />} />
+          <Route path="/accept-invite" element={<AcceptInvite />} />
+          <Route path="/scorekeeper/:tournamentId" element={<ProtectedRoute><Scorekeeper /></ProtectedRoute>} />
+          <Route path="/checkin/:tournamentId" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
+          <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
+          <Route path="/scoreboard/parent/:tournamentId" element={<ParentScoreboard />} />
+          <Route path="/scoreboard/:publicSlug" element={<PublicScoreboardBySlug />} />
+          {/* School portal — share a read-only link with parents/directors
+              so they can see the live bracket without needing to log in.
+              Lives in the public route tree so the AdminLayout doesn't
+              wrap it. */}
+          <Route path="/tournaments/:tournamentId/school" element={<SchoolPortal />} />
+          {/* Legacy URL redirects — old paths used /tournaments/:id/<page>.
+              Closes #39 where a stale URL or bookmark hit a 404. */}
+          <Route path="/tournaments/:id/scorekeeper" element={<LegacyRedirect toKey="scorekeeper" />} />
+          <Route path="/tournaments/:id/checkin" element={<LegacyRedirect toKey="checkin" />} />
+          <Route path="/tournaments/:id/display" element={<LegacyRedirect toKey="display" />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
     );
   }
 
   return (
     <ProtectedRoute>
       <AdminLayout>
-        <Routes>
-          {/* General pages - any authenticated user */}
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/competitors" element={<Competitors />} />
-          <Route path="/trash" element={<Trash />} />
-          <Route path="/tournaments" element={<Tournaments />} />
-          <Route path="/tournaments/:id" element={<TournamentDetail />} />
-          <Route path="/tournaments/:id/results" element={<Results />} />
-          <Route
-            path="/tournaments/:tournamentId/divisions/:divisionId/bracket"
-            element={<BracketEditor />}
-          />
-          <Route path="/profile" element={<Profile />} />
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            {/* General pages - any authenticated user */}
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/competitors" element={<Competitors />} />
+            <Route path="/trash" element={<Trash />} />
+            <Route path="/tournaments" element={<Tournaments />} />
+            <Route path="/tournaments/:id" element={<TournamentDetail />} />
+            <Route path="/tournaments/:id/results" element={<Results />} />
+            <Route
+              path="/tournaments/:tournamentId/divisions/:divisionId/bracket"
+              element={<BracketEditor />}
+            />
+            <Route path="/profile" element={<Profile />} />
 
-          {/* Director+ pages - admin or director only */}
-          <Route
-            path="/tournaments/:id/settings"
-            element={
-              <ProtectedRoute requiredRoles={['admin', 'director']}>
-                <TournamentSettings />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/tournaments/:id/divisions"
-            element={
-              <ProtectedRoute requiredRoles={['admin', 'director']}>
-                <Divisions />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/tournaments/:id/schedule"
-            element={
-              <ProtectedRoute requiredRoles={['admin', 'director']}>
-                <Schedule />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/tournaments/:id/director"
-            element={
-              <ProtectedRoute requiredRoles={['admin', 'director']}>
-                <DirectorDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/tournaments/:tournamentId/fairness"
-            element={
-              <ProtectedRoute requiredRoles={['admin', 'director']}>
-                <FairnessRules />
-              </ProtectedRoute>
-            }
-          />
+            {/* Director+ pages - admin or director only */}
+            <Route
+              path="/tournaments/:id/settings"
+              element={
+                <ProtectedRoute requiredRoles={['admin', 'director']}>
+                  <TournamentSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tournaments/:id/divisions"
+              element={
+                <ProtectedRoute requiredRoles={['admin', 'director']}>
+                  <Divisions />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tournaments/:id/schedule"
+              element={
+                <ProtectedRoute requiredRoles={['admin', 'director']}>
+                  <Schedule />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tournaments/:id/director"
+              element={
+                <ProtectedRoute requiredRoles={['admin', 'director']}>
+                  <DirectorDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tournaments/:tournamentId/fairness"
+              element={
+                <ProtectedRoute requiredRoles={['admin', 'director']}>
+                  <FairnessRules />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Admin only pages */}
-          <Route
-            path="/admin/users"
-            element={
-              <ProtectedRoute requiredRoles={['admin']}>
-                <UserManagement />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            {/* Admin only pages */}
+            <Route
+              path="/admin/users"
+              element={
+                <ProtectedRoute requiredRoles={['admin']}>
+                  <UserManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </AdminLayout>
     </ProtectedRoute>
   );
