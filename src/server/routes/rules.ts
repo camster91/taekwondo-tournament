@@ -3,7 +3,12 @@ import type { Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validate.js';
-import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import {
+  authenticate,
+  requireTournamentAccess,
+  checkTournamentAccess,
+  type AuthenticatedRequest,
+} from '../middleware/auth.js';
 import {
   loadTournamentRules,
   evaluateBracketRules,
@@ -18,6 +23,19 @@ const getParam = (param: string | string[] | undefined): string => {
   if (Array.isArray(param)) return param[0];
   return param || '';
 };
+
+// Helper to safely parse a `parameters` JSON string. Returns the fallback
+// when the stored JSON is malformed (e.g. truncated row from a botched
+// migration or a manual edit) so one bad record doesn't crash the whole
+// request.
+function safeJsonParse<T>(value: string | null | undefined, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
 
 // Validation schemas
 const createRuleSchema = z.object({
@@ -186,18 +204,10 @@ function parseNaturalLanguageRule(text: string, _tournamentId: string): {
 router.get(
   '/tournament/:tournamentId',
   authenticate,
-  requireRole('admin', 'director'),
+  requireTournamentAccess('director'),
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
     const tournamentId = getParam(req.params.tournamentId);
-
-    const tournament = await prisma.tournament.findUnique({
-      where: { id: tournamentId },
-    });
-
-    if (!tournament) {
-      return res.status(404).json({ error: 'Tournament not found' });
-    }
 
     const rules = await prisma.tournamentRule.findMany({
       where: { tournamentId },
@@ -207,7 +217,7 @@ router.get(
     // Parse parameters JSON for the response
     const parsed = rules.map(rule => ({
       ...rule,
-      parameters: JSON.parse(rule.parameters),
+      parameters: safeJsonParse(rule.parameters, {}),
     }));
 
     res.json(parsed);
@@ -218,7 +228,7 @@ router.get(
 router.post(
   '/tournament/:tournamentId',
   authenticate,
-  requireRole('admin', 'director'),
+  requireTournamentAccess('director'),
   validateRequest(createRuleSchema),
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
@@ -261,7 +271,6 @@ router.post(
 router.put(
   '/:ruleId',
   authenticate,
-  requireRole('admin', 'director'),
   validateRequest(updateRuleSchema),
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
@@ -273,6 +282,12 @@ router.put(
 
     if (!existing) {
       return res.status(404).json({ error: 'Rule not found' });
+    }
+
+    // Authorize against the parent tournament.
+    const access = await checkTournamentAccess(req, prisma, existing.tournamentId, 'director');
+    if (!access.ok) {
+      return res.status(access.status || 403).json({ error: access.error });
     }
 
     const updateData: Record<string, unknown> = {};
@@ -295,7 +310,7 @@ router.put(
 
     res.json({
       ...updated,
-      parameters: JSON.parse(updated.parameters),
+      parameters: safeJsonParse(updated.parameters, {}),
     });
   }
 );
@@ -304,7 +319,6 @@ router.put(
 router.delete(
   '/:ruleId',
   authenticate,
-  requireRole('admin', 'director'),
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
     const ruleId = getParam(req.params.ruleId);
@@ -315,6 +329,13 @@ router.delete(
 
     if (!existing) {
       return res.status(404).json({ error: 'Rule not found' });
+    }
+
+    // Authorize against the parent tournament.
+    const access = await checkTournamentAccess(req, prisma, existing.tournamentId, 'director');
+    if (!access.ok) {
+      return res.status(access.status || 403).json({ error: access.error });
+    }
     }
 
     await prisma.tournamentRule.delete({
@@ -329,18 +350,10 @@ router.delete(
 router.post(
   '/tournament/:tournamentId/defaults',
   authenticate,
-  requireRole('admin', 'director'),
+  requireTournamentAccess('director'),
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
     const tournamentId = getParam(req.params.tournamentId);
-
-    const tournament = await prisma.tournament.findUnique({
-      where: { id: tournamentId },
-    });
-
-    if (!tournament) {
-      return res.status(404).json({ error: 'Tournament not found' });
-    }
 
     // Check if rules already exist
     const existingCount = await prisma.tournamentRule.count({
@@ -372,7 +385,7 @@ router.post(
 
     const parsed = rules.map(rule => ({
       ...rule,
-      parameters: JSON.parse(rule.parameters),
+      parameters: safeJsonParse(rule.parameters, {}),
     }));
 
     res.status(201).json({
@@ -386,18 +399,10 @@ router.post(
 router.post(
   '/tournament/:tournamentId/evaluate',
   authenticate,
-  requireRole('admin', 'director'),
+  requireTournamentAccess('director'),
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
     const tournamentId = getParam(req.params.tournamentId);
-
-    const tournament = await prisma.tournament.findUnique({
-      where: { id: tournamentId },
-    });
-
-    if (!tournament) {
-      return res.status(404).json({ error: 'Tournament not found' });
-    }
 
     // 1. Load tournament rules
     const rules = await loadTournamentRules(prisma, tournamentId);
@@ -546,19 +551,11 @@ router.post(
 router.post(
   '/tournament/:tournamentId/parse',
   authenticate,
-  requireRole('admin', 'director'),
+  requireTournamentAccess('director'),
   validateRequest(parseRuleSchema),
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
     const tournamentId = getParam(req.params.tournamentId);
-
-    const tournament = await prisma.tournament.findUnique({
-      where: { id: tournamentId },
-    });
-
-    if (!tournament) {
-      return res.status(404).json({ error: 'Tournament not found' });
-    }
 
     const { text } = req.body;
 
