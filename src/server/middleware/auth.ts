@@ -31,6 +31,11 @@ export interface JWTPayload {
   userId: string;
   email: string;
   role: string;
+  // Mirrors User.tokenVersion at issue time. The auth middleware
+  // re-reads User.tokenVersion from the DB and rejects the request
+  // if the two don't match — that's how logout (bump) / role change
+  // / isActive flip invalidate every outstanding JWT at once.
+  tokenVersion?: number;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -43,13 +48,34 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
+// Name of the HttpOnly session cookie. Browser auto-sends on
+// same-origin requests (no credentials: 'include' needed) so the
+// SPA doesn't have to manage the token at all.
+export const SESSION_COOKIE = 'ashbi_token';
+
+export const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+  // 7 days — matches JWT_EXPIRES_IN
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
 /**
  * Creates a JWT token for a user. Pass `expiresIn` to override the
  * default 7-day TTL (use a string like '4h' or a number in seconds).
  * Defaults stay at 7d for normal user sessions; demo routes use a
  * shorter TTL via this parameter.
+ *
+ * Embeds the user's current `tokenVersion` so the middleware can
+ * reject tokens whose version no longer matches the DB (post-logout
+ * or post-role-change).
  */
-export function createToken(payload: JWTPayload, expiresIn: string | number = JWT_EXPIRES_IN): string {
+export function createToken(
+  payload: Omit<JWTPayload, 'tokenVersion'> & { tokenVersion: number },
+  expiresIn: string | number = JWT_EXPIRES_IN
+): string {
   const options: jwt.SignOptions = {
     expiresIn: expiresIn as any,
     algorithm: 'HS256',
@@ -75,17 +101,34 @@ export function verifyToken(token: string): JWTPayload | null {
 }
 
 /**
+ * Pull the JWT from either the HttpOnly cookie (preferred, set on
+ * login) or the Authorization: Bearer header (fallback for tests
+ * and other non-browser clients). Returns null when neither is
+ * present or both are malformed.
+ */
+function extractToken(req: AuthenticatedRequest): string | null {
+  const cookieToken = (req as AuthenticatedRequest & { cookies?: Record<string, string> }).cookies?.[SESSION_COOKIE];
+  if (cookieToken) return cookieToken;
+
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+
+  return null;
+}
+
+/**
  * Middleware to authenticate requests
  * Adds user info to request if authenticated
  */
 export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
+  const token = extractToken(req);
 
-  if (!authHeader?.startsWith('Bearer ')) {
+  if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const token = authHeader.substring(7);
   const payload = verifyToken(token);
 
   if (!payload) {
@@ -98,11 +141,20 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
   prisma.user
     .findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, role: true, firstName: true, lastName: true, isActive: true },
+      select: { id: true, email: true, role: true, firstName: true, lastName: true, isActive: true, tokenVersion: true },
     })
     .then((user) => {
       if (!user || !user.isActive) {
         return res.status(401).json({ error: 'User not found or inactive' });
+      }
+
+      // Reject tokens whose embedded tokenVersion no longer matches
+      // the user's current tokenVersion in the DB. Triggered by
+      // logout (bump), role change, or isActive flip. Without this
+      // check, a leaked token would remain valid for the full 7-day
+      // TTL.
+      if (typeof payload.tokenVersion === 'number' && payload.tokenVersion !== user.tokenVersion) {
+        return res.status(401).json({ error: 'Session invalidated' });
       }
 
       req.user = {
@@ -124,13 +176,11 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
  * Optional authentication - doesn't fail if no token, but attaches user if present
  */
 export function optionalAuthenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
+  const token = extractToken(req);
 
-  if (!authHeader?.startsWith('Bearer ')) {
+  if (!token) {
     return next();
   }
-
-  const token = authHeader.substring(7);
   const payload = verifyToken(token);
 
   if (!payload) {

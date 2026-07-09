@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from 'express-serve-static-core'
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import 'express-async-errors';
@@ -88,6 +89,13 @@ app.use(
 // multipart/form-data or pre-parsed JSON from the client. A larger
 // default + a single huge endpoint was an OOM vector.
 app.use(express.json({ limit: '1mb' }));
+
+// Cookie parsing for JWT session tokens. Reads the HttpOnly
+// `ashbi_token` cookie set on login. The auth middleware
+// accepts the cookie as the primary credential source; the
+// `Authorization: Bearer` header remains a fallback for tests
+// and other non-browser clients.
+app.use(cookieParser());
 
 // Make prisma available to routes
 app.locals.prisma = prisma;

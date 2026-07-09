@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
-import { createToken, authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, type AuthenticatedRequest } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
@@ -312,12 +312,20 @@ router.post('/verify-magic-link', authLimiter, async (req: Request, res: Respons
       data: { lastLogin: new Date() },
     });
 
-    // Create JWT
+    // Create JWT with the user's current tokenVersion embedded. Bumping
+    // the tokenVersion in the DB later (logout, role change, isActive
+    // flip) invalidates this token without needing a denylist.
     const jwtToken = createToken({
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion,
     });
+
+    // Set the HttpOnly session cookie. Same-origin browser requests
+    // auto-attach it, so the SPA no longer needs to manage the token
+    // in localStorage.
+    res.cookie(SESSION_COOKIE, jwtToken, SESSION_COOKIE_OPTIONS);
 
     res.json({
       user: {
@@ -361,7 +369,14 @@ router.post('/setup', registerLimiter, async (req: Request, res: Response) => {
     });
 
     // Issue JWT directly so they can log in
-    const jwtToken = createToken({ userId: user.id, email: user.email, role: user.role });
+    const jwtToken = createToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      tokenVersion: user.tokenVersion,
+    });
+
+    res.cookie(SESSION_COOKIE, jwtToken, SESSION_COOKIE_OPTIONS);
 
     res.status(201).json({
       message: 'Admin account created. Use magic link to sign in.',
@@ -400,12 +415,38 @@ if (devAuthEndpointsEnabled) {
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion,
     });
+    res.cookie(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
     res.json({ token, user: { id: user.id, email: user.email, role: user.role } });
   });
 }
 
 // Get current user
+router.post('/logout', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+
+  try {
+    // Bump tokenVersion to invalidate every outstanding JWT for
+    // this user at once. The authenticate middleware compares the
+    // embedded tokenVersion against the current DB value on every
+    // request, so any token issued before this bump is rejected.
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { tokenVersion: { increment: 1 } },
+    });
+  } catch (error) {
+    console.error('Logout tokenVersion bump failed:', error);
+    // Fall through — clearing the cookie still ends the current session.
+  }
+
+  // Clear the session cookie. With tokenVersion bumped, even a
+  // cached Bearer token in the client (if any) becomes a 401 on
+  // next request.
+  res.clearCookie(SESSION_COOKIE, { path: '/' });
+  res.json({ success: true });
+});
+
 router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
@@ -513,7 +554,9 @@ router.put('/users/:userId/role', authenticate, requireRole('admin'), validateRe
   try {
     const user = await prisma.user.update({
       where: { id: userId },
-      data: { role },
+      // Role change invalidates all outstanding JWTs for this user —
+      // a stale token would otherwise carry the old role.
+      data: { role, tokenVersion: { increment: 1 } },
       select: {
         id: true,
         email: true,
@@ -545,7 +588,11 @@ router.put('/users/:userId/status', authenticate, requireRole('admin'), validate
   try {
     const user = await prisma.user.update({
       where: { id: userId },
-      data: { isActive },
+      // Deactivation invalidates all outstanding JWTs at once. The
+      // authenticate middleware also checks isActive so this is
+      // belt-and-braces, but the bump guarantees a stale token
+      // doesn't keep working even before the next isActive read.
+      data: { isActive, tokenVersion: { increment: 1 } },
       select: {
         id: true,
         email: true,
@@ -669,6 +716,7 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
         lastName: true,
         role: true,
         createdAt: true,
+        tokenVersion: true,
       },
     });
 
@@ -682,7 +730,10 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion,
     });
+
+    res.cookie(SESSION_COOKIE, jwtToken, SESSION_COOKIE_OPTIONS);
 
     // Send welcome email (non-blocking)
     const baseUrl = process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:5173';
@@ -749,6 +800,7 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
           firstName: true,
           lastName: true,
           role: true,
+          tokenVersion: true,
         },
       });
 
@@ -756,8 +808,10 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
         userId: user.id,
         email: user.email,
         role: user.role,
+        tokenVersion: user.tokenVersion,
       });
 
+      res.cookie(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
       return res.json({ user, token, message: 'Existing user promoted to admin' });
     }
 
@@ -775,6 +829,7 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
         firstName: true,
         lastName: true,
         role: true,
+        tokenVersion: true,
       },
     });
 
@@ -782,8 +837,10 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
       userId: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion,
     });
 
+    res.cookie(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
     res.status(201).json({ user, token, message: 'Admin account created successfully' });
   } catch (error) {
     console.error('Setup admin error:', error);
@@ -830,9 +887,12 @@ if (demoLoginEnabled) {
           userId: user.id,
           email: user.email,
           role: user.role,
+          tokenVersion: user.tokenVersion,
         },
         DEMO_TTL_SECONDS, // 4h, not the 7d default
       );
+
+      res.cookie(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
 
       res.json({
         token,
