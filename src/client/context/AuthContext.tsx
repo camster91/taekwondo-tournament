@@ -1,5 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
-import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from '../utils/auth-storage';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 interface User {
   id: string;
@@ -12,153 +11,59 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   requestMagicLink: (email: string) => Promise<{ success: boolean; error?: string; devMode?: boolean; magicUrl?: string; code?: string }>;
   verifyCode: (email: string, code: string) => Promise<{ success: boolean; error?: string }>;
   verifyToken: (token: string) => Promise<{ success: boolean; error?: string }>;
-  // login takes a pre-issued token + user (e.g. from /api/auth/accept-invite)
-  // and pushes them into React state. Prefer verifyCode/verifyToken when
-  // the caller only has an email + OTP; this is for flows where the server
-  // returns a complete session in one step.
-  login: (data: { token: string; user: User }) => void;
-  logout: () => void;
+  // Hydrate React state from a complete session payload (e.g. accept-invite).
+  // Prefer verifyCode/verifyToken when the caller only has email + OTP.
+  login: (data: { user: User }) => void;
+  logout: () => Promise<void>;
   hasRole: (roles: string[]) => boolean;
   refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Local aliases so the rest of this file reads naturally. The actual
-// string values come from `../utils/auth-storage` so all callers stay
-// in sync on rename.
-const TOKEN_KEY = AUTH_TOKEN_KEY;
-const USER_KEY = AUTH_USER_KEY;
-
-// Decode JWT to get expiry time (without external library)
-function decodeJwtExpiry(token: string): number | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-
-    const payload = JSON.parse(atob(parts[1]));
-    return payload.exp ? payload.exp * 1000 : null; // Convert to milliseconds
-  } catch {
-    return null;
-  }
-}
+/**
+ * Auth is now cookie-based. The HttpOnly `ashbi_token` cookie is set
+ * by the server on every successful login (magic-link, demo, accept-
+ * invite, etc.). Same-origin browser requests auto-attach the cookie,
+ * so client code no longer reads, stores, or sends the JWT — it just
+ * asks /api/auth/me on mount to learn who the cookie authenticates as.
+ *
+ * getAuthHeaders() below is kept as a no-op for backward compatibility
+ * with existing callers; the cookie is what actually authenticates.
+ */
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Set up auto-logout timer based on token expiry
-  const setupLogoutTimer = (authToken: string) => {
-    // Clear any existing timer
-    if (logoutTimerRef.current) {
-      clearTimeout(logoutTimerRef.current);
-      logoutTimerRef.current = null;
-    }
-
-    const expiryTime = decodeJwtExpiry(authToken);
-    if (!expiryTime) return;
-
-    const timeUntilExpiry = expiryTime - Date.now();
-
-    // If token is already expired, logout immediately
-    if (timeUntilExpiry <= 0) {
-      logout();
-      return;
-    }
-
-    // Set timer to logout when token expires (with 10 second buffer)
-    const timerMs = Math.max(timeUntilExpiry - 10000, 1000);
-    logoutTimerRef.current = setTimeout(() => {
-      logout();
-      // Dispatch a custom event so the toast system (mounted as a child) can display a message
-      window.dispatchEvent(new CustomEvent('session-expired'));
-    }, timerMs);
-  };
-
-  // Cleanup timer on unmount
+  // Hydrate from the cookie session on mount.
   useEffect(() => {
-    return () => {
-      if (logoutTimerRef.current) {
-        clearTimeout(logoutTimerRef.current);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+        if (!cancelled && res.ok) {
+          const userData = (await res.json()) as User;
+          setUser(userData);
+        }
+      } catch {
+        // Network error — leave user null, isLoading false.
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
-  // Load auth state from localStorage on mount
-  useEffect(() => {
-    const savedToken = localStorage.getItem(TOKEN_KEY);
-    const savedUser = localStorage.getItem(USER_KEY);
-
-    if (savedToken && savedUser) {
-      try {
-        // Check if token is expired before restoring
-        const expiryTime = decodeJwtExpiry(savedToken);
-        if (expiryTime && expiryTime <= Date.now()) {
-          // Token expired, clear storage
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(USER_KEY);
-          setIsLoading(false);
-          return;
-        }
-
-        const parsedUser = JSON.parse(savedUser);
-        setToken(savedToken);
-        setUser(parsedUser);
-        setupLogoutTimer(savedToken);
-        // Verify token is still valid on server
-        checkToken(savedToken);
-      } catch {
-        // Invalid saved state, clear it
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-      }
-    }
-    setIsLoading(false);
-  }, []);
-
-  const checkToken = async (authToken: string) => {
-    try {
-      const res = await fetch('/api/auth/me', {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
-
-      if (!res.ok) {
-        // Token invalid, logout
-        logout();
-        return;
-      }
-
-      const userData = await res.json();
-      setUser(userData);
-      localStorage.setItem(USER_KEY, JSON.stringify(userData));
-    } catch {
-      // Network error, keep current state
-    }
-  };
-
-  const storeAuth = (data: { token: string; user: User }) => {
-    setToken(data.token);
+  const login = (data: { user: User }) => {
     setUser(data.user);
-    localStorage.setItem(TOKEN_KEY, data.token);
-    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-    setupLogoutTimer(data.token);
-  };
-
-  // Public version of storeAuth for callers (like AcceptInvite) that
-  // receive a complete session payload from the server and want to
-  // hydrate React state without a full page reload.
-  const login = (data: { token: string; user: User }) => {
-    storeAuth(data);
   };
 
   const requestMagicLink = async (email: string) => {
@@ -166,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/auth/request-magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ email }),
       });
 
@@ -175,7 +81,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: data.error || 'Failed to send sign-in link' };
       }
 
-      // Return devMode data if present (email not configured)
       if (data.devMode) {
         return {
           success: true,
@@ -196,16 +101,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/auth/verify-magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ email, code }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
         return { success: false, error: data.error || 'Verification failed' };
       }
 
-      storeAuth(data);
+      // Cookie is set by the server. Fetch /me to hydrate state.
+      const meRes = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      if (meRes.ok) {
+        const userData = (await meRes.json()) as User;
+        setUser(userData);
+      }
       return { success: true };
     } catch {
       return { success: false, error: 'Network error. Please try again.' };
@@ -217,32 +127,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/auth/verify-magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ token: magicToken }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
         return { success: false, error: data.error || 'Verification failed' };
       }
 
-      storeAuth(data);
+      const meRes = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      if (meRes.ok) {
+        const userData = (await meRes.json()) as User;
+        setUser(userData);
+      }
       return { success: true };
     } catch {
       return { success: false, error: 'Network error. Please try again.' };
     }
   };
 
-  const logout = () => {
-    // Clear the logout timer
-    if (logoutTimerRef.current) {
-      clearTimeout(logoutTimerRef.current);
-      logoutTimerRef.current = null;
+  const logout = async () => {
+    // Server bumps tokenVersion and clears the cookie. Even if this
+    // request fails, the next API call would 401 anyway — but we
+    // optimistically clear local state too.
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+    } catch {
+      // Ignore network errors — local clear below is enough to stop
+      // the UI from acting as if the user is still signed in.
     }
-    setToken(null);
     setUser(null);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
   };
 
   const hasRole = (roles: string[]) => {
@@ -251,8 +169,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshUser = async () => {
-    if (token) {
-      await checkToken(token);
+    try {
+      const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      if (res.ok) {
+        const userData = (await res.json()) as User;
+        setUser(userData);
+      }
+    } catch {
+      // Network error — leave state alone.
     }
   };
 
@@ -260,7 +184,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        token,
         isLoading,
         isAuthenticated: !!user,
         requestMagicLink,
@@ -277,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
@@ -285,11 +208,10 @@ export function useAuth() {
   return context;
 }
 
-// Helper to get auth headers for API calls
+// No-op kept for backward compatibility — the HttpOnly cookie
+// authenticates same-origin requests automatically, so callers no
+// longer need to attach an Authorization header. Returning {} lets
+// existing call sites spread the result without changing headers.
 export function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
   return {};
 }

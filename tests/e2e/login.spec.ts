@@ -37,10 +37,15 @@ test.describe('login (magic link flow)', () => {
     // Success lands somewhere other than /login.
     await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 10_000 });
 
-    // The auth token is now in localStorage; the app is authenticated.
-    const token = await page.evaluate(() => localStorage.getItem('tkd_auth_token'));
-    expect(token).toBeTruthy();
-    expect(token).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/); // JWT shape
+    // Auth is now cookie-based — the HttpOnly ashbi_token cookie is
+    // set by the server and JS can't read it directly. Verify the
+    // session is real by hitting /api/auth/me from the browser
+    // context (the cookie auto-attaches for same-origin requests).
+    const meResponse = await page.request.get('/api/auth/me');
+    expect(meResponse.ok()).toBeTruthy();
+    const me = await meResponse.json();
+    expect(me.email).toBe(email);
+    expect(me.role).toBeTruthy();
   });
 
   test('invalid 6-digit code shows an error and stays on the code step', async ({ page }) => {
@@ -71,7 +76,10 @@ test.describe('login (magic link flow)', () => {
     await page.getByRole('button', { name: /Try the demo/i }).click();
     await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 });
 
-    const token = await page.evaluate(() => localStorage.getItem('tkd_auth_token'));
-    expect(token).toBeTruthy();
+    // Session is cookie-based — verify by hitting /api/auth/me.
+    const meResponse = await page.request.get('/api/auth/me');
+    expect(meResponse.ok()).toBeTruthy();
+    const me = await meResponse.json();
+    expect(me.role).toBe('admin');
   });
 });

@@ -20,18 +20,11 @@ import {
   Terminal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from '../utils/auth-storage';
 import Spinner from '../components/ui/Spinner';
 import { Card, CardBody } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
-
-// Local aliases for readability within this file. See auth-storage.ts.
-// These mirror the same names in AuthContext so the rest of this file
-// reads naturally.
-const TOKEN_KEY = AUTH_TOKEN_KEY;
-const USER_KEY = AUTH_USER_KEY;
 
 export default function Login() {
   const navigate = useNavigate();
@@ -95,11 +88,9 @@ export default function Login() {
       if (!res.ok) {
         setError(data.error || 'Setup failed');
       } else {
-        localStorage.setItem(TOKEN_KEY, data.token);
-        if (data.user) {
-          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-        }
-        navigate('/', { replace: true });
+        // Session cookie is set by the server. Hard nav so
+        // AuthProvider re-mounts and hydrates user state from /me.
+        window.location.href = '/';
       }
     } catch {
       setError('Setup failed. Please try again.');
@@ -156,8 +147,8 @@ export default function Login() {
       const res = await fetch('/api/auth/demo', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Demo login failed');
-      localStorage.setItem(TOKEN_KEY, data.token);
-      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      // Session cookie is set by the server. Hard nav so the
+      // AuthProvider re-mounts and hydrates user state from /me.
       window.location.href = '/';
     } catch (err: any) {
       setError(err.message || 'Demo login failed. Please try again.');
