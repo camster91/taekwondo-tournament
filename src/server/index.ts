@@ -91,7 +91,7 @@ app.use(
 app.use(express.json({ limit: '1mb' }));
 
 // Cookie parsing for JWT session tokens. Reads the HttpOnly
-// `ashbi_token` cookie set on login. The auth middleware
+// `bowin_session` cookie set on login. The auth middleware
 // accepts the cookie as the primary credential source; the
 // `Authorization: Bearer` header remains a fallback for tests
 // and other non-browser clients.

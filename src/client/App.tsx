@@ -199,14 +199,18 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           sidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-2.5 px-5 h-16'
         )}>
           <div className="relative flex-shrink-0">
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-violet-500 blur-md opacity-50" />
-            <div className="relative h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg">
-              <Trophy className="h-5 w-5 text-white" strokeWidth={2.5} />
+            <div className="absolute inset-0 bg-[#DC2626] blur-md opacity-40" />
+            <div className="relative h-9 w-9 rounded-xl bg-[#0F172A] flex items-center justify-center shadow-lg border border-slate-800">
+              {/* bowin mark: two converging strokes suggesting a bow */}
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 6 L12 18 L20 6" className="text-white" />
+                <circle cx="12" cy="18" r="1.4" fill="#DC2626" stroke="none" />
+              </svg>
             </div>
           </div>
           {!sidebarCollapsed && (
             <div className="flex flex-col leading-tight min-w-0">
-              <span className="text-sm font-semibold text-white tracking-tight truncate">Ashbi TKD</span>
+              <span className="text-sm font-semibold text-white tracking-tight truncate">bowin</span>
               <span className="text-[10px] uppercase tracking-widest text-white/40 font-medium">Tournament OS</span>
             </div>
           )}
