@@ -51,7 +51,7 @@ export interface AuthenticatedRequest extends Request {
 // Name of the HttpOnly session cookie. Browser auto-sends on
 // same-origin requests (no credentials: 'include' needed) so the
 // SPA doesn't have to manage the token at all.
-export const SESSION_COOKIE = 'ashbi_token';
+export const SESSION_COOKIE = 'bowin_session';
 
 export const SESSION_COOKIE_OPTIONS = {
   httpOnly: true,
@@ -79,8 +79,8 @@ export function createToken(
   const options: jwt.SignOptions = {
     expiresIn: expiresIn as any,
     algorithm: 'HS256',
-    issuer: 'tkd-app',
-    audience: 'tkd-app',
+    issuer: 'bowin',
+    audience: 'bowin',
   };
   return jwt.sign(payload, EFFECTIVE_JWT_SECRET, options);
 }
@@ -92,8 +92,8 @@ export function verifyToken(token: string): JWTPayload | null {
   try {
     return jwt.verify(token, EFFECTIVE_JWT_SECRET, {
       algorithms: ['HS256'],
-      issuer: 'tkd-app',
-      audience: 'tkd-app',
+      issuer: 'bowin',
+      audience: 'bowin',
     }) as JWTPayload;
   } catch {
     return null;

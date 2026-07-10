@@ -849,7 +849,7 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
 });
 
 // Demo mode: anyone can sign in as a guest without an email.
-// - Creates (or reuses) a "demo@ashbi.ca" user
+// - Creates (or reuses) a "demo@bowin.app" user
 // - Mints a JWT with a 4-hour expiry
 // - Designed for the public live URL so visitors can try the app
 //   without needing to receive a magic-link email
@@ -857,7 +857,7 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
 // SECURITY: gated by ENABLE_DEMO_LOGIN. Defaults to ON in development
 // and OFF in production. Operators must explicitly opt in to expose
 // the demo account on a live deploy (the demo user has admin role).
-const DEMO_EMAIL = 'demo@ashbi.ca';
+const DEMO_EMAIL = 'demo@bowin.app';
 const DEMO_TTL_SECONDS = 4 * 60 * 60; // 4 hours
 const demoLoginEnabled =
   process.env.ENABLE_DEMO_LOGIN === '1' ||

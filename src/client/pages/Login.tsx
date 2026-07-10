@@ -162,10 +162,13 @@ export default function Login() {
       <header className="border-b border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-950/60 backdrop-blur-xl sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/login" className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-md">
-              <Trophy className="h-4.5 w-4.5 text-white" strokeWidth={2.5} />
+            <div className="h-8 w-8 rounded-lg bg-[#0F172A] flex items-center justify-center shadow-md border border-slate-800">
+              <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 6 L12 18 L20 6" className="text-white" />
+                <circle cx="12" cy="18" r="1.4" fill="#DC2626" stroke="none" />
+              </svg>
             </div>
-            <span className="text-base font-semibold tracking-tight">Ashbi TKD</span>
+            <span className="text-base font-semibold tracking-tight">bowin</span>
           </Link>
           <div className="flex items-center gap-4 text-sm">
             <span className="text-slate-600 hidden sm:inline">Real tournament management, end-to-end.</span>
@@ -183,21 +186,21 @@ export default function Login() {
 
       <main className="flex-1 grid lg:grid-cols-[1.1fr_0.9fr]">
         {/* ─── Left: Hero ─── */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white hidden lg:block">
-          {/* Decorative gradients */}
-          <div className="absolute top-0 left-0 w-[600px] h-[600px] bg-indigo-500/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-violet-500/20 rounded-full blur-3xl translate-x-1/3 translate-y-1/3" />
+        <section className="relative overflow-hidden bg-gradient-to-br from-[#0F172A] via-[#0F172A] to-[#1E293B] text-white hidden lg:block">
+          {/* Decorative gradients — bowin ink + red accent */}
+          <div className="absolute top-0 left-0 w-[600px] h-[600px] bg-[#DC2626]/15 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+          <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-[#DC2626]/10 rounded-full blur-3xl translate-x-1/3 translate-y-1/3" />
           <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]" />
 
           <div className="relative max-w-xl mx-auto lg:mx-0 lg:ml-auto lg:mr-12 px-6 lg:px-0 py-16 lg:py-24 flex flex-col justify-center min-h-full">
             <div className="inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-full bg-white/10 border border-white/10 text-xs font-medium text-white/80 backdrop-blur-sm mb-6 animate-fade-in">
-              <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-              <span>Built for Ontario dojangs</span>
+              <Sparkles className="h-3.5 w-3.5 text-[#DC2626]" />
+              <span>Tournaments, run like a black belt.</span>
             </div>
 
             <h2 className="text-4xl lg:text-5xl font-bold tracking-tight leading-[1.1] animate-slide-up">
               Run a real tournament.{' '}
-              <span className="bg-gradient-to-r from-indigo-300 via-violet-300 to-pink-300 bg-clip-text text-transparent">
+              <span className="text-[#DC2626]">
                 Not a spreadsheet.
               </span>
             </h2>
@@ -215,8 +218,8 @@ export default function Login() {
                 { icon: Zap, label: 'Excel import', sub: 'Drop your .xlsm, we handle the rest' },
               ].map((f) => (
                 <div key={f.label} className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-indigo-500/30 to-violet-500/30 border border-white/10 flex items-center justify-center flex-shrink-0">
-                    <f.icon className="h-4 w-4 text-indigo-200" />
+                  <div className="h-9 w-9 rounded-lg bg-[#DC2626]/15 border border-[#DC2626]/30 flex items-center justify-center flex-shrink-0">
+                    <f.icon className="h-4 w-4 text-[#FCA5A5]" />
                   </div>
                   <div className="flex-1">
                     <div className="text-sm font-medium text-white">{f.label}</div>
@@ -297,7 +300,7 @@ export default function Login() {
       {/* Footer */}
       <footer className="border-t border-slate-200/60 dark:border-slate-800/60 py-4 px-6">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600">
-          <div>Ashbi TKD · Tournament Manager v1.0</div>
+          <div>bowin &middot; tournament manager v1.0</div>
           <div className="flex items-center gap-4">
             <a href="/register" className="hover:text-slate-900 dark:hover:text-white">Public Registration</a>
             <a href="/api/health" target="_blank" rel="noopener" className="hover:text-slate-900 dark:hover:text-white">Status</a>

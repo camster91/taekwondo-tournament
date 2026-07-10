@@ -27,7 +27,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 /**
- * Auth is now cookie-based. The HttpOnly `ashbi_token` cookie is set
+ * Auth is now cookie-based. The HttpOnly `bowin_session` cookie is set
  * by the server on every successful login (magic-link, demo, accept-
  * invite, etc.). Same-origin browser requests auto-attach the cookie,
  * so client code no longer reads, stores, or sends the JWT — it just
