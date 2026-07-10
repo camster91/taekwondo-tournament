@@ -11,7 +11,11 @@ export async function verifyEmailConnection(): Promise<boolean> {
 
   try {
     const auth = Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64');
-    const res = await fetch(`${MAILGUN_BASE_URL}/${MAILGUN_DOMAIN}`, {
+    // Hit /v3/domains/{domain} (the domain-info endpoint), not /v3/{domain}
+    // which is a 404. The previous shape was wrong even though sending
+    // worked — the startup log "SMTP connection failed" was a false negative
+    // caused by this verify path.
+    const res = await fetch(`${MAILGUN_BASE_URL}/domains/${MAILGUN_DOMAIN}`, {
       headers: { Authorization: `Basic ${auth}` },
     });
     return res.ok;
