@@ -108,6 +108,17 @@ echo "ENABLE_DEMO_LOGIN=1" >> "$ENV_FILE"
 # not the dev origin. Used by /api/auth/request-magic-link
 # to build the magicUrl.
 echo "PUBLIC_APP_URL=https://tkd.ashbi.ca" >> "$ENV_FILE"
+# Pass through any MAILGUN_* / EMAIL_* vars from /etc/taekwondo.d/app-env.
+# Optional — if absent, the server boots in "SMTP not configured" mode
+# and the magic-link auth path is a 500 to the user (the route refuses
+# to enqueue a token without a real recipient). When present, this is
+# what enables /api/auth/request-magic-link to deliver the link email.
+for var in MAILGUN_API_KEY MAILGUN_DOMAIN MAILGUN_BASE_URL EMAIL_FROM_NAME EMAIL_FROM_ADDRESS; do
+    val=$(grep -E "^${var}=" /etc/taekwondo.d/app-env 2>/dev/null | head -1 | cut -d= -f2-)
+    if [ -n "$val" ]; then
+        printf "%s=%s\n" "$var" "$val" >> "$ENV_FILE"
+    fi
+done
 trap "rm -f $ENV_FILE" EXIT
 
 echo "==> Starting container"
