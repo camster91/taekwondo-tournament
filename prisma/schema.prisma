@@ -43,6 +43,10 @@ model Competitor {
   @@index([lastName, firstName])
   @@index([schoolDojang])
   @@index([region])
+  // Closes P13: every list query filters on deletedAt=null; without
+  // this index the planner may skip the (lastName, firstName)
+  // index and scan. Same pattern as Incident.deletedAt.
+  @@index([deletedAt])
 }
 
 // Tournament instances
@@ -81,6 +85,12 @@ model Tournament {
   matchupHistories    MatchupHistory[]
   organization Organization? @relation(fields: [organizationId], references: [id])
   sportProfile SportProfile? @relation(fields: [sportProfileId], references: [id])
+
+  // Closes P13: every list query filters on deletedAt; without
+  // an index the planner may scan. The tournaments list also
+  // filters on status; the publicSlug is already @unique.
+  @@index([deletedAt])
+  @@index([status])
 }
 
 // Competitor-Tournament registration link
@@ -120,6 +130,8 @@ model Registration {
   @@unique([tournamentId, competitorId])
   @@index([tournamentId])
   @@index([competitorId])
+  // Closes P13: day-of panel queries filter on checkedIn.
+  @@index([tournamentId, checkedIn])
 }
 
 // Auto-generated or manually created divisions/categories
@@ -156,6 +168,8 @@ model Division {
   @@index([tournamentId])
   @@index([tournamentId, eventType])
   @@index([tournamentId, gender, eventType])
+  // Closes P13: every list query filters on deletedAt.
+  @@index([deletedAt])
 }
 
 // Competitor-Division assignment
@@ -215,6 +229,15 @@ model Match {
   @@index([bracketId])
   @@index([status])
   @@index([winnerId])
+  // Closes P13: the match-advancement path looks up "the next
+  // winners match" via bracketId+roundNumber+bracketType. The
+  // previous indexes on bracketId and status didn't cover this
+  // combined lookup, so a 100+ match bracket hit a full scan per
+  // advancement. Same for competitor1Id / competitor2Id, used by
+  // the public scoreboard to enumerate a registration's matches.
+  @@index([bracketId, roundNumber, bracketType])
+  @@index([competitor1Id])
+  @@index([competitor2Id])
 }
 
 // Configurable weight classes per tournament
