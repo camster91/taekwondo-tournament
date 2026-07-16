@@ -44,15 +44,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Type check (if configured)
-        run: |
-          if grep -q '"typecheck"\|"type-check"\|"tsc"' package.json; then
-            echo "Running typecheck..."
-            npm run typecheck || npm run type-check || npx tsc --noEmit
-          else
-            echo "No typecheck script found, skipping."
-          fi
-        continue-on-error: true
+      - name: Type check
+        # Closes D19: the old typecheck step had continue-on-error: true
+        # which meant type errors never failed CI. Now the dedicated
+        # `npm run typecheck` script runs both the client and server
+        # tsc, and any type error fails the build.
+        run: npm run typecheck
 
       - name: Unit tests
         # Run vitest before lint/build so a failing test short-circuits
@@ -103,16 +100,15 @@ jobs:
         run: echo "DATABASE_URL=postgresql://taekwondo:taekwondo@localhost:5432/taekwondo_tournament" >> $GITHUB_ENV
 
       - name: E2E tests
-        # Run the Playwright e2e suite. On the CI runner, browser
-        # cold-start + 23 tests = ~7-10 min. We exclude the 8
-        # scorekeeper-a11y tests (which take 70s each on CI due to
-        # repeated login() calls — local: ~6s, CI: ~70s) from the
-        # CI run. They're covered by:
+        # Closes D20: e2e step had continue-on-error: true so a
+        # failing e2e could merge. Now e2e is a hard gate.
+        # On the CI runner, browser cold-start + 23 tests = ~7-10 min.
+        # We exclude the 8 scorekeeper-a11y tests (which take 70s
+        # each on CI due to repeated login() calls) from the CI
+        # run. They're covered by:
         #   1. Manual smoke test (docs/PILOT-VERIFICATION-2026-06-23.md,
         #      17/17 PASS)
         #   2. Local e2e (npm run test:e2e, runs the full suite in 26s)
-        # CI runs the smoke-critical paths only.
         run: npx playwright test --config playwright.config.ts --grep-invert "scorekeeper \(a11y\)"
-        continue-on-error: true
         env:
           JWT_SECRET: ci-throwaway-secret-not-used-in-tests-min-32-chars-xx
