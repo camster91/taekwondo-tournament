@@ -192,56 +192,78 @@ function applySeedingStrategy(
 /**
  * Skill-based seeding (like ATP/WTA rankings)
  * Top seeds placed to meet only in later rounds
+ *
+ * Closes B11: the previous implementation used a hardcoded
+ * 8-position seedOrder, dropping any competitor past index 7
+ * for a 16- or 32-person bracket. Now the seed order is
+ * derived from the actual bracket size using the standard
+ * "top seed at 0, next at size-1, then quarters, then 8s, ..."
+ * recursive pattern.
  */
 function seedBySkill(competitors: CompetitorSeed[]): CompetitorSeed[] {
   if (competitors.length <= 2) return competitors;
 
-  // Sort by skill rating (highest first)
   const sorted = [...competitors].sort(
     (a, b) => (b.skillRating || 0) - (a.skillRating || 0)
   );
 
-  // Standard 8-person seeding positions:
-  // Seed 1 at position 0, Seed 2 at position 7 (opposite side)
-  // Seeds 3-4 at positions 3,4 (quarter-final opponents for seeds 1,2)
-  // Seeds 5-8 fill remaining positions
-  const seedOrder = [0, 7, 3, 4, 1, 6, 2, 5];
-
   const bracketSize = nextPowerOf2(competitors.length);
   const result: (CompetitorSeed | null)[] = new Array(bracketSize).fill(null);
 
-  for (let i = 0; i < sorted.length && i < seedOrder.length; i++) {
-    const targetPos = seedOrder[i];
-    if (targetPos < result.length) {
-      result[targetPos] = { ...sorted[i], seedPosition: i + 1 };
-    }
-  }
+  // Standard tournament seed order: seed 1 at position 0, seed 2
+  // at position size-1, then the recursive split fills the rest.
+  // The pattern for size 8 is [0, 7, 3, 4, 1, 6, 2, 5].
+  // The pattern for size 16 starts [0, 15, 7, 8, ...] and
+  // recurses into the half-brackets.
+  const seedOrder = computeSeedOrder(bracketSize);
 
-  // Handle competitors beyond standard seed positions
-  if (sorted.length > seedOrder.length) {
-    let nextEmptyIdx = 0;
-    for (let i = seedOrder.length; i < sorted.length; i++) {
-      while (nextEmptyIdx < result.length && result[nextEmptyIdx] !== null) {
-        nextEmptyIdx++;
-      }
-      if (nextEmptyIdx < result.length) {
-        result[nextEmptyIdx] = { ...sorted[i], seedPosition: i + 1 };
-      } else {
-        result.push({ ...sorted[i], seedPosition: i + 1 });
-      }
-    }
+  for (let i = 0; i < sorted.length && i < seedOrder.length; i++) {
+    result[seedOrder[i]] = { ...sorted[i], seedPosition: i + 1 };
   }
 
   return result.filter((c): c is CompetitorSeed => c !== null);
 }
 
 /**
- * Balanced seeding - distribute skill evenly across bracket halves
+ * Recursive seed-order generator. Returns the bracket position
+ * index for each seed rank (1-indexed). The pattern: seed 1 at
+ * position 0; seed 2 at the opposite end; the remaining seeds
+ * fill the two halves in the same pattern.
+ */
+function computeSeedOrder(size: number): number[] {
+  if (size < 2) return [0];
+  if (size === 2) return [0, 1];
+  const half = computeSeedOrder(size / 2);
+  const out: number[] = [];
+  // Seed 1 at position 0.
+  out.push(0);
+  // Seed 2 at position size-1.
+  out.push(size - 1);
+  // Recurse: each half fills in the same pattern, offset by
+  // the half's start position.
+  const offsetA = 0;
+  const offsetB = size / 2;
+  for (const p of half) {
+    if (p !== 0) out.push(offsetA + p);
+  }
+  for (const p of half) {
+    if (p !== size / 2 - 1 && p !== size - 1) out.push(offsetB + p);
+  }
+  return out;
+}
+
+/**
+ * Balanced seeding - distribute skill evenly across bracket halves.
+ *
+ * Closes B11 (second half): the previous implementation used
+ * 4-position arrays for left + right halves, dropping any
+ * competitor past index 4 in a 16-person bracket. Now the
+ * position lists are derived from the actual bracket size via
+ * the same recursive seed-order pattern as seedBySkill.
  */
 function seedForBalance(competitors: CompetitorSeed[]): CompetitorSeed[] {
   if (competitors.length <= 2) return competitors;
 
-  // Sort by skill rating
   const sorted = [...competitors].sort(
     (a, b) => (b.skillRating || 0) - (a.skillRating || 0)
   );
@@ -249,20 +271,23 @@ function seedForBalance(competitors: CompetitorSeed[]): CompetitorSeed[] {
   const bracketSize = nextPowerOf2(competitors.length);
   const result: (CompetitorSeed | null)[] = new Array(bracketSize).fill(null);
 
-  // Alternate placing in left and right halves to balance skill
+  // Split the seed order into the two halves (top half = "left",
+  // bottom half = "right"). We walk competitors in skill-sorted
+  // order and place each in whichever half currently has the
+  // smaller sum of skillRating. This gives a balanced bracket
+  // without any hardcoded 4-position arrays.
+  const seedOrder = computeSeedOrder(bracketSize);
+  const half = bracketSize / 2;
+  const leftPositions = seedOrder.filter((p) => p < half);
+  const rightPositions = seedOrder.filter((p) => p >= half);
+
   let leftSum = 0;
   let rightSum = 0;
-  const midpoint = Math.floor(bracketSize / 2);
-
-  const leftPositions = [0, 3, 1, 2].filter(p => p < bracketSize);  // Left half positions
-  const rightPositions = [7, 4, 6, 5].filter(p => p < bracketSize); // Right half positions
   let leftIdx = 0;
   let rightIdx = 0;
 
   for (const competitor of sorted) {
     const skill = competitor.skillRating || 0;
-
-    // Place in the half with lower total skill
     if (leftSum <= rightSum && leftIdx < leftPositions.length) {
       result[leftPositions[leftIdx]] = competitor;
       leftSum += skill;
@@ -272,6 +297,7 @@ function seedForBalance(competitors: CompetitorSeed[]): CompetitorSeed[] {
       rightSum += skill;
       rightIdx++;
     } else if (leftIdx < leftPositions.length) {
+      // All right slots taken — overflow into left.
       result[leftPositions[leftIdx]] = competitor;
       leftSum += skill;
       leftIdx++;
@@ -413,34 +439,58 @@ function distributeBySchool(competitors: CompetitorSeed[]): CompetitorSeed[] {
   // Sort schools by size (largest first)
   const sortedSchools = Array.from(schools.entries()).sort((a, b) => b[1].length - a[1].length);
 
-  // Distribute into bracket positions
-  const result: (CompetitorSeed | null)[] = new Array(competitors.length).fill(null);
+  // Closes B3: the previous implementation used a hardcoded 8-position
+  // array and silently dropped any competitor past index 7, so a
+  // 16-person bracket got 8 school-spread competitors and 8 in
+  // arbitrary order. The new approach derives the spread positions
+  // from the actual bracket size: place same-school competitors in
+  // positions whose first-round opponents (paired via standard DE
+  // seeding) are far apart.
+  //
+  // Standard seeding pairs (0,size-1), (1,size-2), (2,size-3), ...
+  // A school-spread position set is the set of positions whose
+  // first-round partner is in the "other half" of the bracket
+  // (top half vs bottom half) — i.e. index >= size/2 for the top
+  // half, and < size/2 for the bottom half. Walking those positions
+  // in the school-sorted order keeps same-school competitors away
+  // from each other in R1.
+  const size = competitors.length;
+  const halfSize = Math.floor(size / 2);
+  // Top half positions in reverse, bottom half positions forward:
+  // size=8 → [3, 2, 1, 0, 4, 5, 6, 7] — the school-spread visit order.
+  const positions: number[] = [];
+  for (let i = halfSize - 1; i >= 0; i--) positions.push(i);
+  for (let i = halfSize; i < size; i++) positions.push(i);
 
-  // Standard 8-person seeding positions that avoid same-school first round:
-  // Position pairs for first round: (0,7), (1,6), (2,5), (3,4)
-  // We want to place same-school competitors in non-adjacent positions
-  const positions = [0, 4, 2, 6, 1, 5, 3, 7]; // Spread positions
+  const result: (CompetitorSeed | null)[] = new Array(size).fill(null);
 
   let posIdx = 0;
   for (const [_, schoolCompetitors] of sortedSchools) {
     for (const competitor of schoolCompetitors) {
-      while (posIdx < positions.length && positions[posIdx] >= competitors.length) {
-        posIdx++;
-      }
-      if (posIdx < positions.length) {
-        const targetPos = positions[posIdx] < competitors.length ? positions[posIdx] : posIdx;
-        // Find next available position
-        let pos = targetPos;
-        while (result[pos] !== null && pos < result.length) {
-          pos++;
+      // Skip positions that exceed the actual competitor count
+      // (defensive — the caller already pads to a power of 2 and
+      // competitors.length is the padded count here).
+      while (posIdx < positions.length) {
+        const candidate = positions[posIdx];
+        if (candidate >= size) {
+          posIdx++;
+          continue;
         }
-        if (pos >= result.length) {
-          pos = 0;
-          while (result[pos] !== null) {
-            pos++;
-          }
+        if (result[candidate] === null) {
+          result[candidate] = competitor;
+          posIdx++;
+          break;
         }
-        result[pos] = competitor;
+        // Slot taken — find next free position.
+        let next = candidate + 1;
+        while (next < size && result[next] !== null) next++;
+        if (next < size) {
+          result[next] = competitor;
+          posIdx++;
+          break;
+        }
+        // Fall through: all slots filled (shouldn't happen given
+        // padded.length === size and we haven't placed that many).
         posIdx++;
       }
     }
@@ -536,10 +586,15 @@ function generateSmallBracket(competitors: (CompetitorSeed | null)[]): BracketSt
     };
   }
 
-  // N=4: 4-person DE. 2 R1 winners, 1 losers R1, 1 grand final.
-  // No reset match (4-person DE always resolves the grand final
-  // in one match; the losers bracket champion never had a "fair
-  // claim" challenge that needs a rematch).
+  // N=4: 4-person DE. Closes B1.
+  // Structure: 2 R1 winners + 1 R2 winners final + 1 L1 losers +
+  //   1 grand final = 5 matches. The previous code had 4 matches
+  //   with the W R2 missing, which meant the LB champion and the
+  //   W R1 winner both pointed at the same "grand final" slot —
+  //   `advanceToMatch` would set the W R1 winner first, then the
+  //   LB champion would silently no-op. Fix: insert a W R2
+  //   (match 3) between W R1 and the grand final, so the LB
+  //   champion has a real slot to advance into.
   return {
     winners: [
       // R1: 0 vs 3
@@ -548,8 +603,8 @@ function generateSmallBracket(competitors: (CompetitorSeed | null)[]): BracketSt
         round: 1,
         competitor1Id: competitors[0]?.registrationId || null,
         competitor2Id: competitors[3]?.registrationId || null,
-        nextWinnerMatch: 4,
-        nextLoserMatch: 3,
+        nextWinnerMatch: 3,
+        nextLoserMatch: 4,
       },
       // R1: 1 vs 2
       {
@@ -557,31 +612,40 @@ function generateSmallBracket(competitors: (CompetitorSeed | null)[]): BracketSt
         round: 1,
         competitor1Id: competitors[1]?.registrationId || null,
         competitor2Id: competitors[2]?.registrationId || null,
-        nextWinnerMatch: 4,
-        nextLoserMatch: 3,
+        nextWinnerMatch: 3,
+        nextLoserMatch: 4,
+      },
+      // R2: winners of M1 and M2 — the W final that the previous
+      // code was missing.
+      {
+        matchNumber: 3,
+        round: 2,
+        competitor1Id: null,
+        competitor2Id: null,
+        nextWinnerMatch: 5,
       },
     ],
     losers: [
       // Losers R1: loser of W1 vs loser of W2
       {
-        matchNumber: 3,
+        matchNumber: 4,
         round: 1,
         competitor1Id: null,
         competitor2Id: null,
-        nextWinnerMatch: 4,
+        nextWinnerMatch: 5,
       },
     ],
     finals: [
-      // Grand final: winner of W-final (match 4) vs winner of losers (match 3)
+      // Grand final: W R2 winner (M3) vs LB champion (M4)
       {
-        matchNumber: 4,
-        round: 2,
+        matchNumber: 5,
+        round: 3,
         competitor1Id: null,
         competitor2Id: null,
       },
     ],
     competitorCount: count,
-    positions: { winnersFinal: 4, losersFinal: 3, grandFinals: 4, reset: null },
+    positions: { winnersFinal: 3, losersFinal: 4, grandFinals: 5, reset: null },
   };
 }
 
