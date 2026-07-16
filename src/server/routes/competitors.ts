@@ -7,7 +7,7 @@ import { importFromExcel } from '../services/excel-import.js';
 import { generateImportTemplate, getDefaultColumnMapping } from '../services/excel-template.js';
 import { autoDetectMapping } from '../services/excel-auto-map.js';
 import { validateRequest } from '../middleware/validate.js';
-import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import { authenticate, requireRole, buildTournamentAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -83,6 +83,23 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
   } = req.query as Record<string, string>;
 
   const where: any = { deletedAt: trash === 'true' ? { not: null } : null };
+
+  // Closes B34: scope competitor list to the tournaments the user
+  // can access. Without this, a viewer in org A can list every
+  // competitor in the system (name, DOB, school, special needs).
+  const tournamentFilter = await buildTournamentAccessFilter(
+    req as AuthenticatedRequest,
+    prisma
+  );
+  if (tournamentFilter !== null) {
+    // Restrict to competitors that have a registration in a
+    // tournament the user can access. This still leaks an
+    // orphan competitor with no registrations, but those have no
+    // PII to leak in the first place.
+    where.registrations = {
+      some: { tournament: tournamentFilter, deletedAt: null },
+    };
+  }
 
   if (search) {
     where.OR = [
@@ -237,7 +254,12 @@ router.get('/meta/belts', authenticate, async (req: Request, res: Response) => {
   res.json(belts.map((b) => b.belt));
 });
 
-// Get single competitor (requires authentication)
+// Get single competitor (requires authentication). Closes S17:
+// the original `include: { tournament: true }` leaked every tournament
+// a competitor has ever been in, including from other orgs. Now
+// returns only the basic competitor row; the per-tournament
+// registration history is fetched via the registration list endpoint
+// which already enforces the tournament access filter.
 router.get('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   // Soft-deleted competitors are not accessible via direct ID — restore
@@ -246,13 +268,6 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
   // a competitor the operator already removed.
   const competitor = await prisma.competitor.findFirst({
     where: { id: getParam(req.params.id), deletedAt: null },
-    include: {
-      registrations: {
-        include: {
-          tournament: true,
-        },
-      },
-    },
   });
 
   if (!competitor) {

@@ -185,6 +185,25 @@ router.post('/division/:divisionId/generate', authenticate, async (req: Authenti
 router.get('/division/:divisionId', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
+  // Resolve the parent tournament for the per-tournament access
+  // check before returning any competitor PII (closes S6 + B34).
+  const divMeta = await prisma.division.findUnique({
+    where: { id: getParam(req.params.divisionId) },
+    select: { tournamentId: true, deletedAt: true },
+  });
+  if (!divMeta || divMeta.deletedAt) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+  const access = await checkTournamentAccess(
+    req as AuthenticatedRequest,
+    prisma,
+    divMeta.tournamentId,
+    'viewer'
+  );
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+
   const bracket = await prisma.bracket.findUnique({
     where: { divisionId: getParam(req.params.divisionId) },
     include: {
@@ -307,16 +326,26 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
   res.json(matchWithoutBracket);
 });
 
-// Get bracket placements (requires authentication)
+// Get bracket placements (requires authentication + tournament access)
 router.get('/division/:divisionId/placements', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   const bracket = await prisma.bracket.findUnique({
     where: { divisionId: getParam(req.params.divisionId) },
+    include: { division: { select: { tournamentId: true, deletedAt: true } } },
   });
 
-  if (!bracket) {
+  if (!bracket || bracket.division.deletedAt) {
     return res.status(404).json({ error: 'Bracket not found' });
+  }
+  const access = await checkTournamentAccess(
+    req as AuthenticatedRequest,
+    prisma,
+    bracket.division.tournamentId,
+    'viewer'
+  );
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
   }
 
   const placements = await getBracketPlacements(prisma, bracket.id);
@@ -385,9 +414,28 @@ router.post('/match/:matchId/swap', authenticate, async (req: AuthenticatedReque
   res.json(updated);
 });
 
-// Get match audit log
+// Get match audit log (requires authentication + tournament access;
+// closes S8 — the audit log leaks scorekeeper emails + prior match
+// state across orgs without this check).
 router.get('/match/:matchId/audit', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+
+  const matchMeta = await prisma.match.findUnique({
+    where: { id: getParam(req.params.matchId) },
+    select: { bracket: { select: { division: { select: { tournamentId: true, deletedAt: true } } } } },
+  });
+  if (!matchMeta || matchMeta.bracket.division.deletedAt) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+  const access = await checkTournamentAccess(
+    req as AuthenticatedRequest,
+    prisma,
+    matchMeta.bracket.division.tournamentId,
+    'director'
+  );
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
 
   const logs = await prisma.matchAuditLog.findMany({
     where: { matchId: getParam(req.params.matchId) },

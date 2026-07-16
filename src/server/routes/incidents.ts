@@ -51,6 +51,40 @@ router.post(
       return res.status(access.status || 403).json({ error: access.error });
     }
 
+    // Cross-tournament FK checks: match and registration must both
+    // belong to the parent tournament. Closes B6 (cross-tenant data
+    // corruption / false audit trail).
+    if (data.matchId) {
+      const match = await prisma.match.findUnique({
+        where: { id: data.matchId },
+        select: {
+          bracket: { select: { division: { select: { tournamentId: true } } } },
+        },
+      });
+      if (!match) {
+        return res.status(404).json({ error: 'Match not found' });
+      }
+      if (match.bracket.division.tournamentId !== data.tournamentId) {
+        return res.status(400).json({
+          error: 'Match does not belong to this tournament',
+        });
+      }
+    }
+    if (data.registrationId) {
+      const registration = await prisma.registration.findUnique({
+        where: { id: data.registrationId },
+        select: { tournamentId: true },
+      });
+      if (!registration) {
+        return res.status(404).json({ error: 'Registration not found' });
+      }
+      if (registration.tournamentId !== data.tournamentId) {
+        return res.status(400).json({
+          error: 'Registration does not belong to this tournament',
+        });
+      }
+    }
+
     const incident = await prisma.incident.create({
       data: {
         tournamentId: data.tournamentId,
