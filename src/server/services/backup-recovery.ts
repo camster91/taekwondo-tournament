@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * State backup for recovery purposes
@@ -159,30 +161,94 @@ export async function restoreDivisionState(
 }
 
 /**
- * In-memory backup storage (for session-based recovery)
- * In production, this should be persisted to Redis or database
+ * Persistent backup storage. Closes D3, B27, S21.
+ *
+ * History: the original implementation kept backups in a
+ * module-level Map, which meant any restart (deploy, OOM, crash)
+ * dropped every backup. The Restore endpoint silently returned
+ * "no backup" after a redeploy, defeating the feature.
+ *
+ * New implementation: a JSON file on disk. Each tournament's
+ * backup is at <BACKUP_DIR>/<tournamentId>.json. The dir defaults
+ * to a sibling of the data dir, override with BACKUP_DIR env.
+ *
+ * Why file and not DB? A new `BackupState` table would be the
+ * "proper" fix and is on the day-2 list. A JSON file is
+ * good enough for now: the rollback path is rare, the
+ * payload per backup is small (one tournament's division
+ * tree, typically <10 KB), and it survives every failure
+ * mode that drops in-memory state. The interface
+ * (saveBackup / getBackup) is the same as the Map, so the
+ * eventual DB migration is a one-line change.
  */
-const backupStore = new Map<string, TournamentBackup>();
+
+const BACKUP_DIR = process.env.BACKUP_DIR
+  ? path.resolve(process.env.BACKUP_DIR)
+  : path.resolve(process.cwd(), 'data', 'backups');
+
+function ensureDir(): void {
+  try {
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  } catch (err) {
+    console.error(`[backup-recovery] could not create ${BACKUP_DIR}:`, err);
+  }
+}
+
+function backupFilePath(tournamentId: string): string {
+  // Sanitize: tournamentId is a UUID in practice but guard against
+  // path traversal from a malformed value.
+  const safe = tournamentId.replace(/[^a-zA-Z0-9-]/g, '_');
+  return path.join(BACKUP_DIR, `${safe}.json`);
+}
 
 /**
- * Save backup to store
+ * Save backup to disk. Synchronous write so a deploy restart right
+ * after the call still has the file. Cost is one ~10 KB write per
+ * tournament regeneration.
  */
 export function saveBackup(backup: TournamentBackup): void {
-  backupStore.set(backup.tournamentId, backup);
+  ensureDir();
+  try {
+    fs.writeFileSync(
+      backupFilePath(backup.tournamentId),
+      JSON.stringify(backup),
+      { mode: 0o600 }
+    );
+  } catch (err) {
+    console.error(`[backup-recovery] saveBackup failed for ${backup.tournamentId}:`, err);
+  }
 }
 
 /**
- * Get backup from store
+ * Get backup from disk. Returns undefined if no backup exists OR
+ * if the file is unreadable (corrupt / perms). Errors are logged
+ * but never thrown — the caller's rollback flow treats "no
+ * backup" the same as "corrupt backup".
  */
 export function getBackup(tournamentId: string): TournamentBackup | undefined {
-  return backupStore.get(tournamentId);
+  try {
+    const raw = fs.readFileSync(backupFilePath(tournamentId), 'utf-8');
+    return JSON.parse(raw) as TournamentBackup;
+  } catch (err: any) {
+    if (err?.code !== 'ENOENT') {
+      console.error(`[backup-recovery] getBackup failed for ${tournamentId}:`, err);
+    }
+    return undefined;
+  }
 }
 
 /**
- * Clear backup from store
+ * Drop a backup (used after a successful restore, so the next
+ * bad regeneration doesn't restore the same state again).
  */
 export function clearBackup(tournamentId: string): void {
-  backupStore.delete(tournamentId);
+  try {
+    fs.unlinkSync(backupFilePath(tournamentId));
+  } catch (err: any) {
+    if (err?.code !== 'ENOENT') {
+      console.error(`[backup-recovery] clearBackup failed for ${tournamentId}:`, err);
+    }
+  }
 }
 
 /**
