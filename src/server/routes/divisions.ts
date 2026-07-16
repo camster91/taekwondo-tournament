@@ -672,7 +672,15 @@ router.post('/:id/move', authenticate, async (req: AuthenticatedRequest, res: Re
 router.post('/:id/split', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.id);
-  const { splitCount = 2 } = req.body;
+  // Closes S14: cap splitCount at half the assignment count
+  // (a division can't have more sub-divisions than
+  // competitors). Zod-validate to reject extreme values.
+  const rawSplitCount = Number(req.body?.splitCount ?? 2);
+  if (!Number.isFinite(rawSplitCount) || rawSplitCount < 2) {
+    return res.status(400).json({ error: 'splitCount must be a number >= 2' });
+  }
+  const splitCount = Math.min(rawSplitCount, 50); // hard upper bound
+  req.body = { ...req.body, splitCount };
 
   const division = await prisma.division.findUnique({
     where: { id: divisionId },

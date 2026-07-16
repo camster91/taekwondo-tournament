@@ -116,7 +116,11 @@ export function generatePoolPlay(
     return generateRoundRobin(competitors, options);
   }
 
-  // Decide pool count
+  // Decide pool count. Closes S15: cap poolCount at the
+  // competitor count (you can't have more pools than
+  // competitors) and at a hard upper bound of 100 to
+  // prevent the `Array.from({ length: poolCount })` OOM
+  // on a hostile input.
   let poolCount = options?.poolCount ?? 0;
   if (!poolCount && options?.poolSize) {
     poolCount = Math.max(2, Math.ceil(count / options.poolSize));
@@ -127,6 +131,7 @@ export function generatePoolPlay(
     else if (count <= 12) poolCount = 3;
     else poolCount = 4;
   }
+  poolCount = Math.max(2, Math.min(poolCount, count, 100));
 
   const advancePerPool = options?.advancePerPool ?? 2;
   const strategy = options?.seedingStrategy ?? 'school_spread';

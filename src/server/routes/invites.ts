@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
+import rateLimit from 'express-rate-limit';
 import { authenticate, type AuthenticatedRequest } from '../middleware/auth.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { invitationEmail } from '../services/email-templates.js';
@@ -9,6 +10,19 @@ import { invitationEmail } from '../services/email-templates.js';
 const router = Router();
 
 const INVITE_EXPIRY_HOURS = 72;
+
+// Closes S22: per-IP rate limit on the public invite-verify
+// endpoint. The token itself is 256-bit so brute-force is
+// infeasible, but the route returns email + role for any
+// matching token, which is a useful signal for an attacker
+// enumerating; the limiter makes that enumeration slow.
+const inviteVerifyLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many invite verifications, please slow down.' },
+});
 
 function getBaseUrl(): string {
   return process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:5173';
@@ -202,7 +216,7 @@ router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Respo
 });
 
 // GET /api/invites/verify/:token — Public: verify an invite token
-router.get('/verify/:token', async (req: Request, res: Response) => {
+router.get('/verify/:token', inviteVerifyLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { token } = req.params;
 

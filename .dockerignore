@@ -6,3 +6,30 @@ prisma/tournament.db-shm
 prisma/tournament.db-wal
 .env
 *.log
+
+# Closes D23: the repo root contains real dojang photos and
+# sample data that don't belong in the build context. They
+# were silently included before this .dockerignore update.
+# Use a single glob for all 16 "BB*"/"CB*" directories at
+# the repo root.
+assets/
+docs/
+AUDIT-REPORT-*.md
+POST-DEPLOY-QA-*.md
+2025 NEWTONS CHAMPIONSHIP LIST.xlsm
+Tournament ScheduleNewSparring.pdf
+LAUNCH_*.md
+REQUIREMENTS.md
+TOURNAMENT_PLAN.md
+.git
+.playwright-mcp/
+_bb-*
+_cb-*
+BB Females Patterns/*
+BB Females Sparring*
+BB Males Patterns*
+BB Males Sparring*
+CB Females Patterns*
+CB Females Sparring*
+CB Males Patterns*
+CB Males Sparring*
