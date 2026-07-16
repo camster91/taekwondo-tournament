@@ -58,15 +58,11 @@ COPY --chown=node:node server.js ./
 COPY --chown=node:node node_modules ./node_modules
 USER node
 EXPOSE 3001
-# Prisma 7 db push needs the URL set BEFORE the config loads. The CLI
-# --url flag passes it directly so it works without dotenv.
-# --accept-data-loss allows additive changes that Prisma considers
-# potentially-destructive (e.g. adding a UNIQUE constraint to a
-# column that already has rows). For our deployments the new
-# `publicSlug` column is added as NULL and the constraint is safe
-# to add (all existing rows are NULL, NULL is allowed in a UNIQUE
-# column in Postgres).
-CMD ["sh", "-c", "./node_modules/.bin/prisma db push --accept-data-loss --url=\"$DATABASE_URL\" && node server.js"]
+# Prisma migrate deploy: replays the checked-in prisma/migrations/
+# directory. Schema changes now require a new migration file in
+# the PR (closes D1 + D2 — the old `db push --accept-data-loss`
+# silently applied destructive changes).
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node server.js"]
 DOCKERFILE
 
 echo "==> Installing prod deps (1-2 min)"
