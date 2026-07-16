@@ -132,6 +132,23 @@ docker ps --filter name=taekwondo-tournament --format "{{.Names}} {{.Status}} {{
 
 echo "==> Recent logs:"
 docker logs --tail 20 taekwondo-tournament 2>&1
+
+echo "==> Healthcheck gate (closes D17)"
+HEALTHY=0
+for i in $(seq 1 30); do
+    if curl -fsS "http://127.0.0.1:18301/api/health/ready" >/dev/null 2>&1; then
+        echo "    ready after ${i}s"
+        HEALTHY=1
+        break
+    fi
+    sleep 1
+done
+if [ "$HEALTHY" -ne 1 ]; then
+    echo "DEPLOY FAILED — /api/health/ready never returned 200"
+    echo "Recent logs:"
+    docker logs --tail 50 taekwondo-tournament 2>&1
+    exit 1
+fi
 DEPLOY_SCRIPT
 
 echo "==> Done. Live at https://tkd.ashbi.ca"
