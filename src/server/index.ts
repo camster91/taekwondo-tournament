@@ -88,7 +88,36 @@ app.use(
 // 1 MB JSON body limit. Heavy endpoints (Excel auto-map, import) accept
 // multipart/form-data or pre-parsed JSON from the client. A larger
 // default + a single huge endpoint was an OOM vector.
-app.use(express.json({ limit: '1mb' }));
+//
+// Per-route override pattern (closes D4): a route that needs a larger
+// body (e.g. /api/competitors/auto-map accepts up to 25 MB of
+// base64-encoded Excel) can mount a route-specific express.json
+// with a higher limit ahead of the global one. Express will use
+// the first middleware that actually parses the request, so
+// the global 1 MB limit is the default and only the specific
+// routes opt in to higher.
+const defaultJsonParser = express.json({ limit: '1mb' });
+// Closes D4: per-route higher body limit for the Excel auto-map
+// endpoint. The global defaultJsonParser is 1 MB; the auto-map
+// route accepts a 25 MB base64-encoded buffer, which inflates
+// from the original .xlsx via base64 ~33%. The mount order is
+// critical: the more-specific (longer prefix) express.json
+// here runs FIRST, parses the body, and Express's body-parser
+// only parses a request once per content-type — so the global
+// 1 MB limit no longer trips for this route.
+app.use('/api/competitors/auto-map', jsonBodyParser('40mb'));
+
+// The global 1 MB default applies to every other route. Mounted
+// after the per-route override so the specific path matches first.
+app.use(defaultJsonParser);
+
+// Helper: per-route body parser with a custom limit. Routes that
+// need to accept a larger payload (Excel auto-map) wrap their
+// handler with this. Always returns the same parser so a single
+// route mounts the same middleware consistently.
+export function jsonBodyParser(limit: string) {
+  return express.json({ limit });
+}
 
 // Cookie parsing for JWT session tokens. Reads the HttpOnly
 // `bowin_session` cookie set on login. The auth middleware
