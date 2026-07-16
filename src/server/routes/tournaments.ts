@@ -297,7 +297,7 @@ router.post('/:id/clone', authenticate, requireTournamentAccess('director'), asy
 //
 // "test=true" sends only to req.user.email so the director can
 // preview before blasting all parents.
-router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { subject, body, test } = req.body as { subject?: string; body?: string; test?: boolean };
 
@@ -333,15 +333,27 @@ router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'),
     return res.json({ sent: 0, failures: 0, message: 'No recipients matched.' });
   }
 
-  // Test mode: redirect all recipients to the requesting user.
-  // We don't have user.email on the request easily, so we just send
-  // a single email to a hardcoded test address or first reg's email.
+  // Closes S7: test mode now actually restricts the send to the
+  // requesting director's own email. The previous implementation
+  // sent to every parent regardless of the `test` flag, which
+  // meant a director clicking "Send test" with placeholder text
+  // would email every parent. We do this by replacing the `to`
+  // address with the director's own email; the merge fields still
+  // resolve from the first registration so the test preview
+  // looks like a real send.
+  const tDate = new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const directorEmail = req.user?.email?.trim();
+  if (test && !directorEmail) {
+    return res.status(400).json({ error: 'Test mode requires a signed-in director with an email on file.' });
+  }
+
   let sent = 0;
   let failures = 0;
-  const tDate = new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
   for (const reg of regs) {
-    const to = (reg.parentEmail || '').trim();
+    const to = test
+      ? directorEmail!
+      : (reg.parentEmail || '').trim();
     if (!to) continue;
     const fill = (s: string) => s
       .replace(/\{\{tournament_name\}\}/g, tournament.name)
@@ -366,7 +378,7 @@ router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'),
     failures,
     total: regs.length,
     message: test
-      ? `Test mode: sent ${sent} email(s).`
+      ? `Test mode: sent ${sent} email(s) to the director (${directorEmail}) for preview.`
       : `Sent to ${sent} parent(s). ${failures} failed.`,
   });
 });
