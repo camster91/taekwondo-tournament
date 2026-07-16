@@ -157,22 +157,29 @@ describe('BracketStructure.positions — size-aware match lookup', () => {
       expect(structure.positions.reset).toBeNull();
     });
 
-    it('N=4: 2 R1 winners + 1 losers R1 + 1 grand final = 4 matches', () => {
+    it('N=4: 2 R1 winners + 1 R2 winners final + 1 losers R1 + 1 grand final = 5 matches', () => {
       const structure = generateBracket(seeded(4));
       expect(structure.competitorCount).toBe(4);
-      expect(structure.winners).toHaveLength(2);
+      // Closes B1: the previous test asserted 2 winners + 1 L + 1 F = 4
+      // matches, which was the bug (no W R2, so the LB champion and
+      // the W R1 winner both pointed at the same grand-final slot).
+      // The correct 4-person DE has 5 matches with a real W R2.
+      expect(structure.winners).toHaveLength(3); // 2 R1 + 1 R2 final
       expect(structure.losers).toHaveLength(1);
       expect(structure.finals).toHaveLength(1);
-      // R1 winners link down to losers R1 and up to the grand final
-      expect(structure.winners[0].nextWinnerMatch).toBe(4);
-      expect(structure.winners[0].nextLoserMatch).toBe(3);
-      expect(structure.winners[1].nextWinnerMatch).toBe(4);
-      expect(structure.winners[1].nextLoserMatch).toBe(3);
+      // R1 winners link down to losers R1 and up to the W R2
+      expect(structure.winners[0].nextWinnerMatch).toBe(3); // W R2 = M3
+      expect(structure.winners[0].nextLoserMatch).toBe(4);  // L R1 = M4
+      expect(structure.winners[1].nextWinnerMatch).toBe(3);
+      expect(structure.winners[1].nextLoserMatch).toBe(4);
+      // W R2 advances to the grand final
+      expect(structure.winners[2].nextWinnerMatch).toBe(5); // GF = M5
       // Losers R1 advances to the grand final
-      expect(structure.losers[0].nextWinnerMatch).toBe(4);
-      // The grand final is at match 4, the losers final at match 3
-      expect(structure.positions.grandFinals).toBe(4);
-      expect(structure.positions.losersFinal).toBe(3);
+      expect(structure.losers[0].nextWinnerMatch).toBe(5);
+      // With the new W R2 inserted: GF = M5, W R2 = M3, L R1 = M4.
+      expect(structure.positions.grandFinals).toBe(5);
+      expect(structure.positions.winnersFinal).toBe(3);
+      expect(structure.positions.losersFinal).toBe(4);
       // 4-person DE has no reset match (grand final is decisive)
       expect(structure.positions.reset).toBeNull();
       assertLinkingsAreValid(structure);
