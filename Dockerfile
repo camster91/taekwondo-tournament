@@ -49,5 +49,10 @@ USER node
 
 EXPOSE 3001
 
-# Run schema sync and start server (use local prisma binary to ensure correct version)
-CMD ["sh", "-c", "./node_modules/.bin/prisma db push --url=\"$DATABASE_URL\" && node server.js"]
+# Run schema migrations and start server (use local prisma binary to ensure correct version).
+# Closes D1 + D2: previously the deploy used `prisma db push --accept-data-loss`,
+# which silently applies schema changes that Prisma considers "potentially
+# destructive" (column drops, type changes that lose data). The new flow
+# uses `migrate deploy`, which replays the checked-in `prisma/migrations/`
+# directory. Schema changes now require a new migration file in the PR.
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node server.js"]
