@@ -142,10 +142,29 @@ app.use('/api/sports', sportsRouter);
 app.use('/api/rules', rulesRouter);
 app.use('/api/incidents', incidentsRouter);
 
-// Health check
+// Health check (liveness — the process is up and the HTTP server
+// is bound). This is the cheap probe for the load balancer.
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Readiness check (closes D10). Confirms the process is bound AND
+// the Prisma client can answer a SELECT 1. The deploy script gates
+// on this endpoint before declaring the new container healthy.
+app.get('/api/health/ready', async (_req: Request, res: Response) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', db: 'ok' });
+  } catch (err: any) {
+    res.status(503).json({ status: 'not ready', db: err?.message ?? 'error' });
+  }
+});
+
+// Compression middleware (closes D11). The API serves large JSON
+// payloads (analytics, day-of, full bracket) and the static SPA
+// bundle is ~1 MB. Compression is a free 3-10x on payload size
+// for the cost of a few MB of CPU.
+app.use((await import('compression')).default());
 
 // Serve static files in production
 if (isProduction) {
@@ -202,8 +221,20 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
-// Start server
-app.listen(Number(PORT), '0.0.0.0', async () => {
+
+// Graceful shutdown (closes D7). Docker / Coolify / Kubernetes
+// send SIGTERM first, then SIGKILL after 10 s. The previous
+// handler only caught SIGINT (Ctrl-C in a terminal) — under
+// SIGTERM the in-flight PDF export and analytics requests
+// were 502'd and the Prisma connection pool leaked.
+//
+// New flow:
+//   1. Receive signal, log it.
+//   2. Stop accepting new connections (server.close).
+//   3. Disconnect Prisma so in-flight queries can finish
+//      cleanly against a healthy pool.
+//   4. Hard-exit after 25 s in case anything hangs.
+const server = app.listen(Number(PORT), '0.0.0.0', async () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 
   if (isEmailConfigured()) {
@@ -214,8 +245,22 @@ app.listen(Number(PORT), '0.0.0.0', async () => {
   }
 });
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  await prisma.$disconnect();
+const shutdown = async (signal: string) => {
+  console.log(`[shutdown] received ${signal}, draining...`);
+  // Stop accepting new connections.
+  server.close(() => console.log('[shutdown] HTTP server closed'));
+  // Hard-exit safety net.
+  setTimeout(() => {
+    console.error('[shutdown] 25s grace exceeded, forcing exit');
+    process.exit(1);
+  }, 25_000).unref();
+  try {
+    await prisma.$disconnect();
+    console.log('[shutdown] Prisma disconnected');
+  } catch (err) {
+    console.error('[shutdown] Prisma disconnect error:', err);
+  }
   process.exit(0);
-});
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
