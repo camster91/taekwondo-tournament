@@ -569,10 +569,14 @@ router.post('/:id/registrations/bulk', authenticate, requireTournamentAccess('di
     where: { id: { in: competitorIds } },
   });
 
-  const registrations = await Promise.all(
-    competitors.map(async (competitor) => {
+  // Closes B28: wrap the upserts in a $transaction so a mid-loop
+  // failure (e.g. DB connection drop, constraint violation) rolls
+  // back the partial state. The previous Promise.all without a
+  // transaction could leave 25 of 30 kids registered with no
+  // signal of which ones failed.
+  const registrations = await prisma.$transaction(
+    competitors.map((competitor) => {
       const ageAtTournament = calculateAge(competitor.dateOfBirth, tournament.date);
-
       return prisma.registration.upsert({
         where: {
           tournamentId_competitorId: {
