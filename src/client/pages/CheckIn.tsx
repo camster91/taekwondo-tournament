@@ -97,6 +97,7 @@ export default function CheckIn() {
       }));
     },
     refetchInterval: 5000,
+  refetchIntervalInBackground: false,
   });
 
   const checkInMutation = useMutation({

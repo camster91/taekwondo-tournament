@@ -1,5 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import Button from './Button';
 import CloseButton from './CloseButton';
 
@@ -15,6 +15,17 @@ interface ConfirmDialogProps {
   isLoading?: boolean;
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], area[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Confirm dialog with the same a11y contract as Modal:
+ *  - Escape closes (treated as Cancel).
+ *  - Tab / Shift+Tab cycle inside the panel.
+ *  - On open, focus moves to the confirm button.
+ *  - On close, focus returns to the element that was focused
+ *    before the dialog opened.
+ */
 export default function ConfirmDialog({
   isOpen,
   onClose,
@@ -26,10 +37,69 @@ export default function ConfirmDialog({
   variant = 'danger',
   isLoading = false,
 }: ConfirmDialogProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const previouslyFocusedRef = useRef<Element | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    previouslyFocusedRef.current = typeof document !== 'undefined'
+      ? document.activeElement
+      : null;
+    const id = window.setTimeout(() => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      // Prefer the confirm button as the focus target — it's the
+      // action the user is being asked to take.
+      const confirmBtn = panel.querySelector<HTMLButtonElement>('[data-confirm-button]');
+      const target = confirmBtn ?? panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      (target ?? panel).focus();
+    }, 0);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusables = Array.from(
+        panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      ).filter((el) => !el.hasAttribute('disabled') && el.tabIndex !== -1);
+      if (focusables.length === 0) {
+        e.preventDefault();
+        panel.focus();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (active === first || !panel.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (active === last || !panel.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      window.clearTimeout(id);
+      document.removeEventListener('keydown', handleKeyDown, true);
+      const prev = previouslyFocusedRef.current;
+      if (prev && typeof (prev as HTMLElement).focus === 'function') {
+        (prev as HTMLElement).focus();
+      }
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
-  // Maps the dialog variant to a Button variant for the confirm action.
-  // Cancel always uses secondary.
   const confirmVariant =
     variant === 'danger'
       ? 'danger'
@@ -44,7 +114,14 @@ export default function ConfirmDialog({
           className="fixed inset-0 bg-black/50 transition-opacity"
           onClick={onClose}
         />
-        <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full transform transition-all">
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+          tabIndex={-1}
+          className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full transform transition-all"
+        >
           <div className="p-6">
             <div className="flex items-start gap-4">
               <div
@@ -82,6 +159,7 @@ export default function ConfirmDialog({
               variant={confirmVariant}
               onClick={onConfirm}
               loading={isLoading}
+              data-confirm-button
               className="w-full sm:w-auto"
             >
               {isLoading ? 'Processing...' : confirmText}

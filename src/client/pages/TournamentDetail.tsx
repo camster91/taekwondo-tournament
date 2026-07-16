@@ -627,15 +627,21 @@ export default function TournamentDetail() {
           action={
             <div className="flex flex-col sm:flex-row gap-3">
               {registrations && registrations.length > 0 && (
-                <Input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full sm:w-48"
-                  inputClassName="h-8 py-1.5"
-                  leftIcon={<Search className="h-4 w-4" />}
-                />
+                <div>
+                  <label htmlFor="tournament-search-registrations" className="sr-only">
+                    Search registered competitors
+                  </label>
+                  <Input
+                    id="tournament-search-registrations"
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full sm:w-48"
+                    inputClassName="h-8 py-1.5"
+                    leftIcon={<Search className="h-4 w-4" />}
+                  />
+                </div>
               )}
               {registrations && registrations.length > 0 && (
                 <Button
@@ -902,14 +908,20 @@ export default function TournamentDetail() {
                   />
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Input
-                    type="text"
-                    placeholder="Search competitors..."
-                    value={modalSearch}
-                    onChange={(e) => setModalSearch(e.target.value)}
-                    leftIcon={<Search className="h-4 w-4" />}
-                    autoFocus
-                  />
+                  <div>
+                    <label htmlFor="tournament-search-add-competitors" className="sr-only">
+                      Search competitors to add
+                    </label>
+                    <Input
+                      id="tournament-search-add-competitors"
+                      type="text"
+                      placeholder="Search competitors..."
+                      value={modalSearch}
+                      onChange={(e) => setModalSearch(e.target.value)}
+                      leftIcon={<Search className="h-4 w-4" />}
+                      autoFocus
+                    />
+                  </div>
                   <div className="flex gap-4">
                     <label className="flex items-center cursor-pointer">
                       <input
@@ -1211,6 +1223,7 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
       return res.json();
     },
     refetchInterval: 10_000,
+  refetchIntervalInBackground: false,
   });
 
   if (isLoading || !data) return null;

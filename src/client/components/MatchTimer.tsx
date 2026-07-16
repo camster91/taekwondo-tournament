@@ -29,6 +29,15 @@ export default function MatchTimer({
   const [breakTime, setBreakTime] = useState(defaultBreakTime);
 
   const audioContextRef = useRef<AudioContext | null>(null);
+  // Wall-clock baseline for the running timer. Computed once when the
+  // user starts a round/break, and re-computed on every tick. This
+  // means browser tab throttling (backgrounded, screen dim) does NOT
+  // drift the displayed countdown — the math is "when does this end"
+  // not "count down a state variable".
+  const endAtRef = useRef<number | null>(null);
+  // Beep / end-sound setTimeout ids, cleared on unmount so a 600ms
+  // queued beep doesn't fire after the user navigates away.
+  const pendingTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   // Play beep sound
   const playBeep = useCallback((frequency: number = 800, duration: number = 200) => {
@@ -67,49 +76,71 @@ export default function MatchTimer({
   // Play end of round sound
   const playEndSound = useCallback(() => {
     playBeep(1000, 500);
-    setTimeout(() => playBeep(1000, 500), 600);
+    const id = setTimeout(() => playBeep(1000, 500), 600);
+    pendingTimeoutsRef.current.add(id);
   }, [playBeep]);
 
-  // Timer logic
+  // Clear any queued beeps on unmount.
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    const set = pendingTimeoutsRef.current;
+    return () => {
+      for (const id of set) clearTimeout(id);
+      set.clear();
+    };
+  }, []);
 
-    if (isRunning && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((prev) => {
-          const newTime = prev - 1;
-
-          // Warning beeps at 10, 5, 4, 3, 2, 1 seconds
-          if (!isBreak && [10, 5, 4, 3, 2, 1].includes(newTime)) {
-            playWarning();
-          }
-
-          return newTime;
-        });
-      }, 1000);
-    } else if (isRunning && timeLeft === 0) {
-      setIsRunning(false);
-      playEndSound();
-
-      if (isBreak) {
-        // Break ended, start next round
-        setIsBreak(false);
-        setTimeLeft(roundTime);
-        setCurrentRound((prev) => prev + 1);
-      } else if (currentRound < totalRounds) {
-        // Round ended, notify and start break
-        onRoundEnd?.(currentRound);
-        setIsBreak(true);
-        setTimeLeft(breakTime);
-      } else {
-        // Match ended
-        onRoundEnd?.(currentRound);
-        onMatchEnd?.();
-      }
+  // Timer logic. Use a Date.now() baseline (`endAtRef`) so a throttled
+  // background tab does not cause the countdown to drift. The display
+  // re-derives from wall-clock every 250ms; React state only updates
+  // when the rounded second changes.
+  useEffect(() => {
+    if (!isRunning) {
+      endAtRef.current = null;
+      return;
     }
+    if (endAtRef.current == null) {
+      // Just started — baseline now + remaining timeLeft.
+      const remaining = timeLeft > 0 ? timeLeft : (isBreak ? breakTime : roundTime);
+      endAtRef.current = Date.now() + remaining * 1000;
+    }
+    let lastDisplayedSecond = timeLeft;
 
+    const tick = () => {
+      if (endAtRef.current == null) return;
+      const msLeft = Math.max(0, endAtRef.current - Date.now());
+      const secondsLeft = Math.ceil(msLeft / 1000);
+      if (secondsLeft !== lastDisplayedSecond) {
+        lastDisplayedSecond = secondsLeft;
+        setTimeLeft(secondsLeft);
+        if (!isBreak && [10, 5, 4, 3, 2, 1].includes(secondsLeft)) {
+          playWarning();
+        }
+      }
+      if (msLeft <= 0) {
+        setIsRunning(false);
+        endAtRef.current = null;
+        playEndSound();
+        if (isBreak) {
+          setIsBreak(false);
+          setTimeLeft(roundTime);
+          setCurrentRound((prev) => prev + 1);
+        } else if (currentRound < totalRounds) {
+          onRoundEnd?.(currentRound);
+          setIsBreak(true);
+          setTimeLeft(breakTime);
+        } else {
+          onRoundEnd?.(currentRound);
+          onMatchEnd?.();
+        }
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 250);
     return () => clearInterval(interval);
-  }, [isRunning, timeLeft, currentRound, totalRounds, isBreak, roundTime, breakTime, playWarning, playEndSound, onRoundEnd, onMatchEnd]);
+    // intentionally not depending on timeLeft (we read it for the
+    // initial baseline only). Other deps must be listed so the effect
+    // re-runs when the round/break settings change mid-flight.
+  }, [isRunning, currentRound, totalRounds, isBreak, roundTime, breakTime, playWarning, playEndSound, onRoundEnd, onMatchEnd]);
 
   const toggleTimer = useCallback(() => {
     setIsRunning(prev => !prev);
@@ -128,7 +159,11 @@ export default function MatchTimer({
   }, [toggleTimer]);
 
   const resetTimer = () => {
+    if (!window.confirm('Reset the entire match timer? This wipes round count, time-left, and break state. There is no undo on tournament day.')) {
+      return;
+    }
     setIsRunning(false);
+    endAtRef.current = null;
     setTimeLeft(roundTime);
     setCurrentRound(1);
     setIsBreak(false);
@@ -136,6 +171,7 @@ export default function MatchTimer({
 
   const resetRound = () => {
     setIsRunning(false);
+    endAtRef.current = null;
     setTimeLeft(isBreak ? breakTime : roundTime);
   };
 

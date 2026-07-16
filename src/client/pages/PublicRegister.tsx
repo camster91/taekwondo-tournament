@@ -484,6 +484,7 @@ export default function PublicRegister() {
                       firstName: '',
                       lastName: '',
                       dateOfBirth: '',
+                      belt: '',
                       danRank: 1,
                       heightInches: '',
                       weightLbs: '',

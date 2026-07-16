@@ -369,7 +369,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                   <button
                     onClick={() => {
                       setUserMenuOpen(false);
-                      try { localStorage.removeItem('tkd_tour_completed'); } catch { /* ignore */ }
+                      try { localStorage.removeItem('bowin_tour_completed'); } catch { /* ignore */ }
                       // Force a remount by reloading — simplest way to re-trigger
                       // the tour from anywhere. The tour reads its own state.
                       window.location.reload();

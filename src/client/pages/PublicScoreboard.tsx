@@ -103,6 +103,7 @@ export default function PublicScoreboard() {
       return res.json();
     },
     refetchInterval: 3000, // TV mode: refresh every 3s
+    refetchIntervalInBackground: false,
     enabled: !tournamentError, // Don't keep retrying the scoreboard if the tournament is bad
   });
   const divisions = scoreboardData?.divisions;
@@ -262,7 +263,7 @@ export default function PublicScoreboard() {
             <div className="hidden md:flex flex-col items-center gap-1" data-testid="mobile-qr">
               <div className="bg-white p-1.5 rounded-md">
                 <QRCodeSVG
-                  value={typeof window !== 'undefined' ? window.location.href : `https://tkd.ashbi.ca/display/${tournament?.id ?? ''}`}
+                  value={typeof window !== 'undefined' ? window.location.href : `https://bowin.app/display/${tournament?.id ?? ''}`}
                   size={64}
                   level="M"
                 />

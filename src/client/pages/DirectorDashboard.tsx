@@ -287,6 +287,7 @@ export default function DirectorDashboard() {
       };
     },
     refetchInterval: 10000,
+  refetchIntervalInBackground: false,
   });
 
   if (isLoading) {
@@ -603,9 +604,17 @@ export default function DirectorDashboard() {
                   onChange={(e) => setDisplayRing(parseInt(e.target.value, 10))}
                   className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 w-full sm:w-auto"
                 >
-                  {Array.from(new Set(progress.divisionDetails.flatMap((d) => d.ringNumber).filter(Boolean))).sort((a, b) => (a ?? 0) - (b ?? 0)).map((r) => (
-                    <option key={r} value={r ?? 0}>Ring {r}</option>
-                  ))}
+                  {Array.from(
+                    new Set(
+                      progress.divisionDetails
+                        .flatMap((d) => d.ring)
+                        .filter((r): r is string => Boolean(r))
+                    )
+                  )
+                    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+                    .map((r) => (
+                      <option key={r} value={parseInt(r, 10) || 0}>Ring {r}</option>
+                    ))}
                 </select>
               </div>
             )}

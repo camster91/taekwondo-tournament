@@ -13,6 +13,7 @@ import {
   Keyboard,
   Timer,
   Monitor,
+  X,
 } from 'lucide-react';
 import MatchTimer from '../components/MatchTimer';
 import SpecialNeedsBadge from '../components/SpecialNeedsBadge';
@@ -104,6 +105,7 @@ export default function Scorekeeper() {
   const [incidentType, setIncidentType] = useState<string>('injury');
   const [incidentSeverity, setIncidentSeverity] = useState<string>('minor');
   const [incidentDescription, setIncidentDescription] = useState('');
+  const [pendingUndoId, setPendingUndoId] = useState<string | null>(null);
   const [incidentAction, setIncidentAction] = useState<string>('');
 
   const { data: tournament } = useQuery<Tournament>({
@@ -133,6 +135,7 @@ export default function Scorekeeper() {
       return res.json();
     },
     refetchInterval: 10000,
+  refetchIntervalInBackground: false,
   });
 
   // Get ready matches for selected division — safe with optional chaining
@@ -1037,7 +1040,7 @@ export default function Scorekeeper() {
                       )}
                     </div>
                     <button
-                      onClick={() => undoMatchResult.mutate(match.id)}
+                      onClick={() => setPendingUndoId(match.id)}
                       disabled={undoMatchResult.isPending}
                       aria-label={`Undo result: ${winnerName} defeated ${loserName} (match ${match.matchNumber})`}
                       className="px-3 py-1 text-xs bg-red-600 hover:bg-red-500 disabled:bg-gray-600 rounded font-medium"
@@ -1304,6 +1307,42 @@ export default function Scorekeeper() {
             <Button variant="secondary" className="w-full mt-4" onClick={() => setShowKeyboardHelp(false)}>
               Close
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Undo result confirmation */}
+      {pendingUndoId && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="undo-confirm-title"
+        >
+          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full">
+            <h3 id="undo-confirm-title" className="text-xl font-bold mb-4 text-red-400">Undo this result?</h3>
+            <p className="text-gray-300 mb-2">This reverses the recorded winner for this match.</p>
+            <p className="text-sm text-amber-300 mb-4">
+              Downstream matches may now reference a competitor who no longer won. The next match in the bracket may need to be re-played.
+            </p>
+            <div className="flex gap-3">
+              <Button variant="secondary" className="flex-1" onClick={() => setPendingUndoId(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                className="flex-1"
+                loading={undoMatchResult.isPending}
+                onClick={() => {
+                  if (pendingUndoId) {
+                    undoMatchResult.mutate(pendingUndoId);
+                    setPendingUndoId(null);
+                  }
+                }}
+              >
+                Undo result
+              </Button>
+            </div>
           </div>
         </div>
       )}
