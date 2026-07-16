@@ -47,9 +47,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
-        if (!cancelled && res.ok) {
-          const userData = (await res.json()) as User;
-          setUser(userData);
+        if (!cancelled) {
+          if (res.ok) {
+            const userData = (await res.json()) as User;
+            setUser(userData);
+          } else if (res.status === 401) {
+            // Stale / invalid cookie — clear any lingering local state and
+            // notify the rest of the app (ToastContext listens for this).
+            setUser(null);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('session-expired'));
+            }
+          }
         }
       } catch {
         // Network error — leave user null, isLoading false.
@@ -59,6 +68,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  // Global 401 → "session expired" event. Patches fetch so any API call
+  // that returns 401 fires the same CustomEvent (consumed by
+  // ToastContext) and clears local state. This catches the case where
+  // the cookie is invalidated mid-session (admin deactivates the
+  // user, role changes, tokenVersion bump) and the page has not been
+  // remounted.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+      const res = await originalFetch(...args);
+      if (res.status === 401) {
+        const url = typeof args[0] === 'string'
+          ? args[0]
+          : (args[0] as Request)?.url ?? '';
+        // Don't fire on the auth endpoints themselves — they're the source
+        // of the 401 (e.g. wrong password, used code, etc.).
+        if (
+          !url.includes('/api/auth/me') &&
+          !url.includes('/api/auth/login') &&
+          !url.includes('/api/auth/verify-magic-link') &&
+          !url.includes('/api/auth/request-magic-link') &&
+          !url.includes('/api/auth/dev-token') &&
+          !url.includes('/api/auth/demo') &&
+          !url.includes('/api/auth/setup')
+        ) {
+          setUser((current) => {
+            if (current) {
+              window.dispatchEvent(new CustomEvent('session-expired'));
+            }
+            return current;
+          });
+        }
+      }
+      return res;
+    };
+    return () => {
+      window.fetch = originalFetch;
     };
   }, []);
 

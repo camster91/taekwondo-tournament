@@ -1,5 +1,5 @@
 // Lightweight tour / onboarding wizard for first-time directors.
-// Persists a `tkd_tour_completed` flag in localStorage so it shows
+// Persists a `bowin_tour_completed` flag in localStorage so it shows
 // exactly once per browser. A "Show tour" item in the user menu
 // (wired in App.tsx) re-triggers it.
 //
@@ -15,7 +15,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import Button from './ui/Button';
 
-const STORAGE_KEY = 'tkd_tour_completed';
+const STORAGE_KEY = 'bowin_tour_completed';
 
 export interface TourStep {
   /** CSS selector for the element to highlight */

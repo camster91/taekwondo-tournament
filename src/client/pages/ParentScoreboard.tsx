@@ -61,6 +61,7 @@ export default function ParentScoreboard() {
       return res.json();
     },
     refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
     retry: false,
   });
 
@@ -75,6 +76,7 @@ export default function ParentScoreboard() {
       return res.json();
     },
     refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
     enabled: !!tournament && !tournamentError,
     retry: false,
   });
