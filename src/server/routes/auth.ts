@@ -157,7 +157,17 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
     // the operator can use it, but DO NOT echo it in the JSON response.
     // The public response must look identical to the production response
     // (always 200 with a generic message) to avoid information leakage.
-    if (!emailResult.success && !isEmailConfigured()) {
+    //
+    // Closes D5: the old gate was `!emailResult.success && !isEmailConfigured()`
+    // which would activate the e2e bypass in production if a misconfigured
+    // MAILGUN_API_KEY returned an error. Now requires BOTH that no key
+    // is set AND that NODE_ENV !== 'production' — so the bypass is
+    // genuinely dev-only.
+    if (
+      !emailResult.success &&
+      !isEmailConfigured() &&
+      process.env.NODE_ENV !== 'production'
+    ) {
       // Only log the link in development. In production with email
       // configured, no log line fires; in dev without email we print
       // to the server console so the operator can grab the link.
@@ -174,11 +184,12 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
       // can read them. NEVER set this in production. The e2e setup
       // file (tests/e2e/global-setup.ts) sets this on the test
       // process only.
-      // The `= String(1)` idiom is intentional: it forces a truthy
-      // value at runtime (so the bypass always activates when this
-      // dev-mode branch is reached) while keeping the variable
-      // assignment in source code that grep can find.
-      const e2eBypass = (process.env.ENABLE_E2E_AUTH_BYPASS ?? String(1)) as string;
+      // The `= String(1)` fallback (S25) used to fire in any non-prod
+      // env without the var set — that meant the bypass always
+      // activated in dev unless the operator explicitly disabled it.
+      // Now requires the operator to set ENABLE_E2E_AUTH_BYPASS=1
+      // explicitly, no default-on.
+      const e2eBypass = process.env.ENABLE_E2E_AUTH_BYPASS === '1' ? '1' : '';
       if (e2eBypass) {
         return res.json({
           message: 'If an account exists, a sign-in link has been sent',
@@ -343,17 +354,32 @@ router.post('/verify-magic-link', authLimiter, async (req: Request, res: Respons
   }
 });
 
-// First-run setup: creates initial admin user (only when no users exist)
+// First-run setup: creates initial admin user. Closes S3 —
+// the original handler had no env-gate, so a DB reset (or fresh
+// deploy with empty users table) would let any unauthenticated
+// request create an admin. Now requires ADMIN_SETUP_KEY in the
+// request body, matching the sibling /setup-admin route. The
+// key MUST be set in the env on first-run deploys; without it
+// the route is a 401 and the operator sees a clear error.
 router.post('/setup', registerLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
   try {
+    const setupKey = process.env.ADMIN_SETUP_KEY;
+    if (!setupKey) {
+      return res.status(503).json({
+        error: 'ADMIN_SETUP_KEY is not configured on this server. Set it in the env before running first-run setup.',
+      });
+    }
+    const { email, firstName, lastName, setupKey: providedKey } = req.body;
+    if (!providedKey || providedKey !== setupKey) {
+      return res.status(401).json({ error: 'Invalid or missing setupKey' });
+    }
     const existingCount = await prisma.user.count();
     if (existingCount > 0) {
       return res.status(403).json({ error: 'Setup already completed' });
     }
 
-    const { email, firstName, lastName } = req.body;
     if (!email || !firstName || !lastName) {
       return res.status(400).json({ error: 'email, firstName, and lastName are required' });
     }
@@ -396,12 +422,15 @@ router.get('/setup-status', async (req: Request, res: Response) => {
   res.json({ needsSetup: count === 0 });
 });
 
-// v2: dev-only token endpoint for seeding + testing without SMTP
-// Guarded by ENABLE_DEV_AUTH (defaults to "on in non-prod, off in prod")
-// so it can never be enabled on a live prod deploy by accident.
+// v2: dev-only token endpoint for seeding + testing without SMTP.
+// Closes S1 — the old gate "on unless NODE_ENV=production" was
+// default-on whenever the operator forgot to set NODE_ENV, which
+// is a one-env-var tripwire to a full account-takeover on a fresh
+// prod deploy. Now requires BOTH ENABLE_DEV_AUTH=1 AND
+// NODE_ENV=development, so neither flag alone can enable it.
 const devAuthEndpointsEnabled =
-  process.env.ENABLE_DEV_AUTH === '1' ||
-  (process.env.ENABLE_DEV_AUTH !== '0' && process.env.NODE_ENV !== 'production');
+  process.env.ENABLE_DEV_AUTH === '1' &&
+  process.env.NODE_ENV === 'development';
 
 if (devAuthEndpointsEnabled) {
   router.post('/dev-token', async (req: Request, res: Response) => {
@@ -859,9 +888,11 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
 // the demo account on a live deploy (the demo user has admin role).
 const DEMO_EMAIL = 'demo@bowin.app';
 const DEMO_TTL_SECONDS = 4 * 60 * 60; // 4 hours
-const demoLoginEnabled =
-  process.env.ENABLE_DEMO_LOGIN === '1' ||
-  (process.env.ENABLE_DEMO_LOGIN !== '0' && process.env.NODE_ENV !== 'production');
+// Closes S2 — old gate "on unless NODE_ENV=production" let the
+// demo account activate on any deploy where NODE_ENV was unset
+// or set to "staging". The demo user is admin. Now requires an
+// explicit ENABLE_DEMO_LOGIN=1, no NODE_ENV fallback.
+const demoLoginEnabled = process.env.ENABLE_DEMO_LOGIN === '1';
 
 if (demoLoginEnabled) {
   router.post('/demo', async (_req: Request, res: Response) => {
