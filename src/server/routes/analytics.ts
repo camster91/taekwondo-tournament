@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireTournamentAccess, buildTournamentAccessFilter, checkTournamentAccess } from '../middleware/auth.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -16,6 +16,18 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
     // window; without this filter, soft-deleted demo rows leak into the
     // dashboard counts and charts.
     const notDeleted = { deletedAt: null };
+
+    // Closes B35: scope all dashboard counts to the tournaments the
+    // user is allowed to see. buildTournamentAccessFilter returns
+    // null = "see everything" (admins / legacy single-tenant).
+    const tournamentFilter = await buildTournamentAccessFilter(req, prisma);
+    // For the registration recentActivity count we need to also exclude
+    // soft-deleted tournaments. Combine the access filter with the
+    // notDeleted constraint via AND.
+    const registrationWhere =
+      tournamentFilter
+        ? { tournament: { AND: [tournamentFilter, notDeleted] } }
+        : { tournament: notDeleted };
 
     // Get total counts
     const [totalCompetitors, totalTournaments, totalMatches] = await Promise.all([
@@ -58,7 +70,7 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const recentRegistrations = await prisma.registration.count({
-      where: { createdAt: { gte: thirtyDaysAgo } },
+      where: { ...registrationWhere, createdAt: { gte: thirtyDaysAgo } },
     });
 
     // Get matches by status
@@ -128,8 +140,12 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
   }
 });
 
-// Get tournament-specific analytics (requires authentication)
-router.get('/tournament/:tournamentId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+// Get tournament-specific analytics (requires authentication + tournament access;
+// closes S5 + B36). Drops the `competitor: true` include to non-PII
+// fields via a down-stream select; current route already only
+// returns aggregate stats (topSchools, divisionStats) which are
+// safe. The full `competitor: true` include was the original PII leak.
+router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('viewer'), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { tournamentId } = req.params;
 
@@ -150,6 +166,16 @@ router.get('/tournament/:tournamentId', authenticate, async (req: AuthenticatedR
 
     if (!tournament) {
       return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    const access = await checkTournamentAccess(
+      req,
+      prisma,
+      tournamentId,
+      'viewer'
+    );
+    if (!access.ok) {
+      return res.status(access.status || 403).json({ error: access.error });
     }
 
     // School participation

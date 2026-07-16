@@ -63,8 +63,8 @@ const divisionUpdateSchema = z.object({
   displayOrder: z.number().int().optional(),
 });
 
-// Get divisions for a tournament (requires authentication)
-router.get('/tournament/:tournamentId', authenticate, async (req: Request, res: Response) => {
+// Get divisions for a tournament (requires authentication + tournament access)
+router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const withMatches = req.query.withMatches === 'true';
 
@@ -118,9 +118,28 @@ router.get('/tournament/:tournamentId', authenticate, async (req: Request, res: 
   res.json(divisions);
 });
 
-// Get single division with competitors (requires authentication)
+// Get single division with competitors (requires authentication + tournament access)
 router.get('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+
+  // Resolve parent tournament for the access check before returning
+  // any competitor PII (closes S6 + B36-style IDOR).
+  const parent = await prisma.division.findUnique({
+    where: { id: getParam(req.params.id) },
+    select: { tournamentId: true, deletedAt: true },
+  });
+  if (!parent || parent.deletedAt) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+  const access = await checkTournamentAccess(
+    req as AuthenticatedRequest,
+    prisma,
+    parent.tournamentId,
+    'viewer'
+  );
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
 
   const division = await prisma.division.findUnique({
     where: { id: getParam(req.params.id) },
@@ -207,7 +226,7 @@ router.post('/tournament/:tournamentId/preview', authenticate, requireTournament
 });
 
 // Check if regenerating divisions would lose data (requires authentication)
-router.get('/tournament/:tournamentId/check-data-loss', authenticate, async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/check-data-loss', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
 
@@ -540,6 +559,22 @@ router.post('/:id/assign', authenticate, async (req: AuthenticatedRequest, res: 
 
   const { registrationId, seedPosition, manualOverride } = req.body;
 
+  // Cross-tournament FK check: the registration must belong to the
+  // same tournament as the division. Closes B5 (cross-tenant data
+  // corruption via assign/move).
+  const registration = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    select: { tournamentId: true },
+  });
+  if (!registration) {
+    return res.status(404).json({ error: 'Registration not found' });
+  }
+  if (registration.tournamentId !== division.tournamentId) {
+    return res.status(400).json({
+      error: 'Registration does not belong to this tournament',
+    });
+  }
+
   const assignment = await prisma.divisionAssignment.create({
     data: {
       divisionId,
@@ -600,6 +635,21 @@ router.post('/:id/move', authenticate, async (req: AuthenticatedRequest, res: Re
   const access = await checkTournamentAccess(req, prisma, current.division.tournamentId, 'scorekeeper');
   if (!access.ok) {
     return res.status(access.status || 403).json({ error: access.error });
+  }
+
+  // Cross-tournament FK check: the destination division must belong
+  // to the same tournament as the source assignment. Closes B5.
+  const target = await prisma.division.findUnique({
+    where: { id: toDivisionId },
+    select: { tournamentId: true, deletedAt: true },
+  });
+  if (!target || target.deletedAt) {
+    return res.status(404).json({ error: 'Target division not found' });
+  }
+  if (target.tournamentId !== current.division.tournamentId) {
+    return res.status(400).json({
+      error: 'Target division does not belong to the same tournament',
+    });
   }
 
   const assignment = await prisma.divisionAssignment.update({
@@ -699,7 +749,7 @@ router.post('/:id/split', authenticate, async (req: AuthenticatedRequest, res: R
 });
 
 // Get current backup state for a tournament (requires authentication)
-router.get('/tournament/:tournamentId/backup', authenticate, async (req: Request, res: Response) => {
+router.get('/tournament/:tournamentId/backup', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const tournamentId = getParam(req.params.tournamentId);
   const backup = getBackup(tournamentId);
 
