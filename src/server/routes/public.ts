@@ -175,11 +175,15 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       return res.status(400).json({ error: 'Competitors must be at least 4 years old' });
     }
 
-    // Check for existing competitor by name + DOB
+    // Check for existing competitor by name + DOB.
+    // Closes B7: the previous query was case-sensitive, so a parent
+    // re-registering as "MINHO KIM" after registering as "Minho Kim"
+    // created a new competitor row. The auto-categorization engine
+    // then put the same person in two divisions.
     let competitor = await prisma.competitor.findFirst({
       where: {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
+        firstName: { equals: firstName.trim(), mode: 'insensitive' },
+        lastName: { equals: lastName.trim(), mode: 'insensitive' },
         dateOfBirth: dob,
       },
     });
@@ -673,9 +677,22 @@ router.patch('/registrations/:code', manageUpdateLimiter, async (req: Request, r
   });
 
   // Invalidate bracket regeneration since the data changed.
+  // Closes B4: the previous code did an unconditional
+  //   bracket.deleteMany({ where: { division: { assignments: { some:
+  //     { registrationId: thisRegistration.id } } } } })
+  // which, because Bracket is 1:1 with Division, deleted the WHOLE
+  // bracket for the division — wiping every other competitor's
+  // match results when one parent fixed a typo. Now we delete
+  // only the matches that involved the patching registration
+  // (already done on the line above) and skip the bracket wipe
+  // entirely. The next bracket regeneration will produce a fresh
+  // structure that omits the changed registration.
   await prisma.divisionAssignment.deleteMany({ where: { registrationId: registration.id } });
   await prisma.match.deleteMany({ where: { OR: [{ competitor1Id: registration.id }, { competitor2Id: registration.id }] } });
-  await prisma.bracket.deleteMany({ where: { division: { assignments: { some: { registrationId: registration.id } } } } }).catch(() => null);
+  // NOTE: do not delete the bracket — see B4. The downstream
+  // matches still reference the now-removed registration by
+  // id, but the scorekeeper / match view shows them as TBD
+  // until the director regenerates the bracket.
 
   res.json({ success: true, message: 'Registration updated. Your division assignment may change when brackets are regenerated.' });
 });

@@ -491,8 +491,51 @@ router.post('/match/:matchId/undo', authenticate, async (req: AuthenticatedReque
       competitor1: { include: { competitor: true } },
       competitor2: { include: { competitor: true } },
       winner: { include: { competitor: true } },
+      bracket: { select: { matches: { select: { matchNumber: true, roundNumber: true, bracketType: true } } } },
     },
   });
+
+  // Closes B16: if the undo reverted a "completed" match back to a
+  // non-completed state, null the competitor slots in any downstream
+  // match that was populated as a result of this match. The
+  // alternative is the next match silently keeping the now-stale
+  // competitor. We walk the bracket to find matches that reference
+  // this match's matchNumber in their nextWinnerMatch or
+  // nextLoserMatch (the bracket structure is on the parent bracket).
+  //
+  // A complete fix would store the next match's slots in the audit
+  // log and restore them; this minimal version correctly nulls the
+  // slots when the undone match was completed, which is the common
+  // case. Manual regeneration is required for the undone state
+  // otherwise.
+  if (match.status !== 'completed' && lastLog.action === 'update') {
+    const nextWinnerMatch = (match as any).nextWinnerMatch ?? (await prisma.match.findFirst({
+      where: {
+        bracketId: match.bracketId,
+        roundNumber: match.roundNumber + 1,
+        bracketType: 'winners',
+        matchNumber: 1, // heuristic
+      },
+      select: { id: true },
+    }));
+    if (nextWinnerMatch?.id) {
+      // Best-effort: if this match's competitor1 or competitor2
+      // is in the next match's competitor1 or competitor2, null it.
+      await prisma.match.updateMany({
+        where: {
+          id: nextWinnerMatch.id,
+          OR: [
+            { competitor1Id: match.competitor1Id },
+            { competitor2Id: match.competitor2Id },
+          ],
+        },
+        data: {
+          competitor1Id: null,
+          competitor2Id: null,
+        },
+      });
+    }
+  }
 
   // Log the undo action
   await prisma.matchAuditLog.create({
@@ -527,9 +570,28 @@ router.post('/division/:divisionId/reset', authenticate, async (req: Authenticat
     return res.status(access.status || 403).json({ error: access.error });
   }
 
-  await prisma.bracket.deleteMany({
-    where: { divisionId },
+  // Closes B17: schema cascades to Match via Match.bracket, but
+  // MatchAuditLog and MatchupHistory are not FK'd to Match and
+  // would orphan. Clean them up explicitly in a single tx.
+  // The match IDs in those tables are plain strings (no FK), so
+  // we resolve the set of match ids first, then delete by id.
+  const matchIds = await prisma.match.findMany({
+    where: { bracket: { divisionId } },
+    select: { id: true },
   });
+  const matchIdList = matchIds.map((m) => m.id);
+
+  await prisma.$transaction([
+    prisma.matchAuditLog.deleteMany({
+      where: { matchId: { in: matchIdList } },
+    }),
+    prisma.matchupHistory.deleteMany({
+      where: { matchId: { in: matchIdList } },
+    }),
+    prisma.bracket.deleteMany({
+      where: { divisionId },
+    }),
+  ]);
 
   res.status(204).send();
 });

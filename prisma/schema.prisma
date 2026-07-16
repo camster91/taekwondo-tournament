@@ -76,6 +76,9 @@ model Tournament {
   weightClasses WeightClass[]
   userAccess    UserTournamentAccess[]
   rules         TournamentRule[]
+  incidents     Incident[]
+  competitorHistories CompetitorHistory[]
+  matchupHistories    MatchupHistory[]
   organization Organization? @relation(fields: [organizationId], references: [id])
   sportProfile SportProfile? @relation(fields: [sportProfileId], references: [id])
 }
@@ -301,6 +304,8 @@ model CompetitorHistory {
   createdAt     DateTime @default(now())
 
   competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  // Closes B8: orphan history rows on hard-delete of Tournament.
+  tournament    Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@index([competitorId])
   @@index([tournamentId])
@@ -321,6 +326,9 @@ model MatchupHistory {
   roundNumber   Int      // Which round the matchup occurred
   score         String?  // Score if available
   createdAt     DateTime @default(now())
+
+  // Closes B8: orphan history rows on hard-delete of Tournament.
+  tournament    Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@unique([competitor1Id, competitor2Id, tournamentId, matchId])
   @@index([competitor1Id])
@@ -450,6 +458,9 @@ model Incident {
   // for liability / insurance) without surfacing them in active
   // dashboards. Same pattern as Competitor / Tournament / Division.
   deletedAt       DateTime?
+
+  // Closes B8: orphan incident rows on hard-delete of Tournament.
+  tournament      Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@index([tournamentId])
   @@index([matchId])
