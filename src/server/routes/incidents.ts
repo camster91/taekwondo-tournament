@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import {
   authenticate,
@@ -8,6 +9,14 @@ import {
   checkTournamentAccess,
   type AuthenticatedRequest,
 } from '../middleware/auth.js';
+
+const incidentsLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many incidents created, please slow down.' },
+});
 
 const router = Router();
 
@@ -17,7 +26,7 @@ const createIncidentSchema = z.object({
   registrationId: z.string().uuid().optional().nullable(),
   type: z.enum(['injury', 'disqualification', 'medical', 'equipment', 'conduct']),
   severity: z.enum(['minor', 'moderate', 'serious']),
-  description: z.string().min(1),
+  description: z.string().min(1).max(5000),
   actionTaken: z.enum(['first_aid', 'withdrawn', 'continued', 'ambulance']).optional().nullable(),
 });
 
@@ -34,6 +43,12 @@ const updateIncidentSchema = z.object({
 // middleware would otherwise read the wrong param.
 router.post(
   '/',
+  // Closes S20: incidents creation now has a per-user rate limit
+  // (20 per hour) and a max description length. The scorekeeper
+  // shouldn't be able to DB-pollute with thousands of incidents,
+  // and a sane cap on description length prevents a single
+  // huge payload from filling the column.
+  incidentsLimiter,
   authenticate,
   requireRole('admin', 'director', 'scorekeeper'),
   async (req: AuthenticatedRequest, res: Response) => {

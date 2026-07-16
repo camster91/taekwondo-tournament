@@ -46,7 +46,7 @@ cd /opt/taekwondo-tournament
 # We DO need node_modules with the Prisma engine binary, so install
 # prod deps once at deploy time. ~120MB.
 cat > Dockerfile <<'DOCKERFILE'
-FROM node:20-alpine
+FROM node:20.18.0-alpine3.20
 WORKDIR /app
 RUN apk add --no-cache openssl
 ENV NODE_ENV=production

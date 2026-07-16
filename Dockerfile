@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:20.18.0-alpine3.20 AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ RUN ./node_modules/.bin/prisma generate && \
     npx tsc -p tsconfig.server.json
 
 # ─── Production Dependencies Stage ─────────────────────────────────
-FROM node:20-alpine AS deps
+FROM node:20.18.0-alpine3.20 AS deps
 
 WORKDIR /app
 COPY package*.json ./
@@ -24,7 +24,7 @@ COPY prisma ./prisma
 RUN npm ci --omit=dev && ./node_modules/.bin/prisma generate
 
 # ─── Production Image ────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:20.18.0-alpine3.20 AS runner
 
 WORKDIR /app
 

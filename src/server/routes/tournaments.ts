@@ -415,10 +415,23 @@ router.get('/:id/rules', authenticate, requireTournamentAccess('viewer'), async 
 });
 
 // PUT /api/tournaments/:id/rules — replaces the rules JSON
+// Closes S19: the previous version only round-tripped the body
+// through parseTournamentRules (which merges with defaults and
+// silently drops unknown keys). A director could POST any
+// nested object and have it stored. Now there's an explicit
+// shape check that rejects non-objects, and the round-trip
+// through parseTournamentRules normalizes against the schema
+// in src/shared/constants (so unknown keys are dropped, not
+// stored).
 router.put('/:id/rules', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { rules } = req.body as { rules: TournamentRules };
-  // Validate by round-tripping through parse (which merges with defaults)
+  const { rules } = req.body as { rules: unknown };
+  if (!rules || typeof rules !== 'object' || Array.isArray(rules)) {
+    return res.status(400).json({ error: 'rules must be an object' });
+  }
+  // Round-trip through parse (which validates shape and merges
+  // with defaults). Anything the schema doesn't know about is
+  // dropped silently.
   const normalized = parseTournamentRules(JSON.stringify(rules));
   const tournament = await prisma.tournament.update({
     where: { id: getParam(req.params.id) },
