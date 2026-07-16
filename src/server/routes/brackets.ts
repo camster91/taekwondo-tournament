@@ -668,17 +668,21 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
       ...bracketStructure.finals.map((m) => ({ ...m, bracketType: 'finals' })),
     ];
 
-    for (const match of allMatches) {
-      await prisma.match.create({
-        data: {
+    // Closes P4: the previous loop did one prisma.match.create per
+    // match — for a 50-division tournament with 31 matches per DE
+    // bracket that's 1,550 sequential round-trips. createMany
+    // collapses each division to a single round-trip.
+    if (allMatches.length > 0) {
+      await prisma.match.createMany({
+        data: allMatches.map((m) => ({
           bracketId: bracket.id,
-          roundNumber: match.round,
-          matchNumber: match.matchNumber,
-          bracketType: match.bracketType,
-          competitor1Id: match.competitor1Id || null,
-          competitor2Id: match.competitor2Id || null,
-          status: match.competitor1Id && match.competitor2Id ? 'ready' : 'pending',
-        },
+          roundNumber: m.round,
+          matchNumber: m.matchNumber,
+          bracketType: m.bracketType,
+          competitor1Id: m.competitor1Id || null,
+          competitor2Id: m.competitor2Id || null,
+          status: m.competitor1Id && m.competitor2Id ? 'ready' : 'pending',
+        })),
       });
     }
 

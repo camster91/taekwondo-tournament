@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
-import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, type AuthenticatedRequest } from '../middleware/auth.js';
+import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, type AuthenticatedRequest, invalidateAuthCache } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
@@ -464,6 +464,7 @@ router.post('/logout', authenticate, async (req: AuthenticatedRequest, res: Resp
       where: { id: req.user!.id },
       data: { tokenVersion: { increment: 1 } },
     });
+    invalidateAuthCache(req.user!.id);
   } catch (error) {
     console.error('Logout tokenVersion bump failed:', error);
     // Fall through — clearing the cookie still ends the current session.
@@ -595,6 +596,7 @@ router.put('/users/:userId/role', authenticate, requireRole('admin'), validateRe
         isActive: true,
       },
     });
+    invalidateAuthCache(userId);
 
     res.json(user);
   } catch (error) {
