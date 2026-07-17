@@ -753,9 +753,24 @@ router.get('/:id/day-of', authenticate, requireTournamentAccess('viewer'), async
       where: { tournamentId },
       include: { _count: { select: { assignments: true } } },
     }),
+    // Closes P5: the day-of endpoint is polled every 3-10s by the
+    // director dashboard, public scoreboard, and school portal.
+    // The previous `findMany` with a `bracket: { include: {...} }`
+    // returned every match column (notes, score1, score2, winnerId,
+    // createdAt, updatedAt, ...) plus the bracket relation. For a
+    // 500-match tournament that's ~500 KB per poll. The narrow
+    // select below cuts the response ~5x. The WHERE joins through
+    // Bracket.divisionId (FK index) → Division.tournamentId (FK
+    // index) which the planner handles as 2 nested-loop lookups.
     prisma.match.findMany({
       where: { bracket: { division: { tournamentId } } },
-      include: { bracket: { select: { id: true, divisionId: true } } },
+      select: {
+        id: true,
+        matchNumber: true,
+        status: true,
+        ringNumber: true,
+        bracket: { select: { id: true, divisionId: true } },
+      },
     }),
   ]);
 
