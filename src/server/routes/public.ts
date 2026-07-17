@@ -134,16 +134,49 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
   // Validation
   const errors: string[] = [];
 
+  // Length caps on every free-text field. The previous validation
+  // checked required + format but not length, so a malicious or
+  // buggy client could push a 10 MB parentName and we'd write it
+  // to the DB. The caps below match the column widths in
+  // schema.prisma (Competitor.firstName/lastName varchar(100),
+  // Competitor.specialNeeds text, Registration.parentName
+  // varchar(200), etc).
   if (!tournamentId) errors.push('Tournament is required');
   if (!firstName?.trim()) errors.push('First name is required');
+  else if (firstName.length > 100) errors.push('First name must be 100 characters or fewer');
   if (!lastName?.trim()) errors.push('Last name is required');
+  else if (lastName.length > 100) errors.push('Last name must be 100 characters or fewer');
   if (!gender || !['M', 'F'].includes(gender)) errors.push('Gender is required (M or F)');
   if (!dateOfBirth) errors.push('Date of birth is required');
   if (!belt?.trim()) errors.push('Belt level is required');
   if (!patterns && !sparring) errors.push('Please select at least one event (Patterns or Sparring)');
+  if (schoolDojang && schoolDojang.length > 200) errors.push('School/dojang name must be 200 characters or fewer');
+  if (specialNeeds && specialNeeds.length > 2000) errors.push('Special needs must be 2000 characters or fewer');
+  if (parentName && parentName.length > 200) errors.push('Parent name must be 200 characters or fewer');
+  if (parentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)) errors.push('Parent email is not a valid email');
+  if (parentEmail && parentEmail.length > 200) errors.push('Parent email must be 200 characters or fewer');
+  if (parentPhone && parentPhone.length > 50) errors.push('Parent phone must be 50 characters or fewer');
 
   if (sparring && !weightLbs) {
     errors.push('Weight is required for sparring registration');
+  }
+  if (weightLbs != null) {
+    const w = Number(weightLbs);
+    if (!Number.isFinite(w) || w < 0 || w > 500) {
+      errors.push('Weight must be a number between 0 and 500');
+    }
+  }
+  if (heightInches != null) {
+    const h = Number(heightInches);
+    if (!Number.isFinite(h) || h < 0 || h > 108) {
+      errors.push('Height must be a number between 0 and 108 inches');
+    }
+  }
+  if (danRank != null) {
+    const d = Number(danRank);
+    if (!Number.isInteger(d) || d < 0 || d > 9) {
+      errors.push('Dan rank must be an integer between 0 and 9');
+    }
   }
 
   if (errors.length > 0) {
