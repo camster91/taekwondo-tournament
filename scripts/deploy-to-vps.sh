@@ -98,6 +98,13 @@ DATABASE_URL=postgresql://markup:${DB_PW}@markup-postgres:5432/taekwondo?schema=
 JWT_SECRET=${JWT_SECRET}
 ENABLE_DEMO_LOGIN=1
 PUBLIC_APP_URL=https://tkd.ashbi.ca
+# ALLOWED_ORIGINS gates the CORS middleware in src/server/index.ts
+# and is also required at startup by the production env-validation
+# check (added in commit e2759c5 — closes D9). Hardcoded to the
+# single public origin of this deployment; add additional origins
+# comma-separated if you stand up a second frontend (e.g. a
+# staging URL behind a different hostname).
+ALLOWED_ORIGINS=https://tkd.ashbi.ca
 ENVEOF
 for var in MAILGUN_API_KEY MAILGUN_DOMAIN MAILGUN_BASE_URL EMAIL_FROM_NAME EMAIL_FROM_ADDRESS; do
     val=$(grep -E "^${var}=" /etc/taekwondo.d/app-env 2>/dev/null | head -1 | cut -d= -f2-)
@@ -121,6 +128,12 @@ echo "NODE_ENV=production" > "$ENV_FILE"
 echo "PORT=3001" >> "$ENV_FILE"
 printf "JWT_SECRET=%s\n" "$JWT_SECRET" >> "$ENV_FILE"
 echo "DATABASE_URL=postgresql://markup:${DB_PW}@markup-postgres:5432/taekwondo?schema=public" >> "$ENV_FILE"
+# ALLOWED_ORIGINS must also reach the runtime container (the
+# CORS middleware reads it from process.env at request time, NOT
+# from the .env file that prisma loads — the docker run env is
+# the runtime source of truth). The .env has the same value for
+# the startup check; this ENV_FILE line is the runtime copy.
+echo "ALLOWED_ORIGINS=https://tkd.ashbi.ca" >> "$ENV_FILE"
 # tkd.ashbi.ca is a demo deployment. The landing page advertises
 # "Try the demo. Full access for 4 hours" as the primary CTA, so
 # /api/auth/demo must be reachable in this environment. The route
