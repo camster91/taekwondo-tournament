@@ -268,6 +268,61 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
     }
   }
 
+  // Closes B15: status transition guard. The Zod schema accepts any
+  // of the 5 statuses, but the bracket state machine only allows
+  // certain transitions. Without this guard, a scorekeeper could
+  // flip a "completed" match back to "pending" without clearing
+  // winnerId, and the next advancement call would silently re-advance
+  // the same competitor (double-propagation) or get stuck because
+  // the loser side still has a stale competitor pointer.
+  //
+  // Allowed transitions:
+  //   pending   -> ready, in_progress, completed, bye
+  //   ready     -> in_progress, completed, pending
+  //   in_progress -> completed, pending
+  //   completed -> pending (only if winnerId is being cleared),
+  //                 in_progress (re-open for a scoring correction)
+  //   bye       -> pending (only if both competitors now set)
+  //
+  // Plus: status=completed requires winnerId; status=pending
+  // requires winnerId to be cleared (or already null).
+  if (status !== undefined) {
+    const from = currentMatch.status;
+    const to = status;
+    const transitions: Record<string, string[]> = {
+      pending: ['ready', 'in_progress', 'completed', 'bye'],
+      ready: ['in_progress', 'completed', 'pending'],
+      in_progress: ['completed', 'pending'],
+      completed: ['pending', 'in_progress'],
+      bye: ['pending'],
+    };
+    const allowed = transitions[from] ?? [];
+    if (!allowed.includes(to)) {
+      return res.status(400).json({
+        error: `Invalid status transition: ${from} -> ${to}. Allowed: ${allowed.join(', ') || '(none)'}`,
+      });
+    }
+    // Cross-field guards tied to the transition.
+    if (to === 'completed') {
+      if (winnerId === undefined ? !currentMatch.winnerId : !winnerId) {
+        return res.status(400).json({
+          error: 'Cannot mark match completed without a winnerId',
+        });
+      }
+    }
+    if (to === 'pending' && from === 'completed') {
+      // Going back to pending must clear the winner (otherwise the
+      // bracket state machine is in an inconsistent state — the
+      // match has a winner but is no longer "completed").
+      const cleared = winnerId === undefined ? null : winnerId;
+      if (cleared !== null) {
+        return res.status(400).json({
+          error: 'Cannot revert a completed match to pending without clearing winnerId (set winnerId: null)',
+        });
+      }
+    }
+  }
+
   // Wrap the match update + audit log in a single transaction so the
   // audit log can never desync from the match state. advanceWinner
   // stays outside the transaction because it makes its own round-trip
@@ -350,23 +405,31 @@ router.get('/division/:divisionId/placements', authenticate, async (req: Request
 
   const placements = await getBracketPlacements(prisma, bracket.id);
 
-  // Get competitor details
-  const placementsWithDetails = await Promise.all(
-    placements.map(async (p) => {
-      const registration = await prisma.registration.findUnique({
-        where: { id: p.competitorId },
+  // Closes P3: the previous code did a per-placement findUnique, which
+  // is N round-trips. The placements endpoint typically returns 1-4
+  // rows, so the absolute win is small, but the pattern matters
+  // because the same N+1 was in the PDF batch export. Now: one
+  // findMany with an `in: [...]` over the placement registration IDs.
+  const regIds = placements.map((p) => p.competitorId);
+  const registrations = regIds.length > 0
+    ? await prisma.registration.findMany({
+        where: { id: { in: regIds } },
         include: { competitor: true },
-      });
-      return {
-        place: p.place,
-        competitorId: p.competitorId,
-        name: registration
-          ? `${registration.competitor.firstName} ${registration.competitor.lastName}`
-          : 'Unknown',
-        school: registration?.competitor.schoolDojang || '',
-      };
-    })
-  );
+      })
+    : [];
+  const regById = new Map(registrations.map((r) => [r.id, r]));
+
+  const placementsWithDetails = placements.map((p) => {
+    const registration = regById.get(p.competitorId);
+    return {
+      place: p.place,
+      competitorId: p.competitorId,
+      name: registration
+        ? `${registration.competitor.firstName} ${registration.competitor.lastName}`
+        : 'Unknown',
+      school: registration?.competitor.schoolDojang || '',
+    };
+  });
 
   res.json(placementsWithDetails);
 });
@@ -623,17 +686,13 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
 
   let generated = 0;
   let skipped = 0;
+  const errors: Array<{ divisionId: string; divisionName: string; error: string }> = [];
 
   for (const division of divisions as any[]) {
     if (division.assignments.length === 0) {
       skipped++;
       continue;
     }
-
-    // Delete existing bracket
-    await prisma.bracket.deleteMany({
-      where: { divisionId: division.id },
-    });
 
     const competitors = division.assignments.map((a: any) => ({
       registrationId: a.registrationId,
@@ -654,45 +713,68 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
       bracketStructure = generateBracket(competitors, seedingStrategy);
     }
 
-    const bracket = await prisma.bracket.create({
-      data: {
-        divisionId: division.id,
-        structure: JSON.stringify(bracketStructure),
-        format,
-      },
-    });
-
     const allMatches = [
       ...bracketStructure.winners.map((m) => ({ ...m, bracketType: 'winners' })),
       ...bracketStructure.losers.map((m) => ({ ...m, bracketType: 'losers' })),
       ...bracketStructure.finals.map((m) => ({ ...m, bracketType: 'finals' })),
     ];
 
-    // Closes P4: the previous loop did one prisma.match.create per
-    // match — for a 50-division tournament with 31 matches per DE
-    // bracket that's 1,550 sequential round-trips. createMany
-    // collapses each division to a single round-trip.
-    if (allMatches.length > 0) {
-      await prisma.match.createMany({
-        data: allMatches.map((m) => ({
-          bracketId: bracket.id,
-          roundNumber: m.round,
-          matchNumber: m.matchNumber,
-          bracketType: m.bracketType,
-          competitor1Id: m.competitor1Id || null,
-          competitor2Id: m.competitor2Id || null,
-          status: m.competitor1Id && m.competitor2Id ? 'ready' : 'pending',
-        })),
+    // Closes B29: each division's generate is now wrapped in a
+    // $transaction so a partial failure (e.g. an FK conflict on the
+    // new bracket row) doesn't leave the old bracket half-deleted.
+    // The handleByeMatches() call stays outside the transaction
+    // because it depends on reading the just-committed bracket
+    // state (matches created in the same transaction aren't
+    // visible to a follow-up read inside the transaction in
+    // Prisma's default isolation level). Each division is also
+    // isolated from its neighbors — a failure in division 25 of
+    // 50 leaves divisions 1-24 done and 26-50 untouched, instead
+    // of partially committed.
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.bracket.deleteMany({
+          where: { divisionId: division.id },
+        });
+
+        const bracket = await tx.bracket.create({
+          data: {
+            divisionId: division.id,
+            structure: JSON.stringify(bracketStructure),
+            format,
+          },
+        });
+
+        if (allMatches.length > 0) {
+          await tx.match.createMany({
+            data: allMatches.map((m) => ({
+              bracketId: bracket.id,
+              roundNumber: m.round,
+              matchNumber: m.matchNumber,
+              bracketType: m.bracketType,
+              competitor1Id: m.competitor1Id || null,
+              competitor2Id: m.competitor2Id || null,
+              status: m.competitor1Id && m.competitor2Id ? 'ready' : 'pending',
+            })),
+          });
+        }
+
+        return bracket;
+      });
+
+      // Handle BYE matches outside the transaction so the reads see
+      // committed state.
+      await handleByeMatches(prisma, division.id);
+      generated++;
+    } catch (err: any) {
+      errors.push({
+        divisionId: division.id,
+        divisionName: division.name,
+        error: err?.message || 'Unknown error',
       });
     }
-
-    // Handle BYE matches
-    await handleByeMatches(prisma, bracket.id);
-
-    generated++;
   }
 
-  res.json({ generated, skipped, total: divisions.length });
+  res.json({ generated, skipped, total: divisions.length, errors });
 });
 
 // ============ PDF Export Endpoints ============

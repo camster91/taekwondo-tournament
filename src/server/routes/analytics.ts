@@ -178,7 +178,14 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
       return res.status(access.status || 403).json({ error: access.error });
     }
 
-    // School participation
+    // School participation. Note: tournament.registrations is already
+    // eager-loaded via the include above, so the JS-side aggregation
+    // is on in-memory data — no extra round trips. (P2 was flagged
+    // for the pattern, but the actual `competitor.groupBy` we want
+    // here can't filter by tournament directly because groupBy
+    // doesn't follow the registration relation. A raw SQL count
+    // would be marginally faster for very large tournaments but
+    // not worth the maintainability hit here.)
     const schoolCounts: Record<string, number> = {};
     tournament.registrations.forEach((r) => {
       const school = r.competitor.schoolDojang || 'Unknown';
