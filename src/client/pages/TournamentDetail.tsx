@@ -76,6 +76,14 @@ interface Registration {
   checkedIn: boolean;
   ageAtTournament: number | null;
   competitor: Competitor;
+  // Optional — populated when the server enriches the
+  // registration with the parent contact fields (used by the
+  // Broadcast Email modal to count and address recipients).
+  // The /api/tournaments/:id/registrations endpoint returns
+  // these for director+; the public list views omit them.
+  parentEmail?: string | null;
+  parentName?: string | null;
+  parentPhone?: string | null;
 }
 
 function formatStatus(status: string): string {
@@ -100,6 +108,7 @@ function formatStatus(status: string): string {
 export default function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
@@ -234,6 +243,7 @@ export default function TournamentDetail() {
     onError: (e: Error) => alert(e.message || 'Clone failed'),
   });
   const handleClone = () => {
+    if (!tournament) return;
     if (confirm(`Clone "${tournament.name}" as a new draft tournament? Copies age groups, weight classes, fee note, and division settings. You'll be sent to its Settings page to pick a date.`)) {
       cloneMutation.mutate();
     }

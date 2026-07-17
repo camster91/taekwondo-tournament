@@ -27,12 +27,16 @@ function daysAgo(iso: string) {
 }
 
 export default function Trash() {
-  const { token } = useAuth();
+  useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [purgingId, setPurgingId] = useState<string | null>(null);
 
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  // Auth is via HttpOnly cookies (bowin_session) — no need to attach
+  // an Authorization header. The browser sends the cookie on
+  // same-origin requests automatically. Leaving Content-Type so
+  // the server knows it's JSON.
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['competitors', 'trash'],

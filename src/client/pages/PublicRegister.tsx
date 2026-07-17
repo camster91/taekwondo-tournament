@@ -768,8 +768,11 @@ export default function PublicRegister() {
                       // particular) fire `input` on date-picker interactions
                       // but the synthetic `change` event can be missed when
                       // the input is re-rendered mid-pick. Mirror to onInput
-                      // so the state is always updated.
-                      onInput={handleChange}
+                      // so the state is always updated. Cast to InputEvent
+                      // handler because the underlying DOM event is the same
+                      // shape (target.value) and React's strict event-type
+                      // discrimination rejects the cross-type assignment.
+                      onInput={handleChange as unknown as React.FormEventHandler<HTMLInputElement>}
                       required
                       aria-required="true"
                       autoComplete="bday"

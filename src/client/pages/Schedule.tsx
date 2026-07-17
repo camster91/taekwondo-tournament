@@ -33,6 +33,12 @@ interface ScheduledDivision {
   startTime: string;
   endTime: string;
   estimatedDurationMinutes: number;
+  // Optional list of competitor names, populated when the
+  // /api/tournaments/:id/schedule endpoint enriches the response
+  // with division contents (used by the bracket preview to show
+  // who's actually in each division). Server may omit it for
+  // performance on large tournaments.
+  competitorNames?: string[];
 }
 
 interface ScheduleConfig {

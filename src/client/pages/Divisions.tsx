@@ -337,6 +337,25 @@ export default function Divisions() {
     },
   });
 
+  // Drag-and-drop reorder — was previously called as `reorderMutation.mutate(...)`
+  // without ever being declared, so the click handler would throw at runtime
+  // ("reorderMutation is not defined"). Now wired up to
+  // POST /api/divisions/tournament/:id/reorder with the full ordered
+  // id list so the server can persist displayOrder globally.
+  const reorderMutation = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      const res = await fetch(`/api/divisions/tournament/${id}/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ orderedIds }),
+      });
+      if (!res.ok) throw new Error('Failed to reorder divisions');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+    },
+  });
+
   const closeAssignModal = () => {
     setAssignTarget(null);
     setSelectedCompetitorIds(new Set());

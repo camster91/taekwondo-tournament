@@ -161,7 +161,11 @@ export function buildResultsWorkbook(
   filteredDivisions.forEach((division) => {
     const placements = new Map<string, string | number>();
     division.bracket?.placements?.forEach((p) => {
-      placements.set(p.registration.competitorId, getPlaceName(p.place));
+      // Key by competitor.id (not registration.competitorId which
+      // doesn't exist — the registration nested object has a
+      // competitor sub-object whose id matches the competitorIds
+      // collected in the seenCompetitorIds set below).
+      placements.set(p.registration.competitor.id, getPlaceName(p.place));
     });
     // We need the registrations list — currently we only have placements.
     // Use bracket.matches to find all competitors who were in this

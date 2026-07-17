@@ -75,7 +75,7 @@ export default function AcceptInvite() {
       // but causes a full app re-mount (flicker, loss of unsaved
       // form state, and broken SPA back-button). The login() helper
       // sets both the React state and localStorage in one go.
-      login({ token: data.token, user: data.user });
+      login({ user: data.user });
 
       // Redirect to dashboard
       navigate('/', { replace: true });

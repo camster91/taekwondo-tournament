@@ -36,6 +36,7 @@ interface Tournament {
   location: string | null;
   status: string;
   settings: string | null;
+  publicSlug?: string | null;
 }
 
 interface AgeGroup {
@@ -568,7 +569,7 @@ export default function TournamentSettings() {
           setRevokeOpen(false);
           revokeSlugMutation.mutate();
         }}
-        onCancel={() => setRevokeOpen(false)}
+        onClose={() => setRevokeOpen(false)}
       />
 
       {/* Age Groups */}
