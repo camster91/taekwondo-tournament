@@ -7,6 +7,7 @@ import { importFromExcel } from '../services/excel-import.js';
 import { generateImportTemplate, getDefaultColumnMapping } from '../services/excel-template.js';
 import { autoDetectMapping } from '../services/excel-auto-map.js';
 import { validateRequest } from '../middleware/validate.js';
+import { jsonBodyParser } from '../index.js';
 import { authenticate, requireRole, buildTournamentAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -385,15 +386,73 @@ router.delete('/:id/purge', authenticate, requireRole('admin'), async (req: Requ
 });
 
 // Import from Excel (requires authentication + admin/director role)
-router.post('/import', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const { data, columnMapping } = req.body;
+//
+// Two request shapes are accepted:
+//   1. { data: any[], columnMapping }    — client already parsed
+//      the .xlsx via xlsx.read (SheetJS in the browser). This is
+//      the original path; kept for backward compat with the
+//      existing client.
+//   2. { fileBase64: string, columnMapping, fileName? } — closes
+//      P8. The client uploads the raw file as a base64 string
+//      and lets the server parse it. Reasons to prefer this:
+//        a) Larger files don't blow the Vite proxy's 1 MB JSON
+//           limit (a 50 KB .xlsx inflates to ~70 KB JSON but
+//           a 5 MB .xlsx inflates to ~7 MB which trips the
+//           proxy's limit). With a base64 form the body
+//           parser is mounted on this route at 40 MB (per the
+//           jsonBodyParser('40mb') override in src/server/index.ts).
+//        b) Single source of truth for the parser — if we add
+//           validation rules (e.g. "max 5000 rows") we don't
+//           need to ship them in two places.
+//        c) The client can show a progress bar against the
+//           upload, not against a parse that already happened.
+const importFileSchema = z.object({
+  fileBase64: z.string().min(1),
+  columnMapping: z.record(z.string(), z.string()),
+  fileName: z.string().optional(),
+});
 
-  if (!data || !columnMapping) {
-    return res.status(400).json({ error: 'Missing data or columnMapping' });
+router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const body = req.body as { data?: any[]; columnMapping?: any; fileBase64?: string; fileName?: string };
+
+  if (!body.columnMapping) {
+    return res.status(400).json({ error: 'Missing columnMapping' });
   }
 
-  const result = await importFromExcel(prisma, data, columnMapping);
+  // Path 2: server-side xlsx parsing.
+  if (body.fileBase64) {
+    const parsed = importFileSchema.safeParse(body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid file payload', details: parsed.error.flatten() });
+    }
+    try {
+      const buffer = Buffer.from(parsed.data.fileBase64, 'base64');
+      if (buffer.length > 25 * 1024 * 1024) {
+        return res.status(413).json({ error: 'File too large (max 25MB)' });
+      }
+      // Read the workbook. The first non-empty sheet is what
+      // we import (matches the client behavior — see
+      // Competitors.tsx handleFileUpload which picks the sheet
+      // matching 'competitor' or falls back to SheetNames[0]).
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        return res.status(400).json({ error: 'Workbook has no sheets' });
+      }
+      const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+      const result = await importFromExcel(prisma, data as any[], parsed.data.columnMapping as any);
+      return res.json({ ...result, parsedServerSide: true });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Failed to parse xlsx' });
+    }
+  }
+
+  // Path 1: pre-parsed JSON (original behavior).
+  if (!body.data) {
+    return res.status(400).json({ error: 'Missing data or fileBase64' });
+  }
+  const result = await importFromExcel(prisma, body.data, body.columnMapping);
   res.json(result);
 });
 

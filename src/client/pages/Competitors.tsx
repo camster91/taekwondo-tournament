@@ -117,6 +117,14 @@ export default function Competitors() {
   const [pageLimit, setPageLimit] = useState(100);
   const [importData, setImportData] = useState<any[] | null>(null);
   const [importColumns, setImportColumns] = useState<string[]>([]);
+  // Original File handle for the parsed workbook. Kept around so
+  // the import step can re-encode it as base64 and send the raw
+  // file to the server (closes P8 — single source of truth for
+  // the xlsx parser on the server side). If null, the import
+  // falls back to the pre-parsed JSON path (kept for back-compat
+  // — old imports that uploaded a file then had the page reload
+  // before the file was held in state).
+  const [importFile, setImportFile] = useState<File | null>(null);
   const [columnMapping, setColumnMapping] = useState<ImportMapping>({
     firstName: '',
     lastName: '',
@@ -256,11 +264,21 @@ export default function Competitors() {
   const filteredCompetitors = data?.competitors;
 
   const importMutation = useMutation({
-    mutationFn: async ({ data, mapping }: { data: any[]; mapping: ImportMapping }) => {
+    mutationFn: async (
+      payload:
+        | { data: any[]; mapping: ImportMapping }
+        | { fileBase64: string; fileName?: string; mapping: ImportMapping }
+    ) => {
+      // Two request shapes — server accepts either (the
+      // server-side xlsx parser is preferred per P8, but the
+      // JSON path is kept for back-compat with old imports).
+      const body = 'fileBase64' in payload
+        ? { fileBase64: payload.fileBase64, fileName: payload.fileName, columnMapping: payload.mapping }
+        : { data: payload.data, columnMapping: payload.mapping };
       const res = await fetch('/api/competitors/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ data, columnMapping: mapping }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error('Failed to import competitors');
       return res.json();
@@ -298,6 +316,13 @@ export default function Competitors() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Hold onto the original File so the import step can
+    // re-encode it as base64 and send the raw bytes to the
+    // server (P8). The local parse below is still used for
+    // the auto-mapping preview — the user gets the column
+    // suggestion without waiting for a second round-trip.
+    setImportFile(file);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -357,9 +382,31 @@ export default function Competitors() {
     reader.readAsArrayBuffer(file);
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!importData) return;
-    importMutation.mutate({ data: importData, mapping: columnMapping });
+    // Closes P8: prefer the server-side xlsx parser when we still
+    // have the original File handle. The client re-encodes to
+    // base64 here, the server reads it with XLSX.read and runs
+    // the same importFromExcel pipeline. If the File handle is
+    // gone (e.g. user reloaded the page after uploading), fall
+    // back to the pre-parsed JSON path — slower but still works.
+    if (importFile) {
+      const fileBase64: string = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => {
+          const result = r.result as string;
+          // result is `data:<mime>;base64,<payload>` — strip the
+          // prefix so the server gets raw base64.
+          const comma = result.indexOf(',');
+          resolve(comma >= 0 ? result.slice(comma + 1) : result);
+        };
+        r.onerror = reject;
+        r.readAsDataURL(importFile);
+      });
+      importMutation.mutate({ fileBase64, fileName: importFile.name, mapping: columnMapping });
+    } else {
+      importMutation.mutate({ data: importData, mapping: columnMapping });
+    }
   };
 
   const handleDownloadTemplate = () => {
