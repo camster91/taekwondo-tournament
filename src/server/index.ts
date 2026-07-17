@@ -46,6 +46,26 @@ const prisma: PrismaClient = new Proxy({} as PrismaClient, {
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Closes D9 (env validation): without this check, a typo or missing
+// var in the deploy env file crashes the server on the first DB
+// call (or silently boots in an unsafe state if JWT_SECRET is
+// missing — it would fall back to a literal default and accept
+// any token signed with that default). Now: fail-fast at startup
+// with a clear list of which vars are missing, so an operator
+// notices before the first request lands.
+if (isProduction) {
+  const required = ['DATABASE_URL', 'JWT_SECRET'] as const;
+  const missing = required.filter((k) => !process.env[k] || process.env[k]!.length < 16);
+  if (missing.length > 0) {
+    console.error(`[startup] FATAL: required env vars missing or too short in production: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+  if (!process.env.ALLOWED_ORIGINS) {
+    console.error('[startup] FATAL: ALLOWED_ORIGINS not set in production (CORS would fail closed)');
+    process.exit(1);
+  }
+}
+
 // Trust proxy only in production (behind Coolify/Docker reverse proxy)
 if (isProduction) {
   app.set('trust proxy', 1);
