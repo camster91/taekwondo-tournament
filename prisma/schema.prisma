@@ -9,36 +9,36 @@ datasource db {
 
 // Persistent competitor registry
 model Competitor {
-  id            String   @id @default(uuid())
-  firstName     String
-  lastName      String
-  gender        String   // M or F
-  dateOfBirth   DateTime
-  belt          String   // White, Yellow, Green, Blue, Red, Black
-  beltStripe    String?  // e.g., "Single Green Stripe"
-  danRank       Int?     // 1-6 for Black Belts, null for colored belts
-  heightInches  Float?
-  weightLbs     Float?
-  schoolDojang  String?
-  specialNeeds  String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(uuid())
+  firstName    String
+  lastName     String
+  gender       String // M or F
+  dateOfBirth  DateTime
+  belt         String // White, Yellow, Green, Blue, Red, Black
+  beltStripe   String? // e.g., "Single Green Stripe"
+  danRank      Int? // 1-6 for Black Belts, null for colored belts
+  heightInches Float?
+  weightLbs    Float?
+  schoolDojang String?
+  specialNeeds String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Experience tracking for fair matching
   beltPromotionDate DateTime? // When they earned current belt
-  yearsTraining     Float?    // Total years of martial arts training
-  region            String?   // Geographic region for regional diversity
-  reachInches       Float?    // Arm reach for sparring matching
+  yearsTraining     Float? // Total years of martial arts training
+  region            String? // Geographic region for regional diversity
+  reachInches       Float? // Arm reach for sparring matching
 
   // Soft-delete: managers can accidentally delete a kid/division. We
   // keep the row in the DB for 7 days with deletedAt set, then a
   // cron could purge. The list endpoint filters these out by default;
   // ?trash=true shows them; POST /:id/restore un-sets deletedAt.
-  deletedAt         DateTime?
+  deletedAt DateTime?
 
-  registrations      Registration[]
-  competitorHistory  CompetitorHistory[]
-  ratings            CompetitorRating[]
+  registrations     Registration[]
+  competitorHistory CompetitorHistory[]
+  ratings           CompetitorRating[]
 
   @@index([lastName, firstName])
   @@index([schoolDojang])
@@ -56,16 +56,16 @@ model Tournament {
   date      DateTime
   location  String?
   status    String   @default("draft") // draft, registration, brackets, in_progress, completed
-  settings  String?  // JSON string for tournament-specific settings
+  settings  String? // JSON string for tournament-specific settings
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   organizationId   String?
   sportProfileId   String?
-  sportProfileSlug String?  @default("taekwondo")
+  sportProfileSlug String? @default("taekwondo")
 
   // Soft-delete: see Competitor.deletedAt comment
-  deletedAt        DateTime?
+  deletedAt DateTime?
 
   // Public share token for the unauthenticated scoreboard. Directors
   // see this in the Tournament Settings page; it goes into the URL for
@@ -73,18 +73,18 @@ model Tournament {
   // returns 404 — a brute-force guess of valid UUIDs is impractical.
   // Optional (NULL) means the public scoreboard link is disabled for
   // this tournament. Rotated from the UI to revoke the old link.
-  publicSlug       String?   @unique
+  publicSlug String? @unique
 
-  registrations Registration[]
-  divisions     Division[]
-  weightClasses WeightClass[]
-  userAccess    UserTournamentAccess[]
-  rules         TournamentRule[]
-  incidents     Incident[]
+  registrations       Registration[]
+  divisions           Division[]
+  weightClasses       WeightClass[]
+  userAccess          UserTournamentAccess[]
+  rules               TournamentRule[]
+  incidents           Incident[]
   competitorHistories CompetitorHistory[]
   matchupHistories    MatchupHistory[]
-  organization Organization? @relation(fields: [organizationId], references: [id])
-  sportProfile SportProfile? @relation(fields: [sportProfileId], references: [id])
+  organization        Organization?          @relation(fields: [organizationId], references: [id])
+  sportProfile        SportProfile?          @relation(fields: [sportProfileId], references: [id])
 
   // Closes P13: every list query filters on deletedAt; without
   // an index the planner may scan. The tournaments list also
@@ -100,25 +100,25 @@ model Registration {
   competitorId         String
   patterns             Boolean   @default(false)
   sparring             Boolean   @default(false)
-  weightAtRegistration Float?    // Weight at time of registration
-  ageAtTournament      Int?      // Calculated age at tournament date
+  weightAtRegistration Float? // Weight at time of registration
+  ageAtTournament      Int? // Calculated age at tournament date
   checkedIn            Boolean   @default(false)
   checkInTime          DateTime?
-  checkInWeight        Float?    // Weight at check-in (for verification)
+  checkInWeight        Float? // Weight at check-in (for verification)
   parentName           String?
   parentEmail          String?
   parentPhone          String?
   createdAt            DateTime  @default(now())
 
   // Enhanced attributes for fair matching
-  heightAtRegistration Float?    // Height at registration time
-  reachAtRegistration  Float?    // Reach at registration time
-  experienceScore      Float?    // Calculated from history
-  skillEstimate        Float?    // Estimated skill level
-  competeWithOlder     Boolean   @default(false) // Competitor/parent opt-in to compete in older age band
-  specialNeeds         String?   // Per-registration notes (separate from competitor-level field)
-  manualDivisionId     String?   // Manager override — pin to a specific Division ID
-  seeding              Int?      // Manual seeding 1..N (null = auto-seed by rating)
+  heightAtRegistration Float? // Height at registration time
+  reachAtRegistration  Float? // Reach at registration time
+  experienceScore      Float? // Calculated from history
+  skillEstimate        Float? // Estimated skill level
+  competeWithOlder     Boolean @default(false) // Competitor/parent opt-in to compete in older age band
+  specialNeeds         String? // Per-registration notes (separate from competitor-level field)
+  manualDivisionId     String? // Manager override — pin to a specific Division ID
+  seeding              Int? // Manual seeding 1..N (null = auto-seed by rating)
 
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   competitor  Competitor           @relation(fields: [competitorId], references: [id], onDelete: Cascade)
@@ -136,30 +136,30 @@ model Registration {
 
 // Auto-generated or manually created divisions/categories
 model Division {
-  id             String   @id @default(uuid())
+  id             String  @id @default(uuid())
   tournamentId   String
-  name           String   // e.g., "10-11 CB All Green Belts Males Sparring Heavy"
-  beltLevel      String   // BB or CB
-  gender         String   // M or F
-  eventType      String   // patterns or sparring
+  name           String // e.g., "10-11 CB All Green Belts Males Sparring Heavy"
+  beltLevel      String // BB or CB
+  gender         String // M or F
+  eventType      String // patterns or sparring
   ageMin         Int
   ageMax         Int
-  beltColors     String?  // JSON array: ["White", "Yellow"]
+  beltColors     String? // JSON array: ["White", "Yellow"]
   danMin         Int?
   danMax         Int?
-  weightClass    String?  // Feather, Light, Middle, Heavy
-  divisionNumber Int      @default(1) // DIV1, DIV2, DIV3
+  weightClass    String? // Feather, Light, Middle, Heavy
+  divisionNumber Int     @default(1) // DIV1, DIV2, DIV3
 
   // Soft-delete: see Competitor.deletedAt comment
   deletedAt      DateTime?
-  isSpecialNeeds Boolean  @default(false)
+  isSpecialNeeds Boolean   @default(false)
   displayOrder   Int?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   // Fairness metadata
-  bracketDifficulty Float?   // Calculated bracket difficulty score
-  matchupQuality    Float?   // Overall matchup fairness score
-  avgSkillRating    Float?   // Average skill rating of competitors
+  bracketDifficulty Float? // Calculated bracket difficulty score
+  matchupQuality    Float? // Overall matchup fairness score
+  avgSkillRating    Float? // Average skill rating of competitors
 
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   assignments DivisionAssignment[]
@@ -177,7 +177,7 @@ model DivisionAssignment {
   id             String   @id @default(uuid())
   divisionId     String
   registrationId String
-  seedPosition   Int?     // Bracket seeding
+  seedPosition   Int? // Bracket seeding
   manualOverride Boolean  @default(false) // True if manually placed
   createdAt      DateTime @default(now())
 
@@ -193,7 +193,7 @@ model DivisionAssignment {
 model Bracket {
   id         String   @id @default(uuid())
   divisionId String   @unique
-  structure  String   // JSON bracket tree structure
+  structure  String // JSON bracket tree structure
   format     String   @default("double_elim") // double_elim, single_elim, round_robin, pool_play
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -204,22 +204,22 @@ model Bracket {
 
 // Individual matches
 model Match {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   bracketId     String
   roundNumber   Int
   matchNumber   Int
-  bracketType   String   // winners, losers, finals, pool
+  bracketType   String // winners, losers, finals, pool
   competitor1Id String?
   competitor2Id String?
   winnerId      String?
   score1        String?
   score2        String?
-  status        String   @default("pending") // pending, ready, in_progress, completed, bye
+  status        String    @default("pending") // pending, ready, in_progress, completed, bye
   scheduledTime DateTime?
   ringNumber    Int?
   notes         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   bracket     Bracket       @relation(fields: [bracketId], references: [id], onDelete: Cascade)
   competitor1 Registration? @relation("Competitor1", fields: [competitor1Id], references: [id], onDelete: SetNull)
@@ -242,7 +242,7 @@ model Match {
 
 // Configurable weight classes per tournament
 model WeightClass {
-  id           String @id @default(uuid())
+  id           String  @id @default(uuid())
   tournamentId String
   name         String // Feather, Light, Middle, Heavy
   gender       String?
@@ -259,26 +259,26 @@ model WeightClass {
 
 // User authentication
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String    @id @default(uuid())
+  email        String    @unique
   passwordHash String?
   firstName    String
   lastName     String
-  role         String   @default("viewer") // admin, director, scorekeeper, viewer
-  isActive     Boolean  @default(true)
+  role         String    @default("viewer") // admin, director, scorekeeper, viewer
+  isActive     Boolean   @default(true)
   lastLogin    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   // JWT tokenVersion: bumped on logout / role change / isActive flip
   // to invalidate every outstanding token for this user at once.
   // Without this, a JWT in flight remains valid until its 7-day TTL
   // expires regardless of who owns it. Default 0 keeps the column
   // populated for existing rows after `db:push`.
-  tokenVersion Int      @default(0)
+  tokenVersion Int @default(0)
 
   // Tournament-specific permissions
-  tournamentAccess UserTournamentAccess[]
+  tournamentAccess    UserTournamentAccess[]
   organizationMembers OrganizationMember[]
 }
 
@@ -302,7 +302,7 @@ model UserTournamentAccess {
   id           String   @id @default(uuid())
   userId       String
   tournamentId String
-  role         String   // director, scorekeeper, viewer
+  role         String // director, scorekeeper, viewer
   createdAt    DateTime @default(now())
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -314,21 +314,21 @@ model UserTournamentAccess {
 
 // Track competitor performance across tournaments
 model CompetitorHistory {
-  id            String   @id @default(uuid())
-  competitorId  String
-  tournamentId  String
-  divisionId    String
-  divisionName  String   // Stored for historical reference
-  eventType     String   // patterns or sparring
-  placement     Int      // 1, 2, 3, etc.
-  matchesWon    Int      @default(0)
-  matchesLost   Int      @default(0)
-  points        Float    @default(0) // Calculated skill points
-  createdAt     DateTime @default(now())
+  id           String   @id @default(uuid())
+  competitorId String
+  tournamentId String
+  divisionId   String
+  divisionName String // Stored for historical reference
+  eventType    String // patterns or sparring
+  placement    Int // 1, 2, 3, etc.
+  matchesWon   Int      @default(0)
+  matchesLost  Int      @default(0)
+  points       Float    @default(0) // Calculated skill points
+  createdAt    DateTime @default(now())
 
   competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
   // Closes B8: orphan history rows on hard-delete of Tournament.
-  tournament    Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@index([competitorId])
   @@index([tournamentId])
@@ -339,19 +339,19 @@ model CompetitorHistory {
 // Track head-to-head matchup history
 model MatchupHistory {
   id            String   @id @default(uuid())
-  competitor1Id String   // First competitor (alphabetically by ID)
-  competitor2Id String   // Second competitor
+  competitor1Id String // First competitor (alphabetically by ID)
+  competitor2Id String // Second competitor
   tournamentId  String
   divisionId    String
   matchId       String
   winnerId      String?
-  eventType     String   // patterns or sparring
-  roundNumber   Int      // Which round the matchup occurred
-  score         String?  // Score if available
+  eventType     String // patterns or sparring
+  roundNumber   Int // Which round the matchup occurred
+  score         String? // Score if available
   createdAt     DateTime @default(now())
 
   // Closes B8: orphan history rows on hard-delete of Tournament.
-  tournament    Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@unique([competitor1Id, competitor2Id, tournamentId, matchId])
   @@index([competitor1Id])
@@ -361,14 +361,14 @@ model MatchupHistory {
 
 // Competitor skill ratings (ELO-style)
 model CompetitorRating {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   competitorId  String
-  eventType     String   // patterns or sparring
-  rating        Float    @default(1000) // Initial ELO
-  peakRating    Float    @default(1000)
-  matchesPlayed Int      @default(0)
+  eventType     String // patterns or sparring
+  rating        Float     @default(1000) // Initial ELO
+  peakRating    Float     @default(1000)
+  matchesPlayed Int       @default(0)
   lastMatchDate DateTime?
-  lastUpdated   DateTime @default(now())
+  lastUpdated   DateTime  @default(now())
 
   competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
 
@@ -401,12 +401,12 @@ model Invitation {
 model MatchAuditLog {
   id            String   @id @default(uuid())
   matchId       String
-  action        String   // update, complete, reset
-  previousState String   // JSON of previous match state
-  newState      String   // JSON of new match state
-  userId        String?  // Who made the change
-  userEmail     String?  // Email for reference
-  reason        String?  // Optional reason for change
+  action        String // update, complete, reset
+  previousState String // JSON of previous match state
+  newState      String // JSON of new match state
+  userId        String? // Who made the change
+  userEmail     String? // Email for reference
+  reason        String? // Optional reason for change
   createdAt     DateTime @default(now())
 
   @@index([matchId])
@@ -419,7 +419,7 @@ model Organization {
   name      String
   slug      String   @unique
   plan      String   @default("free") // free, starter, pro, enterprise
-  settings  String?  // JSON
+  settings  String? // JSON
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -448,42 +448,42 @@ model OrganizationMember {
 // Sport configuration profile
 model SportProfile {
   id             String   @id @default(uuid())
-  name           String   // e.g. "Taekwondo", "Karate", "Judo", "MMA", "Boxing"
-  slug           String   // e.g. "taekwondo", "karate", "judo", "mma", "boxing"
-  icon           String?  // emoji
-  eventTypes     String   // JSON array: [{id, name, hasWeightClasses, description}]
-  beltConfig     String   // JSON: {levels:[{name,abbreviation,rank,color}], hasStripes, hasDanRank, topLevelName}
-  scoringConfig  String   // JSON: {type:"points"|"decision"|"time", hasPenalties, penaltyName}
-  ageGroupConfig String?  // JSON array: [{min,max,label}]
-  isGlobal       Boolean  @default(true)  // false = org-specific
+  name           String // e.g. "Taekwondo", "Karate", "Judo", "MMA", "Boxing"
+  slug           String // e.g. "taekwondo", "karate", "judo", "mma", "boxing"
+  icon           String? // emoji
+  eventTypes     String // JSON array: [{id, name, hasWeightClasses, description}]
+  beltConfig     String // JSON: {levels:[{name,abbreviation,rank,color}], hasStripes, hasDanRank, topLevelName}
+  scoringConfig  String // JSON: {type:"points"|"decision"|"time", hasPenalties, penaltyName}
+  ageGroupConfig String? // JSON array: [{min,max,label}]
+  isGlobal       Boolean  @default(true) // false = org-specific
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  tournaments    Tournament[]
+  tournaments Tournament[]
 
   @@unique([slug])
 }
 
 // Medical/incident tracking
 model Incident {
-  id              String   @id @default(uuid())
-  tournamentId    String
-  matchId         String?
-  registrationId  String?
-  type            String   // injury, disqualification, medical, equipment, conduct
-  severity        String   // minor, moderate, serious
-  description     String
-  actionTaken     String?  // first_aid, withdrawn, continued, ambulance
-  reportedBy      String?  // userId of reporter
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String    @id @default(uuid())
+  tournamentId   String
+  matchId        String?
+  registrationId String?
+  type           String // injury, disqualification, medical, equipment, conduct
+  severity       String // minor, moderate, serious
+  description    String
+  actionTaken    String? // first_aid, withdrawn, continued, ambulance
+  reportedBy     String? // userId of reporter
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
   // Soft-delete: keeps incident reports on file (often required
   // for liability / insurance) without surfacing them in active
   // dashboards. Same pattern as Competitor / Tournament / Division.
-  deletedAt       DateTime?
+  deletedAt      DateTime?
 
   // Closes B8: orphan incident rows on hard-delete of Tournament.
-  tournament      Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@index([tournamentId])
   @@index([matchId])
@@ -495,16 +495,16 @@ model Incident {
 model TournamentRule {
   id           String   @id @default(uuid())
   tournamentId String
-  name         String   // Human-readable name: "Same-school avoidance"
-  description  String?  // Why this rule exists
-  category     String   // "bracket", "division", "weight", "seeding", "custom"
-  ruleType     String   // "same_school_avoidance", "weight_tolerance", "height_limit", "experience_grouping", "custom_constraint"
+  name         String // Human-readable name: "Same-school avoidance"
+  description  String? // Why this rule exists
+  category     String // "bracket", "division", "weight", "seeding", "custom"
+  ruleType     String // "same_school_avoidance", "weight_tolerance", "height_limit", "experience_grouping", "custom_constraint"
   enforcement  String   @default("hard") // "hard" (must comply), "soft" (warning), "info" (log only)
-  parameters   String   // JSON: rule-specific parameters
+  parameters   String // JSON: rule-specific parameters
   priority     Int      @default(50) // Higher = evaluated first (0-100)
   isActive     Boolean  @default(true)
   source       String   @default("manual") // "manual", "llm_suggested", "system_default"
-  createdBy    String?  // User ID who created/approved
+  createdBy    String? // User ID who created/approved
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -513,4 +513,22 @@ model TournamentRule {
   @@index([tournamentId])
   @@index([tournamentId, category])
   @@index([ruleType])
+}
+
+// Snapshot of tournament division state for rollback if a bracket
+// regeneration wipes data. Replaces the previous file-based
+// BACKUP_DIR/<tournamentId>.json store (closes day-2 follow-up:
+// move backupStore to DB table). One row per tournament, overwritten
+// in place — there's no audit history, just the "last known good"
+// snapshot. The delete-on-success / restore-on-failure lifecycle
+// lives in src/server/services/backup-recovery.ts.
+model BackupState {
+  tournamentId String   @id
+  // JSON-encoded TournamentBackup (see backup-recovery.ts). The
+  // service layer parses this on read; the schema doesn't try to
+  // shape the contents because the structure evolves with the
+  // division / assignment models. ~10 KB per row.
+  payload      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

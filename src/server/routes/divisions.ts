@@ -11,6 +11,7 @@ import {
   backupDivisionState,
   saveBackup,
   getBackup,
+  clearBackup,
   restoreDivisionState,
 } from '../services/backup-recovery.js';
 import {
@@ -271,7 +272,7 @@ router.post('/tournament/:tournamentId/auto-generate', authenticate, requireTour
 
   // Create backup before modifying
   const backup = await backupDivisionState(prisma, tournamentId);
-  saveBackup(backup);
+  await saveBackup(prisma, backup);
 
   // Get all registrations with competitor data
   const registrations = await prisma.registration.findMany({
@@ -526,7 +527,7 @@ router.delete('/tournament/:tournamentId/all', authenticate, requireTournamentAc
 
   // Create backup before deleting
   const backup = await backupDivisionState(prisma, tournamentId);
-  saveBackup(backup);
+  await saveBackup(prisma, backup);
 
   const result = await prisma.division.deleteMany({
     where: { tournamentId },
@@ -758,8 +759,9 @@ router.post('/:id/split', authenticate, async (req: AuthenticatedRequest, res: R
 
 // Get current backup state for a tournament (requires authentication)
 router.get('/tournament/:tournamentId/backup', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
-  const backup = getBackup(tournamentId);
+  const backup = await getBackup(prisma, tournamentId);
 
   if (!backup) {
     return res.status(404).json({
@@ -781,7 +783,7 @@ router.post('/tournament/:tournamentId/restore', authenticate, requireTournament
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
 
-  const backup = getBackup(tournamentId);
+  const backup = await getBackup(prisma, tournamentId);
 
   if (!backup) {
     return res.status(404).json({
@@ -792,6 +794,9 @@ router.post('/tournament/:tournamentId/restore', authenticate, requireTournament
   }
 
   const result = await restoreDivisionState(prisma, backup);
+  // Clear the backup after a successful restore so the next
+  // bad regeneration doesn't restore the same state again.
+  await clearBackup(prisma, tournamentId);
 
   res.json({
     ...result,

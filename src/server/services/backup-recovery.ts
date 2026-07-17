@@ -1,6 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import * as fs from 'fs';
-import * as path from 'path';
 
 /**
  * State backup for recovery purposes
@@ -168,71 +166,71 @@ export async function restoreDivisionState(
  * dropped every backup. The Restore endpoint silently returned
  * "no backup" after a redeploy, defeating the feature.
  *
- * New implementation: a JSON file on disk. Each tournament's
- * backup is at <BACKUP_DIR>/<tournamentId>.json. The dir defaults
- * to a sibling of the data dir, override with BACKUP_DIR env.
- *
- * Why file and not DB? A new `BackupState` table would be the
- * "proper" fix and is on the day-2 list. A JSON file is
- * good enough for now: the rollback path is rare, the
- * payload per backup is small (one tournament's division
- * tree, typically <10 KB), and it survives every failure
- * mode that drops in-memory state. The interface
- * (saveBackup / getBackup) is the same as the Map, so the
- * eventual DB migration is a one-line change.
+ * New implementation: a JSON column on the `BackupState` table
+ * (one row per tournament). Replaces the previous file-based
+ * BACKUP_DIR/<tournamentId>.json store (day-2 follow-up "move
+ * backupStore to DB table"). The DB-backed approach is the
+ * "proper" fix: backups now survive container restarts on any
+ * host (no filesystem persistence dependency), can be inspected
+ * via SQL, and are backed up by the same nightly DB backup
+ * that covers the rest of the data. The interface
+ * (saveBackup / getBackup) is unchanged.
  */
 
-const BACKUP_DIR = process.env.BACKUP_DIR
-  ? path.resolve(process.env.BACKUP_DIR)
-  : path.resolve(process.cwd(), 'data', 'backups');
-
-function ensureDir(): void {
-  try {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
-  } catch (err) {
-    console.error(`[backup-recovery] could not create ${BACKUP_DIR}:`, err);
-  }
-}
-
-function backupFilePath(tournamentId: string): string {
-  // Sanitize: tournamentId is a UUID in practice but guard against
-  // path traversal from a malformed value.
-  const safe = tournamentId.replace(/[^a-zA-Z0-9-]/g, '_');
-  return path.join(BACKUP_DIR, `${safe}.json`);
-}
+// BACKUP_DIR was the old file-based store's directory. The DB-backed
+// BackupState table replaces it. Kept as a comment for the day-2
+// migration history; can be deleted in a follow-up once we're sure
+// no leftover files exist on the VPS.
+//
+// const BACKUP_DIR = process.env.BACKUP_DIR
+//   ? path.resolve(process.env.BACKUP_DIR)
+//   : path.resolve(process.cwd(), 'data', 'backups');
 
 /**
- * Save backup to disk. Synchronous write so a deploy restart right
- * after the call still has the file. Cost is one ~10 KB write per
- * tournament regeneration.
+ * Save backup. Now async + DB-backed: INSERT … ON CONFLICT
+ * (tournamentId) DO UPDATE so the row is overwritten in place.
+ * One round-trip per save; the payload is a single ~10 KB column.
+ * Closes day-2 follow-up: move backupStore to DB table.
  */
-export function saveBackup(backup: TournamentBackup): void {
-  ensureDir();
+export async function saveBackup(
+  prisma: PrismaClient,
+  backup: TournamentBackup
+): Promise<void> {
   try {
-    fs.writeFileSync(
-      backupFilePath(backup.tournamentId),
-      JSON.stringify(backup),
-      { mode: 0o600 }
-    );
+    await prisma.backupState.upsert({
+      where: { tournamentId: backup.tournamentId },
+      create: {
+        tournamentId: backup.tournamentId,
+        payload: JSON.stringify(backup),
+      },
+      update: {
+        payload: JSON.stringify(backup),
+        updatedAt: new Date(),
+      },
+    });
   } catch (err) {
     console.error(`[backup-recovery] saveBackup failed for ${backup.tournamentId}:`, err);
   }
 }
 
 /**
- * Get backup from disk. Returns undefined if no backup exists OR
- * if the file is unreadable (corrupt / perms). Errors are logged
- * but never thrown — the caller's rollback flow treats "no
- * backup" the same as "corrupt backup".
+ * Get backup from the DB. Returns undefined if no backup exists
+ * OR if the payload is corrupt. Errors are logged but never
+ * thrown — the caller's rollback flow treats "no backup" the
+ * same as "corrupt backup".
  */
-export function getBackup(tournamentId: string): TournamentBackup | undefined {
+export async function getBackup(
+  prisma: PrismaClient,
+  tournamentId: string
+): Promise<TournamentBackup | undefined> {
   try {
-    const raw = fs.readFileSync(backupFilePath(tournamentId), 'utf-8');
-    return JSON.parse(raw) as TournamentBackup;
+    const row = await prisma.backupState.findUnique({
+      where: { tournamentId },
+    });
+    if (!row) return undefined;
+    return JSON.parse(row.payload) as TournamentBackup;
   } catch (err: any) {
-    if (err?.code !== 'ENOENT') {
-      console.error(`[backup-recovery] getBackup failed for ${tournamentId}:`, err);
-    }
+    console.error(`[backup-recovery] getBackup failed for ${tournamentId}:`, err);
     return undefined;
   }
 }
@@ -241,11 +239,17 @@ export function getBackup(tournamentId: string): TournamentBackup | undefined {
  * Drop a backup (used after a successful restore, so the next
  * bad regeneration doesn't restore the same state again).
  */
-export function clearBackup(tournamentId: string): void {
+export async function clearBackup(
+  prisma: PrismaClient,
+  tournamentId: string
+): Promise<void> {
   try {
-    fs.unlinkSync(backupFilePath(tournamentId));
+    await prisma.backupState.delete({
+      where: { tournamentId },
+    });
   } catch (err: any) {
-    if (err?.code !== 'ENOENT') {
+    // P2025 = "record not found" — same as ENOENT for our purposes.
+    if (err?.code !== 'P2025') {
       console.error(`[backup-recovery] clearBackup failed for ${tournamentId}:`, err);
     }
   }
