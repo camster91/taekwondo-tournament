@@ -1,9 +1,11 @@
 // Pure Excel multi-sheet builder extracted from Results.tsx so it can be unit
 // tested. The browser-only XLSX.writeFile() call stays in Results.tsx (it
 // triggers a download via the FileSaver API); this module returns a workbook
-// object the caller can write.
+// object the caller can write. The xlsx library itself is loaded via dynamic
+// import inside the builder so Vite splits it out of the route chunks and the
+// browser only downloads it when an export is actually requested.
 
-import * as XLSX from 'xlsx';
+import type * as XLSX from 'xlsx';
 import {
   type DivisionLike,
   type SchoolStats,
@@ -72,10 +74,11 @@ export function buildAgeBreakdown(filteredDivisions: DivisionLike[]): AgeBreakdo
   });
 }
 
-export function buildResultsWorkbook(
+export async function buildResultsWorkbook(
   schoolStats: SchoolStats[],
   filteredDivisions: DivisionLike[],
-): XLSX.WorkBook {
+): Promise<XLSX.WorkBook> {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
 
   const schoolData: (string | number)[][] = [

@@ -272,8 +272,8 @@ describe('buildAgeBreakdown', () => {
 });
 
 describe('buildResultsWorkbook', () => {
-  it('produces a workbook with the six expected sheets', () => {
-    const wb = buildResultsWorkbook(sampleSchools, sampleDivisions);
+  it('produces a workbook with the six expected sheets', async () => {
+    const wb = await buildResultsWorkbook(sampleSchools, sampleDivisions);
     // 6 sheets now: standings, divisions, belts, ages, roster, matches.
     // Closes M9 from the UI audit — added Competitor Roster + Match Results.
     expect(wb.SheetNames).toEqual([
@@ -286,8 +286,8 @@ describe('buildResultsWorkbook', () => {
     ]);
   });
 
-  it('populates the School Standings sheet with header + at least one data row', () => {
-    const wb = buildResultsWorkbook(sampleSchools, sampleDivisions);
+  it('populates the School Standings sheet with header + at least one data row', async () => {
+    const wb = await buildResultsWorkbook(sampleSchools, sampleDivisions);
     const sheet = wb.Sheets['School Standings'];
     expect(sheet).toBeDefined();
     // A1 is the header
@@ -297,8 +297,8 @@ describe('buildResultsWorkbook', () => {
     expect(sheet['B2']?.v).toBe('Dragon Taekwondo');
   });
 
-  it('populates the By Division sheet with placement rows', () => {
-    const wb = buildResultsWorkbook(sampleSchools, sampleDivisions);
+  it('populates the By Division sheet with placement rows', async () => {
+    const wb = await buildResultsWorkbook(sampleSchools, sampleDivisions);
     const sheet = wb.Sheets['By Division'];
     expect(sheet).toBeDefined();
     expect(sheet['A1']?.v).toBe('Division');
