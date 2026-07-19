@@ -13,7 +13,6 @@ import {
   Filter,
   MoreHorizontal,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
@@ -325,7 +324,10 @@ export default function Competitors() {
     setImportFile(file);
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
+      // xlsx is dynamically imported so its chunk only downloads when a
+      // file is actually selected for import preview.
+      const XLSX = await import('xlsx');
       const data = new Uint8Array(event.target?.result as ArrayBuffer);
       const workbook = XLSX.read(data, { type: 'array' });
 
@@ -434,6 +436,8 @@ export default function Competitors() {
       ]),
     ];
 
+    // Dynamic import: the ~490KB xlsx chunk downloads only on export.
+    const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     XLSX.utils.book_append_sheet(wb, ws, 'Competitors');

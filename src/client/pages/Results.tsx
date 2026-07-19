@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
 import {
   Trophy,
   Medal,
@@ -175,10 +174,12 @@ export default function Results() {
   };
 
   // Export full results to Excel with multiple sheets. The workbook assembly
-  // is in the pure builder; here we just trigger the browser download.
-  const exportExcel = () => {
+  // is in the pure builder; here we just trigger the browser download. xlsx
+  // is dynamically imported so its ~490KB chunk only downloads on click.
+  const exportExcel = async () => {
     const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
-    const wb = buildResultsWorkbook(schoolStats, filteredDivisions ?? []);
+    const XLSX = await import('xlsx');
+    const wb = await buildResultsWorkbook(schoolStats, filteredDivisions ?? []);
     XLSX.writeFile(wb, `tournament_results${eventSuffix}.xlsx`);
     setShowExportMenu(false);
   };
