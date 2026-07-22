@@ -604,6 +604,20 @@ export function resolveNextMatchSlots(
  *
  * Returns the list of (matchId, field) pairs to null.
  */
+/**
+ * Given the undo target (which slots downstream matches WOULD have
+ * been filled) and the actual downstream DB state, decide which
+ * slots to null. Only null the slot whose current value matches the
+ * undone match's competitor — this prevents over-resetting a slot
+ * that was filled by a different upstream match.
+ *
+ * Returns the list of (matchId, field) pairs to null.
+ *
+ * Skips targets whose downstream candidate is missing from the
+ * DB — this can happen mid-tournament if a match was deleted or
+ * if the bracket structure references a match that hasn't been
+ * created yet.
+ */
 export function pickSlotsToNull(
   undoneCompetitorIds: string[],
   downstreamCandidates: NextMatchCandidate[],
@@ -623,6 +637,174 @@ export function pickSlotsToNull(
     }
   }
   return out;
+}
+
+// ─── Match status state machine ──────────────────────────────────────
+
+export type MatchStatus = 'pending' | 'ready' | 'in_progress' | 'completed' | 'bye';
+
+/**
+ * Match state machine — allowed status transitions for a single
+ * match. Pure function: caller passes the current state and the
+ * requested new state and gets back whether the transition is valid.
+ *
+ * The map captures the bracket-aware rules:
+ *   - `bye` is terminal-ish (you can only go back to `pending`)
+ *     because BYE matches are auto-completed by `handleByeMatches`.
+ *   - `completed` can revert to `pending` (only when `winnerId` is
+ *     being cleared; caller must check separately) or `in_progress`
+ *     (re-open for a scoring correction).
+ *   - `ready → pending` is allowed because a no-show / withdrawal
+ *     can pull a competitor out of the bracket after they're set.
+ *   - `in_progress → pending` is allowed for the same reason.
+ *   - `pending → bye` is allowed when one slot is empty (the match
+ *     was waiting for a competitor who never showed; the bracket
+ *     auto-advances the present one).
+ */
+const STATUS_TRANSITIONS: Record<MatchStatus, MatchStatus[]> = {
+  pending: ['ready', 'in_progress', 'completed', 'bye'],
+  ready: ['in_progress', 'completed', 'pending'],
+  in_progress: ['completed', 'pending'],
+  completed: ['pending', 'in_progress'],
+  bye: ['pending'],
+};
+
+/**
+ * Pure check: is the status transition `from` -> `to` valid?
+ * Returns `{ ok: true }` when valid, `{ ok: false, allowed: [...] }`
+ * when invalid (caller can use `allowed` to surface a useful error).
+ */
+export function isValidStatusTransition(
+  from: MatchStatus,
+  to: MatchStatus
+): { ok: true } | { ok: false; allowed: MatchStatus[] } {
+  if (from === to) {
+    // Self-transitions are no-ops; treat them as valid so the
+    // route doesn't error on a no-op PATCH.
+    return { ok: true };
+  }
+  const allowed = STATUS_TRANSITIONS[from] ?? [];
+  return allowed.includes(to) ? { ok: true } : { ok: false, allowed };
+}
+
+/**
+ * Result of validating a full match-status PATCH (status + winnerId +
+ * competitor slot state). Pure function — caller is responsible for
+ * loading the match row and slot state, then applying the resulting
+ * `update` data.
+ */
+export type StatusValidationResult =
+  | { ok: true }
+  | {
+      ok: false;
+      code: 'invalid_transition' | 'missing_winner' | 'stale_winner' | 'inconsistent_slot_state';
+      message: string;
+      allowed?: MatchStatus[];
+    };
+
+interface ValidateStatusInput {
+  from: MatchStatus;
+  to: MatchStatus;
+  /** The `winnerId` being set in this PATCH (or undefined if not changing). */
+  winnerId?: string | null;
+  /** The `winnerId` currently on the match (before this PATCH). */
+  currentWinnerId: string | null;
+  /** Whether both competitor slots are filled right now. */
+  bothSlotsFilled: boolean;
+  /** Whether at least one competitor slot is filled. */
+  someSlotFilled: boolean;
+  /**
+   * Whether the caller's request is trying to clear winnerId. We
+   * infer this when `winnerId === null` is explicitly passed; if
+   * `winnerId` is undefined we treat it as "no change".
+   */
+  clearingWinnerId: boolean;
+}
+
+export function validateMatchStatusTransition(input: ValidateStatusInput): StatusValidationResult {
+  const { from, to, winnerId, currentWinnerId, bothSlotsFilled, someSlotFilled, clearingWinnerId } = input;
+
+  // 1. Transition validity.
+  const transition = isValidStatusTransition(from, to);
+  if (!transition.ok) {
+    return {
+      ok: false,
+      code: 'invalid_transition',
+      message: `Invalid status transition: ${from} -> ${to}. Allowed: ${transition.allowed.join(', ') || '(none)'}`,
+      allowed: transition.allowed,
+    };
+  }
+
+  // 2. Completing requires a winnerId, either pre-existing or in
+  // this PATCH.
+  if (to === 'completed') {
+    const finalWinnerId = winnerId !== undefined ? winnerId : currentWinnerId;
+    if (!finalWinnerId) {
+      return {
+        ok: false,
+        code: 'missing_winner',
+        message: 'Cannot mark match completed without a winnerId',
+      };
+    }
+  }
+
+  // 3. Going back to `pending` from `completed` must clear the winner.
+  if (to === 'pending' && from === 'completed') {
+    const finalWinnerId = winnerId !== undefined ? winnerId : currentWinnerId;
+    if (finalWinnerId !== null) {
+      return {
+        ok: false,
+        code: 'stale_winner',
+        message: 'Cannot revert a completed match to pending without clearing winnerId (set winnerId: null)',
+      };
+    }
+  }
+
+  // 4. Slot state must be consistent with the target status.
+  if (to === 'in_progress') {
+    // A match in progress must have both competitors present.
+    if (!bothSlotsFilled) {
+      return {
+        ok: false,
+        code: 'inconsistent_slot_state',
+        message: 'Cannot mark match in_progress with one or both competitor slots empty',
+      };
+    }
+  }
+  if (to === 'completed') {
+    // Completed matches must have both slots (a BYE is auto-completed
+    // via `handleByeMatches` with one slot; explicit PATCH must
+    // have both). The check below is intentionally strict — if you
+    // want to advance a BYE, use `handleByeMatches`.
+    if (!bothSlotsFilled) {
+      return {
+        ok: false,
+        code: 'inconsistent_slot_state',
+        message: 'Cannot mark match completed with one or both competitor slots empty (use handleByeMatches for BYEs)',
+      };
+    }
+  }
+  if (to === 'bye') {
+    // BYE = exactly one competitor (the other never showed).
+    if (!someSlotFilled || bothSlotsFilled) {
+      return {
+        ok: false,
+        code: 'inconsistent_slot_state',
+        message: 'BYE status requires exactly one competitor slot filled (the other is a no-show)',
+      };
+    }
+  }
+
+  // 5. `clearingWinnerId` to a non-pending/in_progress state is suspicious.
+  // If the caller is clearing winnerId but the transition isn't a
+  // revert (e.g., pending -> ready with cleared winnerId), accept it
+  // but flag — the winnerId will simply be null on the next read.
+
+  // Silence unused-var warning for clearingWinnerId; we keep it in
+  // the API surface for future validation rules.
+  void clearingWinnerId;
+
+  return { ok: true };
 }
 
 /**

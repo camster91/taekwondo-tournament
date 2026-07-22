@@ -3,7 +3,7 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { generateBracket, generateSingleElimination, type BracketStructure } from '../services/bracket-generator.js';
 import { generateRoundRobin, generatePoolPlay } from '../services/bracket-formats.js';
-import { advanceWinner, handleByeMatches, getBracketPlacements, resolveNextMatchSlots, pickSlotsToNull } from '../services/match-advancement.js';
+import { advanceWinner, handleByeMatches, getBracketPlacements, resolveNextMatchSlots, pickSlotsToNull, validateMatchStatusTransition } from '../services/match-advancement.js';
 import {
   generateBracketPDF,
   generateBatchBracketsPDF,
@@ -292,41 +292,19 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
   //   bye       -> pending (only if both competitors now set)
   //
   // Plus: status=completed requires winnerId; status=pending
-  // requires winnerId to be cleared (or already null).
+  // requires winnerId to be cleared if the match was completed.
   if (status !== undefined) {
-    const from = currentMatch.status;
-    const to = status;
-    const transitions: Record<string, string[]> = {
-      pending: ['ready', 'in_progress', 'completed', 'bye'],
-      ready: ['in_progress', 'completed', 'pending'],
-      in_progress: ['completed', 'pending'],
-      completed: ['pending', 'in_progress'],
-      bye: ['pending'],
-    };
-    const allowed = transitions[from] ?? [];
-    if (!allowed.includes(to)) {
-      return res.status(400).json({
-        error: `Invalid status transition: ${from} -> ${to}. Allowed: ${allowed.join(', ') || '(none)'}`,
-      });
-    }
-    // Cross-field guards tied to the transition.
-    if (to === 'completed') {
-      if (winnerId === undefined ? !currentMatch.winnerId : !winnerId) {
-        return res.status(400).json({
-          error: 'Cannot mark match completed without a winnerId',
-        });
-      }
-    }
-    if (to === 'pending' && from === 'completed') {
-      // Going back to pending must clear the winner (otherwise the
-      // bracket state machine is in an inconsistent state — the
-      // match has a winner but is no longer "completed").
-      const cleared = winnerId === undefined ? null : winnerId;
-      if (cleared !== null) {
-        return res.status(400).json({
-          error: 'Cannot revert a completed match to pending without clearing winnerId (set winnerId: null)',
-        });
-      }
+    const validation = validateMatchStatusTransition({
+      from: currentMatch.status as 'pending' | 'ready' | 'in_progress' | 'completed' | 'bye',
+      to: status,
+      winnerId,
+      currentWinnerId: currentMatch.winnerId,
+      bothSlotsFilled: !!(currentMatch.competitor1Id && currentMatch.competitor2Id),
+      someSlotFilled: !!(currentMatch.competitor1Id || currentMatch.competitor2Id),
+      clearingWinnerId: winnerId === null,
+    });
+    if (!validation.ok) {
+      return res.status(400).json({ error: validation.message });
     }
   }
 
