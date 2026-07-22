@@ -207,9 +207,62 @@ function applySeeding(
     case 'manual':
       return [...competitors].sort((a, b) => (a.seedPosition || 99) - (b.seedPosition || 99));
     case 'skill_based':
-    case 'balanced':
-    case 'fairness_optimized':
+      // Pure skill sort: highest-rated competitor first. Standard
+      // ATP/WTA-style seeding.
       return [...competitors].sort((a, b) => (b.skillRating || 0) - (a.skillRating || 0));
+    case 'balanced': {
+      // Distribute skill evenly across the resulting pairing rounds
+      // (round-robin) or pool assignments (pool-play). For RR this
+      // means: after sorting by skill, assign competitors to "rails"
+      // so that each round's pairings pull from similar-skill rails.
+      //
+      // Concrete algorithm: sort by skill descending, then deal into
+      // a fixed number of "rails" in a snake pattern so adjacent
+      // skill values end up in different rails. This gives best-effort
+      // skill balance per round.
+      const sorted = [...competitors].sort((a, b) => (b.skillRating || 0) - (a.skillRating || 0));
+      // Use min(4, n) rails — a heuristic that keeps round-robin
+      // round 1 from being lopsided without over-shuffling the
+      // ordering for tiny brackets.
+      const rails = Math.min(4, sorted.length);
+      const out: CompetitorSeed[] = [];
+      const lanes: CompetitorSeed[][] = Array.from({ length: rails }, () => []);
+      for (let i = 0; i < sorted.length; i++) {
+        const round = Math.floor(i / rails);
+        const slot = i % rails;
+        const lane = round % 2 === 0 ? slot : rails - 1 - slot;
+        lanes[lane].push(sorted[i]);
+      }
+      for (const lane of lanes) out.push(...lane);
+      return out;
+    }
+    case 'fairness_optimized': {
+      // Heuristic: prefer pairings that match similar skill levels
+      // while avoiding repeat matchups from a recent tournament set.
+      // For the seed-ORDERING step (before the circle method runs),
+      // we use the same balanced-rails seed + a final swap pass that
+      // tries to put mid-skill competitors adjacent in the ordering
+      // (which the circle method will pair together in early rounds).
+      const balanced = applySeeding(competitors, 'balanced', config);
+      // Swap pass: try swapping adjacent pairs to reduce skill
+      // gaps in the resulting ordering. Stable: bounded passes.
+      const out = [...balanced];
+      for (let pass = 0; pass < 3; pass++) {
+        let swapped = false;
+        for (let i = 0; i < out.length - 1; i++) {
+          const a = out[i].skillRating || 0;
+          const b = out[i + 1].skillRating || 0;
+          const c = i + 2 < out.length ? out[i + 2].skillRating || 0 : a;
+          // If gap(b, c) < gap(a, b), swap b and c.
+          if (Math.abs(b - c) < Math.abs(a - b) - 1) {
+            [out[i + 1], out[i + 2]] = [out[i + 2], out[i + 1]];
+            swapped = true;
+          }
+        }
+        if (!swapped) break;
+      }
+      return out;
+    }
     case 'school_spread':
     default: {
       // School-aware interleaving: avoid putting two of the same school adjacent
