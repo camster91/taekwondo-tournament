@@ -94,6 +94,54 @@ interface PreviewResult {
   warnings: string[];
 }
 
+/**
+ * Shapes used only inside the assignment modal. Minimal — the modal
+ * doesn't need every field on these entities, just the ones the UI
+ * reads. Keeping them local avoids rippling server-side schema
+ * changes into this view.
+ */
+interface AssignmentRow {
+  id: string;
+  registrationId: string;
+  registration: {
+    competitor: {
+      firstName: string;
+      lastName: string;
+      belt?: string | null;
+      schoolDojang?: string | null;
+    };
+  };
+}
+
+interface AssignmentDivision {
+  assignments: AssignmentRow[];
+}
+
+interface RegistrationRow {
+  id: string;
+  // The server returns `patterns` and `sparring` as optional booleans
+  // based on what the registration opted into. Indexed by eventType
+  // (which is a string at this layer; the modal narrows via the
+  // index signature below).
+  patterns?: boolean;
+  sparring?: boolean;
+  competitor: {
+    firstName: string;
+    lastName: string;
+    belt?: string | null;
+    schoolDojang?: string | null;
+    weightLbs?: number | null;
+  };
+}
+
+/**
+ * Narrower view used by the eligibility check — only the event-type
+ * booleans matter here. We declare an index signature so the modal
+ * can do `row[assignTarget.eventType]` without re-narrowing at every
+ * call site.
+ */
+type EventFlagRow = RegistrationRow & Record<string, boolean | undefined>;
+
 export default function Divisions() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -243,7 +291,7 @@ export default function Divisions() {
   const [selectedCompetitorIds, setSelectedCompetitorIds] = useState<Set<string>>(new Set());
 
   // Full division (with assignments) — fetched fresh when modal opens
-  const { data: assignDivision, isLoading: assignDivisionLoading, refetch: refetchAssignDivision } = useQuery<any>({
+  const { data: assignDivision, isLoading: assignDivisionLoading, refetch: refetchAssignDivision } = useQuery<AssignmentDivision>({
     queryKey: ['division', assignTarget?.id],
     queryFn: async () => {
       const res = await fetch(`/api/divisions/${assignTarget?.id}`, { headers: getAuthHeaders() });
@@ -254,7 +302,7 @@ export default function Divisions() {
   });
 
   // All tournament registrations (for the unassigned list)
-  const { data: allRegistrations } = useQuery<any[]>({
+  const { data: allRegistrations } = useQuery<RegistrationRow[]>({
     queryKey: ['tournament-registrations', id],
     queryFn: async () => {
       const res = await fetch(`/api/tournaments/${id}/registrations`, { headers: getAuthHeaders() });
@@ -266,24 +314,26 @@ export default function Divisions() {
 
   // Currently-assigned registration IDs for the open division
   const assignedRegistrationIds = useMemo(
-    () => new Set((assignDivision?.assignments ?? []).map((a: any) => a.registrationId)),
+    () => new Set((assignDivision?.assignments ?? []).map((a) => a.registrationId)),
     [assignDivision]
   );
 
   // Registrations that match the division's event type (so we don't
-  // show a patterns-only competitor in a sparring-only division)
+  // show a patterns-only competitor in a sparring-only division).
+  // The cast through `EventFlagRow` lets the index signature handle
+  // `r[eventType]` without an `as any`.
   const eligibleRegistrations = useMemo(() => {
     if (!allRegistrations || !assignTarget) return [];
     const eventType = assignTarget.eventType;
-    return allRegistrations.filter((r: any) => r[eventType] === true);
+    return allRegistrations.filter((r) => (r as EventFlagRow)[eventType] === true);
   }, [allRegistrations, assignTarget]);
 
   // Eligible + unassigned + search filter
   const availableRegistrations = useMemo(() => {
     const q = assignmentSearch.trim().toLowerCase();
     return eligibleRegistrations
-      .filter((r: any) => !assignedRegistrationIds.has(r.id))
-      .filter((r: any) => {
+      .filter((r) => !assignedRegistrationIds.has(r.id))
+      .filter((r) => {
         if (!q) return true;
         const c = r.competitor;
         return (
@@ -960,33 +1010,12 @@ export default function Divisions() {
               ) : (assignDivision?.assignments ?? []).length === 0 ? (
                 <p className="text-sm text-gray-600 dark:text-gray-400">No competitors assigned yet.</p>
               ) : (
-                <div className="space-y-1 max-h-96 overflow-y-auto">
-                  {assignDivision.assignments.map((a: any) => {
-                    const c = a.registration?.competitor;
-                    if (!c) return null;
-                    return (
-                      <div key={a.id} className="flex items-center justify-between gap-2 py-1.5 px-2 hover:bg-gray-50 dark:hover:bg-gray-800/40 rounded">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                            {c.firstName} {c.lastName}
-                          </p>
-                          <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                            {c.belt}{c.schoolDojang && ` · ${c.schoolDojang}`}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => unassignMutation.mutate(a.id)}
-                          disabled={unassignMutation.isPending}
-                          className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 p-1"
-                          title="Remove from division"
-                          aria-label={`Remove ${c.firstName} ${c.lastName}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
+                // `assignDivision` is narrowed from the `length === 0`
+                // check above: if the length is > 0, the object is
+                // defined. Re-declare as a non-null const inside the
+                // JSX expression so downstream `.assignments` doesn't
+                // need its own guard.
+                <AssignedList division={assignDivision as AssignmentDivision} unassignMutation={unassignMutation} />
               )}
             </div>
 
@@ -1011,7 +1040,7 @@ export default function Divisions() {
                 </p>
               ) : (
                 <div className="space-y-1 max-h-80 overflow-y-auto">
-                  {availableRegistrations.map((r: any) => {
+                  {availableRegistrations.map((r) => {
                     const c = r.competitor;
                     const checked = selectedCompetitorIds.has(r.id);
                     return (
@@ -1059,6 +1088,50 @@ export default function Divisions() {
 // clear-all) by the server-side backup-recovery service. The restore
 // endpoint will reject if the backup structure no longer matches the
 // current schema.
+/**
+ * Renders the list of currently-assigned competitors inside the
+ * assignment modal. Pulled out of the inline ternary so the
+ * surrounding JSX doesn't need an IIFE just to satisfy TS's
+ * control-flow narrowing on `assignDivision`.
+ */
+function AssignedList({
+  division,
+  unassignMutation,
+}: {
+  division: AssignmentDivision;
+  unassignMutation: { mutate: (id: string) => void; isPending: boolean };
+}) {
+  return (
+    <div className="space-y-1 max-h-96 overflow-y-auto">
+      {division.assignments.map((a) => {
+        const c = a.registration?.competitor;
+        if (!c) return null;
+        return (
+          <div key={a.id} className="flex items-center justify-between gap-2 py-1.5 px-2 hover:bg-gray-50 dark:hover:bg-gray-800/40 rounded">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                {c.firstName} {c.lastName}
+              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                {c.belt}{c.schoolDojang && ` · ${c.schoolDojang}`}
+              </p>
+            </div>
+            <button
+              onClick={() => unassignMutation.mutate(a.id)}
+              disabled={unassignMutation.isPending}
+              className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 p-1"
+              title="Remove from division"
+              aria-label={`Remove ${c.firstName} ${c.lastName}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function BackupRestoreCard({ tournamentId, hasDivisions }: { tournamentId: string; hasDivisions: boolean }) {
   const { addToast } = useToast();
   const queryClient = useQueryClient();

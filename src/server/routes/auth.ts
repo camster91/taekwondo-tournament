@@ -933,9 +933,9 @@ if (demoLoginEnabled) {
         expiresIn: DEMO_TTL_SECONDS,
         message: 'Demo session active. Changes you make are visible to all demo visitors.',
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Demo login error:', err);
-      res.status(500).json({ error: err.message || 'Demo login failed' });
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Demo login failed' });
     }
   });
 }

@@ -586,7 +586,23 @@ function CustomAgeBands({ value, onChange }: { value: AgeGroup[]; onChange: (v: 
   );
 }
 
-function EventRuleEditor({ title, rule, onChange }: { title: string; rule: EventRules['patterns'] | EventRules['sparring']; onChange: (next: any) => void }) {
+// Each editor only edits one of the two rule shapes, so make this
+// generic. T is the rule type the editor is configured for; the parent
+// page wires up `patterns` editors with T = PatternsRule and `sparring`
+// editors with T = SparringRule. The previous `(next: any)` swallowed
+// the fact that swapping types was unsafe.
+type PatternRule = EventRules['patterns'];
+type SparringRule = EventRules['sparring'];
+
+function EventRuleEditor<T extends PatternRule | SparringRule>({
+  title,
+  rule,
+  onChange,
+}: {
+  title: string;
+  rule: T;
+  onChange: (next: T) => void;
+}) {
   return (
     <div className="border border-gray-200 rounded-lg p-3 mb-3">
       <div className="flex items-center gap-2 mb-2">
@@ -599,13 +615,26 @@ function EventRuleEditor({ title, rule, onChange }: { title: string; rule: Event
       </div>
       <div className="text-xs text-gray-600 mb-2">Group competitors by:</div>
       <div className="flex flex-wrap gap-2 mb-2">
-        {['tier','gender','age','weight','belt'].map(g => {
-          const active = (rule.groupBy as string[]).includes(g);
+        {(['tier','gender','age','weight','belt'] as const).map(g => {
+          const active = (rule.groupBy as readonly string[]).includes(g);
           return (
             <button
               key={g}
               type="button"
-              onClick={() => onChange({ ...rule, groupBy: active ? rule.groupBy.filter((x: string) => x !== g) : [...rule.groupBy, g] })}
+              onClick={() => {
+                // The literal `as const` on the source array means `g` is
+                // typed as `'tier' | 'gender' | 'age' | 'weight' | 'belt'`.
+                // We narrow `rule.groupBy` to that same union for the
+                // purposes of `includes` / `filter` so this stays strict
+                // even though `rule.groupBy` is generic over T.
+                const allowed = ['tier','gender','age','weight','belt'] as const;
+                type G = (typeof allowed)[number];
+                const groupBy = rule.groupBy as G[];
+                const next = active
+                  ? (groupBy as readonly G[]).filter((x) => x !== g)
+                  : [...groupBy, g as G];
+                onChange({ ...rule, groupBy: next } as T);
+              }}
               className={`text-xs px-2 py-1 rounded border ${active ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-300'}`}
             >
               {g}

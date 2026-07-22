@@ -79,8 +79,8 @@ export default function AcceptInvite() {
 
       // Redirect to dashboard
       navigate('/', { replace: true });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Invalid or expired invite');
     } finally {
       setIsSubmitting(false);
     }

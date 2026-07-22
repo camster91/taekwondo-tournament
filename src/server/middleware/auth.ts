@@ -76,8 +76,12 @@ export function createToken(
   payload: Omit<JWTPayload, 'tokenVersion'> & { tokenVersion: number },
   expiresIn: string | number = JWT_EXPIRES_IN
 ): string {
+  // jsonwebtoken's `SignOptions['expiresIn']` is the buggy `string | undefined`
+  // union (the actual runtime accepts `number` too via ms()). Our public
+  // signature already promises `string | number`, so the cast stays local
+  // and only at the jsonwebtoken boundary — callers don't see `any`.
   const options: jwt.SignOptions = {
-    expiresIn: expiresIn as any,
+    expiresIn: expiresIn as unknown as jwt.SignOptions['expiresIn'],
     algorithm: 'HS256',
     issuer: 'bowin',
     audience: 'bowin',

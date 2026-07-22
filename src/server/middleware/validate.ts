@@ -36,9 +36,11 @@ export function validateRequest<T extends z.ZodTypeAny>(
       return;
     }
 
-    // Replace the source data with the validated and transformed data
+    // Replace the source data with the validated and transformed data.
+    // Augment the Express Request type so `req.body` carries the
+    // schema-derived type instead of `any` for downstream handlers.
     if (source === 'body') {
-      (req as any).body = result.data;
+      (req as Request & { body: z.infer<T> }).body = result.data;
     }
     next();
   };
@@ -78,7 +80,7 @@ export function validateMultiple(schemas: {
             });
           });
         } else if (source === 'body') {
-          (req as any).body = result.data;
+          (req as Request & { body: z.infer<typeof schema> }).body = result.data;
         }
       }
     }

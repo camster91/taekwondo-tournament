@@ -1,6 +1,16 @@
 import { PrismaClient } from '@prisma/client';
 import { normalizeBelt } from '../../shared/constants/belts.js';
 
+/**
+ * A single cell from an uploaded spreadsheet. SheetJS returns the
+ * JS-native value: string, number, boolean, Date, or null/undefined.
+ * `unknown` is the honest input type for parser helpers — they each
+ * narrow internally (Number for numerics, `String(value).trim()` for
+ * strings) and return the typed value the rest of the pipeline wants.
+ */
+export type ExcelCellValue = string | number | boolean | Date | null | undefined;
+export type ExcelRow = Record<string, ExcelCellValue>;
+
 export interface ColumnMapping {
   firstName: string;
   lastName: string;
@@ -27,11 +37,31 @@ export interface ImportResult {
 
 export async function importFromExcel(
   prisma: PrismaClient,
-  rows: any[],
-  mapping: ColumnMapping
+  rows: ExcelRow[],
+  // Caller-provided mapping. `firstName` / `lastName` / `gender` /
+  // `belt` / `weight` are required; everything else is optional
+  // because not every upload carries a DOB column or a school column.
+  // We narrow the required keys up front so the loop body doesn't
+  // have to deal with `string | undefined` indexing.
+  mapping: Partial<ColumnMapping>
 ): Promise<ImportResult> {
   if (rows.length > 5000) {
     throw new Error('Import limited to 5000 rows');
+  }
+
+  // Required-field guard. Throwing here keeps the existing per-row
+  // error reporting downstream (`result.errors.push(...)`) untouched —
+  // a missing required mapping is a hard failure for the whole import,
+  // not a per-row error.
+  const firstNameCol = mapping.firstName;
+  const lastNameCol = mapping.lastName;
+  const genderCol = mapping.gender;
+  const beltCol = mapping.belt;
+  const weightCol = mapping.weight;
+  if (!firstNameCol || !lastNameCol || !genderCol || !beltCol || !weightCol) {
+    throw new Error(
+      'Mapping is missing required columns: firstName, lastName, gender, belt, weight'
+    );
   }
 
   const result: ImportResult = {
@@ -47,9 +77,12 @@ export async function importFromExcel(
       const rowNum = i + 2; // Account for header row
 
       try {
-        // Extract and validate required fields
-        let firstName = String(row[mapping.firstName] || '').trim();
-        let lastName = String(row[mapping.lastName] || '').trim();
+        // Extract and validate required fields. The required-column
+        // check at the top of the function narrowed these from
+        // `string | undefined` to plain `string`, so direct indexing
+        // is safe.
+        let firstName = String(row[firstNameCol] || '').trim();
+        let lastName = String(row[lastNameCol] || '').trim();
 
         // Handle combined "Name" column (Newton's .xlsm format)
         if ((!firstName || !lastName) && mapping.name) {
@@ -72,7 +105,7 @@ export async function importFromExcel(
         }
 
         // Parse gender
-        const genderRaw = String(row[mapping.gender] || '').toUpperCase().trim();
+        const genderRaw = String(row[genderCol] || '').toUpperCase().trim();
         const gender = genderRaw.startsWith('M') ? 'M' : genderRaw.startsWith('F') ? 'F' : null;
 
         if (!gender) {
@@ -103,7 +136,7 @@ export async function importFromExcel(
         }
 
         // Parse belt
-        const beltRaw = String(row[mapping.belt] || '').trim();
+        const beltRaw = String(row[beltCol] || '').trim();
         const belt = normalizeBelt(beltRaw);
 
         if (!belt) {
@@ -115,7 +148,7 @@ export async function importFromExcel(
         // Parse optional fields
         const danRank = mapping.danRank ? parseDanRank(row[mapping.danRank]) : null;
         const heightInches = mapping.height ? parseHeight(row[mapping.height]) : null;
-        const weightLbs = parseWeight(row[mapping.weight]);
+        const weightLbs = parseWeight(row[weightCol]);
         const schoolDojang = mapping.school ? String(row[mapping.school] || '').trim() || null : null;
         const specialNeeds = mapping.specialNeeds ? String(row[mapping.specialNeeds] || '').trim() || null : null;
 
@@ -164,8 +197,9 @@ export async function importFromExcel(
           });
           result.imported++;
         }
-      } catch (error: any) {
-        result.errors.push({ row: rowNum, message: error.message });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        result.errors.push({ row: rowNum, message });
         result.skipped++;
       }
     }
@@ -174,8 +208,8 @@ export async function importFromExcel(
   return result;
 }
 
-function parseDate(value: any): Date | null {
-  if (!value) return null;
+function parseDate(value: ExcelCellValue): Date | null {
+  if (value === null || value === undefined || value === '') return null;
 
   // Handle Excel serial date number
   if (typeof value === 'number') {
@@ -185,12 +219,12 @@ function parseDate(value: any): Date | null {
   }
 
   // Handle string date
-  const date = new Date(value);
+  const date = new Date(String(value));
   return isNaN(date.getTime()) ? null : date;
 }
 
-function parseDanRank(value: any): number | null {
-  if (!value) return null;
+function parseDanRank(value: ExcelCellValue): number | null {
+  if (value === null || value === undefined || value === '') return null;
 
   const str = String(value).toLowerCase().trim();
 
@@ -204,7 +238,7 @@ function parseDanRank(value: any): number | null {
   return null;
 }
 
-function parseHeight(value: any): number | null {
+function parseHeight(value: ExcelCellValue): number | null {
   if (!value) return null;
 
   const str = String(value).trim();
@@ -238,7 +272,7 @@ function parseHeight(value: any): number | null {
   return null;
 }
 
-function parseWeight(value: any): number | null {
+function parseWeight(value: ExcelCellValue): number | null {
   if (!value) return null;
 
   const str = String(value).trim();

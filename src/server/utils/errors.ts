@@ -38,10 +38,22 @@ export enum ErrorCode {
   INTERNAL_ERROR = 'INTERNAL_ERROR',
 }
 
+/**
+ * Shape of an individual entry in `details`. Most call sites pass
+ * Zod issues (with `field` + `message`) or Excel-import row errors
+ * (with `row` + `message`); the union keeps both honest while
+ * preserving `unknown[]` for callers that legitimately pass something
+ * the API serializes through unchanged.
+ */
+export type ApiErrorDetail =
+  | { field: string; message: string }
+  | { row: number; message: string }
+  | Record<string, unknown>;
+
 export interface ApiError {
   error: string;           // Human-readable message
   code: ErrorCode;         // Machine-readable code
-  details?: any[];         // Additional details (validation errors, etc.)
+  details?: ApiErrorDetail[]; // Additional details (validation errors, etc.)
   recoverable: boolean;    // Can the user fix this?
   suggestion?: string;     // What should the user try?
   statusCode: number;      // HTTP status code
@@ -55,7 +67,7 @@ export class AppError extends Error {
   public statusCode: number;
   public recoverable: boolean;
   public suggestion?: string;
-  public details?: any[];
+  public details?: ApiErrorDetail[];
 
   constructor(
     message: string,
@@ -64,7 +76,7 @@ export class AppError extends Error {
     options: {
       recoverable?: boolean;
       suggestion?: string;
-      details?: any[];
+      details?: ApiErrorDetail[];
     } = {}
   ) {
     super(message);
@@ -182,7 +194,7 @@ export const Errors = {
       { recoverable: true }
     ),
 
-  validationFailed: (details: any[]) =>
+  validationFailed: (details: ApiErrorDetail[]) =>
     new AppError(
       'Validation failed',
       ErrorCode.VALIDATION_ERROR,
@@ -223,12 +235,18 @@ export const Errors = {
 };
 
 /**
- * Wrap async route handlers to catch errors
+ * Wrap async route handlers to catch errors. The handlers receive
+ * fully-typed Express request/response/next; only the outer wrapper
+ * widens to the catch-all `unknown` return type that `Promise.catch`
+ * expects.
  */
-export function asyncHandler(
-  fn: (req: any, res: any, next: any) => Promise<any>
+export function asyncHandler<
+  Req extends import('express-serve-static-core').Request = import('express-serve-static-core').Request,
+  Res extends import('express-serve-static-core').Response = import('express-serve-static-core').Response,
+>(
+  fn: (req: Req, res: Res, next: import('express-serve-static-core').NextFunction) => Promise<unknown>
 ) {
-  return (req: any, res: any, next: any) => {
+  return (req: Req, res: Res, next: import('express-serve-static-core').NextFunction): void => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 }

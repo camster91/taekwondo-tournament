@@ -301,7 +301,22 @@ async function createFullBracket(
   const r = (i: number) => regMap[startIdx + i]; // shorthand
 
   const winnersR1: [number, number][] = [[0,7],[3,4],[1,6],[2,5]]; // 1v8, 4v5, 2v7, 3v6
-  const matchData: any[] = [];
+  /**
+   * Shape of each pre-seeded bracket match in `matchData`. The fields
+   * below cover every property actually read in the seeding loop:
+   * the next-match link numbers are only set on R1 winners, and
+   * competitor slots are filled in as the simulation progresses.
+   */
+  interface SeededMatch {
+    matchNumber: number;
+    round: number;
+    bracketType: 'winners' | 'losers' | 'finals';
+    competitor1Id: string | null;
+    competitor2Id: string | null;
+    nextWinnerMatch?: number;
+    nextLoserMatch?: number;
+  }
+  const matchData: SeededMatch[] = [];
   let matchNum = 1;
 
   // Winners R1 (matches 1-4)

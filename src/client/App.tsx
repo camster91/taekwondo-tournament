@@ -23,6 +23,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   HelpCircle,
+  type LucideIcon,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -96,7 +97,7 @@ function classNames(...classes: (string | boolean | undefined | null)[]): string
 }
 
 function NavItem({ item, active, onClick, collapsed, indent = false }: {
-  item: { name: string; href?: string; to?: string; icon: any; pathSuffix?: string };
+  item: { name: string; href?: string; to?: string; icon: LucideIcon; pathSuffix?: string };
   active: boolean;
   onClick?: () => void;
   collapsed?: boolean;

@@ -45,10 +45,22 @@ export default function MatchTimer({
 
     try {
       if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        // `webkitAudioContext` is a Safari-prefixed fallback. Declare
+        // it locally as `AudioContext | undefined` rather than casting
+        // `window` to `any` — the cast never leaves the assignment.
+        const Ctor =
+          (window as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext ??
+          (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (Ctor) {
+          audioContextRef.current = new Ctor();
+        }
       }
 
       const ctx = audioContextRef.current;
+      // No-op when the browser doesn't expose AudioContext (rare —
+      // mostly older Safari with the prefix removed). The previous
+      // `any` swallow hid a runtime TypeError in that case.
+      if (!ctx) return;
       const oscillator = ctx.createOscillator();
       const gainNode = ctx.createGain();
 

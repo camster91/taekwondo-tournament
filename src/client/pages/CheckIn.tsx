@@ -89,7 +89,7 @@ export default function CheckIn() {
       const res = await fetch(`/api/tournaments/${tournamentId}/registrations`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to fetch registrations');
       const data = await res.json();
-      return data.map((r: any) => ({
+      return data.map((r: { checkedIn?: boolean; [key: string]: unknown }) => ({
         ...r,
         checkedIn: r.checkedIn || false,
         checkInTime: r.checkInTime || null,
@@ -289,7 +289,7 @@ export default function CheckIn() {
         <div className="flex gap-2 overflow-x-auto pb-1 flex-wrap">
           <Select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
+            onChange={(e) => setFilterStatus(e.target.value as 'all' | 'checked' | 'unchecked')}
             className="text-sm"
           >
             <option value="all">All Status</option>
@@ -299,7 +299,7 @@ export default function CheckIn() {
 
           <Select
             value={filterEvent}
-            onChange={(e) => setFilterEvent(e.target.value as any)}
+            onChange={(e) => setFilterEvent(e.target.value as 'all' | 'patterns' | 'sparring')}
             className="text-sm"
           >
             <option value="all">All Events</option>
