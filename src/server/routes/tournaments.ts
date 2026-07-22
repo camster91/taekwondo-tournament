@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
-import { generateSchedule } from '../services/schedule-generator.js';
+import { generateSchedule, validateScheduleConfig, DEFAULT_CONFIG, type ScheduleConfig } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
 import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
 // requireRole stays in use for POST / (create new tournament) — there's
@@ -713,12 +713,21 @@ router.put('/:id/weight-classes', authenticate, requireTournamentAccess('directo
 // Generate tournament schedule (requires authentication)
 router.post('/:id/schedule', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const config = req.body.config || {};
+  const configOverrides = req.body.config || {};
 
   try {
-    const schedule = await generateSchedule(prisma, getParam(req.params.id), config);
+    // Resolve the merged config so we can validate it before handing
+    // it off. The service also validates internally; this gives us
+    // an early, clear 400 before any DB calls.
+    const mergedConfig: ScheduleConfig = { ...DEFAULT_CONFIG, ...configOverrides };
+    validateScheduleConfig(mergedConfig);
+
+    const schedule = await generateSchedule(prisma, getParam(req.params.id), configOverrides);
     res.json(schedule);
   } catch (error: unknown) {
+    // Validation errors get a 400; everything else (DB errors, etc.)
+    // gets a 400 too. The error message is surfaced verbatim — it's
+    // either a user-supplied config problem or a server-side issue.
     res.status(400).json({ error: error instanceof Error ? error.message : 'Schedule generation failed' });
   }
 });

@@ -23,6 +23,15 @@ import {
   type BracketPositions,
 } from './match-advancement.js';
 import type { BracketStructure } from './bracket-generator.js';
+import {
+  timeToMinutes,
+  minutesToTime,
+  validateScheduleConfig,
+  estimateDivisionDuration,
+  slotsOverlap,
+  DEFAULT_CONFIG,
+  type ScheduleConfig,
+} from './schedule-generator.js';
 
 // ─── helpers ──────────────────────────────────────────────────────────
 
@@ -296,7 +305,191 @@ describe('isBracketCompletePure', () => {
   });
 });
 
-// ─── resolveNextMatchSlots / pickSlotsToNull ──────────────────────────
+/**
+ * Regression tests for the schedule generator's pure helpers.
+ *
+ * The schedule generator has 304 lines and was previously untested at
+ * the unit level (only e2e). PR #107 extracted the time helpers,
+ * duration estimator, config validator, and overlap detector as
+ * exported pure functions so they could be tested directly. Tests
+ * below pin the contract that callers (the route + the service
+ * internals) depend on.
+ */
+
+describe('timeToMinutes / minutesToTime round-trip', () => {
+  it('round-trips all valid hour/minute combos', () => {
+    for (const h of [0, 1, 9, 12, 23]) {
+      for (const m of [0, 1, 30, 59]) {
+        const time = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        expect(minutesToTime(timeToMinutes(time))).toBe(time);
+      }
+    }
+  });
+
+  it('accepts single-digit hours (9:30)', () => {
+    expect(timeToMinutes('9:30')).toBe(570);
+  });
+
+  it('regression: throws on empty string (was: returned NaN, silently broke schedule)', () => {
+    expect(() => timeToMinutes('')).toThrow(/Invalid time format/);
+  });
+
+  it('regression: throws on bare integer (was: returned NaN)', () => {
+    expect(() => timeToMinutes('25')).toThrow(/Invalid time format/);
+  });
+
+  it('regression: throws on out-of-range minutes (was: silently accepted)', () => {
+    expect(() => timeToMinutes('9:60')).toThrow(/Invalid time format/);
+    expect(() => timeToMinutes('9:99')).toThrow(/Invalid time format/);
+  });
+
+  it('regression: throws on out-of-range hours (was: silently accepted)', () => {
+    expect(() => timeToMinutes('24:00')).toThrow(/Invalid time format/);
+    expect(() => timeToMinutes('99:00')).toThrow(/Invalid time format/);
+  });
+
+  it('regression: minutesToTime throws on NaN / negative (was: produced "NaN:NaN")', () => {
+    expect(() => minutesToTime(Number.NaN)).toThrow(/Invalid minute value/);
+    expect(() => minutesToTime(-1)).toThrow(/Invalid minute value/);
+    expect(() => minutesToTime(Infinity)).toThrow(/Invalid minute value/);
+  });
+
+  it('handles 24h values up to 23:59', () => {
+    expect(timeToMinutes('23:59')).toBe(23 * 60 + 59);
+  });
+});
+
+describe('validateScheduleConfig', () => {
+  const base: ScheduleConfig = { ...DEFAULT_CONFIG };
+
+  it('accepts the default config', () => {
+    expect(() => validateScheduleConfig(base)).not.toThrow();
+  });
+
+  it('rejects negative ring count', () => {
+    expect(() => validateScheduleConfig({ ...base, ringCount: -1 })).toThrow(/ringCount must be a positive integer/);
+  });
+
+  it('rejects zero ring count', () => {
+    expect(() => validateScheduleConfig({ ...base, ringCount: 0 })).toThrow(/ringCount must be a positive integer/);
+  });
+
+  it('rejects non-integer ring count', () => {
+    expect(() => validateScheduleConfig({ ...base, ringCount: 4.5 })).toThrow(/ringCount must be a positive integer/);
+  });
+
+  it('rejects ring count > 100 (OOM guard)', () => {
+    expect(() => validateScheduleConfig({ ...base, ringCount: 1000 })).toThrow(/ringCount must be <= 100/);
+  });
+
+  it('rejects malformed startTime', () => {
+    expect(() => validateScheduleConfig({ ...base, startTime: 'garbage' })).toThrow(/Invalid time format/);
+  });
+
+  it('rejects malformed endTime', () => {
+    expect(() => validateScheduleConfig({ ...base, endTime: '25:00' })).toThrow(/Invalid time format/);
+  });
+
+  it('rejects endTime <= startTime (was: silently accepted)', () => {
+    expect(() => validateScheduleConfig({ ...base, startTime: '17:00', endTime: '09:00' })).toThrow(/endTime.*must be after/);
+    expect(() => validateScheduleConfig({ ...base, startTime: '09:00', endTime: '09:00' })).toThrow(/endTime.*must be after/);
+  });
+
+  it('rejects negative or zero match duration', () => {
+    expect(() => validateScheduleConfig({
+      ...base,
+      matchDurationMinutes: { patterns: 0, sparring: 5 },
+    })).toThrow(/matchDurationMinutes\.patterns must be a positive number/);
+    expect(() => validateScheduleConfig({
+      ...base,
+      matchDurationMinutes: { patterns: 3, sparring: -1 },
+    })).toThrow(/matchDurationMinutes\.sparring must be a positive number/);
+  });
+
+  it('rejects negative break', () => {
+    expect(() => validateScheduleConfig({ ...base, breakBetweenDivisions: -1 })).toThrow(/breakBetweenDivisions must be a non-negative/);
+  });
+
+  it('accepts zero break (back-to-back divisions)', () => {
+    expect(() => validateScheduleConfig({ ...base, breakBetweenDivisions: 0 })).not.toThrow();
+  });
+});
+
+describe('estimateDivisionDuration', () => {
+  const config: ScheduleConfig = {
+    ...DEFAULT_CONFIG,
+    matchDurationMinutes: { patterns: 3, sparring: 5 },
+  };
+
+  it('returns within [10, 90] for empty/small/large competitor counts', () => {
+    for (const n of [0, 1, 2, 4, 8, 16, 32, 100]) {
+      const d = estimateDivisionDuration(n, 'sparring', config);
+      expect(d).toBeGreaterThanOrEqual(10);
+      expect(d).toBeLessThanOrEqual(90);
+    }
+  });
+
+  it('uses patterns duration for patterns events', () => {
+    const d = estimateDivisionDuration(8, 'patterns', config);
+    // 8*1.5 = 12 matches * 3 min = 36 min
+    expect(d).toBe(36);
+  });
+
+  it('uses sparring duration for sparring events', () => {
+    const d = estimateDivisionDuration(8, 'sparring', config);
+    // 8*1.5 = 12 matches * 5 min = 60 min
+    expect(d).toBe(60);
+  });
+
+  it('falls through to sparring for unknown event types (regression: was the original behavior)', () => {
+    const d = estimateDivisionDuration(8, 'weird-event-type', config);
+    expect(d).toBe(60); // sparring
+  });
+
+  it('applies 10-minute minimum', () => {
+    expect(estimateDivisionDuration(0, 'sparring', config)).toBe(10);
+    expect(estimateDivisionDuration(1, 'sparring', config)).toBe(10);
+  });
+
+  it('applies 90-minute ceiling (regression: known — see PR description)', () => {
+    // 100 competitors → 150 estimated matches → 750 min → capped at 90.
+    const d = estimateDivisionDuration(100, 'sparring', config);
+    expect(d).toBe(90);
+  });
+});
+
+describe('slotsOverlap (double-booking detection)', () => {
+  it('detects forward overlap', () => {
+    // a = 540-600 (09:00-10:00), b = 570-630 (09:30-10:30)
+    expect(slotsOverlap({ start: 540, end: 600 }, { start: 570, end: 630 })).toBe(true);
+  });
+
+  it('detects reverse overlap', () => {
+    expect(slotsOverlap({ start: 570, end: 630 }, { start: 540, end: 600 })).toBe(true);
+  });
+
+  it('detects identical slots', () => {
+    expect(slotsOverlap({ start: 540, end: 600 }, { start: 540, end: 600 })).toBe(true);
+  });
+
+  it('detects one-contains-the-other', () => {
+    expect(slotsOverlap({ start: 540, end: 600 }, { start: 555, end: 575 })).toBe(true);
+  });
+
+  it('does NOT flag back-to-back (b starts when a ends)', () => {
+    // Convention: a kid finishing patterns at 10:00 can start sparring at 10:00.
+    expect(slotsOverlap({ start: 540, end: 600 }, { start: 600, end: 660 })).toBe(false);
+  });
+
+  it('does NOT flag disjoint slots', () => {
+    expect(slotsOverlap({ start: 540, end: 600 }, { start: 700, end: 760 })).toBe(false);
+  });
+
+  it('does NOT flag touching-at-start slots (b starts at a.end - 1)', () => {
+    // Minute-level adjacency: a ends at 10:00, b starts at 09:59.
+    expect(slotsOverlap({ start: 540, end: 600 }, { start: 599, end: 659 })).toBe(true);
+  });
+});
 
 describe('resolveNextMatchSlots — undo target resolution', () => {
   // Use a hand-built 8-person DE structure that mirrors what the
