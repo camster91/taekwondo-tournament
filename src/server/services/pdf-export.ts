@@ -40,6 +40,17 @@ export interface BracketPDFOptions {
   division: DivisionInfo;
   matches: BracketMatch[];
   showResults?: boolean;
+  /**
+   * Named positions from the bracket structure. Used by `drawFinals`
+   * to label the grand finals + reset match correctly across bracket
+   * sizes. The 8-person DE has GF at match 14 / reset at 15, but N=4
+   * has GF at match 5 / no reset, and N=16 has GF at match 30 / reset
+   * at 31. Without this, only 8-person brackets got labelled.
+   */
+  positions?: {
+    grandFinals?: number | null;
+    reset?: number | null;
+  };
 }
 
 const PAGE_WIDTH = 612; // Letter size in points
@@ -51,7 +62,7 @@ const CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN;
  * Generates a PDF for a single bracket
  */
 export function generateBracketPDF(options: BracketPDFOptions): jsPDF {
-  const { tournament, division, matches, showResults = false } = options;
+  const { tournament, division, matches, showResults = false, positions } = options;
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'pt',
@@ -95,7 +106,7 @@ export function generateBracketPDF(options: BracketPDFOptions): jsPDF {
   drawLosersBracket(doc, losersMatches, 400, bracketStartY, 250, bracketHeight, showResults);
 
   // Draw finals on right
-  drawFinals(doc, finalsMatches, 680, bracketStartY + bracketHeight / 3, showResults);
+  drawFinals(doc, finalsMatches, 680, bracketStartY + bracketHeight / 3, showResults, positions);
 
   // Footer
   doc.setFontSize(8);
@@ -244,7 +255,8 @@ function drawFinals(
   matches: BracketMatch[],
   x: number,
   y: number,
-  showResults: boolean
+  showResults: boolean,
+  positions?: { grandFinals?: number | null; reset?: number | null }
 ): void {
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
@@ -254,8 +266,14 @@ function drawFinals(
   const matchHeight = 45;
 
   matches.forEach((match, i) => {
-    const label = match.matchNumber === 14 ? 'Grand Finals' :
-                  match.matchNumber === 15 ? 'Reset (if needed)' : '';
+    // Label the grand finals + reset by their actual match numbers
+    // (passed in via positions), not hardcoded 14/15. Falls back to
+    // the historical 8-person defaults when positions aren't supplied
+    // (matches the same legacy-bracket fallback in match-advancement).
+    const grandFinalsMatch = positions?.grandFinals ?? 14;
+    const resetMatchNumber = positions?.reset ?? 15;
+    const label = match.matchNumber === grandFinalsMatch ? 'Grand Finals' :
+                  match.matchNumber === resetMatchNumber ? 'Reset (if needed)' : '';
 
     doc.setFontSize(8);
     doc.setFont('helvetica', 'italic');
@@ -955,7 +973,7 @@ export function generateBatchBracketsPDF(
 
     drawWinnersBracket(doc, winnersMatches, margin, bracketStartY, 350, bracketHeight, showResults);
     drawLosersBracket(doc, losersMatches, 400, bracketStartY, 250, bracketHeight, showResults);
-    drawFinals(doc, finalsMatches, 680, bracketStartY + bracketHeight / 3, showResults);
+    drawFinals(doc, finalsMatches, 680, bracketStartY + bracketHeight / 3, showResults, undefined);
   }
 
   return doc;
