@@ -16,8 +16,11 @@ import { describe, it, expect } from 'vitest';
 import {
   resolvePlacements,
   isBracketCompletePure,
+  resolveNextMatchSlots,
+  pickSlotsToNull,
   type BracketPositions,
 } from './match-advancement.js';
+import type { BracketStructure } from './bracket-generator.js';
 
 // ─── helpers ──────────────────────────────────────────────────────────
 
@@ -288,5 +291,172 @@ describe('isBracketCompletePure', () => {
       { matchNumber: 15, status: 'pending' },
     ];
     expect(isBracketCompletePure(matches, positions)).toBe(true);
+  });
+});
+
+// ─── resolveNextMatchSlots / pickSlotsToNull ──────────────────────────
+
+describe('resolveNextMatchSlots — undo target resolution', () => {
+  // Use a hand-built 8-person DE structure that mirrors what the
+  // generator produces. We don't import generateBracket here to
+  // keep the test fast and free of Prisma-adjacent deps.
+  const eightPersonDE: BracketStructure = {
+    winners: [
+      { matchNumber: 1, round: 1, competitor1Id: 'r1', competitor2Id: 'r8', nextWinnerMatch: 5, nextLoserMatch: 8 },
+      { matchNumber: 2, round: 1, competitor1Id: 'r4', competitor2Id: 'r5', nextWinnerMatch: 5, nextLoserMatch: 8 },
+      { matchNumber: 3, round: 1, competitor1Id: 'r2', competitor2Id: 'r7', nextWinnerMatch: 6, nextLoserMatch: 9 },
+      { matchNumber: 4, round: 1, competitor1Id: 'r3', competitor2Id: 'r6', nextWinnerMatch: 6, nextLoserMatch: 9 },
+      { matchNumber: 5, round: 2, competitor1Id: null, competitor2Id: null, nextWinnerMatch: 7, nextLoserMatch: 10 },
+      { matchNumber: 6, round: 2, competitor1Id: null, competitor2Id: null, nextWinnerMatch: 7, nextLoserMatch: 11 },
+      { matchNumber: 7, round: 3, competitor1Id: null, competitor2Id: null, nextWinnerMatch: 14, nextLoserMatch: 13 },
+    ],
+    losers: [
+      { matchNumber: 8, round: 1, competitor1Id: null, competitor2Id: null, nextWinnerMatch: 10 },
+      { matchNumber: 9, round: 1, competitor1Id: null, competitor2Id: null, nextWinnerMatch: 11 },
+      { matchNumber: 10, round: 2, competitor1Id: null, competitor2Id: null, nextWinnerMatch: 12 },
+      { matchNumber: 11, round: 2, competitor1Id: null, competitor2Id: null, nextWinnerMatch: 12 },
+      { matchNumber: 12, round: 3, competitor1Id: null, competitor2Id: null, nextWinnerMatch: 13 },
+      { matchNumber: 13, round: 4, competitor1Id: null, competitor2Id: null, nextWinnerMatch: 14 },
+    ],
+    finals: [
+      { matchNumber: 14, round: 4, competitor1Id: null, competitor2Id: null },
+      { matchNumber: 15, round: 5, competitor1Id: null, competitor2Id: null },
+    ],
+    competitorCount: 8,
+    positions: { winnersFinal: 7, losersFinal: 13, grandFinals: 14, reset: 15 },
+  };
+
+  it('returns both slots of nextWinnerMatch + nextLoserMatch for an R1 winners match', () => {
+    const targets = resolveNextMatchSlots(
+      { matchNumber: 1, bracketType: 'winners' },
+      eightPersonDE
+    );
+    // nextWinnerMatch is M5 (slot 1, then 2 if filled).
+    // nextLoserMatch is M8 (slot 1, then 2 if filled).
+    expect(targets).toEqual([
+      { matchNumber: 5, bracketType: 'winners', slot: 'competitor1' },
+      { matchNumber: 5, bracketType: 'winners', slot: 'competitor2' },
+      { matchNumber: 8, bracketType: 'losers', slot: 'competitor1' },
+      { matchNumber: 8, bracketType: 'losers', slot: 'competitor2' },
+    ]);
+  });
+
+  it('returns nextWinnerMatch only for losers matches (no nextLoserMatch there)', () => {
+    const targets = resolveNextMatchSlots(
+      { matchNumber: 8, bracketType: 'losers' },
+      eightPersonDE
+    );
+    // M8 nextWinnerMatch = M10. No nextLoserMatch.
+    expect(targets).toEqual([
+      { matchNumber: 10, bracketType: 'losers', slot: 'competitor1' },
+      { matchNumber: 10, bracketType: 'losers', slot: 'competitor2' },
+    ]);
+  });
+
+  it('returns empty for the grand final (no next links)', () => {
+    expect(resolveNextMatchSlots(
+      { matchNumber: 14, bracketType: 'finals' },
+      eightPersonDE
+    )).toEqual([]);
+  });
+
+  it('returns empty when structure is missing', () => {
+    expect(resolveNextMatchSlots(
+      { matchNumber: 1, bracketType: 'winners' },
+      null
+    )).toEqual([]);
+    expect(resolveNextMatchSlots(
+      { matchNumber: 1, bracketType: 'winners' },
+      undefined
+    )).toEqual([]);
+  });
+
+  it('regression: undoing R1 M1 finds M5, not M7 (regression of the matchNumber: 1 heuristic)', () => {
+    // The previous code looked for "roundNumber+1, matchNumber: 1" and
+    // found the WB final (M7, round 3, matchNumber 1). Wrong — M7 is
+    // two rounds away. The real next match for M1 is M5.
+    const targets = resolveNextMatchSlots(
+      { matchNumber: 1, bracketType: 'winners' },
+      eightPersonDE
+    );
+    expect(targets.find((t) => t.matchNumber === 7)).toBeUndefined();
+    expect(targets.some((t) => t.matchNumber === 5)).toBe(true);
+  });
+});
+
+describe('pickSlotsToNull — undo slot selection', () => {
+  it('nulls only the slot whose current value matches the undone competitor', () => {
+    // M3's winner ("r2") is in M6 slot 1. M4's winner ("r3") is in M6 slot 2.
+    // Undoing M3 should null M6 slot 1, not slot 2.
+    const undoneCompetitorIds = ['r2'];
+    const downstream = [
+      { matchNumber: 6, bracketType: 'winners' as const, competitor1Id: 'r2', competitor2Id: 'r3' },
+    ];
+    const targets = [
+      { matchNumber: 6, bracketType: 'winners' as const, slot: 'competitor1' as const },
+      { matchNumber: 6, bracketType: 'winners' as const, slot: 'competitor2' as const },
+    ];
+    const result = pickSlotsToNull(undoneCompetitorIds, downstream, targets);
+    expect(result).toEqual([
+      { matchNumber: 6, bracketType: 'winners', field: 'competitor1Id' },
+    ]);
+  });
+
+  it('leaves both slots alone when the downstream competitor IDs do not match the undone match', () => {
+    // Both M6 slots were filled by M3+M4. Undoing M3 with competitor
+    // set ['r1'] (no match) → don't touch either slot.
+    const result = pickSlotsToNull(
+      ['r1'],
+      [
+        { matchNumber: 6, bracketType: 'winners' as const, competitor1Id: 'r2', competitor2Id: 'r3' },
+      ],
+      [
+        { matchNumber: 6, bracketType: 'winners' as const, slot: 'competitor1' as const },
+        { matchNumber: 6, bracketType: 'winners' as const, slot: 'competitor2' as const },
+      ]
+    );
+    expect(result).toEqual([]);
+  });
+
+  it('handles multi-target: undoing M1 nulls M5 + M8 slots that match', () => {
+    // M1 winner ("r1") advanced to M5. M1 loser ("r8") advanced to M8.
+    // Undoing M1 with both competitor IDs should null both slots.
+    const result = pickSlotsToNull(
+      ['r1', 'r8'],
+      [
+        { matchNumber: 5, bracketType: 'winners' as const, competitor1Id: 'r1', competitor2Id: 'r4' },
+        { matchNumber: 8, bracketType: 'losers' as const, competitor1Id: 'r8', competitor2Id: null },
+      ],
+      [
+        { matchNumber: 5, bracketType: 'winners' as const, slot: 'competitor1' as const },
+        { matchNumber: 5, bracketType: 'winners' as const, slot: 'competitor2' as const },
+        { matchNumber: 8, bracketType: 'losers' as const, slot: 'competitor1' as const },
+        { matchNumber: 8, bracketType: 'losers' as const, slot: 'competitor2' as const },
+      ]
+    );
+    expect(result).toEqual([
+      { matchNumber: 5, bracketType: 'winners', field: 'competitor1Id' },
+      { matchNumber: 8, bracketType: 'losers', field: 'competitor1Id' },
+    ]);
+  });
+
+  it('returns empty when undoneCompetitorIds is empty', () => {
+    expect(pickSlotsToNull([], [], [])).toEqual([]);
+  });
+
+  it('skips targets whose downstream candidate is missing', () => {
+    // Target references M6 but only M5 exists — defensive against
+    // partial bracket state.
+    const result = pickSlotsToNull(
+      ['r1'],
+      [{ matchNumber: 5, bracketType: 'winners' as const, competitor1Id: 'r1', competitor2Id: null }],
+      [
+        { matchNumber: 5, bracketType: 'winners' as const, slot: 'competitor1' as const },
+        { matchNumber: 6, bracketType: 'winners' as const, slot: 'competitor1' as const },
+      ]
+    );
+    expect(result).toEqual([
+      { matchNumber: 5, bracketType: 'winners', field: 'competitor1Id' },
+    ]);
   });
 });
