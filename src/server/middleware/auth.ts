@@ -213,7 +213,19 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
   // Fast path: cache hit. Skips the DB round-trip.
   const cached = cacheGet(payload.userId);
   if (cached) {
-    if (!cached.isActive || cached.tokenVersion !== payload.tokenVersion) {
+    if (!cached.isActive) {
+      cacheInvalidate(payload.userId);
+      return res.status(401).json({ error: 'User not found or inactive' });
+    }
+    // Reject tokens whose embedded tokenVersion no longer matches
+    // the cached user's tokenVersion (triggered by logout/role
+    // change/isActive flip). Tokens issued before tokenVersion
+    // existed (i.e. payload.tokenVersion === undefined) are also
+    // rejected — those are legacy tokens from before the version
+    // mechanism shipped. Forcing a re-login is acceptable: the
+    // alternative (silently accepting pre-versioning tokens
+    // forever) defeats the entire invalidation scheme.
+    if (cached.tokenVersion !== (payload.tokenVersion ?? -1)) {
       cacheInvalidate(payload.userId);
       return res.status(401).json({ error: 'Session invalidated' });
     }
@@ -242,7 +254,14 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
       // logout (bump), role change, or isActive flip. Without this
       // check, a leaked token would remain valid for the full 7-day
       // TTL.
-      if (typeof payload.tokenVersion === 'number' && payload.tokenVersion !== user.tokenVersion) {
+      //
+      // Tokens without an embedded tokenVersion (legacy tokens from
+      // before the version mechanism shipped) are also rejected —
+      // they must be re-issued. Forcing a re-login is the
+      // conservative choice; the alternative (silently accepting
+      // pre-versioning tokens) would defeat the invalidation
+      // scheme.
+      if (user.tokenVersion !== (payload.tokenVersion ?? -1)) {
         return res.status(401).json({ error: 'Session invalidated' });
       }
 
@@ -281,10 +300,21 @@ export function optionalAuthenticate(req: AuthenticatedRequest, res: Response, n
   prisma.user
     .findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, role: true, firstName: true, lastName: true, isActive: true },
+      select: { id: true, email: true, role: true, firstName: true, lastName: true, isActive: true, tokenVersion: true },
     })
     .then((user) => {
       if (user && user.isActive) {
+        // Match the strict gate in `authenticate`: reject tokens
+        // whose embedded tokenVersion no longer matches the DB.
+        // Without this, a logged-out user's JWT keeps attaching
+        // user info to optional endpoints (e.g. scoreboard pages
+        // that show different UI based on user.role) until the
+        // 7-day JWT TTL expires. Pinning to "?? -1" also rejects
+        // pre-versioning legacy tokens here, same as the strict
+        // path.
+        if (user.tokenVersion !== (payload.tokenVersion ?? -1)) {
+          return next();
+        }
         req.user = {
           id: user.id,
           email: user.email,
