@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 
-interface ScheduleConfig {
+export interface ScheduleConfig {
   startTime: string; // HH:MM format
   endTime: string;
   ringCount: number;
@@ -11,7 +11,7 @@ interface ScheduleConfig {
   breakBetweenDivisions: number; // minutes
 }
 
-interface ScheduledDivision {
+export interface ScheduledDivision {
   divisionId: string;
   divisionName: string;
   eventType: string;
@@ -25,7 +25,7 @@ interface ScheduledDivision {
   estimatedDurationMinutes: number;
 }
 
-interface TournamentSchedule {
+export interface TournamentSchedule {
   tournamentId: string;
   tournamentName: string;
   date: string;
@@ -45,21 +45,79 @@ const DEFAULT_CONFIG: ScheduleConfig = {
   breakBetweenDivisions: 5,
 };
 
-// Helper to parse time string to minutes since midnight
-function timeToMinutes(time: string): number {
-  const [hours, minutes] = time.split(':').map(Number);
-  return hours * 60 + minutes;
+export { DEFAULT_CONFIG };
+
+// ─── Time helpers ──────────────────────────────────────────────────────
+//
+// Pure, exported so the route can validate config before calling
+// generateSchedule, and so unit tests can exercise them directly.
+
+const HHMM_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+
+/**
+ * Parse "HH:MM" to minutes since midnight. Throws on malformed input
+ * — earlier versions returned NaN which silently propagated through
+ * the schedule (NaN comparisons are always false → no warnings ever
+ * fired, no ring assignment was attempted). The route catches and
+ * surfaces this as a 400.
+ */
+export function timeToMinutes(time: string): number {
+  const match = HHMM_RE.exec(time);
+  if (!match) {
+    throw new Error(`Invalid time format: "${time}". Expected HH:MM (00:00 to 23:59).`);
+  }
+  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
 }
 
-// Helper to convert minutes since midnight to time string
-function minutesToTime(minutes: number): string {
+/**
+ * Convert minutes since midnight to "HH:MM". Throws on negative or
+ * non-finite input so the caller gets a clear error rather than a
+ * silent "NaN:NaN" string in the schedule.
+ */
+export function minutesToTime(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    throw new Error(`Invalid minute value: ${minutes}. Expected a non-negative finite number.`);
+  }
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Validate a ScheduleConfig. Throws on any issue. The route calls
+ * this before passing the config to generateSchedule so malformed
+ * inputs get a 400 instead of silently breaking the schedule.
+ */
+export function validateScheduleConfig(config: ScheduleConfig): void {
+  // Ring count: positive integer.
+  if (!Number.isInteger(config.ringCount) || config.ringCount < 1) {
+    throw new Error(`ringCount must be a positive integer (got ${config.ringCount}).`);
+  }
+  if (config.ringCount > 100) {
+    // Hard cap to prevent OOM on hostile input — the schedule uses
+    // ringCount as a fixed array size.
+    throw new Error(`ringCount must be <= 100 (got ${config.ringCount}).`);
+  }
+  // Times: valid HH:MM.
+  const startMin = timeToMinutes(config.startTime);
+  const endMin = timeToMinutes(config.endTime);
+  if (endMin <= startMin) {
+    throw new Error(`endTime (${config.endTime}) must be after startTime (${config.startTime}).`);
+  }
+  // Match durations: positive numbers.
+  for (const [key, value] of Object.entries(config.matchDurationMinutes)) {
+    if (typeof value !== 'number' || value <= 0) {
+      throw new Error(`matchDurationMinutes.${key} must be a positive number (got ${value}).`);
+    }
+  }
+  // Break: non-negative.
+  if (typeof config.breakBetweenDivisions !== 'number' || config.breakBetweenDivisions < 0) {
+    throw new Error(`breakBetweenDivisions must be a non-negative number (got ${config.breakBetweenDivisions}).`);
+  }
+}
+
 // Estimate duration for a division based on bracket structure
-function estimateDivisionDuration(
+export function estimateDivisionDuration(
   competitorCount: number,
   eventType: string,
   config: ScheduleConfig
@@ -81,12 +139,32 @@ function estimateDivisionDuration(
   return Math.max(10, Math.min(90, totalTime));
 }
 
+/**
+ * Detect double-booking of a single competitor across two scheduled
+ * divisions. Pure — the route assembles the per-competitor slot
+ * list and the candidate slot, this returns whether they overlap.
+ *
+ * Convention: back-to-back (slot B starts exactly when slot A ends)
+ * is NOT an overlap. A kid finishing patterns at 10:00 can start
+ * sparring at 10:00 — that's the design intent.
+ */
+export function slotsOverlap(
+  a: { start: number; end: number },
+  b: { start: number; end: number }
+): boolean {
+  return a.start < b.end && b.start < a.end;
+}
+
 export async function generateSchedule(
   prisma: PrismaClient,
   tournamentId: string,
   configOverrides?: Partial<ScheduleConfig>
 ): Promise<TournamentSchedule> {
-  const config = { ...DEFAULT_CONFIG, ...configOverrides };
+  // Validate the resolved config so a malformed override can't reach
+  // the scheduling loop. The route layer also validates; this is
+  // belt-and-braces for any future caller.
+  const config: ScheduleConfig = { ...DEFAULT_CONFIG, ...configOverrides };
+  validateScheduleConfig(config);
   const warnings: string[] = [];
 
   // Get tournament and divisions
@@ -269,8 +347,7 @@ export async function generateSchedule(
         const a = slots[i];
         const b = slots[j];
         if (a.divId === b.divId) continue;
-        const overlaps = a.start < b.end && b.start < a.end;
-        if (!overlaps) continue;
+        if (!slotsOverlap(a, b)) continue;
         // Sort the two for a stable warning key (alphabetical)
         const [first, second] = [a, b].sort((x, y) => x.divId.localeCompare(y.divId));
         const warnKey = `${name}|${first.divId}|${second.divId}`;
