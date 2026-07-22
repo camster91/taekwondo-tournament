@@ -6,6 +6,12 @@ import rateLimit from 'express-rate-limit';
 import { authenticate, type AuthenticatedRequest } from '../middleware/auth.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { invitationEmail } from '../services/email-templates.js';
+import {
+  validateEmail,
+  validateBoundedString,
+  validateRole,
+  FIELD_LIMITS,
+} from './field-validation.js';
 
 const router = Router();
 
@@ -37,27 +43,40 @@ router.post('/send', authenticate, async (req: AuthenticatedRequest, res: Respon
   const prisma: PrismaClient = req.app.locals.prisma;
   const { email, firstName, lastName, role } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ error: 'Email is required' });
-  }
+  // Field-level validation via the shared helpers (field-validation.ts).
+  // The same regex + length caps apply to public.ts POST /register.
+  const errors: string[] = [];
+  const emailErr = validateEmail(email);
+  if (emailErr) errors.push(emailErr);
+  const fnErr = validateBoundedString(firstName, 'First name', FIELD_LIMITS.MAX_FIRST_NAME);
+  if (fnErr) errors.push(fnErr);
+  const lnErr = validateBoundedString(lastName, 'Last name', FIELD_LIMITS.MAX_LAST_NAME);
+  if (lnErr) errors.push(lnErr);
+  const roleErr = validateRole(role);
+  if (roleErr) errors.push(roleErr);
 
-  const validRoles = ['admin', 'director', 'scorekeeper', 'viewer'];
-  if (role && !validRoles.includes(role)) {
-    return res.status(400).json({ error: 'Invalid role' });
+  if (errors.length > 0) {
+    return res.status(400).json({ error: 'Validation failed', details: errors });
   }
 
   try {
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+    // Check if user already exists. Prisma's case-insensitive
+    // matching was added in 4.x — use it here so an existing user
+    // with "User@Example.com" can't be duplicated by an invite
+    // sent to "user@example.com". The previous behavior was
+    // case-sensitive on `findUnique`, which let duplicates slip
+    // through for any user whose existing email wasn't already
+    // lowercase.
+    const existingUser = await prisma.user.findFirst({
+      where: { email: { equals: email.toLowerCase(), mode: 'insensitive' } },
     });
     if (existingUser) {
       return res.status(409).json({ error: 'A user with this email already exists' });
     }
 
-    // Check for pending invitation to same email
+    // Same case-insensitive check for an outstanding invite.
     const existingInvite = await prisma.invitation.findFirst({
-      where: { email: email.toLowerCase(), status: 'pending' },
+      where: { email: { equals: email.toLowerCase(), mode: 'insensitive' }, status: 'pending' },
     });
     if (existingInvite) {
       return res.status(409).json({ error: 'A pending invitation already exists for this email' });
@@ -207,6 +226,13 @@ router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Respo
   const { id } = req.params;
 
   try {
+    // Check existence first so we can return 404 instead of 500.
+    // Prisma's `delete` throws P2025 if the row doesn't exist,
+    // which the catch-all below would surface as a generic 500.
+    const existing = await prisma.invitation.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Invitation not found' });
+    }
     await prisma.invitation.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
