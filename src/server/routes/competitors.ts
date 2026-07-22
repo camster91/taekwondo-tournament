@@ -9,6 +9,7 @@ import { autoDetectMapping } from '../services/excel-auto-map.js';
 import { validateRequest } from '../middleware/validate.js';
 import { jsonBodyParser } from '../index.js';
 import { authenticate, requireRole, buildTournamentAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
+import { parseBoundedInt, parseOptionalInt } from './query-parsing.js';
 
 const router = Router();
 
@@ -83,6 +84,22 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     limit = '100', offset = '0',
   } = req.query as Record<string, string>;
 
+  // Defensive numeric parsing. `parseInt('abc')` returns NaN,
+  // which Prisma rejects at the DB layer with a 500 — better to
+  // clamp here so the route returns a sensible page.
+  const limitResult = parseBoundedInt(limit, 100, 1, 1000);
+  if (!limitResult.ok) return res.status(400).json({ error: `limit ${limitResult.error}` });
+  const offsetResult = parseBoundedInt(offset, 0, 0, Number.MAX_SAFE_INTEGER);
+  if (!offsetResult.ok) return res.status(400).json({ error: `offset ${offsetResult.error}` });
+  const weightMinResult = parseOptionalInt(weight_min);
+  if (!weightMinResult.ok) return res.status(400).json({ error: `weight_min ${weightMinResult.error}` });
+  const weightMaxResult = parseOptionalInt(weight_max);
+  if (!weightMaxResult.ok) return res.status(400).json({ error: `weight_max ${weightMaxResult.error}` });
+  const parsedLimit = limitResult.value!;
+  const parsedOffset = offsetResult.value!;
+  const parsedWeightMin = weightMinResult.value;
+  const parsedWeightMax = weightMaxResult.value;
+
   // Build a Prisma `where` for the competitors list. The shape is
   // `Prisma.CompetitorWhereInput`; we assemble it incrementally as
   // optional filters are added (search, belt, school, age/weight
@@ -138,17 +155,17 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
   // Age / weight filters require computed-from-DOB & weightLbs columns.
   // We compute age in JS from dateOfBirth. For SQL-level filtering
   // we use weightLbs directly.
-  if (weight_min || weight_max) {
+  if (parsedWeightMin !== undefined || parsedWeightMax !== undefined) {
     where.weightLbs = {};
-    if (weight_min) where.weightLbs.gte = parseInt(weight_min);
-    if (weight_max) where.weightLbs.lte = parseInt(weight_max);
+    if (parsedWeightMin !== undefined) where.weightLbs.gte = parsedWeightMin;
+    if (parsedWeightMax !== undefined) where.weightLbs.lte = parsedWeightMax;
   }
 
   const [competitors, total] = await Promise.all([
     prisma.competitor.findMany({
       where,
-      take: parseInt(limit),
-      skip: parseInt(offset),
+      take: parsedLimit,
+      skip: parsedOffset,
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     }),
     prisma.competitor.count({ where }),
@@ -365,24 +382,48 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
 // Soft-delete: sets deletedAt, row stays in DB for 7 days, manager can
 // restore via POST /:id/restore before the auto-purge cron runs.
 // Uses updateMany instead of update so a non-existent ID returns204 silently.
+// Soft-delete a competitor (admin/director only). Closes S18: the
+// previous implementation used `updateMany` which silently no-ops
+// when the row doesn't exist (returns count: 0). API clients
+// couldn't tell a successful delete from a typo'd id. Switched
+// to a single `update` with a not-found catch.
 router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  await prisma.competitor.updateMany({
-    where: { id: getParam(req.params.id) },
-    data: { deletedAt: new Date() },
-  });
-
-  res.status(204).send();
+  try {
+    await prisma.competitor.update({
+      where: { id: getParam(req.params.id) },
+      data: { deletedAt: new Date() },
+    });
+    res.status(204).send();
+  } catch (error: unknown) {
+    // Prisma throws P2025 when the row doesn't exist. Returning
+    // 404 here matches the contract for GET /:id and PUT /:id
+    // (which also throw P2025 → handler turns it into 500 today;
+    // this DELETE fix is the easy case because the row may
+    // legitimately not exist).
+    if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'P2025') {
+      return res.status(404).json({ error: 'Competitor not found' });
+    }
+    throw error;
+  }
 });
 
-// Restore a soft-deleted competitor (admin/director only)
+// Restore a soft-deleted competitor (admin/director only). Same
+// 404-on-missing handling as DELETE above.
 router.post('/:id/restore', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const updated = await prisma.competitor.update({
-    where: { id: getParam(req.params.id) },
-    data: { deletedAt: null },
-  });
-  res.json(updated);
+  try {
+    const updated = await prisma.competitor.update({
+      where: { id: getParam(req.params.id) },
+      data: { deletedAt: null },
+    });
+    res.json(updated);
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'P2025') {
+      return res.status(404).json({ error: 'Competitor not found' });
+    }
+    throw error;
+  }
 });
 
 // Hard-delete a soft-deleted competitor (admin only) — used by the auto-purge
