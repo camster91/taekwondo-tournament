@@ -81,12 +81,20 @@ export async function advanceWinner(
     }
   }
 
-  // Check if grand finals reset is needed. The grand final and reset
-  // match numbers come from the bracket structure, NOT a hardcoded
-  // 14/15 — for non-8-person brackets those numbers are different
-  // (4-person grand final is match 4, 16-person is match 22, etc).
-  const grandFinalsNumber = structure.positions?.grandFinals ?? null;
-  const resetNumber = structure.positions?.reset ?? null;
+  // Check if grand finals reset is needed. Prefer the named positions
+  // from the bracket structure; for legacy brackets generated before
+  // `positions` existed, fall back to the historical 8-person defaults
+  // (14 = GF, 15 = reset). Without the fallback, a LB-champion win
+  // on a legacy bracket would silently skip reset activation, and
+  // the bracket would end with no clear 1st-place finish.
+  const positions = structure.positions ?? {
+    winnersFinal: 7,
+    losersFinal: 13,
+    grandFinals: 14,
+    reset: 15,
+  };
+  const grandFinalsNumber = positions.grandFinals ?? null;
+  const resetNumber = positions.reset ?? null;
   if (
     match.bracketType === 'finals' &&
     grandFinalsNumber !== null &&
@@ -256,6 +264,120 @@ export async function handleByeMatches(
 }
 
 /**
+ * Position names from the bracket structure. Mirrors the field on
+ * `BracketStructure.positions`. Kept as a local type alias so this
+ * helper can be imported + unit-tested without dragging the full
+ * BracketStructure shape in.
+ */
+export interface BracketPositions {
+  winnersFinal: number | null;
+  losersFinal: number | null;
+  grandFinals: number | null;
+  reset: number | null;
+}
+
+/**
+ * Minimal shape of a match record the placement resolver needs.
+ * Compatible with both Prisma `Match` rows and in-memory `MatchData`
+ * from the generator.
+ */
+interface PlacementMatch {
+  matchNumber: number;
+  bracketType: 'winners' | 'losers' | 'finals';
+  status: string;
+  winnerId: string | null;
+  competitor1Id: string | null;
+  competitor2Id: string | null;
+}
+
+/**
+ * Resolve final placements from a set of matches + the bracket's
+ * named positions. Pure function — no DB access, no fallbacks to
+ * magic match numbers. The caller is responsible for loading the
+ * matches and deciding what to do if `positions` is absent (see
+ * the legacy-fallback comment below).
+ *
+ * Returns placements in 1st/2nd/3rd order. Empty array when the
+ * grand final hasn't been decided yet. Two 3rd-place entries can
+ * appear in double elimination (the loser of the winners final who
+ * lost again in the losers bracket, and the loser of the losers
+ * final) — both are valid `place: 3` rows.
+ */
+export function resolvePlacements(
+  matches: PlacementMatch[],
+  positions: BracketPositions | null | undefined
+): { place: number; competitorId: string }[] {
+  // No positions = we can't reliably map roles to match numbers.
+  // Each bracket size has different positions; without the named
+  // map, any guess is a guess. The legacy fallback for 8-person DE
+  // (13/14/15) lives in the caller — keep this helper honest.
+  if (!positions) return [];
+
+  const byNum = new Map<number, PlacementMatch>();
+  for (const m of matches) byNum.set(m.matchNumber, m);
+
+  const gf = positions.grandFinals !== null ? byNum.get(positions.grandFinals) : undefined;
+  const reset = positions.reset !== null ? byNum.get(positions.reset) : undefined;
+  const lf = positions.losersFinal !== null ? byNum.get(positions.losersFinal) : undefined;
+
+  const placements: { place: number; competitorId: string }[] = [];
+  const placed = new Set<string>();
+
+  const pushPlacement = (place: number, competitorId: string | null) => {
+    if (!competitorId || placed.has(competitorId)) return;
+    placed.add(competitorId);
+    placements.push({ place, competitorId });
+  };
+
+  const opponentOf = (m: PlacementMatch, winnerId: string): string | null =>
+    m.competitor1Id === winnerId ? m.competitor2Id : m.competitor1Id;
+
+  // Reset match takes precedence — when it was played, it decides
+  // both 1st and 2nd (because by definition the LB champion had to
+  // beat the WB champion to force a reset).
+  if (reset?.status === 'completed' && reset.winnerId) {
+    pushPlacement(1, reset.winnerId);
+    pushPlacement(2, opponentOf(reset, reset.winnerId));
+  } else if (gf?.status === 'completed' && gf.winnerId) {
+    pushPlacement(1, gf.winnerId);
+    pushPlacement(2, opponentOf(gf, gf.winnerId));
+  }
+
+  // 3rd place: loser of the losers final (if there is one)
+  if (lf?.status === 'completed' && lf.winnerId) {
+    pushPlacement(3, opponentOf(lf, lf.winnerId));
+  }
+
+  // In DE there can be a second 3rd-place finisher — the loser of
+  // the winners final who then lost again in the losers bracket.
+  //
+  // This requires the WB-final loser to have actually competed in
+  // the losers bracket. For small brackets (N=4 and N=6) the
+  // losers bracket has only a single round (L R1) reserved for
+  // the W R1 losers — the W-final loser drops out with no LB
+  // entry. We detect this by checking whether the W-final loser
+  // appears as a participant in any completed losers-bracket match.
+  const wf = positions.winnersFinal !== null ? byNum.get(positions.winnersFinal) : undefined;
+  if (wf?.status === 'completed' && wf.winnerId) {
+    const wfLoser = opponentOf(wf, wf.winnerId);
+    if (wfLoser && !placed.has(wfLoser)) {
+      const competedInLosers = matches.some(
+        (m) =>
+          m.bracketType === 'losers' &&
+          m.status === 'completed' &&
+          (m.competitor1Id === wfLoser || m.competitor2Id === wfLoser)
+      );
+      if (competedInLosers) {
+        placements.push({ place: 3, competitorId: wfLoser });
+        placed.add(wfLoser);
+      }
+    }
+  }
+
+  return placements;
+}
+
+/**
  * Gets the current standings/placements from a bracket
  */
 export async function getBracketPlacements(
@@ -269,67 +391,32 @@ export async function getBracketPlacements(
 
   if (!bracket) return [];
 
-  // Pull named positions from the bracket structure. For legacy
-  // brackets generated before `positions` existed (no field at all),
-  // fall back to the old hardcoded 13/14/15 lookup. New brackets
-  // always have `positions` populated.
   const structure: BracketStructure | null = (() => {
     try { return JSON.parse(bracket.structure); } catch { return null; }
   })();
-  const positions = structure?.positions;
-  const grandFinalsNumber = positions?.grandFinals ?? 14;
-  const resetNumber = positions?.reset ?? 15;
-  const losersFinalNumber = positions?.losersFinal ?? 13;
-  const winnersFinalNumber = positions?.winnersFinal ?? 7;
 
-  const placements: { place: number; competitorId: string }[] = [];
-
-  // Find finals matches
-  const grandFinals = bracket.matches.find(m => m.matchNumber === grandFinalsNumber);
-  const resetMatch = bracket.matches.find(m => m.matchNumber === resetNumber);
-  const losersFinal = bracket.matches.find(m => m.matchNumber === losersFinalNumber);
-
-  // Determine 1st and 2nd place
-  if (resetMatch?.status === 'completed' && resetMatch.winnerId) {
-    // Reset match was played
-    placements.push({ place: 1, competitorId: resetMatch.winnerId });
-    const secondId = resetMatch.competitor1Id === resetMatch.winnerId
-      ? resetMatch.competitor2Id
-      : resetMatch.competitor1Id;
-    if (secondId) placements.push({ place: 2, competitorId: secondId });
-  } else if (grandFinals?.status === 'completed' && grandFinals.winnerId) {
-    // Grand finals decided it (winners bracket champion won)
-    placements.push({ place: 1, competitorId: grandFinals.winnerId });
-    const secondId = grandFinals.competitor1Id === grandFinals.winnerId
-      ? grandFinals.competitor2Id
-      : grandFinals.competitor1Id;
-    if (secondId) placements.push({ place: 2, competitorId: secondId });
+  // Legacy fallback: brackets generated before `positions` existed
+  // (pre-fix #89) don't have the named map. The historical lookup
+  // (13/14/15) was specifically for the 8-person DE, which is what
+  // the old code hardcoded everywhere. For those legacy brackets we
+  // synthesize a positions object from the historical defaults so
+  // `resolvePlacements` can handle them uniformly.
+  let positions: BracketPositions | null | undefined = structure?.positions;
+  if (!positions) {
+    positions = { winnersFinal: 7, losersFinal: 13, grandFinals: 14, reset: 15 };
   }
 
-  // 3rd place - loser of losers final
-  if (losersFinal?.status === 'completed' && losersFinal.winnerId) {
-    const thirdId = losersFinal.competitor1Id === losersFinal.winnerId
-      ? losersFinal.competitor2Id
-      : losersFinal.competitor1Id;
-    if (thirdId) placements.push({ place: 3, competitorId: thirdId });
-  }
-
-  // Also 3rd place - loser of winners final who lost in losers bracket
-  // (In double elimination, there can be two 3rd place finishers)
-  const winnersFinal = bracket.matches.find(m => m.matchNumber === winnersFinalNumber);
-  if (winnersFinal?.status === 'completed' && winnersFinal.winnerId) {
-    const losersFinalist = winnersFinal.competitor1Id === winnersFinal.winnerId
-      ? winnersFinal.competitor2Id
-      : winnersFinal.competitor1Id;
-
-    // Check if this person lost before losers finals
-    if (losersFinalist && !placements.some(p => p.competitorId === losersFinalist)) {
-      // They got 3rd place (tied)
-      placements.push({ place: 3, competitorId: losersFinalist });
-    }
-  }
-
-  return placements;
+  return resolvePlacements(
+    bracket.matches.map((m) => ({
+      matchNumber: m.matchNumber,
+      bracketType: m.bracketType as PlacementMatch['bracketType'],
+      status: m.status,
+      winnerId: m.winnerId,
+      competitor1Id: m.competitor1Id,
+      competitor2Id: m.competitor2Id,
+    })),
+    positions
+  );
 }
 
 /**
@@ -374,32 +461,61 @@ export async function getBracketPlacementsEnriched(
 }
 
 /**
+ * Minimal match shape for completion checks. Same as `PlacementMatch`
+ * minus the slots we don't need.
+ */
+interface CompletionMatch {
+  matchNumber: number;
+  status: string;
+}
+
+/**
+ * Pure check: is the bracket complete?
+ *
+ * The bracket is complete when the grand final has been decided.
+ * If a reset match exists and is `ready` (activated but not yet
+ * played), the bracket is NOT complete — the LB champion forced a
+ * rematch and we're waiting for the reset result.
+ *
+ * Takes the named `positions` rather than guessing match numbers.
+ * Legacy callers that don't have positions can synthesize the
+ * 8-person defaults.
+ */
+export function isBracketCompletePure(
+  matches: CompletionMatch[],
+  positions: BracketPositions | null | undefined
+): boolean {
+  if (!positions) return false;
+  const byNum = new Map<number, CompletionMatch>();
+  for (const m of matches) byNum.set(m.matchNumber, m);
+
+  const gf = positions.grandFinals !== null ? byNum.get(positions.grandFinals) : undefined;
+  const reset = positions.reset !== null ? byNum.get(positions.reset) : undefined;
+
+  if (!gf) return false;
+
+  if (gf.status === 'completed') {
+    // If the reset was activated (status === 'ready') but not yet
+    // played, the bracket is mid-reset — not complete.
+    if (reset && reset.status === 'ready') return false;
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Checks if a bracket is complete
  */
 export function isBracketComplete(
   matches: { status: string; matchNumber: number }[],
   structure?: BracketStructure | null
 ): boolean {
-  // Resolve the grand-finals and reset match numbers. Prefer the
-  // bracket structure's named positions when available; fall back
-  // to 14/15 for legacy 8-person brackets.
-  const grandFinalsNumber = structure?.positions?.grandFinals ?? 14;
-  const resetNumber = structure?.positions?.reset ?? 15;
-
-  const grandFinals = matches.find(m => m.matchNumber === grandFinalsNumber);
-  const resetMatch = matches.find(m => m.matchNumber === resetNumber);
-
-  if (!grandFinals) return false;
-
-  // If grand finals is complete and reset match exists but is pending,
-  // check if reset was needed
-  if (grandFinals.status === 'completed') {
-    if (resetMatch && resetMatch.status === 'ready') {
-      // Reset match was activated but not completed
-      return false;
-    }
-    return true;
-  }
-
-  return false;
+  const positions = structure?.positions ?? {
+    winnersFinal: 7,
+    losersFinal: 13,
+    grandFinals: 14,
+    reset: 15,
+  };
+  return isBracketCompletePure(matches, positions);
 }

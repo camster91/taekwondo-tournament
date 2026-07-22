@@ -817,7 +817,11 @@ router.get('/division/:divisionId/pdf', authenticate, async (req: AuthenticatedR
     include: {
       tournament: true,
       bracket: {
-        include: {
+        // `structure` holds the named positions map used to label
+        // the grand finals + reset match correctly across bracket
+        // sizes in the PDF.
+        select: {
+          structure: true,
           matches: {
             include: {
               competitor1: { include: { competitor: true } },
@@ -833,6 +837,18 @@ router.get('/division/:divisionId/pdf', authenticate, async (req: AuthenticatedR
   if (!division || !division.bracket) {
     return res.status(404).json({ error: 'Bracket not found' });
   }
+
+  // Parse positions once; default to 8-person if a legacy bracket
+  // pre-dates the field. Same fallback semantics as the placement +
+  // advancement code.
+  const bracketPositions = (() => {
+    try {
+      const parsed = JSON.parse(division.bracket.structure) as { positions?: { grandFinals?: number | null; reset?: number | null } };
+      return parsed.positions ?? { grandFinals: 14, reset: 15 };
+    } catch {
+      return { grandFinals: 14, reset: 15 };
+    }
+  })();
 
   const tournamentInfo: TournamentInfo = {
     name: division.tournament.name,
@@ -895,6 +911,7 @@ router.get('/division/:divisionId/pdf', authenticate, async (req: AuthenticatedR
     division: divisionInfo,
     matches,
     showResults,
+    positions: bracketPositions,
   });
 
   const pdfBuffer = pdf.output('arraybuffer');
