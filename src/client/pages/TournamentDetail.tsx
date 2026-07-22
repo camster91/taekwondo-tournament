@@ -1224,8 +1224,48 @@ function BroadcastModal({
 // ─── Day-Of Operations Panel ───────────────────────────────────────────────
 // Real-time operational view: who's checked in, what rings are running,
 // what's coming up, weight-mismatch alerts. Auto-refreshes every 10s.
+//
+// Minimal types for the day-of payload — only the fields the panel
+// actually consumes. The full /api/tournaments/:id/day-of response
+// includes match history, ring assignment maps, and audit-log rollups;
+// declaring just the consumed slice here keeps the panel immune to
+// those other surface changes.
+interface UpNextRing {
+  ring: string;
+  division: string;
+  matchNumber: number;
+}
+
+interface WeightMismatchDetail {
+  registrationId: string;
+  name: string;
+  school?: string | null;
+  weightAtRegistration: number;
+  checkInWeight: number;
+  delta: number;
+}
+
+interface DayOfData {
+  checkIn: {
+    total: number;
+    checkedIn: number;
+    notCheckedIn: number;
+    percent: number;
+    weightMismatches: number;
+    weightMismatchDetails?: WeightMismatchDetail[];
+  };
+  matches: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    ready: number;
+    pending: number;
+  };
+  upNext?: UpNextRing[];
+}
+
 function DayOfPanel({ tournamentId }: { tournamentId: string }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<DayOfData | null>({
     queryKey: ['day-of', tournamentId],
     queryFn: async () => {
       const res = await fetch(`/api/tournaments/${tournamentId}/day-of`, { headers: getAuthHeaders() });
@@ -1330,7 +1370,7 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {data.upNext.map((u: any) => (
+            {data.upNext.map((u) => (
               <div key={u.ring} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
                 <div className="flex items-center gap-2 mb-1.5">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -1352,7 +1392,7 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
             <h3 className="text-sm font-semibold text-red-700 dark:text-red-300">Weight mismatches to review</h3>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            {data.checkIn.weightMismatchDetails.map((m: any) => (
+            {data.checkIn.weightMismatchDetails.map((m) => (
               <div key={m.registrationId} className="flex items-center justify-between px-3 py-2 rounded-md bg-white dark:bg-slate-900 border border-red-200/60 dark:border-red-900/40">
                 <div className="min-w-0 flex-1">
                   <div className="font-medium text-slate-900 dark:text-white truncate">{m.name}</div>

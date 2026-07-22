@@ -38,7 +38,13 @@ interface Tournament {
   _count: { registrations: number; divisions: number };
 }
 
-interface CompetitorsResponse { competitors: any[]; total: number; }
+/**
+ * The competitors query is only used to read `.total` (the count badge).
+ * Keep the type minimal — the full Competitor shape isn't needed here
+ * and a future schema change to Competitor shouldn't ripple into the
+ * dashboard's compile pass.
+ */
+interface CompetitorsResponse { competitors: unknown[]; total: number; }
 
 interface AnalyticsData {
   totals: { competitors: number; tournaments: number; matches: number; completedMatches: number; recentRegistrations: number };

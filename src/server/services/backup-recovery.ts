@@ -149,8 +149,9 @@ export async function restoreDivisionState(
         }
 
         restored++;
-      } catch (error: any) {
-        errors.push(`Failed to restore ${div.name}: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`Failed to restore ${div.name}: ${message}`);
       }
     }
   });
@@ -229,7 +230,7 @@ export async function getBackup(
     });
     if (!row) return undefined;
     return JSON.parse(row.payload) as TournamentBackup;
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(`[backup-recovery] getBackup failed for ${tournamentId}:`, err);
     return undefined;
   }
@@ -247,9 +248,12 @@ export async function clearBackup(
     await prisma.backupState.delete({
       where: { tournamentId },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     // P2025 = "record not found" — same as ENOENT for our purposes.
-    if (err?.code !== 'P2025') {
+    // Prisma's error shape uses a string `code`, so narrow it without
+    // dragging the whole Prisma error class into this catch.
+    const code = (err as { code?: unknown } | null)?.code;
+    if (code !== 'P2025') {
       console.error(`[backup-recovery] clearBackup failed for ${tournamentId}:`, err);
     }
   }

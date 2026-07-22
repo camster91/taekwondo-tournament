@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { ColumnMapping } from './excel-import.js';
+import type { ColumnMapping, ExcelCellValue, ExcelRow } from './excel-import.js';
 
 /**
  * Auto-detect a column mapping for an uploaded Excel file.
@@ -23,7 +23,7 @@ export interface AutoMapResult {
   availableSheets: string[];
   detectedHeaderRow: number;
   rawHeaders: string[];
-  sampleRow: Record<string, any>;
+  sampleRow: ExcelRow;
   rowCount: number;
 }
 
@@ -67,10 +67,14 @@ function scoreField(headerRaw: string, field: keyof ColumnMapping): number {
 }
 
 /**
- * Parse a date from various common formats
+ * Parse a date from various common formats.
+ *
+ * SheetJS hands us `unknown` from cell reads; narrow via `typeof` /
+ * `instanceof Date` before treating as a Date. String fallback keeps
+ * the existing behavior for headers that come in as text.
  */
-function tryParseDate(v: any): Date | null {
-  if (!v) return null;
+function tryParseDate(v: ExcelCellValue): Date | null {
+  if (v === null || v === undefined || v === '') return null;
   if (v instanceof Date) return v;
   const s = String(v).trim();
   if (!s) return null;
@@ -98,10 +102,11 @@ function tryParseDate(v: any): Date | null {
 }
 
 /**
- * Parse a height in 4'11" or 5'10 format to total inches
+ * Parse a height in 4'11" or 5'10 format to total inches.
+ * Bare integers are interpreted as inches.
  */
-function tryParseHeightInches(v: any): number | null {
-  if (!v) return null;
+function tryParseHeightInches(v: ExcelCellValue): number | null {
+  if (v === null || v === undefined || v === '') return null;
   const s = String(v).trim();
   const m = s.match(/^(\d+)'?\s*(\d+)?/);
   if (m) {
@@ -127,7 +132,11 @@ export function autoDetectMapping(buffer: Buffer): AutoMapResult {
   let bestRowCount = 0;
   for (const name of availableSheets) {
     const sheet = workbook.Sheets[name];
-    const rows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: null });
+    // `header: 1` returns each row as an array of cells. Cell values
+    // are SheetJS's JS-native types (string/number/Date/null); we
+    // declare them as `unknown[]` here and narrow at the call sites
+    // that actually care (header detection, sample row assembly).
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null });
     // Count rows that have at least 3 non-null cells
     const real = rows.filter((r) => Array.isArray(r) && r.filter((c) => c != null && c !== '').length >= 3);
     if (real.length > bestRowCount) {
@@ -151,7 +160,7 @@ export function autoDetectMapping(buffer: Buffer): AutoMapResult {
   }
 
   const sheet = workbook.Sheets[bestSheet];
-  const allRows = XLSX.utils.sheet_to_json<any>(sheet, { header: 1, defval: null });
+  const allRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null });
 
   // Detect header row: scan the first 5 rows, pick the one that matches the
   // most field aliases
@@ -177,11 +186,11 @@ export function autoDetectMapping(buffer: Buffer): AutoMapResult {
 
   const rawHeaders: string[] = (allRows[headerRowIdx] || []).map((c: unknown) => String(c || '').trim());
   const dataRows = allRows.slice(headerRowIdx + 1);
-  const sampleRow: Record<string, any> = {};
+  const sampleRow: ExcelRow = {};
   for (let i = 0; i < dataRows.length; i++) {
-    if (dataRows[i] && dataRows[i].some((c: any) => c != null && c !== '')) {
+    if (dataRows[i] && dataRows[i].some((c: unknown) => c != null && c !== '')) {
       rawHeaders.forEach((h, idx) => {
-        sampleRow[h] = dataRows[i][idx];
+        sampleRow[h] = dataRows[i][idx] as ExcelCellValue;
       });
       break;
     }
@@ -208,9 +217,12 @@ export function autoDetectMapping(buffer: Buffer): AutoMapResult {
     }
     if (best >= 50 && bestHeader) {
       confidence[f] = best;
-      // Only set if not already taken (highest confidence wins)
+      // Only set if not already taken (highest confidence wins).
+      // `Partial<ColumnMapping>` doesn't index by `keyof ColumnMapping`
+      // in TS's view, so the cast stays local — we're populating the
+      // partial object from a known key list.
       if (!Object.values(mapping).includes(bestHeader)) {
-        (mapping as any)[f] = bestHeader;
+        (mapping as Record<string, string>)[f] = bestHeader;
       }
     }
   }

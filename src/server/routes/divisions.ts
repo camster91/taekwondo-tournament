@@ -107,10 +107,14 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
   // bracket model. Compute them here so the response shape matches the
   // client's expectations.
   if (withMatches) {
+    // Mutate the in-memory division objects to attach `bracket.placements`
+    // before serialization. We can't return a new typed shape because the
+    // route's outer `include` already fixes the inferred Prisma type;
+    // unknown stays local to this block.
     await Promise.all(
-      divisions.map(async (d: any) => {
+      divisions.map(async (d) => {
         if (d.bracket?.id) {
-          d.bracket.placements = await getBracketPlacementsEnriched(prisma, d.bracket.id);
+          (d.bracket as { placements?: unknown }).placements = await getBracketPlacementsEnriched(prisma, d.bracket.id);
         }
       })
     );

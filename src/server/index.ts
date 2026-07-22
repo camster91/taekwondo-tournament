@@ -175,8 +175,8 @@ app.get('/api/health/ready', async (_req: Request, res: Response) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
     res.json({ status: 'ok', db: 'ok' });
-  } catch (err: any) {
-    res.status(503).json({ status: 'not ready', db: err?.message ?? 'error' });
+  } catch (err: unknown) {
+    res.status(503).json({ status: 'not ready', db: err instanceof Error ? err.message : 'error' });
   }
 });
 

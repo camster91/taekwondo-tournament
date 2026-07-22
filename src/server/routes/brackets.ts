@@ -87,7 +87,10 @@ router.post('/division/:divisionId/generate', authenticate, async (req: Authenti
     return res.status(404).json({ error: 'Division not found' });
   }
 
-  const competitors = (division as any).assignments.map((a: any) => ({
+  // Prisma narrows the result type via the `include` shape — no cast
+  // needed because `assignments` carries the registration+competitor
+  // chain we map below.
+  const competitors = division.assignments.map((a) => ({
     registrationId: a.registrationId,
     name: `${a.registration.competitor.firstName} ${a.registration.competitor.lastName}`,
     school: a.registration.competitor.schoolDojang || '',
@@ -96,10 +99,10 @@ router.post('/division/:divisionId/generate', authenticate, async (req: Authenti
 
   let bracketStructure: BracketStructure;
   if (format === 'round_robin') {
-    bracketStructure = generateRoundRobin(competitors, { seedingStrategy: seedingStrategy as any });
+    bracketStructure = generateRoundRobin(competitors, { seedingStrategy });
   } else if (format === 'pool_play') {
     bracketStructure = generatePoolPlay(competitors, {
-      seedingStrategy: seedingStrategy as any,
+      seedingStrategy,
       poolCount,
       advancePerPool,
     });
@@ -148,7 +151,11 @@ router.post('/division/:divisionId/generate', authenticate, async (req: Authenti
         bracketType: match.bracketType,
         competitor1Id: match.competitor1Id || null,
         competitor2Id: match.competitor2Id || null,
-        status: (match.competitor1Id && match.competitor2Id ? 'ready' : 'pending') as any,
+        // 'pending' (no opponent yet, including BYE) or 'ready'
+        // (both opponents known). The DB enum matches the union
+        // exactly, so no cast is needed once we widen it to its
+        // Prisma-inferred shape.
+        status: (match.competitor1Id && match.competitor2Id ? 'ready' : 'pending'),
       })),
     });
 
@@ -571,15 +578,23 @@ router.post('/match/:matchId/undo', authenticate, async (req: AuthenticatedReque
   // slots when the undone match was completed, which is the common
   // case. Manual regeneration is required for the undone state
   // otherwise.
+  // `match.nextWinnerMatch` is only populated when the bracket was
+  // generated with the latest generator (which writes the chain as
+  // part of the structure). Older brackets don't have it, so we
+  // fall back to a heuristic lookup. We use `unknown` because the
+  // shape is generator-version-specific; the bracket generator
+  // re-derives the next match via position math when needed.
   if (match.status !== 'completed' && lastLog.action === 'update') {
-    const nextWinnerMatch = (match as any).nextWinnerMatch ?? (await prisma.match.findFirst({
-      where: {
-        bracketId: match.bracketId,
-        roundNumber: match.roundNumber + 1,
-        bracketType: 'winners',
-        matchNumber: 1, // heuristic
-      },
-      select: { id: true },
+    const nextWinnerMatch =
+      ((match as { nextWinnerMatch?: unknown }).nextWinnerMatch as { id: string } | null | undefined) ??
+      (await prisma.match.findFirst({
+        where: {
+          bracketId: match.bracketId,
+          roundNumber: match.roundNumber + 1,
+          bracketType: 'winners',
+          matchNumber: 1, // heuristic
+        },
+        select: { id: true },
     }));
     if (nextWinnerMatch?.id) {
       // Best-effort: if this match's competitor1 or competitor2
@@ -688,13 +703,13 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
   let skipped = 0;
   const errors: Array<{ divisionId: string; divisionName: string; error: string }> = [];
 
-  for (const division of divisions as any[]) {
+  for (const division of divisions) {
     if (division.assignments.length === 0) {
       skipped++;
       continue;
     }
 
-    const competitors = division.assignments.map((a: any) => ({
+    const competitors = division.assignments.map((a) => ({
       registrationId: a.registrationId,
       name: `${a.registration.competitor.firstName} ${a.registration.competitor.lastName}`,
       school: a.registration.competitor.schoolDojang || '',
@@ -706,9 +721,9 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
     if (format === 'single_elim') {
       bracketStructure = generateSingleElimination(competitors, seedingStrategy);
     } else if (format === 'round_robin') {
-      bracketStructure = generateRoundRobin(competitors, { seedingStrategy: seedingStrategy as any });
+      bracketStructure = generateRoundRobin(competitors, { seedingStrategy });
     } else if (format === 'pool_play') {
-      bracketStructure = generatePoolPlay(competitors, { seedingStrategy: seedingStrategy as any });
+      bracketStructure = generatePoolPlay(competitors, { seedingStrategy });
     } else {
       bracketStructure = generateBracket(competitors, seedingStrategy);
     }
@@ -765,11 +780,11 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
       // committed state.
       await handleByeMatches(prisma, division.id);
       generated++;
-    } catch (err: any) {
+    } catch (err: unknown) {
       errors.push({
         divisionId: division.id,
         divisionName: division.name,
-        error: err?.message || 'Unknown error',
+        error: err instanceof Error ? err.message : 'Unknown error',
       });
     }
   }
@@ -835,7 +850,17 @@ router.get('/division/:divisionId/pdf', authenticate, async (req: AuthenticatedR
     weightClass: division.weightClass,
   };
 
-  const matches: BracketMatch[] = division.bracket.matches.map((m: any) => ({
+  // `m.score1` / `m.score2` come from the DB as `String?` (per the
+  // schema). `BracketMatch` declares them as `number | null` because
+  // the regex-validated Zod schema on the write path already enforces
+  // numeric strings — so a `Number(...)` parse here is safe and the
+  // narrower typing matches what the PDF renderer expects.
+  const toScore = (s: string | null | undefined): number | null => {
+    if (s === null || s === undefined || s === '') return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+  const matches: BracketMatch[] = division.bracket.matches.map((m) => ({
     matchNumber: m.matchNumber,
     round: m.roundNumber,
     bracketType: m.bracketType as 'winners' | 'losers' | 'finals',
@@ -860,8 +885,8 @@ router.get('/division/:divisionId/pdf', authenticate, async (req: AuthenticatedR
           school: m.winner.competitor.schoolDojang || '',
         }
       : null,
-    score1: m.score1,
-    score2: m.score2,
+    score1: toScore(m.score1),
+    score2: toScore(m.score2),
     status: m.status,
   }));
 
@@ -919,9 +944,18 @@ router.get('/tournament/:tournamentId/pdf', authenticate, requireTournamentAcces
     location: tournament.location,
   };
 
-  const brackets = tournament.divisions
-    .filter((d: any) => d.bracket)
-    .map((d: any) => ({
+  // The filter narrows `d.bracket` from `Bracket | null` to `Bracket`
+  // for the `.map` callback — TS needs the explicit type predicate
+  // to carry that narrowing through. Same predicate at line 1042
+  // (placements export) — kept inlined since the two contexts are
+  // far apart and the predicate is one line.
+  type DivisionWithBracket = (typeof tournament.divisions)[number] & { bracket: NonNullable<(typeof tournament.divisions)[number]['bracket']> };
+  const divisionsWithBracket = tournament.divisions.filter(
+    (d): d is DivisionWithBracket => d.bracket !== null
+  );
+
+  const brackets = divisionsWithBracket
+    .map((d) => ({
       division: {
         name: d.name,
         beltLevel: d.beltLevel,
@@ -931,7 +965,7 @@ router.get('/tournament/:tournamentId/pdf', authenticate, requireTournamentAcces
         ageMax: d.ageMax,
         weightClass: d.weightClass,
       } as DivisionInfo,
-      matches: d.bracket.matches.map((m: any) => ({
+      matches: d.bracket.matches.map((m) => ({
         matchNumber: m.matchNumber,
         round: m.roundNumber,
         bracketType: m.bracketType as 'winners' | 'losers' | 'finals',
@@ -1008,10 +1042,15 @@ router.get('/tournament/:tournamentId/results/pdf', authenticate, requireTournam
     location: tournament.location,
   };
 
+  // Inline type predicate — same shape as `divisionsWithBracket`
+  // above, repeated because the two contexts are too far apart to
+  // share a variable cleanly and the predicate is one line.
+  type DivisionWithBracket = (typeof tournament.divisions)[number] & { bracket: NonNullable<(typeof tournament.divisions)[number]['bracket']> };
+
   const divisionsWithPlacements = await Promise.all(
     tournament.divisions
-      .filter((d: any) => d.bracket)
-      .map(async (d: any) => {
+      .filter((d): d is DivisionWithBracket => d.bracket !== null)
+      .map(async (d) => {
         const placements = await getBracketPlacements(prisma, d.bracket.id);
 
         const placementsWithDetails = await Promise.all(
@@ -1165,7 +1204,7 @@ router.get('/tournament/:tournamentId/certificates', authenticate, requireTourna
     eventType: string;
   }> = [];
 
-  for (const division of tournament.divisions as any[]) {
+  for (const division of tournament.divisions) {
     if (!division.bracket) continue;
 
     const placements = await getBracketPlacements(prisma, division.bracket.id);
@@ -1259,7 +1298,7 @@ router.get('/tournament/:tournamentId/school-report', authenticate, requireTourn
   let silver = 0;
   let bronze = 0;
 
-  for (const division of tournament.divisions as any[]) {
+  for (const division of tournament.divisions) {
     if (!division.bracket) continue;
 
     const divPlacements = await getBracketPlacements(prisma, division.bracket.id);

@@ -61,7 +61,10 @@ export default function Login() {
   // Redirect if already logged in
   useEffect(() => {
     if (isAuthenticated) {
-      const from = (location.state as any)?.from?.pathname || '/';
+      // React Router's `location.state` is loosely typed — narrow via
+      // a structural check before reaching into `from.pathname`.
+      const state = location.state as { from?: { pathname?: string } } | null;
+      const from = state?.from?.pathname || '/';
       navigate(from, { replace: true });
     }
   }, [isAuthenticated, location.state, navigate]);
@@ -129,7 +132,10 @@ export default function Login() {
     const result = await verifyCode(email, code);
 
     if (result.success) {
-      const from = (location.state as any)?.from?.pathname || '/';
+      // Same structural narrowing as the auth-effect above — keeps the
+      // post-verify redirect in sync with where the user was heading.
+      const state = location.state as { from?: { pathname?: string } } | null;
+      const from = state?.from?.pathname || '/';
       navigate(from, { replace: true });
     } else {
       setError(result.error || 'Verification failed');
@@ -150,9 +156,9 @@ export default function Login() {
       // Session cookie is set by the server. Hard nav so the
       // AuthProvider re-mounts and hydrates user state from /me.
       window.location.href = '/';
-    } catch (err: any) {
-      setError(err.message || 'Demo login failed. Please try again.');
-      setDemoLoading(false);
+    } catch (err: unknown) {
+      console.error('Login error:', err);
+      setError(err instanceof Error ? err.message : 'Login failed');
     }
   };
 
@@ -313,7 +319,21 @@ export default function Login() {
 
 // ─── Sub-components ────────────────────────────────────────────────
 
-function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: any) {
+function EmailForm({
+  email,
+  setEmail,
+  onSubmit,
+  loading,
+  onDemo,
+  demoLoading,
+}: {
+  email: string;
+  setEmail: (v: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  loading: boolean;
+  onDemo?: () => void;
+  demoLoading?: boolean;
+}) {
   return (
     <div className="space-y-5">
       <h2 className="sr-only">Sign in</h2>
@@ -375,7 +395,25 @@ function EmailForm({ email, setEmail, onSubmit, loading, onDemo, demoLoading }: 
   );
 }
 
-function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRef, devModeData }: any) {
+function CodeForm({
+  email,
+  code,
+  setCode,
+  onSubmit,
+  loading,
+  onBack,
+  codeInputRef,
+  devModeData,
+}: {
+  email: string;
+  code: string;
+  setCode: (v: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  loading: boolean;
+  onBack: () => void;
+  codeInputRef: React.RefObject<HTMLInputElement | null>;
+  devModeData: { magicUrl: string; code: string; email: string } | null;
+}) {
   const [copied, setCopied] = useState<'url' | 'code' | null>(null);
 
   const handleCopy = async (type: 'url' | 'code', value: string) => {
@@ -497,7 +535,27 @@ function CodeForm({ email, code, setCode, onSubmit, loading, onBack, codeInputRe
   );
 }
 
-function SetupForm({ email, setEmail, firstName, setFirstName, lastName, setLastName, onSubmit, error, loading }: any) {
+function SetupForm({
+  email,
+  setEmail,
+  firstName,
+  setFirstName,
+  lastName,
+  setLastName,
+  onSubmit,
+  error,
+  loading,
+}: {
+  email: string;
+  setEmail: (v: string) => void;
+  firstName: string;
+  setFirstName: (v: string) => void;
+  lastName: string;
+  setLastName: (v: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  error: string;
+  loading: boolean;
+}) {
   return (
     <div className="space-y-5">
       <div>

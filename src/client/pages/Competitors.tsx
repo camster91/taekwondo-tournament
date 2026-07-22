@@ -114,7 +114,10 @@ export default function Competitors() {
   const [deleteTarget, setDeleteTarget] = useState<Competitor | null>(null);
   const [formData, setFormData] = useState(emptyForm);
   const [pageLimit, setPageLimit] = useState(100);
-  const [importData, setImportData] = useState<any[] | null>(null);
+  // The import preview is a spreadsheet row — `unknown` keyed by
+  // column header. We never index individual cells with strict types,
+  // just stringify them for display.
+  const [importData, setImportData] = useState<Record<string, unknown>[] | null>(null);
   const [importColumns, setImportColumns] = useState<string[]>([]);
   // Original File handle for the parsed workbook. Kept around so
   // the import step can re-encode it as base64 and send the raw
@@ -265,7 +268,7 @@ export default function Competitors() {
   const importMutation = useMutation({
     mutationFn: async (
       payload:
-        | { data: any[]; mapping: ImportMapping }
+        | { data: Record<string, unknown>[]; mapping: ImportMapping }
         | { fileBase64: string; fileName?: string; mapping: ImportMapping }
     ) => {
       // Two request shapes — server accepts either (the
@@ -342,7 +345,7 @@ export default function Competitors() {
       if (jsonData.length > 0) {
         const columns = Object.keys(jsonData[0] as object);
         setImportColumns(columns);
-        setImportData(jsonData);
+        setImportData(jsonData as Record<string, unknown>[]);
 
         const autoMapping: ImportMapping = {
           firstName: '',
@@ -1148,7 +1151,7 @@ export default function Competitors() {
                   {required && <span className="text-red-500">*</span>}
                 </Label>
                 <Select
-                  value={(columnMapping as any)[key] || ''}
+                  value={(columnMapping as unknown as Record<string, string>)[key] || ''}
                   onChange={(e) =>
                     setColumnMapping({ ...columnMapping, [key]: e.target.value })
                   }
@@ -1184,7 +1187,7 @@ export default function Competitors() {
                   <TableBody>
                     {importData.slice(0, 3).map((row, i) => (
                       <TableRow key={i}>
-                        {Object.values(row).slice(0, 4).map((val: any, j) => (
+                        {Object.values(row).slice(0, 4).map((val: unknown, j) => (
                           <TableCell key={j} density="compact" className="px-2 py-1 border-t whitespace-nowrap">
                             {String(val).substring(0, 15)}
                           </TableCell>

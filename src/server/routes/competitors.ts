@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import * as XLSX from 'xlsx';
-import { importFromExcel } from '../services/excel-import.js';
+import { importFromExcel, type ColumnMapping, type ExcelRow } from '../services/excel-import.js';
 import { generateImportTemplate, getDefaultColumnMapping } from '../services/excel-template.js';
 import { autoDetectMapping } from '../services/excel-auto-map.js';
 import { validateRequest } from '../middleware/validate.js';
@@ -67,8 +67,8 @@ router.post('/auto-map', authenticate, requireRole('admin', 'director'), validat
     }
     const result = autoDetectMapping(buffer);
     res.json({ ...result, fileName: fileName || 'uploaded' });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to parse file' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to parse file' });
   }
 });
 
@@ -83,7 +83,11 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     limit = '100', offset = '0',
   } = req.query as Record<string, string>;
 
-  const where: any = { deletedAt: trash === 'true' ? { not: null } : null };
+  // Build a Prisma `where` for the competitors list. The shape is
+  // `Prisma.CompetitorWhereInput`; we assemble it incrementally as
+  // optional filters are added (search, belt, school, age/weight
+  // ranges, trash, tournament-scope). No cast needed.
+  const where: Prisma.CompetitorWhereInput = { deletedAt: trash === 'true' ? { not: null } : null };
 
   // Closes B34: scope competitor list to the tournaments the user
   // can access. Without this, a viewer in org A can list every
@@ -97,8 +101,14 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     // tournament the user can access. This still leaks an
     // orphan competitor with no registrations, but those have no
     // PII to leak in the first place.
+    //
+    // Note: `Registration` doesn't have a `deletedAt` column in the
+    // schema (only `Competitor` does), so a previous `deletedAt: null`
+    // in this filter was silently no-op'd by Prisma. Worth a follow-up
+    // PR to decide whether soft-deleted registrations should be
+    // excluded from this list.
     where.registrations = {
-      some: { tournament: tournamentFilter, deletedAt: null },
+      some: { tournament: tournamentFilter },
     };
   }
 
@@ -414,7 +424,11 @@ const importFileSchema = z.object({
 
 router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const body = req.body as { data?: any[]; columnMapping?: any; fileBase64?: string; fileName?: string };
+  // The import endpoint takes two shapes: pre-parsed JSON (browser already
+  // ran SheetJS) or a base64-encoded workbook (server parses here). The
+  // Zod schema for the base64 path validates columnMapping strictly;
+  // the JSON path's mapping is treated as Partial<ColumnMapping> below.
+  const body = req.body as { data?: ExcelRow[]; columnMapping?: Partial<ColumnMapping>; fileBase64?: string; fileName?: string };
 
   if (!body.columnMapping) {
     return res.status(400).json({ error: 'Missing columnMapping' });
@@ -440,11 +454,12 @@ router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin'
       if (!sheetName) {
         return res.status(400).json({ error: 'Workbook has no sheets' });
       }
-      const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
-      const result = await importFromExcel(prisma, data as any[], parsed.data.columnMapping as any);
+      const data = XLSX.utils.sheet_to_json<ExcelRow>(workbook.Sheets[sheetName], { defval: '' });
+      const result = await importFromExcel(prisma, data, parsed.data.columnMapping);
       return res.json({ ...result, parsedServerSide: true });
-    } catch (err: any) {
-      return res.status(500).json({ error: err?.message || 'Failed to parse xlsx' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Import failed';
+      res.status(500).json({ error: message });
     }
   }
 

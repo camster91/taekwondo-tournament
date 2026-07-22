@@ -23,6 +23,7 @@ import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { StatTile } from '../components/ui';
+import type { ApiDivision, ApiMatch, ApiTournamentSummary } from '../utils/api-types';
 
 interface DivisionStats {
   id: string;
@@ -122,31 +123,31 @@ export default function DirectorDashboard() {
 
       if (!tournamentRes.ok) throw new Error('Failed to fetch tournament');
 
-      const tournament = await tournamentRes.json();
-      const divisions: any[] = divisionsRes.ok ? await divisionsRes.json() : [];
+      const tournament = (await tournamentRes.json()) as ApiTournamentSummary;
+      const divisions: ApiDivision[] = divisionsRes.ok ? await divisionsRes.json() : [];
 
-      const matches = divisions.flatMap((d: any) =>
-        (d.bracket?.matches ?? []).map((m: any) => ({
+      const matches: ApiMatch[] = divisions.flatMap((d) =>
+        (d.bracket?.matches ?? []).map((m) => ({
           ...m,
           _divisionId: d.id,
           _divisionName: d.name,
         }))
       );
 
-      const completedDivisions = divisions.filter((d: any) => {
-        const dm = matches.filter((m: any) => m._divisionId === d.id);
-        return dm.length > 0 && dm.every((m: any) => m.status === 'completed' || m.status === 'bye');
+      const completedDivisions = divisions.filter((d) => {
+        const dm = matches.filter((m) => m._divisionId === d.id);
+        return dm.length > 0 && dm.every((m) => m.status === 'completed' || m.status === 'bye');
       }).length;
-      const inProgressDivisions = divisions.filter((d: any) =>
-        matches.some((m: any) => m._divisionId === d.id && m.status === 'in_progress')
+      const inProgressDivisions = divisions.filter((d) =>
+        matches.some((m) => m._divisionId === d.id && m.status === 'in_progress')
       ).length;
 
-      const completedMatches = matches.filter((m: any) => m.status === 'completed').length;
-      const inProgressMatches = matches.filter((m: any) => m.status === 'in_progress').length;
-      const scheduledMatches = matches.filter((m: any) => m.status === 'ready' || m.status === 'pending').length;
+      const completedMatches = matches.filter((m) => m.status === 'completed').length;
+      const inProgressMatches = matches.filter((m) => m.status === 'in_progress').length;
+      const scheduledMatches = matches.filter((m) => m.status === 'ready' || m.status === 'pending').length;
 
-      const ringMap = new Map<string, any[]>();
-      matches.forEach((m: any) => {
+      const ringMap = new Map<string, ApiMatch[]>();
+      matches.forEach((m) => {
         const ring = m.ringNumber != null ? `Ring ${m.ringNumber}` : null;
         if (!ring) return;
         if (!ringMap.has(ring)) ringMap.set(ring, []);
@@ -155,11 +156,11 @@ export default function DirectorDashboard() {
 
       const rings: RingStatus[] = [];
       ringMap.forEach((ringMatches, ring) => {
-        const currentMatch = ringMatches.find((m: any) => m.status === 'in_progress');
-        const upcoming = ringMatches.filter((m: any) => m.status === 'ready' || m.status === 'pending').length;
-        const allCompleted = ringMatches.every((m: any) => m.status === 'completed' || m.status === 'bye');
+        const currentMatch = ringMatches.find((m) => m.status === 'in_progress');
+        const upcoming = ringMatches.filter((m) => m.status === 'ready' || m.status === 'pending').length;
+        const allCompleted = ringMatches.every((m) => m.status === 'completed' || m.status === 'bye');
 
-        const getCompetitorName = (slot: any) => {
+        const getCompetitorName = (slot: ApiMatch['competitor1']) => {
           const comp = slot?.competitor;
           return comp ? `${comp.firstName} ${comp.lastName}` : 'TBD';
         };
@@ -171,7 +172,10 @@ export default function DirectorDashboard() {
             divisionName: currentMatch._divisionName || 'Unknown',
             competitor1: getCompetitorName(currentMatch.competitor1),
             competitor2: getCompetitorName(currentMatch.competitor2),
-            startedAt: currentMatch.updatedAt,
+            // The DB column is `DateTime?`; we coerce null to undefined
+            // here because RingStatus.startedAt is typed as optional
+            // (not nullable) for the renderer's convenience.
+            startedAt: currentMatch.updatedAt ?? undefined,
           } : undefined,
           upcomingMatches: upcoming,
           status: currentMatch ? 'active' : allCompleted ? 'completed' : 'idle',
@@ -203,10 +207,10 @@ export default function DirectorDashboard() {
         }
       }
 
-      const divisionDetails: DivisionStats[] = divisions.map((d: any) => {
-        const divMatches = matches.filter((m: any) => m._divisionId === d.id);
-        const completed = divMatches.filter((m: any) => m.status === 'completed').length;
-        const inProgress = divMatches.filter((m: any) => m.status === 'in_progress').length;
+      const divisionDetails: DivisionStats[] = divisions.map((d) => {
+        const divMatches = matches.filter((m) => m._divisionId === d.id);
+        const completed = divMatches.filter((m) => m.status === 'completed').length;
+        const inProgress = divMatches.filter((m) => m.status === 'in_progress').length;
         const remaining = divMatches.length - completed;
 
         return {
@@ -221,13 +225,17 @@ export default function DirectorDashboard() {
             : inProgress > 0 || completed > 0
               ? 'in_progress'
               : 'not_started',
-          ring: d.ring,
+          // Division-level ring assignment isn't part of the
+          // divisions response — rings live on individual matches
+          // and surface via the `rings` field on the response. The
+          // DivisionStats type keeps the optional field for future
+          // use, but it's never populated here today.
         };
       });
 
       const warnings: string[] = [];
 
-      const noBracket = divisions.filter((d: any) => !d.bracket);
+      const noBracket = divisions.filter((d) => !d.bracket);
       if (noBracket.length > 0) {
         warnings.push(`${noBracket.length} division(s) have no bracket generated`);
       }
@@ -238,9 +246,13 @@ export default function DirectorDashboard() {
         }
       });
 
-      const longMatches = matches.filter((m: any) => {
+      const longMatches = matches.filter((m) => {
         if (m.status !== 'in_progress') return false;
-        const startTime = new Date(m.updatedAt).getTime();
+        // updatedAt is `string | null` from the API; a match can be
+        // in_progress with a null updatedAt (e.g. legacy rows). Fall
+        // back to "right now" so the warning doesn't trip on the
+        // unparseable case — better to skip the warning than crash.
+        const startTime = m.updatedAt ? new Date(m.updatedAt).getTime() : Date.now();
         const elapsed = (Date.now() - startTime) / 60000;
         return elapsed > 10;
       });

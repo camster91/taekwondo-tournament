@@ -718,8 +718,8 @@ router.post('/:id/schedule', authenticate, requireTournamentAccess('director'), 
   try {
     const schedule = await generateSchedule(prisma, getParam(req.params.id), config);
     res.json(schedule);
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
+  } catch (error: unknown) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Schedule generation failed' });
   }
 });
 
@@ -730,8 +730,8 @@ router.get('/:id/schedule', authenticate, requireTournamentAccess('viewer'), asy
   try {
     const schedule = await generateSchedule(prisma, getParam(req.params.id));
     res.json(schedule);
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
+  } catch (error: unknown) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Schedule generation failed' });
   }
 });
 

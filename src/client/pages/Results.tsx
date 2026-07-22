@@ -334,7 +334,7 @@ export default function Results() {
       <div className="px-4 pb-2 flex gap-2 flex-wrap">
         <Select
           value={filterEvent}
-          onChange={(e) => setFilterEvent(e.target.value as any)}
+          onChange={(e) => setFilterEvent(e.target.value as 'all' | 'patterns' | 'sparring')}
           className="text-sm"
         >
           <option value="all">All Events</option>
