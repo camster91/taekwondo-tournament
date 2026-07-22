@@ -966,7 +966,11 @@ router.get('/tournament/:tournamentId/pdf', authenticate, requireTournamentAcces
       divisions: {
         include: {
           bracket: {
-            include: {
+            select: {
+              // `structure` carries the named `positions` map used
+              // by the PDF to label grand finals + reset correctly.
+              // Same fix as the single-bracket PDF in PR #96.
+              structure: true,
               matches: {
                 include: {
                   competitor1: { include: { competitor: true } },
@@ -1003,46 +1007,60 @@ router.get('/tournament/:tournamentId/pdf', authenticate, requireTournamentAcces
   );
 
   const brackets = divisionsWithBracket
-    .map((d) => ({
-      division: {
-        name: d.name,
-        beltLevel: d.beltLevel,
-        gender: d.gender,
-        eventType: d.eventType,
-        ageMin: d.ageMin,
-        ageMax: d.ageMax,
-        weightClass: d.weightClass,
-      } as DivisionInfo,
-      matches: d.bracket.matches.map((m) => ({
-        matchNumber: m.matchNumber,
-        round: m.roundNumber,
-        bracketType: m.bracketType as 'winners' | 'losers' | 'finals',
-        competitor1: m.competitor1
-          ? {
-              id: m.competitor1.id,
-              name: `${m.competitor1.competitor.firstName} ${m.competitor1.competitor.lastName}`,
-              school: m.competitor1.competitor.schoolDojang || '',
-            }
-          : null,
-        competitor2: m.competitor2
-          ? {
-              id: m.competitor2.id,
-              name: `${m.competitor2.competitor.firstName} ${m.competitor2.competitor.lastName}`,
-              school: m.competitor2.competitor.schoolDojang || '',
-            }
-          : null,
-        winner: m.winner
-          ? {
-              id: m.winner.id,
-              name: `${m.winner.competitor.firstName} ${m.winner.competitor.lastName}`,
-              school: m.winner.competitor.schoolDojang || '',
-            }
-          : null,
-        score1: m.score1,
-        score2: m.score2,
-        status: m.status,
-      })) as BracketMatch[],
-    }));
+    .map((d) => {
+      // Parse positions from the bracket structure (matches the
+      // single-bracket PDF path's fallback semantics).
+      let positions: { grandFinals?: number | null; reset?: number | null } | undefined;
+      try {
+        const parsed = JSON.parse(d.bracket.structure) as {
+          positions?: { grandFinals?: number | null; reset?: number | null };
+        };
+        positions = parsed.positions ?? { grandFinals: 14, reset: 15 };
+      } catch {
+        positions = { grandFinals: 14, reset: 15 };
+      }
+      return {
+        division: {
+          name: d.name,
+          beltLevel: d.beltLevel,
+          gender: d.gender,
+          eventType: d.eventType,
+          ageMin: d.ageMin,
+          ageMax: d.ageMax,
+          weightClass: d.weightClass,
+        } as DivisionInfo,
+        matches: d.bracket.matches.map((m) => ({
+          matchNumber: m.matchNumber,
+          round: m.roundNumber,
+          bracketType: m.bracketType as 'winners' | 'losers' | 'finals',
+          competitor1: m.competitor1
+            ? {
+                id: m.competitor1.id,
+                name: `${m.competitor1.competitor.firstName} ${m.competitor1.competitor.lastName}`,
+                school: m.competitor1.competitor.schoolDojang || '',
+              }
+            : null,
+          competitor2: m.competitor2
+            ? {
+                id: m.competitor2.id,
+                name: `${m.competitor2.competitor.firstName} ${m.competitor2.competitor.lastName}`,
+                school: m.competitor2.competitor.schoolDojang || '',
+              }
+            : null,
+          winner: m.winner
+            ? {
+                id: m.winner.id,
+                name: `${m.winner.competitor.firstName} ${m.winner.competitor.lastName}`,
+                school: m.winner.competitor.schoolDojang || '',
+              }
+            : null,
+          score1: m.score1,
+          score2: m.score2,
+          status: m.status,
+        })) as BracketMatch[],
+        positions,
+      };
+    });
 
   if (brackets.length === 0) {
     return res.status(404).json({ error: 'No brackets found for tournament' });

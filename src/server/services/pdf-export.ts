@@ -921,9 +921,24 @@ export function generateSchoolReportPDF(data: SchoolReportData): jsPDF {
   return doc;
 }
 
+/**
+ * Payload for a single bracket page in a batch PDF export. Includes
+ * the named `positions` so the grand finals + reset labels render
+ * correctly across bracket sizes (matches the single-bracket PDF
+ * which got this fix in PR #96).
+ */
+export interface BatchBracketEntry {
+  division: DivisionInfo;
+  matches: BracketMatch[];
+  positions?: {
+    grandFinals?: number | null;
+    reset?: number | null;
+  };
+}
+
 export function generateBatchBracketsPDF(
   tournament: TournamentInfo,
-  brackets: Array<{ division: DivisionInfo; matches: BracketMatch[] }>,
+  brackets: BatchBracketEntry[],
   showResults: boolean = false
 ): jsPDF {
   if (brackets.length === 0) {
@@ -932,25 +947,29 @@ export function generateBatchBracketsPDF(
     return doc;
   }
 
-  // Generate first bracket
+  // The first bracket goes through the full generateBracketPDF path
+  // (which sets up the doc with landscape Letter, header, footer,
+  // and the bracket drawing). Each subsequent bracket is appended
+  // on a new page using the same drawing helpers — and now with
+  // the same `positions`-aware labelling the single-bracket path got.
   let doc = generateBracketPDF({
     tournament,
     division: brackets[0].division,
     matches: brackets[0].matches,
     showResults,
+    positions: brackets[0].positions,
   });
 
-  // Add remaining brackets on new pages
   for (let i = 1; i < brackets.length; i++) {
     doc.addPage('letter', 'landscape');
-    const { division, matches } = brackets[i];
+    const { division, matches, positions } = brackets[i];
 
-    // We need to draw on the new page - recreate the content
-    const pageWidth = 792; // Landscape
+    // Header. The full generateBracketPDF also renders a footer
+    // ("Generated: ...") — we mirror that here for parity.
+    const pageWidth = 792; // Landscape Letter
     const pageHeight = 612;
     const margin = 30;
 
-    // Header
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text(tournament.name, pageWidth / 2, margin, { align: 'center' });
@@ -963,17 +982,31 @@ export function generateBatchBracketsPDF(
     doc.setFont('helvetica', 'bold');
     doc.text(division.name, pageWidth / 2, margin + 50, { align: 'center' });
 
-    // Separate matches by bracket type
-    const winnersMatches = matches.filter(m => m.bracketType === 'winners');
-    const losersMatches = matches.filter(m => m.bracketType === 'losers');
-    const finalsMatches = matches.filter(m => m.bracketType === 'finals');
+    const winnersMatches = matches.filter((m) => m.bracketType === 'winners');
+    const losersMatches = matches.filter((m) => m.bracketType === 'losers');
+    const finalsMatches = matches.filter((m) => m.bracketType === 'finals');
 
     const bracketStartY = margin + 70;
     const bracketHeight = pageHeight - bracketStartY - margin;
 
     drawWinnersBracket(doc, winnersMatches, margin, bracketStartY, 350, bracketHeight, showResults);
     drawLosersBracket(doc, losersMatches, 400, bracketStartY, 250, bracketHeight, showResults);
-    drawFinals(doc, finalsMatches, 680, bracketStartY + bracketHeight / 3, showResults, undefined);
+    // drawFinals is the helper that draws "Grand Finals" / "Reset"
+    // labels — pass `positions` so non-8-person brackets get the
+    // right match numbers (regression of the same bug fixed in
+    // PR #96 for the single-bracket PDF).
+    drawFinals(doc, finalsMatches, 680, bracketStartY + bracketHeight / 3, showResults, positions);
+
+    // Footer (mirror of the single-bracket PDF's footer).
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(
+      `Generated: ${new Date().toLocaleDateString()}`,
+      pageWidth - margin,
+      pageHeight - 20,
+      { align: 'right' }
+    );
+    doc.setTextColor(0);
   }
 
   return doc;
