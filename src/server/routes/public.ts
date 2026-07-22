@@ -6,6 +6,11 @@ import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { normalizeBelt } from '../../shared/constants/belts.js';
+import {
+  buildRegistrationPatch,
+  validateLookupParams,
+  PUBLIC_REGISTRATION_LIMITS,
+} from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { escapeHtml } from '../services/email-templates.js';
 
@@ -576,8 +581,9 @@ router.get('/registrations/:code', manageLimiter, async (req: Request, res: Resp
   const lastName = String(req.query.lastName || '').trim();
   const dob = String(req.query.dateOfBirth || '');
 
-  if (code.length < 6 || !lastName || !dob) {
-    return res.status(400).json({ error: 'Missing required parameters' });
+  const lookupError = validateLookupParams(code, lastName, dob);
+  if (lookupError) {
+    return res.status(400).json({ error: lookupError });
   }
 
   // Match by registration.id prefix (first 8 chars)
@@ -637,8 +643,9 @@ router.patch('/registrations/:code', manageUpdateLimiter, async (req: Request, r
   const lastName = String(req.body?.lastName || '').trim();
   const dob = String(req.body?.dateOfBirth || '');
 
-  if (code.length < 6 || !lastName || !dob) {
-    return res.status(400).json({ error: 'Missing required parameters' });
+  const lookupError = validateLookupParams(code, lastName, dob);
+  if (lookupError) {
+    return res.status(400).json({ error: lookupError });
   }
 
   const registration = await prisma.registration.findFirst({
@@ -662,37 +669,12 @@ router.patch('/registrations/:code', manageUpdateLimiter, async (req: Request, r
     return res.status(409).json({ error: 'Cannot edit a registration once the tournament has started.' });
   }
 
-  // Build the patch object. Only allow fields the parent can change.
-  const data: Record<string, unknown> = {};
-
-  if (req.body?.firstName !== undefined) {
-    const v = String(req.body.firstName).trim();
-    if (!v) return res.status(400).json({ error: 'First name cannot be empty.' });
-    data.firstName = v;
-  }
-  if (req.body?.gender !== undefined) {
-    data.gender = String(req.body.gender).trim();
-  }
-  if (req.body?.belt !== undefined) {
-    data.belt = String(req.body.belt).trim();
-  }
-  if (req.body?.school !== undefined) {
-    data.schoolDojang = String(req.body.school).trim() || null;
-  }
-  if (req.body?.specialNeeds !== undefined) {
-    data.specialNeeds = String(req.body.specialNeeds).trim() || null;
-  }
-  if (req.body?.competeWithOlder !== undefined) {
-    data.competeWithOlder = !!req.body.competeWithOlder;
-  }
-
-  // Registration-level changes
-  const regData: Record<string, unknown> = {};
-  if (req.body?.patterns !== undefined) regData.patterns = !!req.body.patterns;
-  if (req.body?.sparring !== undefined) regData.sparring = !!req.body.sparring;
-  if (req.body?.weight !== undefined) {
-    const w = parseFloat(String(req.body.weight));
-    if (!isNaN(w) && w > 0) regData.weightAtRegistration = w;
+  // Build the patch object via the shared validator. The validator
+  // normalizes fields, applies length caps, and surfaces clear 400
+  // errors for any out-of-range value. See public-validation.ts.
+  const { ok, error, data, regData } = buildRegistrationPatch(req.body);
+  if (!ok) {
+    return res.status(400).json({ error: error ?? 'Invalid patch.' });
   }
 
   if (Object.keys(data).length === 0 && Object.keys(regData).length === 0) {
@@ -738,8 +720,9 @@ router.delete('/registrations/:code', manageUpdateLimiter, async (req: Request, 
   const lastName = String(req.body?.lastName || '').trim();
   const dob = String(req.body?.dateOfBirth || '');
 
-  if (code.length < 6 || !lastName || !dob) {
-    return res.status(400).json({ error: 'Missing required parameters' });
+  const lookupError = validateLookupParams(code, lastName, dob);
+  if (lookupError) {
+    return res.status(400).json({ error: lookupError });
   }
 
   const registration = await prisma.registration.findFirst({
