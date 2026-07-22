@@ -18,6 +18,8 @@ import {
   isBracketCompletePure,
   resolveNextMatchSlots,
   pickSlotsToNull,
+  isValidStatusTransition,
+  validateMatchStatusTransition,
   type BracketPositions,
 } from './match-advancement.js';
 import type { BracketStructure } from './bracket-generator.js';
@@ -458,5 +460,221 @@ describe('pickSlotsToNull — undo slot selection', () => {
     expect(result).toEqual([
       { matchNumber: 5, bracketType: 'winners', field: 'competitor1Id' },
     ]);
+  });
+});
+
+// ─── Match status state machine ──────────────────────────────────────
+
+describe('isValidStatusTransition', () => {
+  // Allowed transitions, copied from the source map. Updating these
+  // here when the source map changes is intentional — it's the
+  // contract that the test pins.
+  const expected: Record<string, string[]> = {
+    pending: ['ready', 'in_progress', 'completed', 'bye'],
+    ready: ['in_progress', 'completed', 'pending'],
+    in_progress: ['completed', 'pending'],
+    completed: ['pending', 'in_progress'],
+    bye: ['pending'],
+  };
+
+  it('allows every transition in the map', () => {
+    for (const [from, tos] of Object.entries(expected)) {
+      for (const to of tos) {
+        expect(isValidStatusTransition(from as never, to as never)).toEqual({ ok: true });
+      }
+    }
+  });
+
+  it('treats self-transitions as valid no-ops', () => {
+    expect(isValidStatusTransition('pending', 'pending')).toEqual({ ok: true });
+    expect(isValidStatusTransition('completed', 'completed')).toEqual({ ok: true });
+  });
+
+  it('rejects transitions not in the map', () => {
+    // Some examples that should NOT be allowed.
+    expect(isValidStatusTransition('pending', 'pending')).toEqual({ ok: true }); // self = ok
+    const r1 = isValidStatusTransition('ready', 'ready');
+    expect(r1.ok).toBe(true);
+    const r2 = isValidStatusTransition('ready', 'bye');
+    expect(r2.ok).toBe(false);
+    if (!r2.ok) expect(r2.allowed).toEqual(['in_progress', 'completed', 'pending']);
+
+    const r3 = isValidStatusTransition('completed', 'ready');
+    expect(r3.ok).toBe(false);
+    if (!r3.ok) expect(r3.allowed).toEqual(['pending', 'in_progress']);
+
+    const r4 = isValidStatusTransition('completed', 'bye');
+    expect(r4.ok).toBe(false);
+
+    const r5 = isValidStatusTransition('bye', 'completed');
+    expect(r5.ok).toBe(false);
+    if (!r5.ok) expect(r5.allowed).toEqual(['pending']);
+
+    const r6 = isValidStatusTransition('bye', 'in_progress');
+    expect(r6.ok).toBe(false);
+  });
+});
+
+describe('validateMatchStatusTransition', () => {
+  const baseInput = {
+    from: 'pending' as const,
+    to: 'completed' as const,
+    currentWinnerId: null as string | null,
+    bothSlotsFilled: true,
+    someSlotFilled: true,
+    clearingWinnerId: false,
+  };
+
+  it('rejects invalid transitions with the same error shape as the old inline code', () => {
+    const result = validateMatchStatusTransition({ ...baseInput, from: 'completed', to: 'ready' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('invalid_transition');
+      expect(result.message).toMatch(/Invalid status transition: completed -> ready/);
+      expect(result.allowed).toEqual(['pending', 'in_progress']);
+    }
+  });
+
+  it('rejects completed without winnerId', () => {
+    const result = validateMatchStatusTransition({
+      ...baseInput,
+      to: 'completed',
+      // No winnerId passed, no current winner
+      winnerId: undefined,
+      currentWinnerId: null,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('missing_winner');
+      expect(result.message).toBe('Cannot mark match completed without a winnerId');
+    }
+  });
+
+  it('accepts completed when winnerId is passed in this PATCH', () => {
+    const result = validateMatchStatusTransition({
+      ...baseInput,
+      to: 'completed',
+      winnerId: 'r1',
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts completed when current match already has a winner and PATCH is no-op on winnerId', () => {
+    const result = validateMatchStatusTransition({
+      ...baseInput,
+      to: 'completed',
+      winnerId: undefined, // not changing
+      currentWinnerId: 'r1', // already set
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('reverts: completed -> pending requires winnerId to be cleared (regression: was a footgun)', () => {
+    // Old code only rejected when winnerId was explicitly passed as non-null.
+    // If PATCH set winnerId=undefined (no change) and the match was
+    // already completed with a winner, the old code accepted it —
+    // leaving the bracket in an inconsistent state.
+    const result = validateMatchStatusTransition({
+      from: 'completed',
+      to: 'pending',
+      currentWinnerId: 'r1',
+      winnerId: undefined, // not changing → still has winner
+      bothSlotsFilled: true,
+      someSlotFilled: true,
+      clearingWinnerId: false,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('stale_winner');
+    }
+  });
+
+  it('accepts completed -> pending when winnerId is explicitly cleared', () => {
+    const result = validateMatchStatusTransition({
+      from: 'completed',
+      to: 'pending',
+      currentWinnerId: 'r1',
+      winnerId: null,
+      bothSlotsFilled: true,
+      someSlotFilled: true,
+      clearingWinnerId: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects in_progress when one competitor slot is empty (regression: was accepted)', () => {
+    // Old code allowed this. Marking a half-filled match as
+    // in_progress doesn't make sense and was the silent-corruption
+    // path for bracket state.
+    const result = validateMatchStatusTransition({
+      from: 'pending',
+      to: 'in_progress',
+      currentWinnerId: null,
+      bothSlotsFilled: false,
+      someSlotFilled: true,
+      clearingWinnerId: false,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('inconsistent_slot_state');
+      expect(result.message).toMatch(/Cannot mark match in_progress with one or both competitor slots empty/);
+    }
+  });
+
+  it('rejects completed with one slot empty (use handleByeMatches for BYEs)', () => {
+    const result = validateMatchStatusTransition({
+      from: 'pending',
+      to: 'completed',
+      currentWinnerId: 'r1',
+      winnerId: 'r1',
+      bothSlotsFilled: false,
+      someSlotFilled: true,
+      clearingWinnerId: false,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('inconsistent_slot_state');
+      expect(result.message).toMatch(/use handleByeMatches for BYEs/);
+    }
+  });
+
+  it('rejects bye with both slots filled (BYE means exactly one)', () => {
+    const result = validateMatchStatusTransition({
+      from: 'pending',
+      to: 'bye',
+      currentWinnerId: null,
+      bothSlotsFilled: true,
+      someSlotFilled: true,
+      clearingWinnerId: false,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('inconsistent_slot_state');
+      expect(result.message).toMatch(/BYE status requires exactly one competitor slot filled/);
+    }
+  });
+
+  it('rejects bye with both slots empty', () => {
+    const result = validateMatchStatusTransition({
+      from: 'pending',
+      to: 'bye',
+      currentWinnerId: null,
+      bothSlotsFilled: false,
+      someSlotFilled: false,
+      clearingWinnerId: false,
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('accepts bye with exactly one slot filled', () => {
+    const result = validateMatchStatusTransition({
+      from: 'pending',
+      to: 'bye',
+      currentWinnerId: null,
+      bothSlotsFilled: false,
+      someSlotFilled: true,
+      clearingWinnerId: false,
+    });
+    expect(result.ok).toBe(true);
   });
 });
