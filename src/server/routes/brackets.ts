@@ -3,7 +3,7 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { generateBracket, generateSingleElimination, type BracketStructure } from '../services/bracket-generator.js';
 import { generateRoundRobin, generatePoolPlay } from '../services/bracket-formats.js';
-import { advanceWinner, handleByeMatches, getBracketPlacements } from '../services/match-advancement.js';
+import { advanceWinner, handleByeMatches, getBracketPlacements, resolveNextMatchSlots, pickSlotsToNull } from '../services/match-advancement.js';
 import {
   generateBracketPDF,
   generateBatchBracketsPDF,
@@ -547,7 +547,9 @@ router.post('/match/:matchId/undo', authenticate, async (req: AuthenticatedReque
 
   const previousState = JSON.parse(lastLog.previousState);
 
-  // Restore previous state
+  // Restore previous state. Pull the bracket structure too — we
+  // need its `nextWinnerMatch` / `nextLoserMatch` links to find
+  // which downstream slots this result populated.
   const match = await prisma.match.update({
     where: { id: getParam(req.params.matchId) },
     data: {
@@ -561,70 +563,121 @@ router.post('/match/:matchId/undo', authenticate, async (req: AuthenticatedReque
       competitor1: { include: { competitor: true } },
       competitor2: { include: { competitor: true } },
       winner: { include: { competitor: true } },
-      bracket: { select: { matches: { select: { matchNumber: true, roundNumber: true, bracketType: true } } } },
+      bracket: {
+        select: {
+          // Need `structure` to walk next-match links. The Match
+          // model itself doesn't carry them — they're part of the
+          // JSON blob written at generation time.
+          structure: true,
+          matches: {
+            select: { matchNumber: true, roundNumber: true, bracketType: true },
+          },
+        },
+      },
     },
   });
 
   // Closes B16: if the undo reverted a "completed" match back to a
   // non-completed state, null the competitor slots in any downstream
-  // match that was populated as a result of this match. The
-  // alternative is the next match silently keeping the now-stale
-  // competitor. We walk the bracket to find matches that reference
-  // this match's matchNumber in their nextWinnerMatch or
-  // nextLoserMatch (the bracket structure is on the parent bracket).
+  // match that THIS match populated. The previous implementation
+  // used a heuristic (`roundNumber + 1, matchNumber: 1`) that only
+  // worked for the 8-person DE — it found the W final (M7) when
+  // undoing R1 M1 and nulled the wrong slots. Worse, it nulled
+  // both `competitor1` and `competitor2` unconditionally, even when
+  // only one slot was filled by this match.
   //
-  // A complete fix would store the next match's slots in the audit
-  // log and restore them; this minimal version correctly nulls the
-  // slots when the undone match was completed, which is the common
-  // case. Manual regeneration is required for the undone state
-  // otherwise.
-  // `match.nextWinnerMatch` is only populated when the bracket was
-  // generated with the latest generator (which writes the chain as
-  // part of the structure). Older brackets don't have it, so we
-  // fall back to a heuristic lookup. We use `unknown` because the
-  // shape is generator-version-specific; the bracket generator
-  // re-derives the next match via position math when needed.
-  if (match.status !== 'completed' && lastLog.action === 'update') {
-    const nextWinnerMatch =
-      ((match as { nextWinnerMatch?: unknown }).nextWinnerMatch as { id: string } | null | undefined) ??
-      (await prisma.match.findFirst({
+  // The new path:
+  //   1. Parse the bracket structure to find the actual
+  //      nextWinnerMatch / nextLoserMatch targets for this match.
+  //   2. Load the DB state of those targets.
+  //   3. Use `pickSlotsToNull` to null only the slot whose current
+  //      value matches one of this match's competitor IDs. A slot
+  //      that was filled by a different upstream match stays put.
+  //
+  // Skip the slot-clearing step entirely if the undone match wasn't
+  // previously completed (e.g. an undo of a score edit on a
+  // still-pending match leaves no downstream effect).
+  let clearedSlots: { matchNumber: number; bracketType: string; field: string }[] = [];
+  if (match.status !== 'completed' && lastLog.action !== 'undo') {
+    const structure = (() => {
+      try {
+        return JSON.parse(match.bracket.structure) as BracketStructure;
+      } catch {
+        return null;
+      }
+    })();
+    const targets = resolveNextMatchSlots(
+      { matchNumber: match.matchNumber, bracketType: match.bracketType as 'winners' | 'losers' | 'finals' },
+      structure
+    );
+    if (targets.length > 0) {
+      // Load the actual downstream match rows.
+      const downstream = await prisma.match.findMany({
         where: {
           bracketId: match.bracketId,
-          roundNumber: match.roundNumber + 1,
-          bracketType: 'winners',
-          matchNumber: 1, // heuristic
+          OR: targets.map((t) => ({
+            matchNumber: t.matchNumber,
+            bracketType: t.bracketType,
+          })),
         },
-        select: { id: true },
-    }));
-    if (nextWinnerMatch?.id) {
-      // Best-effort: if this match's competitor1 or competitor2
-      // is in the next match's competitor1 or competitor2, null it.
-      await prisma.match.updateMany({
-        where: {
-          id: nextWinnerMatch.id,
-          OR: [
-            { competitor1Id: match.competitor1Id },
-            { competitor2Id: match.competitor2Id },
-          ],
-        },
-        data: {
-          competitor1Id: null,
-          competitor2Id: null,
+        select: {
+          id: true,
+          matchNumber: true,
+          bracketType: true,
+          competitor1Id: true,
+          competitor2Id: true,
         },
       });
+      // Prisma returns `bracketType` as a plain string; narrow to the
+      // union that `pickSlotsToNull` expects. The DB enum is
+      // constrained to `winners | losers | finals | pool`, so this
+      // cast is safe — anything else would have failed the `findMany`
+      // above.
+      const downstreamCasted = downstream.map((d) => ({
+        matchNumber: d.matchNumber,
+        bracketType: d.bracketType as 'winners' | 'losers' | 'finals',
+        competitor1Id: d.competitor1Id,
+        competitor2Id: d.competitor2Id,
+      }));
+      const undoneCompetitorIds = [match.competitor1Id, match.competitor2Id, match.winnerId].filter(
+        (id): id is string => typeof id === 'string'
+      );
+      const toNull = pickSlotsToNull(undoneCompetitorIds, downstreamCasted, targets);
+      // Apply each null individually so we can record what was
+      // cleared in the audit log without a second DB round-trip.
+      for (const n of toNull) {
+        const row = downstream.find(
+          (d) => d.matchNumber === n.matchNumber && d.bracketType === n.bracketType
+        );
+        if (!row) continue;
+        await prisma.match.update({
+          where: { id: row.id },
+          data: { [n.field]: null },
+        });
+        clearedSlots.push({
+          matchNumber: n.matchNumber,
+          bracketType: n.bracketType,
+          field: n.field,
+        });
+      }
     }
   }
 
-  // Log the undo action
+  // Log the undo action, including which downstream slots we reset.
   await prisma.matchAuditLog.create({
     data: {
       matchId: match.id,
       action: 'undo',
       previousState: lastLog.newState,
-      newState: lastLog.previousState,
+      newState: JSON.stringify({
+        ...JSON.parse(lastLog.previousState),
+        // Record the slot clears alongside the state snapshot so
+        // a future 'redo' could restore them.
+        clearedSlots,
+      }),
       userId: user?.id,
       userEmail: user?.email,
-      reason: `Undo of ${lastLog.action} from ${lastLog.createdAt.toISOString()}`,
+      reason: `Undo of ${lastLog.action} from ${lastLog.createdAt.toISOString()}; cleared ${clearedSlots.length} downstream slot(s)`,
     },
   });
 

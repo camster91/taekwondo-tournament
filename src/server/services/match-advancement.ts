@@ -505,6 +505,127 @@ export function isBracketCompletePure(
 }
 
 /**
+ * Minimal shape of a match record the slot-resolver needs to decide
+ * which slot (competitor1 vs competitor2) the undone match populated.
+ */
+interface NextMatchCandidate {
+  matchNumber: number;
+  bracketType: 'winners' | 'losers' | 'finals';
+  competitor1Id: string | null;
+  competitor2Id: string | null;
+}
+
+/**
+ * Given the bracket structure and the match being undone, return the
+ * downstream matches that this result could have populated, plus
+ * the specific slot (competitor1 or competitor2) per match that
+ * was populated by THIS match's competitor. Pure — the caller is
+ * responsible for loading the actual `NextMatchCandidate` rows from
+ * the DB and matching by (matchNumber, bracketType).
+ *
+ * Returns an empty array if the structure has no `nextWinnerMatch`
+ * or `nextLoserMatch` link for this match (e.g. the match is the
+ * grand final, or the bracket pre-dates the structure field).
+ *
+ * Slot assignment rules (mirrors the generator + advanceWinner):
+ *   - nextWinnerMatch gets slot `competitor1` if empty, else `competitor2`
+ *   - nextLoserMatch gets slot `competitor1` if empty, else `competitor2`
+ *
+ * So we report the slot the match's competitor WOULD have filled.
+ * The caller compares this against the actual DB state to decide
+ * whether to null the slot or leave it alone (in case a different
+ * match beat this one to the slot).
+ *
+ * Note: `MatchData` doesn't carry `bracketType` directly — the type
+ * is implicit from which array the match lives in. We look the
+ * target up across all three arrays and use the first hit, with
+ * a tiebreaker preference (finals > losers > winners) in case the
+ * same `matchNumber` appears in multiple arrays (it shouldn't in a
+ * well-formed bracket, but defensive lookup costs us nothing).
+ */
+type BracketType = 'winners' | 'losers' | 'finals';
+type Slot = 'competitor1' | 'competitor2';
+type SlotTarget = { matchNumber: number; bracketType: BracketType; slot: Slot };
+
+function findMatchAcross(structure: BracketStructure, matchNumber: number): { match: MatchData; bracketType: BracketType } | null {
+  // Prefer finals → losers → winners for the same matchNumber.
+  // (Real brackets don't reuse matchNumbers across arrays.)
+  for (const [arr, bt] of [
+    [structure.finals, 'finals'] as const,
+    [structure.losers, 'losers'] as const,
+    [structure.winners, 'winners'] as const,
+  ]) {
+    const found = arr.find((m) => m.matchNumber === matchNumber);
+    if (found) return { match: found, bracketType: bt };
+  }
+  return null;
+}
+
+export function resolveNextMatchSlots(
+  undone: { matchNumber: number; bracketType: BracketType },
+  structure: BracketStructure | null | undefined
+): SlotTarget[] {
+  if (!structure) return [];
+  const here = findMatchAcross(structure, undone.matchNumber);
+  if (!here) return [];
+  const out: SlotTarget[] = [];
+
+  if (here.match.nextWinnerMatch !== undefined) {
+    const target = findMatchAcross(structure, here.match.nextWinnerMatch);
+    if (target) {
+      // The advanceToMatch() helper fills competitor1 first, then
+      // competitor2. We mirror that here — but the caller decides
+      // whether to actually null the slot based on what's currently
+      // in the DB.
+      out.push({ matchNumber: target.match.matchNumber, bracketType: target.bracketType, slot: 'competitor1' });
+      out.push({ matchNumber: target.match.matchNumber, bracketType: target.bracketType, slot: 'competitor2' });
+    }
+  }
+  // Losers-bracket drops only happen from winners-bracket matches.
+  // The losers bracket's own matches never feed into another losers
+  // match via nextLoserMatch — they have nextWinnerMatch only (into
+  // either the L final or the grand final).
+  if (here.match.nextLoserMatch !== undefined && undone.bracketType === 'winners') {
+    const target = findMatchAcross(structure, here.match.nextLoserMatch);
+    if (target) {
+      out.push({ matchNumber: target.match.matchNumber, bracketType: target.bracketType, slot: 'competitor1' });
+      out.push({ matchNumber: target.match.matchNumber, bracketType: target.bracketType, slot: 'competitor2' });
+    }
+  }
+  return out;
+}
+
+/**
+ * Given the undo target (which slots downstream matches WOULD have
+ * been filled) and the actual downstream DB state, decide which
+ * slots to null. Only null the slot whose current value matches the
+ * undone match's competitor — this prevents over-resetting a slot
+ * that was filled by a different upstream match.
+ *
+ * Returns the list of (matchId, field) pairs to null.
+ */
+export function pickSlotsToNull(
+  undoneCompetitorIds: string[],
+  downstreamCandidates: NextMatchCandidate[],
+  undoTargets: { matchNumber: number; bracketType: 'winners' | 'losers' | 'finals'; slot: 'competitor1' | 'competitor2' }[]
+): { matchNumber: number; bracketType: 'winners' | 'losers' | 'finals'; field: 'competitor1Id' | 'competitor2Id' }[] {
+  if (undoneCompetitorIds.length === 0) return [];
+  const undoSet = new Set(undoneCompetitorIds);
+  const out: { matchNumber: number; bracketType: 'winners' | 'losers' | 'finals'; field: 'competitor1Id' | 'competitor2Id' }[] = [];
+  for (const target of undoTargets) {
+    const candidate = downstreamCandidates.find(
+      (c) => c.matchNumber === target.matchNumber && c.bracketType === target.bracketType
+    );
+    if (!candidate) continue;
+    const value = target.slot === 'competitor1' ? candidate.competitor1Id : candidate.competitor2Id;
+    if (value && undoSet.has(value)) {
+      out.push({ matchNumber: target.matchNumber, bracketType: target.bracketType, field: target.slot === 'competitor1' ? 'competitor1Id' : 'competitor2Id' });
+    }
+  }
+  return out;
+}
+
+/**
  * Checks if a bracket is complete
  */
 export function isBracketComplete(
