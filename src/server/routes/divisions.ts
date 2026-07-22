@@ -580,6 +580,29 @@ router.post('/:id/assign', authenticate, async (req: AuthenticatedRequest, res: 
     });
   }
 
+  // Idempotency check: a registration can only be assigned to ONE
+  // division at a time. Without this, calling POST /:id/assign for
+  // the same registration in different divisions would silently
+  // land the kid in two divisions — the auto-categorization engine
+  // would then count them twice, the bracket generator would create
+  // duplicate match slots, etc.
+  //
+  // The schema's @@unique([divisionId, registrationId]) only blocks
+  // re-assignment to the SAME division, not different ones — that's
+  // a logical constraint this route enforces.
+  const existingAssignment = await prisma.divisionAssignment.findFirst({
+    where: { registrationId },
+    select: { id: true, divisionId: true, division: { select: { name: true } } },
+  });
+  if (existingAssignment) {
+    return res.status(409).json({
+      error: 'Registration is already assigned to a division',
+      existingDivisionId: existingAssignment.divisionId,
+      existingDivisionName: existingAssignment.division.name,
+      suggestion: 'Use POST /:id/move to transfer the registration instead.',
+    });
+  }
+
   const assignment = await prisma.divisionAssignment.create({
     data: {
       divisionId,
