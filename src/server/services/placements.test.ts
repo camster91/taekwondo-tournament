@@ -22,6 +22,10 @@ import {
   validateMatchStatusTransition,
   type BracketPositions,
 } from './match-advancement.js';
+import {
+  validateGroup,
+  type DivisionGroup,
+} from './categorization-engine.js';
 import type { BracketStructure } from './bracket-generator.js';
 import {
   timeToMinutes,
@@ -869,5 +873,64 @@ describe('validateMatchStatusTransition', () => {
       clearingWinnerId: false,
     });
     expect(result.ok).toBe(true);
+  });
+});
+
+// ─── validateGroup (categorization) ────────────────────────────────────
+
+describe('validateGroup', () => {
+  const regWithAge = (age: number) => ({
+    id: `r-${age}`,
+    competitorId: `c-${age}`,
+    patterns: true,
+    sparring: false,
+    ageAtTournament: age,
+    weightAtRegistration: null,
+    manualDivisionId: null,
+    competitor: {
+      firstName: 'A', lastName: 'B', belt: 'Black', gender: 'M',
+      schoolDojang: null,
+    },
+  });
+
+  const mkGroup = (registrations: ReturnType<typeof regWithAge>[]) => ({
+    key: 'g', name: 'G', beltLevel: 'BB' as const, gender: 'M' as const,
+    eventType: 'patterns' as const, ageMin: 18, ageMax: 35,
+    beltColors: ['Black'], registrations,
+  });
+
+  it('returns empty for no warnings', () => {
+    expect(validateGroup(mkGroup([regWithAge(20), regWithAge(22)]))).toEqual([]);
+  });
+
+  it('returns empty warnings for age spread <= 5', () => {
+    expect(validateGroup(mkGroup([regWithAge(18), regWithAge(22)]))).toEqual([]);
+  });
+
+  it('flags large age spread (> 5 years)', () => {
+    const warnings = validateGroup(mkGroup([regWithAge(15), regWithAge(22)]));
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]).toMatch(/Large age spread: 7/);
+  });
+
+  it('treats missing ageAtTournament as 0', () => {
+    const regs = [
+      { ...regWithAge(20), ageAtTournament: null as number | null },
+      { ...regWithAge(20), ageAtTournament: null as number | null },
+    ];
+    expect(validateGroup(mkGroup(regs))).toEqual([]);
+  });
+
+  it('returns empty for sparring with all weights missing', () => {
+    const group = { ...mkGroup([regWithAge(20)]), eventType: 'sparring' as const };
+    expect(validateGroup(group)).toEqual([]);
+  });
+
+  it('regression: returns string[] (was { valid: boolean; warnings: string[] })', () => {
+    // Pin the shape — the previous version always returned valid: true
+    // and callers never read that field.
+    const result = validateGroup(mkGroup([regWithAge(20)]));
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBe(0);
   });
 });

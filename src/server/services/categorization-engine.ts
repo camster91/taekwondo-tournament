@@ -34,8 +34,28 @@ export interface CategorizationConfig {
   rules?: TournamentRules;
 }
 
-interface RegistrationWithCompetitor extends Registration {
-  competitor: Competitor;
+// Source-internal type. Mirrors `Registration & { competitor: Competitor }` from
+// Prisma, but we declare it explicitly so tests can construct
+// fixtures without depending on the Prisma client.
+interface RegistrationWithCompetitor {
+  id: string;
+  competitorId: string;
+  patterns: boolean;
+  sparring: boolean;
+  ageAtTournament: number | null;
+  weightAtRegistration: number | null;
+  manualDivisionId: string | null;
+  competeWithOlder?: boolean;
+  competitor: {
+    firstName: string;
+    lastName: string;
+    belt: string;
+    beltColor?: string;
+    gender: string;
+    schoolDojang?: string | null;
+    weightLbs?: number | null;
+    danRank?: number | null;
+  };
 }
 
 interface DivisionGroup {
@@ -132,10 +152,12 @@ export function previewCategorization(
   const divisions: PreviewDivision[] = finalGroups
     .filter((g) => g.registrations.length > 0)
     .map((group) => {
-      // Validate and collect warnings
-      const validation = validateGroup(group);
-      if (validation.warnings.length > 0) {
-        warnings.push(...validation.warnings.map((w) => `${group.name}: ${w}`));
+      // Collect any validation warnings (large age spread,
+      // large weight spread, etc.) — these don't fail the preview,
+      // just surface as warnings.
+      const warningsForGroup = validateGroup(group);
+      if (warningsForGroup.length > 0) {
+        warnings.push(...warningsForGroup.map((w) => `${group.name}: ${w}`));
       }
 
       if (group.registrations.length < 3) {
@@ -234,10 +256,11 @@ export async function autoCategorize(
     for (const group of finalGroups) {
       if (group.registrations.length === 0) continue;
 
-      // Validate group
-      const validation = validateGroup(group);
-      if (validation.warnings.length > 0) {
-        warnings.push(...validation.warnings.map((w) => `${group.name}: ${w}`));
+      // Collect validation warnings (large spreads, etc.) — these
+      // don't fail the auto-categorize, just surface as warnings.
+      const warningsForGroup = validateGroup(group);
+      if (warningsForGroup.length > 0) {
+        warnings.push(...warningsForGroup.map((w) => `${group.name}: ${w}`));
       }
 
       const division = await tx.division.create({
@@ -708,7 +731,7 @@ function smartSplitDivision(
     reg,
     skill: getInitialSkillEstimate(
       reg.competitor.belt,
-      reg.competitor.danRank,
+      reg.competitor.danRank ?? null,
       eventType
     ),
     school: reg.competitor.schoolDojang || 'Unknown',
@@ -849,8 +872,10 @@ function smartMergeDivisions(
       }
 
       if (mergeCandidate && mergeIndex >= 0) {
-        // Merge the divisions
-        const mergedGroup = mergeTwoDivisions(current, mergeCandidate);
+        // Merge the divisions — thread eventTypeLabels so the
+        // merged name uses the sport-specific label (Kata/Kumite
+        // for Karate) rather than the hardcoded English.
+        const mergedGroup = mergeTwoDivisions(current, mergeCandidate, config.eventTypeLabels);
         merged.push(mergedGroup);
         processed.add(i);
         processed.add(mergeIndex);
@@ -905,7 +930,11 @@ function canMerge(a: DivisionGroup, b: DivisionGroup): boolean {
 /**
  * Merge two divisions into one
  */
-function mergeTwoDivisions(a: DivisionGroup, b: DivisionGroup): DivisionGroup {
+function mergeTwoDivisions(
+  a: DivisionGroup,
+  b: DivisionGroup,
+  eventTypeLabels?: { patterns: string; sparring: string }
+): DivisionGroup {
   // Combine registrations
   const registrations = [...a.registrations, ...b.registrations];
 
@@ -919,15 +948,18 @@ function mergeTwoDivisions(a: DivisionGroup, b: DivisionGroup): DivisionGroup {
   // Use wider dan range if applicable
   const danMin = a.danMin !== undefined && b.danMin !== undefined
     ? Math.min(a.danMin, b.danMin)
-    : a.danMin || b.danMin;
+    : a.danMin ?? b.danMin;
   const danMax = a.danMax !== undefined && b.danMax !== undefined
     ? Math.max(a.danMax, b.danMax)
-    : a.danMax || b.danMax;
+    : a.danMax ?? b.danMax;
 
-  // Generate merged name
+  // Generate merged name — must mirror createDivisionGroup's event
+  // type label lookup so a Karate tournament's merged division name
+  // reads "Kata" / "Kumite" rather than the hardcoded "Patterns" /
+  // "Sparring". Regression: the previous version ignored
+  // eventTypeLabels entirely.
   const genderName = a.gender === 'M' ? 'Males' : 'Females';
-  const eventName = a.eventType === 'patterns' ? 'Patterns' : 'Sparring';
-  const ageLabel = `${ageMin}-${ageMax}`;
+  const eventName = eventTypeLabels?.[a.eventType] ?? (a.eventType === 'patterns' ? 'Patterns' : 'Sparring');
 
   let beltPart = '';
   if (a.beltLevel === 'BB') {
@@ -943,7 +975,7 @@ function mergeTwoDivisions(a: DivisionGroup, b: DivisionGroup): DivisionGroup {
     beltPart = `CB-All ${beltColors.join('/')} Belts`;
   }
 
-  let name = `${ageLabel} ${beltPart} ${genderName} ${eventName}`;
+  let name = `${ageMin}-${ageMax} ${beltPart} ${genderName} ${eventName}`;
   if (a.weightClass) {
     name += ` ${a.weightClass}`;
   }
@@ -964,7 +996,13 @@ function mergeTwoDivisions(a: DivisionGroup, b: DivisionGroup): DivisionGroup {
   };
 }
 
-function validateGroup(group: DivisionGroup): { valid: boolean; warnings: string[] } {
+/**
+ * Validate a division group and return any warnings. Returns just the
+ * warnings array (the previous shape included a `valid: true` flag
+ * that was always true — no failure path existed — and no caller
+ * read it).
+ */
+export function validateGroup(group: DivisionGroup): string[] {
   const warnings: string[] = [];
 
   // Check age spread
@@ -986,5 +1024,5 @@ function validateGroup(group: DivisionGroup): { valid: boolean; warnings: string
     }
   }
 
-  return { valid: true, warnings };
+  return warnings;
 }
