@@ -189,7 +189,7 @@ this file is wrong.
 | `VerifyMagicLink.tsx` | `/verify?token=...` | Consume the magic link |
 | `AcceptInvite.tsx` | `/accept-invite?token=...` | Invited-user signup |
 | `Dashboard.tsx` | `/` | Director view: counts + recent tournaments |
-| `DirectorDashboard.tsx` | `/director` | Director-specific dashboard (legacy, currently overlapping with `Dashboard.tsx`) |
+| `DirectorDashboard.tsx` | `/tournaments/:id/director` | Per-tournament live control room — ring status, division progress, day-of warnings |
 | `Tournaments.tsx` | `/tournaments` | List + create |
 | `TournamentDetail.tsx` | `/tournaments/:id` | Overview |
 | `TournamentSettings.tsx` | `/tournaments/:id/settings` | Edit settings, weight classes, rules |
