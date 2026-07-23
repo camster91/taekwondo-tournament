@@ -152,21 +152,7 @@ describe('Round-Robin seeding strategies', () => {
   // adjacent pairings (round 1) don't pit same-school against
   // same-school.
 
-  it('school_spread keeps same-school count in round 1 small (best-effort given the circle method)', () => {
-    // The circle method for round-robin pairing (i ↔ n-1-i) couples
-    // pairings to the SEEDING ORDERING. Even with a perfect
-    // school-interleaved ordering like [B, A, C, B, A, C], the circle
-    // method's round-1 pairings are (0,5)=(B,C), (1,4)=(A,A), (2,3)=(C,B).
-    // Same-school pairings in round 1 are structurally possible for
-    // some sizes (notably n=6 with 3 schools of 2).
-    //
-    // The current `school_spread` implementation does best-effort
-    // school interleaving in the ordering; whether round-1 pairings
-    // end up same-school depends on the size + school distribution.
-    // For the test case below, n=6 with 3 schools of 2, the circle
-    // method forces at least one same-school round-1 pairing. The
-    // contract we pin here is the **soft one**: at most one same-school
-    // pairing in round 1, and round 2 should generally improve.
+  it('school_spread avoids same-school matches in round 1 when a conflict-free arrangement exists', () => {
     const r = generateRoundRobin(competitors, { seedingStrategy: 'school_spread' });
     const round1 = r.winners.filter((m) => m.round === 1);
     expect(round1).toHaveLength(3);
@@ -175,10 +161,34 @@ describe('Round-Robin seeding strategies', () => {
       const c2 = competitors.find((c) => c.registrationId === m.competitor2Id);
       return c1?.school === c2?.school;
     });
-    // Allow up to 1 same-school round-1 pairing for the structural
-    // case. A full fix would need a circle-aware seeding algorithm
-    // — out of scope for this audit; flagged as a known constraint.
-    expect(sameSchoolPairings.length).toBeLessThanOrEqual(1);
+    expect(sameSchoolPairings).toHaveLength(0);
+  });
+
+  it('school_spread leaves only the unavoidable conflicts when one school is over-represented', () => {
+    const overRepresented = makeCompetitors(6, ['Alpha', 'Alpha', 'Alpha', 'Alpha', 'Bravo', 'Charlie']);
+    const r = generateRoundRobin(overRepresented, { seedingStrategy: 'school_spread' });
+    const round1 = r.winners.filter((m) => m.round === 1);
+    const schoolById = new Map(overRepresented.map((c) => [c.registrationId, c.school]));
+    const sameSchoolPairings = round1.filter((m) =>
+      schoolById.get(m.competitor1Id!) === schoolById.get(m.competitor2Id!)
+    );
+
+    // Four Alpha competitors cannot all be paired with the two
+    // non-Alpha competitors, so one Alpha-vs-Alpha match is the floor.
+    expect(sameSchoolPairings).toHaveLength(1);
+  });
+
+  it('school_spread uses the implicit BYE to protect an over-represented school in odd divisions', () => {
+    const odd = makeCompetitors(5, ['Alpha', 'Alpha', 'Alpha', 'Bravo', 'Charlie']);
+    const r = generateRoundRobin(odd, { seedingStrategy: 'school_spread' });
+    const round1 = r.winners.filter((m) => m.round === 1);
+    const schoolById = new Map(odd.map((c) => [c.registrationId, c.school]));
+    const sameSchoolPairings = round1.filter((m) =>
+      schoolById.get(m.competitor1Id!) === schoolById.get(m.competitor2Id!)
+    );
+
+    expect(round1).toHaveLength(2);
+    expect(sameSchoolPairings).toHaveLength(0);
   });
 
   it('regression: seeding strategies are NOT all equivalent (skill_based, balanced, fairness_optimized must differ)', () => {

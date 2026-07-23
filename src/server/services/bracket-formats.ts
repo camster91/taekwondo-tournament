@@ -264,21 +264,73 @@ function applySeeding(
       return out;
     }
     case 'school_spread':
-    default: {
-      // School-aware interleaving: avoid putting two of the same school adjacent
-      const sorted = [...competitors].sort((a, b) => (b.skillRating || 0) - (a.skillRating || 0));
-      const result: CompetitorSeed[] = [];
-      const remaining = [...sorted];
-      while (remaining.length > 0) {
-        const lastSchool = result[result.length - 1]?.school;
-        // Find first competitor whose school differs from last placed
-        let pickIdx = remaining.findIndex((c) => c.school !== lastSchool);
-        if (pickIdx === -1) pickIdx = 0; // all same school as last — accept it
-        result.push(remaining.splice(pickIdx, 1)[0]);
-      }
-      return result;
-    }
+    default:
+      return seedForCircleSchoolSpread(competitors);
   }
+}
+
+/**
+ * Order competitors for the circle method's first round.
+ *
+ * The circle method pairs mirrored positions (i ↔ n - 1 - i), so
+ * avoiding adjacent schools is the wrong objective. Start from the
+ * skill-ranked order, then greedily apply the swap that removes the
+ * most mirrored same-school pairings. This reaches the structural
+ * minimum: zero when the school distribution permits it, otherwise
+ * the unavoidable remainder (for example, when one school supplies
+ * more than half of an even-sized division). Each accepted swap
+ * strictly lowers the conflict count, so the loop is deterministic
+ * and bounded by the number of first-round matches.
+ *
+ * Odd divisions get one implicit BYE at the end. Because the last
+ * real competitor is mirrored with that BYE, the optimizer can place
+ * one competitor from an over-represented school there.
+ */
+function seedForCircleSchoolSpread(competitors: CompetitorSeed[]): CompetitorSeed[] {
+  const result = [...competitors].sort(
+    (a, b) => (b.skillRating || 0) - (a.skillRating || 0)
+  );
+  let conflicts = countMirroredSchoolConflicts(result);
+
+  while (conflicts > 0) {
+    let bestConflicts = conflicts;
+    let bestLeft = -1;
+    let bestRight = -1;
+
+    search: for (let left = 0; left < result.length - 1; left++) {
+      for (let right = left + 1; right < result.length; right++) {
+        [result[left], result[right]] = [result[right], result[left]];
+        const candidateConflicts = countMirroredSchoolConflicts(result);
+        [result[left], result[right]] = [result[right], result[left]];
+
+        if (candidateConflicts < bestConflicts) {
+          bestConflicts = candidateConflicts;
+          bestLeft = left;
+          bestRight = right;
+          if (bestConflicts === 0) break search;
+        }
+      }
+    }
+
+    if (bestLeft === -1) break;
+    [result[bestLeft], result[bestRight]] = [result[bestRight], result[bestLeft]];
+    conflicts = bestConflicts;
+  }
+
+  return result;
+}
+
+function countMirroredSchoolConflicts(competitors: CompetitorSeed[]): number {
+  const players: (CompetitorSeed | null)[] = [...competitors];
+  if (players.length % 2 === 1) players.push(null);
+
+  let conflicts = 0;
+  for (let i = 0; i < players.length / 2; i++) {
+    const home = players[i];
+    const away = players[players.length - 1 - i];
+    if (home && away && home.school === away.school) conflicts++;
+  }
+  return conflicts;
 }
 
 function computeBalance(sorted: CompetitorSeed[]): number {
