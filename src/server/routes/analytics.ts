@@ -150,6 +150,28 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
   const { tournamentId } = req.params;
 
   try {
+    // Authorization BEFORE the expensive payload. The previous order
+    // (full findUnique → checkTournamentAccess) paid the cost of
+    // eager-loading registrations + competitors + divisions + brackets
+    // + matches before denying unauthorized requests — a DoS vector
+    // (malicious user hammering a server with foreign tournamentIds)
+    // and a timing-side-channel leak (response time revealed whether
+    // the user had access). The access check now runs first; the
+    // minimal findUnique it performs inside (organizationId + deletedAt
+    // only) is two orders of magnitude cheaper. checkTournamentAccess
+    // also returns 404 for missing/soft-deleted tournaments with the
+    // same error message, so the previous explicit 404 branch is
+    // folded into the access result.
+    const access = await checkTournamentAccess(
+      req,
+      prisma,
+      tournamentId,
+      'viewer'
+    );
+    if (!access.ok) {
+      return res.status(access.status || 403).json({ error: access.error });
+    }
+
     const tournament = await prisma.tournament.findUnique({
       where: { id: tournamentId, deletedAt: null },
       include: {
@@ -165,17 +187,10 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
     });
 
     if (!tournament) {
+      // Race: tournament was hard-deleted between the access check
+      // and this query (admin wipe, etc.). Same shape as the access
+      // check's own 404 so callers see one consistent error.
       return res.status(404).json({ error: 'Tournament not found' });
-    }
-
-    const access = await checkTournamentAccess(
-      req,
-      prisma,
-      tournamentId,
-      'viewer'
-    );
-    if (!access.ok) {
-      return res.status(access.status || 403).json({ error: access.error });
     }
 
     // School participation. Note: tournament.registrations is already
