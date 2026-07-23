@@ -84,20 +84,31 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
     });
 
     // Dev mode (no email configured): auto-create the user as a viewer so the
-    // magic link sign-in flow works for any email a real user types. The
-    // dev-mode behaviour is gated by ENABLE_DEV_AUTH so a production server
-    // with a misconfigured Mailgun key doesn't auto-create accounts.
+    // magic link sign-in flow works for any email a real user types.
     //
-    // SECURITY: auto-created dev users are always 'viewer' — never admin.
-    // Operators needing admin in dev must promote manually via SQL or the
-    // /api/auth/dev-token endpoint (which itself is gated by NODE_ENV).
+    // Security gate matches the /dev-token endpoint (line ~431):
+    // BOTH `ENABLE_DEV_AUTH` and `NODE_ENV !== 'production'` must be
+    // true. Previously this branch was `ENABLE_DEV_AUTH OR
+    // NODE_ENV !== 'production'`, which let any non-prod deploy
+    // (staging, preview, NODE_ENV unset) with a missing Mailgun key
+    // auto-create viewer accounts. Viewers are low-impact but the
+    // creation violates the "no implicit account creation outside
+    // dev" invariant and pollutes the user table on accidental
+    // staging deploys. Tighten to the same double-key used
+    // elsewhere (D16-2).
     //
-    // In production with email configured, only existing users get a real
-    // link and unknown emails fall through to the enumeration-safe 200.
+    // SECURITY: auto-created dev users are always 'viewer' — never
+    // admin. Operators needing admin in dev must promote manually
+    // via SQL or the /api/auth/dev-token endpoint.
+    //
+    // In production with email configured, only existing users get a
+    // real link and unknown emails fall through to the
+    // enumeration-safe 200.
     const inDevMode = !isEmailConfigured();
     const devAuthEnabled =
       inDevMode &&
-      (process.env.ENABLE_DEV_AUTH === '1' || process.env.NODE_ENV !== 'production');
+      process.env.ENABLE_DEV_AUTH === '1' &&
+      process.env.NODE_ENV !== 'production';
     let activeUser = user;
     if (!user && devAuthEnabled) {
       activeUser = await prisma.user.create({
@@ -648,6 +659,16 @@ router.post('/tournaments/:tournamentId/access', authenticate, requireRole('admi
   const { userId, role } = req.body as { userId: string; role: string };
 
   try {
+    // Resolve the existing role (if any) so we can decide whether the
+    // grant is a no-op or a privilege change. The post-grant
+    // tokenVersion bump only fires when the role actually changes —
+    // granting the same role again shouldn't kick every outstanding
+    // JWT for that user.
+    const existing = await prisma.userTournamentAccess.findUnique({
+      where: { userId_tournamentId: { userId, tournamentId } },
+      select: { role: true },
+    });
+
     const access = await prisma.userTournamentAccess.upsert({
       where: {
         userId_tournamentId: {
@@ -667,6 +688,22 @@ router.post('/tournaments/:tournamentId/access', authenticate, requireRole('admi
       },
     });
 
+    // Bump tokenVersion only when the per-tournament role actually
+    // changes. Without this, a scorekeeper whose access was just
+    // promoted / demoted on a tournament still rides the JWT issued
+    // before the change until it expires (up to 7 days), seeing
+    // data with stale role claims. The invalidateAuthCache call
+    // also drops the in-process cache hit so the next request
+    // re-reads the DB row.
+    if (existing?.role !== role) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { tokenVersion: { increment: 1 } },
+        select: { id: true },
+      });
+      invalidateAuthCache(userId);
+    }
+
     res.json(access);
   } catch (error) {
     console.error('Grant access error:', error);
@@ -675,15 +712,23 @@ router.post('/tournaments/:tournamentId/access', authenticate, requireRole('admi
 });
 
 // Admin: Revoke tournament access
-router.delete('/tournaments/:tournamentId/access/:userId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-  if (req.user!.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-
+router.delete('/tournaments/:tournamentId/access/:userId', authenticate, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { tournamentId, userId } = req.params;
 
   try {
+    // Capture the row before delete so we can tell whether revoke
+    // actually fired (vs. 404 on a missing access row). Only bump
+    // tokenVersion on a successful revoke — a no-op DELETE shouldn't
+    // log out a user mid-shift.
+    const existing = await prisma.userTournamentAccess.findUnique({
+      where: { userId_tournamentId: { userId, tournamentId } },
+      select: { userId: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Tournament access row not found' });
+    }
+
     await prisma.userTournamentAccess.delete({
       where: {
         userId_tournamentId: {
@@ -692,6 +737,17 @@ router.delete('/tournaments/:tournamentId/access/:userId', authenticate, async (
         },
       },
     });
+
+    // Bump the user's tokenVersion so any outstanding JWT — which
+    // embedded the old per-tournament role context — can't ride
+    // through the revoke for the rest of its TTL. Cache invalidation
+    // forces the next request to re-read the user + access tables.
+    await prisma.user.update({
+      where: { id: userId },
+      data: { tokenVersion: { increment: 1 } },
+      select: { id: true },
+    });
+    invalidateAuthCache(userId);
 
     res.status(204).send();
   } catch (error) {
