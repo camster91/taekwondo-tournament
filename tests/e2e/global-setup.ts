@@ -26,6 +26,16 @@ export default async function globalSetup() {
   // (truthy for `if (process.env.X)`) and works around chat-layer
   // redaction that mangles the literal `=1`.
   process.env.ENABLE_E2E_AUTH_BYPASS = String(1);
+  // Closes D16-2 (Phase 16): the /request-magic-link dev-mode
+  // auto-create gate is now `ENABLE_DEV_AUTH AND NODE_ENV !==
+  // production`. The e2e suite relies on dev-mode auto-create
+  // for fresh emails in login.spec.ts. Setting this here means
+  // the dev server (started by `npm run dev` from the
+  // playwright config's webServer block) inherits it via
+  // process.env propagation. Pair with the e2e-bypass flag
+  // above — both must be set for the magic-link OTP signin
+  // round-trip in tests.
+  process.env.ENABLE_DEV_AUTH = String(1);
 
   // 1. Push schema (idempotent — no destructive resets, matches test expectation of
   //    "data already exists" from `npm run seed`).
