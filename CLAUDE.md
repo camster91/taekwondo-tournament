@@ -616,6 +616,14 @@ youth Feather division. Public registration requires weight
 for sparring, but auto-categorize doesn't re-check. Fixed in
 the followup; the weight boundary is `weight < weightMaxLbs`.
 
+**Fixed (Phase 8 follow-up):** `canMerge` previously required
+*exact* contiguity (`a.ageMax + 1 === b.ageMin`) for two divisions
+to merge — so custom age groups with gaps (e.g. [6-9] and [11-14]
+skipping age 10) could never merge even when both were below
+`minSize`. Widened to a `GAP_TOLERANCE = 3` year window. Gaps
+beyond that (e.g. youth vs adult) are still blocked as deliberate
+boundaries.
+
 ---
 
 ## Security
