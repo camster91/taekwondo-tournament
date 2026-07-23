@@ -3,6 +3,7 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, requireTournamentAccess, buildTournamentAccessFilter, checkTournamentAccess } from '../middleware/auth.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
+import { buildDashboardWhereClauses } from './analytics-validation.js';
 
 const router = Router();
 
@@ -20,31 +21,29 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
     // Closes B35: scope all dashboard counts to the tournaments the
     // user is allowed to see. buildTournamentAccessFilter returns
     // null = "see everything" (admins / legacy single-tenant).
+    // Closes Phase 18: every count below also applies tournamentFilter
+    // — the prior handler had `prisma.match.count()` with no where at
+    // all, so a viewer in org A could see totalMatches across every
+    // tournament in the database. See analytics-validation.ts.
     const tournamentFilter = await buildTournamentAccessFilter(req, prisma);
-    // For the registration recentActivity count we need to also exclude
-    // soft-deleted tournaments. Combine the access filter with the
-    // notDeleted constraint via AND.
-    const registrationWhere =
-      tournamentFilter
-        ? { tournament: { AND: [tournamentFilter, notDeleted] } }
-        : { tournament: notDeleted };
+    const where = buildDashboardWhereClauses(tournamentFilter, notDeleted);
 
     // Get total counts
     const [totalCompetitors, totalTournaments, totalMatches] = await Promise.all([
-      prisma.competitor.count({ where: notDeleted }),
-      prisma.tournament.count({ where: notDeleted }),
-      prisma.match.count(),
+      prisma.competitor.count({ where: where.competitor }),
+      prisma.tournament.count({ where: where.tournament }),
+      prisma.match.count({ where: where.match }),
     ]);
 
     // Get completed matches
     const completedMatches = await prisma.match.count({
-      where: { status: 'completed' },
+      where: { ...where.match, status: 'completed' },
     });
 
     // Get competitors by belt level
     const beltDistribution = await prisma.competitor.groupBy({
       by: ['belt'],
-      where: notDeleted,
+      where: where.competitor,
       _count: true,
       orderBy: { _count: { belt: 'desc' } },
     });
@@ -52,14 +51,14 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
     // Get competitors by gender
     const genderDistribution = await prisma.competitor.groupBy({
       by: ['gender'],
-      where: notDeleted,
+      where: where.competitor,
       _count: true,
     });
 
     // Get top schools by competitor count
     const topSchools = await prisma.competitor.groupBy({
       by: ['schoolDojang'],
-      where: { ...notDeleted, schoolDojang: { not: null } },
+      where: { ...where.competitor, schoolDojang: { not: null } },
       _count: true,
       orderBy: { _count: { schoolDojang: 'desc' } },
       take: 10,
@@ -70,18 +69,19 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const recentRegistrations = await prisma.registration.count({
-      where: { ...registrationWhere, createdAt: { gte: thirtyDaysAgo } },
+      where: { ...where.registration, createdAt: { gte: thirtyDaysAgo } },
     });
 
     // Get matches by status
     const matchesByStatus = await prisma.match.groupBy({
       by: ['status'],
+      where: where.match,
       _count: true,
     });
 
     // Get age distribution (approximate using birth year)
     const competitors = await prisma.competitor.findMany({
-      where: notDeleted,
+      where: where.competitor,
       select: { dateOfBirth: true },
     });
 
