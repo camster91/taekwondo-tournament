@@ -7,6 +7,7 @@ import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule, validateScheduleConfig, DEFAULT_CONFIG, type ScheduleConfig } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
 import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
+import { generatePublicSlug, applySlugWithRetry, sanitizeBroadcastSubject } from './tournament-helpers.js';
 // requireRole stays in use for POST / (create new tournament) — there's
 // no parent tournament to scope-access yet. All other tournament-scoped
 // mutations use requireTournamentAccess.
@@ -197,17 +198,23 @@ router.post('/:id/public-slug', authenticate, requireTournamentAccess('director'
   const prisma: PrismaClient = req.app.locals.prisma;
   const id = getParam(req.params.id);
 
-  // 16 chars of base32 = ~80 bits of entropy. Brute-forcing is
-  // impractical even at 10^9 attempts/s.
-  const slug = crypto.randomBytes(10).toString('base64url').slice(0, 16);
-
-  const tournament = await prisma.tournament.update({
-    where: { id },
-    data: { publicSlug: slug },
-    select: { id: true, publicSlug: true },
+  // 16 chars of base64url ≈ 80 bits of entropy. Brute-forcing is
+  // impractical even at 10^9 attempts/s. The schema's @unique on
+  // publicSlug means a collision would otherwise throw P2002 → 500.
+  // Retry up to 3 times before giving up. The pure helper is in
+  // tournament-helpers.ts so this can be tested in isolation.
+  const result = await applySlugWithRetry({
+    makeSlug: generatePublicSlug,
+    update: (slug) => prisma.tournament.update({
+      where: { id },
+      data: { publicSlug: slug },
+      select: { id: true, publicSlug: true },
+    }),
+    isP2002: (error) =>
+      !!error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'P2002',
   });
 
-  res.json(tournament);
+  res.json({ id: result.id, publicSlug: result.slug, attempts: result.attempts });
 });
 
 // Disable the public scoreboard by clearing the slug.
@@ -364,9 +371,20 @@ router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'),
       .replace(/\{\{parent_first_name\}\}/g, (reg.parentName || '').split(' ')[0] || 'Parent');
     const filledSubject = fill(subject);
     const filledBody = fill(body);
+    // Defensive subject normalization. Mailgun rejects subjects
+    // containing CR/LF (which can break the RFC 5322 header) and
+    // long subjects (>998 chars) can trigger SMTP truncation. A
+    // director pasting multi-line content (e.g. a copy-paste from
+    // another email) would otherwise fail with an opaque Mailgun
+    // error — here we normalize to a single line and cap length.
+    const safeSubject = sanitizeBroadcastSubject(filledSubject);
+    // Escape HTML in body. Subjects don't render HTML but Apple
+    // Mail + Outlook preview snippets can show truncated subject
+    // text — escape so a director pasting HTML into the subject
+    // doesn't surface as broken markup in a recipient's inbox.
     const html = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; white-space: pre-wrap;">${escapeHtml(filledBody)}</div>`;
     try {
-      await sendEmail(to, filledSubject, html);
+      await sendEmail(to, safeSubject, html);
       sent++;
     } catch {
       failures++;
@@ -387,18 +405,30 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, status, settings } = req.body;
 
-  const tournament = await prisma.tournament.update({
-    where: { id: getParam(req.params.id) },
-    data: {
-      name,
-      date: date ? new Date(date) : undefined,
-      location,
-      status,
-      settings: settings ? JSON.stringify(settings) : undefined,
-    },
-  });
+  try {
+    const tournament = await prisma.tournament.update({
+      where: { id: getParam(req.params.id) },
+      data: {
+        name,
+        date: date ? new Date(date) : undefined,
+        location,
+        status,
+        settings: settings ? JSON.stringify(settings) : undefined,
+      },
+    });
 
-  res.json(tournament);
+    res.json(tournament);
+  } catch (error: unknown) {
+    // Prisma throws P2025 when the row doesn't exist (the
+    // requireTournamentAccess middleware already passed but the
+    // row was hard-deleted between then and now, or the URL has a
+    // typo). Map to 404 with the same shape as GET /:id so the
+    // client gets a clear "not found" rather than a generic 500.
+    if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'P2025') {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+    throw error;
+  }
 });
 
 // ─── Tournament rules (v2) ──────────────────────────────────────────────
