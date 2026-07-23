@@ -923,8 +923,16 @@ export function canMerge(a: DivisionGroup, b: DivisionGroup): boolean {
   if (a.gender !== b.gender) return false;
   if (a.eventType !== b.eventType) return false;
 
-  // Age groups must be adjacent
-  const ageAdjacent = a.ageMax + 1 === b.ageMin || b.ageMax + 1 === a.ageMin;
+  // Age groups must be adjacent, overlapping, or within a small gap
+  // (GAP_TOLERANCE years). Custom age-group rules (useBlackBeltAgeGroups,
+  // customAgeGroups) can leave gaps — e.g. [6-9] and [11-14] skipping 10
+  // because the tournament didn't open a 10-year-old bracket — and we
+  // still want to merge small adjacent divisions in that case. A gap
+  // larger than GAP_TOLERANCE is treated as a deliberate category
+  // boundary and is not mergeable.
+  const GAP_TOLERANCE = 3;
+  const minGap = Math.max(0, Math.max(b.ageMin - a.ageMax - 1, a.ageMin - b.ageMax - 1));
+  const ageAdjacent = minGap <= GAP_TOLERANCE;
   if (!ageAdjacent) return false;
 
   // Belt colors should be similar or adjacent. Belt colors are
