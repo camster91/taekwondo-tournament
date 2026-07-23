@@ -894,9 +894,30 @@ function smartMergeDivisions(
 }
 
 /**
+ * Canonical TKD colored-belt ranking used to judge belt-adjacency
+ * for merging. Used by `canMerge` — but only as ONE of several
+ * merge signals (age adjacency, weight class, combined size are
+ * also checked). A belt color not in this list is treated as
+ * "unknown" rather than letting `BELT_ORDER.indexOf(c) === -1`
+ * produce a meaningless `Math.abs(-1 - x) === Infinity` distance.
+ *
+ * Note: this is the standard TKD 5-color progression. Other styles
+ * use additional colors (Brown pre-black, Purple in some Karate /
+ * BJJ lineages, etc.) — those are deliberately NOT listed here so
+ * `canMerge` will defer to the other signals for them rather than
+ * silently blocking the merge. If we extend this list, watch out
+ * for the strict `<= 1 step` rule below: a 7-color beltOrder would
+ * make Red/Brown a distance-2 pair, and the strict adjacency rule
+ * would block their merge. That's actually arguably correct
+ * (Brown is a pre-black tier, often grouped with Black belts) but
+ * is a behavior change vs the original 5-color order.
+ */
+const BELT_ORDER: readonly string[] = ['White', 'Yellow', 'Green', 'Blue', 'Red'];
+
+/**
  * Check if two divisions can be merged
  */
-function canMerge(a: DivisionGroup, b: DivisionGroup): boolean {
+export function canMerge(a: DivisionGroup, b: DivisionGroup): boolean {
   // Must match on these criteria
   if (a.beltLevel !== b.beltLevel) return false;
   if (a.gender !== b.gender) return false;
@@ -906,12 +927,15 @@ function canMerge(a: DivisionGroup, b: DivisionGroup): boolean {
   const ageAdjacent = a.ageMax + 1 === b.ageMin || b.ageMax + 1 === a.ageMin;
   if (!ageAdjacent) return false;
 
-  // Belt colors should be similar or adjacent
+  // Belt colors should be similar or adjacent. Belt colors are
+  // filled by `groupByBeltColor` / BB paths, but a defensive check
+  // here keeps us safe if `beltColors` is ever empty (e.g. an
+  // upstream refactor) — `Math.max(...[])` and `Math.min(...[])`
+  // return ±Infinity, which would make the distance check below
+  // always fire (Infinity > 1) and block otherwise-mergeable
+  // divisions.
   const beltsOverlap = a.beltColors.some(belt => b.beltColors.includes(belt));
-  const beltOrder = ['White', 'Yellow', 'Green', 'Blue', 'Red'];
-  const aMaxBeltIdx = Math.max(...a.beltColors.map(b => beltOrder.indexOf(b)));
-  const bMinBeltIdx = Math.min(...b.beltColors.map(b => beltOrder.indexOf(b)));
-  const beltsAdjacent = Math.abs(aMaxBeltIdx - bMinBeltIdx) <= 1;
+  const beltsAdjacent = beltsAreAdjacent(a.beltColors, b.beltColors);
 
   if (!beltsOverlap && !beltsAdjacent) return false;
 
@@ -925,6 +949,54 @@ function canMerge(a: DivisionGroup, b: DivisionGroup): boolean {
   if (combinedSize > DIVISION_SIZE_CONFIG.maxSize) return false;
 
   return true;
+}
+
+/**
+ * Decide whether two belt-color lists are "adjacent" on the
+ * canonical belt ranking. Used by `canMerge` to judge whether two
+ * divisions are similar enough to merge — but only as one of
+ * several signals (age adjacency, weight class match, combined size
+ * are also checked).
+ *
+ * Returns `true` (allow) when:
+ *   - All colors are known and the closest pair across the two lists
+ *     is within 1 step on the ranking, OR
+ *   - Any color on either side is unknown (i.e. `BELT_ORDER.indexOf`
+ *     returns `-1`). In that case we can't make a confident
+ *     "not adjacent" judgement, so we defer to the other merge
+ *     signals instead of silently blocking the merge. This is the
+ *     safe direction to fail: a wrong-merge is visible (kids
+ *     competing against a wildly different belt level), but a
+ *     wrong-block leaves small divisions stranded with no
+ *     competitor to fight.
+ *
+ * Returns `false` (block) only when:
+ *   - Both lists have at least one known color AND
+ *   - No known color on either list is within 1 step of any known
+ *     color on the other list.
+ *
+ * Defensive: empty `beltColors` arrays return `true` (defer). The
+ * pre-fix code did `Math.max(...[])` = `-Infinity`, which produced
+ * an `Infinity` distance and silently blocked otherwise-mergeable
+ * divisions.
+ */
+function beltsAreAdjacent(a: string[], b: string[]): boolean {
+  if (a.length === 0 || b.length === 0) return true; // unknown — defer
+  const aIdx = a.map(c => BELT_ORDER.indexOf(c));
+  const bIdx = b.map(c => BELT_ORDER.indexOf(c));
+  const aHasUnknown = aIdx.some(i => i < 0);
+  const bHasUnknown = bIdx.some(i => i < 0);
+  if (aHasUnknown || bHasUnknown) return true; // unknown color — defer
+  const aMax = Math.max(...aIdx);
+  const aMin = Math.min(...aIdx);
+  const bMax = Math.max(...bIdx);
+  const bMin = Math.min(...bIdx);
+  // Check both directions — pick the closest pair across the lists.
+  const distance = Math.min(
+    Math.abs(aMax - bMin),
+    Math.abs(bMax - aMin),
+  );
+  return distance <= 1;
 }
 
 /**
