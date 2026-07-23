@@ -141,10 +141,10 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
 });
 
 // Get tournament-specific analytics (requires authentication + tournament access;
-// closes S5 + B36). Drops the `competitor: true` include to non-PII
-// fields via a down-stream select; current route already only
-// returns aggregate stats (topSchools, divisionStats) which are
-// safe. The full `competitor: true` include was the original PII leak.
+// closes S5 + B36). Replaces the full `competitor: true` include with a
+// `select` projection that excludes PII (dateOfBirth, specialNeeds,
+// weightLbs, heightInches, danRank). Only non-sensitive fields needed
+// for school aggregation are fetched, and the response remains aggregate-only.
 router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('viewer'), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { tournamentId } = req.params;
@@ -176,7 +176,16 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
       where: { id: tournamentId, deletedAt: null },
       include: {
         registrations: {
-          include: { competitor: true },
+          include: {
+            competitor: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                schoolDojang: true,
+              },
+            },
+          },
         },
         divisions: {
           include: {
