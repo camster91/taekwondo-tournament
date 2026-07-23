@@ -9,6 +9,7 @@
     "dev:client": "vite",
     "build": "prisma generate && vite build && tsc -p tsconfig.server.json",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "start": "NODE_ENV=production node server.js",
@@ -80,9 +81,11 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^9.2.4",
+    "eslint": "^10.7.0",
     "jsdom": "^27.4.0",
     "prisma": "7.8.0",
     "tsx": "^4.23.1",
+    "typescript-eslint": "^8.65.0",
     "vitest": "^4.0.18"
   }
 }

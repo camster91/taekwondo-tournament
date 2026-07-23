@@ -184,9 +184,12 @@ export async function generateSchedule(
   // routed to a ring) showed "No rings assigned yet" despite rings
   // being configured in Schedule.
   if (configOverrides && Object.keys(configOverrides).length > 0) {
-    let current: Record<string, any> = {};
+    // `settings` is a free-form JSON blob; we only ever read it back as
+    // an object and mutate a known key, so `Record<string, unknown>` is
+    // the honest shape. The override cast below is `as` to JSON-safe.
+    let current: Record<string, unknown> = {};
     if (tournament.settings) {
-      try { current = JSON.parse(tournament.settings); } catch { current = {}; }
+      try { current = JSON.parse(tournament.settings) as Record<string, unknown>; } catch { current = {}; }
     }
     current.rings = { count: config.ringCount, startTime: config.startTime, endTime: config.endTime };
     await prisma.tournament.update({
