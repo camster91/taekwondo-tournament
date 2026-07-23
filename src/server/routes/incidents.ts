@@ -2,7 +2,10 @@ import { Router } from 'express';
 import type { Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import rateLimit from 'express-rate-limit';
-import { z } from 'zod';
+import {
+  createIncidentSchema,
+  updateIncidentSchema,
+} from './incidents-validation.js';
 import {
   authenticate,
   requireRole,
@@ -19,23 +22,6 @@ const incidentsLimiter = rateLimit({
 });
 
 const router = Router();
-
-const createIncidentSchema = z.object({
-  tournamentId: z.string().uuid(),
-  matchId: z.string().uuid().optional().nullable(),
-  registrationId: z.string().uuid().optional().nullable(),
-  type: z.enum(['injury', 'disqualification', 'medical', 'equipment', 'conduct']),
-  severity: z.enum(['minor', 'moderate', 'serious']),
-  description: z.string().min(1).max(5000),
-  actionTaken: z.enum(['first_aid', 'withdrawn', 'continued', 'ambulance']).optional().nullable(),
-});
-
-const updateIncidentSchema = z.object({
-  type: z.enum(['injury', 'disqualification', 'medical', 'equipment', 'conduct']).optional(),
-  severity: z.enum(['minor', 'moderate', 'serious']).optional(),
-  description: z.string().min(1).optional(),
-  actionTaken: z.enum(['first_aid', 'withdrawn', 'continued', 'ambulance']).optional().nullable(),
-});
 
 // POST /api/incidents - Create incident
 // Note: the parent tournamentId lives in the request body, so auth
