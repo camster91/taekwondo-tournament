@@ -229,7 +229,11 @@ export default function Competitors() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await fetch(`/api/competitors/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+      const res = await fetch(`/api/competitors/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || 'Failed to delete competitor');
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['competitors'] });

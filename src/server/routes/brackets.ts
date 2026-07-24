@@ -812,10 +812,11 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
       await handleByeMatches(prisma, division.id);
       generated++;
     } catch (err: unknown) {
+      console.error(`[brackets/generate-all] ${division.name}:`, err);
       errors.push({
         divisionId: division.id,
         divisionName: division.name,
-        error: err instanceof Error ? err.message : 'Unknown error',
+        error: 'Bracket generation failed',
       });
     }
   }

@@ -23,14 +23,22 @@ class ErrorBoundary extends React.Component<
   }
   render() {
     if (this.state.error) {
+      // Never render stacks in production — they leak component paths
+      // and can expose sensitive context to spectators on venue TVs.
+      const showDetails = !import.meta.env.PROD;
       return (
         <div style={{ padding: 24, fontFamily: 'system-ui, sans-serif', maxWidth: 720, margin: '40px auto' }}>
           <h1 style={{ color: '#b91c1c', fontSize: 20, marginBottom: 12 }}>Something went wrong</h1>
-          <pre style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 12, fontSize: 12, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
-            {this.state.error.name}: {this.state.error.message}
-            {'\n\n'}
-            {this.state.error.stack}
-          </pre>
+          <p style={{ color: '#64748b', fontSize: 14, marginBottom: 12 }}>
+            Please refresh the page. If this keeps happening, contact your tournament director.
+          </p>
+          {showDetails && (
+            <pre style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 12, fontSize: 12, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+              {this.state.error.name}: {this.state.error.message}
+              {'\n\n'}
+              {this.state.error.stack}
+            </pre>
+          )}
         </div>
       );
     }

@@ -14,7 +14,27 @@ const router = Router();
 // Rate limiting for auth routes. In dev/test, set RATE_LIMIT_DISABLED=1 to
 // bypass entirely (the limiter is in-memory so test suites that hit the
 // endpoint multiple times in quick succession would otherwise hit the cap).
-const rateLimitDisabled = process.env.RATE_LIMIT_DISABLED === '1';
+// NEVER honor the bypass in production — a mis-set env would disable every
+// auth/public limiter on a live deploy.
+const rateLimitDisabled =
+  process.env.RATE_LIMIT_DISABLED === '1' && process.env.NODE_ENV !== 'production';
+
+/** Include JWT in JSON only outside production (Bearer tooling / e2e). Cookie is the real session. */
+function maybeTokenField(jwtToken: string): { token?: string } {
+  if (process.env.NODE_ENV === 'production') return {};
+  return { token: jwtToken };
+}
+
+/** Constant-time compare for ADMIN_SETUP_KEY (avoids timing leaks). */
+function setupKeyMatches(provided: unknown, expected: string): boolean {
+  if (typeof provided !== 'string' || provided.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 attempts per window
@@ -297,7 +317,9 @@ router.post('/verify-magic-link', authLimiter, async (req: Request, res: Respons
           await prisma.magicLink.updateMany({
             where: { email: email.toLowerCase(), code, usedAt: null },
             data: { usedAt: new Date() },
-          }).catch(() => {});
+          }).catch((err) => {
+            console.error('[auth] failed to invalidate magic link after max attempts:', err);
+          });
         }
         codeAttempts.set(attemptKey, attempt);
       }
@@ -357,7 +379,7 @@ router.post('/verify-magic-link', authLimiter, async (req: Request, res: Respons
         lastName: user.lastName,
         role: user.role,
       },
-      token: jwtToken,
+      ...maybeTokenField(jwtToken),
     });
   } catch (error) {
     console.error('Verify magic link error:', error);
@@ -383,7 +405,7 @@ router.post('/setup', registerLimiter, async (req: Request, res: Response) => {
       });
     }
     const { email, firstName, lastName, setupKey: providedKey } = req.body;
-    if (!providedKey || providedKey !== setupKey) {
+    if (!setupKeyMatches(providedKey, setupKey)) {
       return res.status(401).json({ error: 'Invalid or missing setupKey' });
     }
     const existingCount = await prisma.user.count();
@@ -418,7 +440,7 @@ router.post('/setup', registerLimiter, async (req: Request, res: Response) => {
     res.status(201).json({
       message: 'Admin account created. Use magic link to sign in.',
       user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
-      token: jwtToken,
+      ...maybeTokenField(jwtToken),
     });
   } catch (error) {
     console.error('Setup error:', error);
@@ -829,11 +851,13 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
       role: user.role,
       loginUrl: baseUrl,
     });
-    sendEmail(user.email, template.subject, template.html).catch(() => {});
+    sendEmail(user.email, template.subject, template.html).catch((err) => {
+      console.error('[accept-invite] welcome email failed:', err);
+    });
 
     res.status(201).json({
       user,
-      token: jwtToken,
+      ...maybeTokenField(jwtToken),
       message: 'Account created successfully',
     });
   } catch (error) {
@@ -853,7 +877,7 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
     return res.status(503).json({ error: 'Admin setup is not configured. Set ADMIN_SETUP_KEY environment variable.' });
   }
 
-  if (setupKey !== requiredKey) {
+  if (!setupKeyMatches(setupKey, requiredKey)) {
     return res.status(403).json({ error: 'Invalid setup key' });
   }
 
@@ -899,7 +923,7 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
       });
 
       res.cookie(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
-      return res.json({ user, token, message: 'Existing user promoted to admin' });
+      return res.json({ user, ...maybeTokenField(token), message: 'Existing user promoted to admin' });
     }
 
     // Create new admin user (no password)
@@ -928,7 +952,7 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
     });
 
     res.cookie(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
-    res.status(201).json({ user, token, message: 'Admin account created successfully' });
+    res.status(201).json({ user, ...maybeTokenField(token), message: 'Admin account created successfully' });
   } catch (error) {
     console.error('Setup admin error:', error);
     res.status(500).json({ error: 'Failed to create admin account' });
@@ -953,7 +977,7 @@ const DEMO_TTL_SECONDS = 4 * 60 * 60; // 4 hours
 const demoLoginEnabled = process.env.ENABLE_DEMO_LOGIN === '1';
 
 if (demoLoginEnabled) {
-  router.post('/demo', async (_req: Request, res: Response) => {
+  router.post('/demo', authLimiter, async (_req: Request, res: Response) => {
     try {
       const prisma: PrismaClient = _req.app.locals.prisma;
 
@@ -984,14 +1008,14 @@ if (demoLoginEnabled) {
       res.cookie(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
 
       res.json({
-        token,
+        ...maybeTokenField(token),
         user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
         expiresIn: DEMO_TTL_SECONDS,
         message: 'Demo session active. Changes you make are visible to all demo visitors.',
       });
     } catch (err: unknown) {
       console.error('Demo login error:', err);
-      res.status(500).json({ error: err instanceof Error ? err.message : 'Demo login failed' });
+      res.status(500).json({ error: 'Demo login failed' });
     }
   });
 }

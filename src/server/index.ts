@@ -146,6 +146,12 @@ export function jsonBodyParser(limit: string) {
 // and other non-browser clients.
 app.use(cookieParser());
 
+// Compression MUST run before API routers. Express only invokes
+// later middleware for unmatched requests — mounting compression
+// after `/api/*` left every JSON response uncompressed (scoreboard,
+// day-of, withMatches). Closes D11 for real.
+app.use((await import('compression')).default());
+
 // Make prisma available to routes
 app.locals.prisma = prisma;
 
@@ -176,15 +182,12 @@ app.get('/api/health/ready', async (_req: Request, res: Response) => {
     await prisma.$queryRaw`SELECT 1`;
     res.json({ status: 'ok', db: 'ok' });
   } catch (err: unknown) {
-    res.status(503).json({ status: 'not ready', db: err instanceof Error ? err.message : 'error' });
+    // Never echo err.message — connection strings / hostnames can
+    // appear in Prisma/pg errors and this probe is often public.
+    console.error('[health/ready] db check failed:', err);
+    res.status(503).json({ status: 'not ready', db: 'error' });
   }
 });
-
-// Compression middleware (closes D11). The API serves large JSON
-// payloads (analytics, day-of, full bracket) and the static SPA
-// bundle is ~1 MB. Compression is a free 3-10x on payload size
-// for the cost of a few MB of CPU.
-app.use((await import('compression')).default());
 
 // Serve static files in production
 if (isProduction) {
