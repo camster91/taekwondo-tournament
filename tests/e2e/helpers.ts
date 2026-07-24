@@ -42,14 +42,42 @@ export async function loginAsEmail(page: Page, email: string) {
 }
 
 /**
+ * Skip the first-run onboarding tour. The tour renders a full-viewport
+ * overlay (z-index 100, pointer-events-auto) that intercepts clicks on
+ * "New Tournament" / check-in controls. Persist the same localStorage
+ * flag the real UI writes on dismiss so the tour never mounts.
+ */
+export async function skipOnboardingTour(page: Page) {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('bowin_tour_completed', '1');
+    } catch {
+      /* ignore quota / private-mode failures */
+    }
+  });
+}
+
+/**
  * Helper: log in via the one-click "Try the demo" button. Faster than the
  * OTP flow, used for tests that need an authenticated session but aren't
  * specifically about the login UX (e.g. tournament create, check-in).
  */
 export async function loginAsDemo(page: Page) {
+  await skipOnboardingTour(page);
   await page.goto('/login');
-  await page.getByRole('button', { name: /Try the demo/i }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 });
+  // Wait for setup-status so the auth card doesn't remount (setup vs
+  // email form swap) mid-click — that detaches the button and makes
+  // Playwright retry until the 180s test timeout.
+  await page.waitForResponse(
+    (resp) => resp.url().includes('/api/auth/setup-status') && resp.ok(),
+    { timeout: 15_000 },
+  ).catch(() => undefined);
+  const demoBtn = page.getByRole('button', { name: /Try the demo/i });
+  await demoBtn.waitFor({ state: 'visible', timeout: 15_000 });
+  await Promise.all([
+    page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 }),
+    demoBtn.click(),
+  ]);
 }
 
 async function expectDevModeCodeVisible(page: Page, code: string) {

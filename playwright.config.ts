@@ -51,10 +51,15 @@ export default defineConfig({
     // is also gated on !isEmailConfigured(), so this is a no-op in
     // production regardless.
     env: {
-      RATE_LIMIT_DISABLED: String(true),
-      // See auth.ts for the gate; here we just need a truthy value
-      // that survives the chat-layer redaction that mangles "=1".
-      ENABLE_E2E_AUTH_BYPASS: String(true),
+      // All three auth gates in auth.ts check `=== '1'` (not truthy).
+      // Use String(1) so the value is the digit "1". `String(true)` is
+      // the string "true" and would silently disable the routes.
+      // `...process.env` last so global-setup's assignments win when
+      // both are set.
+      RATE_LIMIT_DISABLED: String(1),
+      ENABLE_E2E_AUTH_BYPASS: String(1),
+      ENABLE_DEMO_LOGIN: String(1),
+      ENABLE_DEV_AUTH: String(1),
       ...process.env,
     },
     url: BASE_URL,

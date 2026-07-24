@@ -52,10 +52,10 @@ must be started manually each session:
   reuses an already-running server on `:5173` if present — but a
   server started plainly via `npm run dev` lacks those env vars, so
   stop it first to let Playwright manage the webServer for E2E.
-- Known pre-existing E2E failures (NOT environment problems, do not
-  "fix" via env changes): the `login` magic-link spec asserts the
-  old brand text `Martial Arts TM` while the UI was rebranded to
-  `bowin` (rebrand is half-done, see `CLAUDE.md`), and the two
-  `tournament-create` specs are blocked by an `Onboarding tour`
-  dialog overlay that intercepts clicks on "New Tournament". 20/23
-  E2E pass; the rest are stale test assertions / UI-overlay issues.
+- E2E requires `ENABLE_DEMO_LOGIN`, `ENABLE_DEV_AUTH`, and
+  `ENABLE_E2E_AUTH_BYPASS` (set by `tests/e2e/global-setup.ts` +
+  `playwright.config.ts` webServer.env). Demo login has no
+  NODE_ENV fallback — without the flag the route is not mounted.
+- `loginAsDemo` skips the onboarding tour via
+  `bowin_tour_completed` localStorage so the tour overlay does
+  not intercept clicks on authenticated pages.

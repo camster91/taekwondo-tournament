@@ -13,7 +13,8 @@ test.describe('login (magic link flow)', () => {
     );
 
     await page.goto('/login');
-    await expect(page.getByText(/Martial Arts TM/i)).toBeVisible();
+    // Brand was rebranded from "Martial Arts TM" → "bowin" (header mark).
+    await expect(page.getByText(/^bowin$/i).first()).toBeVisible();
 
     // Email step
     await page.getByLabel('Email address').fill(email);
@@ -72,9 +73,7 @@ test.describe('login (magic link flow)', () => {
     // The "Try the demo" button is a fast path: a 4-hour admin session
     // without email. This guards against that path regressing — the e2e
     // suite uses it as the standard auth for the heavier flows.
-    await page.goto('/login');
-    await page.getByRole('button', { name: /Try the demo/i }).click();
-    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 });
+    await loginAsDemo(page);
 
     // Session is cookie-based — verify by hitting /api/auth/me.
     const meResponse = await page.request.get('/api/auth/me');
