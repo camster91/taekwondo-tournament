@@ -236,19 +236,30 @@ describe('GET /api/analytics/tournament/:tournamentId — auth-before-DB orderin
     expect(callArgs[3]).toBe('viewer');
   });
 
-  it('DOES call tournament.findUnique (with eager-loaded includes) when access is granted', async () => {
-    // Positive case — when authorization passes, we still build the
-    // full payload. The fix doesn't change the happy path; it just
-    // stops paying the cost on denied requests. We assert the shape
-    // is preserved so a future "optimization" doesn't quietly drop
-    // the includes.
+  it('loads only non-sensitive competitor fields when access is granted', async () => {
+    // Positive case — when authorization passes, the route loads only
+    // the competitor fields needed for school aggregation. The query
+    // must never pull DOB, special-needs, rank, or body measurements
+    // into process memory for a viewer analytics request.
     mocks.checkTournamentAccess.mockResolvedValueOnce({ ok: true });
 
     const prisma = buildPrismaMock();
     prisma.tournament.findUnique.mockResolvedValueOnce({
       id: 't-1',
       name: 'Open',
-      registrations: [],
+      registrations: [
+        {
+          patterns: true,
+          sparring: false,
+          checkedIn: true,
+          competitor: {
+            id: 'c-1',
+            firstName: 'Pat',
+            lastName: 'Lee',
+            schoolDojang: 'Safe Dojang',
+          },
+        },
+      ],
       divisions: [],
     });
 
@@ -265,15 +276,52 @@ describe('GET /api/analytics/tournament/:tournamentId — auth-before-DB orderin
     expect(res.statusCode).toBe(200);
     expect(prisma.tournament.findUnique).toHaveBeenCalledOnce();
 
-    // Lock in the include shape: registrations→competitor, and
-    // divisions→bracket→matches. These are the eager-loads whose
-    // cost motivated the fix.
+    // Lock in the data-minimized include shape. A regression to
+    // `competitor: true` would fetch every sensitive Competitor field.
     const call = prisma.tournament.findUnique.mock.calls[0][0];
     expect(call.where).toEqual({ id: 't-1', deletedAt: null });
-    expect(call.include.registrations.include).toEqual({ competitor: true });
+    expect(call.include.registrations.include).toEqual({
+      competitor: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          schoolDojang: true,
+        },
+      },
+    });
     expect(call.include.divisions.include).toEqual({
       bracket: { include: { matches: true } },
     });
+
+    expect(res.body).toEqual({
+      tournamentId: 't-1',
+      name: 'Open',
+      registrations: {
+        total: 1,
+        patterns: 1,
+        sparring: 0,
+        checkedIn: 1,
+        checkInRate: 100,
+      },
+      divisions: {
+        total: 0,
+        byType: { patterns: 0, sparring: 0 },
+        stats: [],
+      },
+      topSchools: [{ school: 'Safe Dojang', count: 1 }],
+    });
+    const serializedResponse = JSON.stringify(res.body);
+    for (const sensitiveField of [
+      'dateOfBirth',
+      'specialNeeds',
+      'danRank',
+      'weightLbs',
+      'heightInches',
+      'reachInches',
+    ]) {
+      expect(serializedResponse).not.toContain(sensitiveField);
+    }
   });
 
   it('returns 404 (not 500) when access passed but tournament is gone between check and query', async () => {
