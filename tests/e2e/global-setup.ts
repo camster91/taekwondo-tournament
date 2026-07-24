@@ -36,6 +36,12 @@ export default async function globalSetup() {
   // above — both must be set for the magic-link OTP signin
   // round-trip in tests.
   process.env.ENABLE_DEV_AUTH = String(1);
+  // Demo login (`POST /api/auth/demo` + "Try the demo" button) is
+  // gated behind an explicit ENABLE_DEMO_LOGIN opt-in (no NODE_ENV
+  // fallback). The suite's loginAsDemo helper and several specs
+  // depend on it — without this flag the route is not even mounted
+  // and every demo-auth test hangs / times out.
+  process.env.ENABLE_DEMO_LOGIN = String(1);
 
   // 1. Push schema (idempotent — no destructive resets, matches test expectation of
   //    "data already exists" from `npm run seed`).

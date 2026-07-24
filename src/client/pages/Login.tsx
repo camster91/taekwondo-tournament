@@ -159,6 +159,7 @@ export default function Login() {
     } catch (err: unknown) {
       console.error('Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
+      setDemoLoading(false);
     }
   };
 
