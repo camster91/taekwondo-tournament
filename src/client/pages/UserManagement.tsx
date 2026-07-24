@@ -80,11 +80,25 @@ export default function UserManagement() {
   const { data: users, isLoading } = useQuery<User[]>({
     queryKey: ['users'],
     queryFn: async () => {
-      const res = await fetch('/api/auth/users', {
-        headers: getAuthHeaders(),
-      });
-      if (!res.ok) throw new Error('Failed to fetch users');
-      return res.json();
+      // Page through the API — server returns { users, total }.
+      const pageSize = 200;
+      const all: User[] = [];
+      let offset = 0;
+      let total = Infinity;
+      while (offset < total) {
+        const res = await fetch(`/api/auth/users?limit=${pageSize}&offset=${offset}`, {
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) throw new Error('Failed to fetch users');
+        const body = await res.json();
+        // Back-compat if an older server still returns a bare array.
+        const batch: User[] = Array.isArray(body) ? body : body.users || [];
+        total = Array.isArray(body) ? batch.length : (body.total ?? batch.length);
+        all.push(...batch);
+        if (batch.length === 0) break;
+        offset += batch.length;
+      }
+      return all;
     },
   });
 

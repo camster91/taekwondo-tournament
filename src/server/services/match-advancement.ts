@@ -420,6 +420,28 @@ export async function getBracketPlacements(
 }
 
 /**
+ * Gets placements from an already-loaded bracket (structure JSON +
+ * matches). Avoids the per-division DB round-trip that
+ * getBracketPlacements performs when callers already have the data
+ * (e.g. GET /divisions?withMatches=true).
+ */
+export function getBracketPlacementsFromLoaded(
+  structureJson: string,
+  matches: PlacementMatch[],
+): { place: number; competitorId: string }[] {
+  const structure: BracketStructure | null = (() => {
+    try { return JSON.parse(structureJson); } catch { return null; }
+  })();
+
+  let positions: BracketPositions | null | undefined = structure?.positions;
+  if (!positions) {
+    positions = { winnersFinal: 7, losersFinal: 13, grandFinals: 14, reset: 15 };
+  }
+
+  return resolvePlacements(matches, positions);
+}
+
+/**
  * Enriched placements: returns { place, registrationId, registration: { competitor: {...} } }
  * shaped like the Prisma Placement model the Results page expects.
  */

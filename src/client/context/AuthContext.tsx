@@ -258,10 +258,13 @@ export function useAuth(): AuthContextType {
   return context;
 }
 
-// No-op kept for backward compatibility — the HttpOnly cookie
-// authenticates same-origin requests automatically, so callers no
-// longer need to attach an Authorization header. Returning {} lets
-// existing call sites spread the result without changing headers.
+// CSRF double-submit: read the readable `bowin_csrf` cookie and send
+// it as X-CSRF-Token on mutating requests. Cookie auth alone is not
+// enough — without this header a cross-site form could trigger
+// state-changing requests (mitigated partly by SameSite=Lax).
 export function getAuthHeaders(): HeadersInit {
-  return {};
+  if (typeof document === 'undefined') return {};
+  const match = document.cookie.match(/(?:^|;\s*)bowin_csrf=([^;]*)/);
+  const csrf = match ? decodeURIComponent(match[1]) : '';
+  return csrf ? { 'X-CSRF-Token': csrf } : {};
 }

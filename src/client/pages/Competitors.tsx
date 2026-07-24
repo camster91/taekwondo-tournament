@@ -423,9 +423,25 @@ export default function Competitors() {
   };
 
   const handleExportExcel = async () => {
-    const res = await fetch('/api/competitors?limit=10000', { headers: getAuthHeaders() });
-    const result = await res.json();
-    const all: Competitor[] = result.competitors || [];
+    // Page through the API (server caps limit at 1000) so large
+    // registries aren't silently truncated.
+    const pageSize = 1000;
+    const all: Competitor[] = [];
+    let offset = 0;
+    let total = Infinity;
+    while (offset < total) {
+      const res = await fetch(
+        `/api/competitors?limit=${pageSize}&offset=${offset}`,
+        { headers: getAuthHeaders() },
+      );
+      if (!res.ok) throw new Error('Failed to export competitors');
+      const result = await res.json();
+      const batch: Competitor[] = result.competitors || [];
+      total = typeof result.total === 'number' ? result.total : batch.length;
+      all.push(...batch);
+      if (batch.length === 0) break;
+      offset += batch.length;
+    }
 
     const wsData = [
       ['First Name', 'Last Name', 'Gender', 'Date of Birth', 'Belt', 'Dan Rank', 'Height (in)', 'Weight (lbs)', 'School/Dojang', 'Special Needs'],

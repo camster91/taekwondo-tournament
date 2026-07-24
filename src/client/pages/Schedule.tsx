@@ -10,7 +10,6 @@ import {
   AlertTriangle,
   Monitor,
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
@@ -114,9 +113,10 @@ export default function Schedule() {
     }
   }, [regenerateMutation.isError]);
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     if (!schedule) return;
 
+    const { jsPDF } = await import('jspdf');
     const doc = new jsPDF('portrait', 'pt', 'letter');
     const pageWidth = doc.internal.pageSize.getWidth();
 

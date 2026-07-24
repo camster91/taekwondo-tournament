@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { autoCategorize, previewCategorization, type CategorizationConfig } from '../services/categorization-engine.js';
-import { getBracketPlacementsEnriched } from '../services/match-advancement.js';
+import { getBracketPlacementsFromLoaded } from '../services/match-advancement.js';
 import { getSportProfile } from '../../shared/constants/sport-profiles.js';
 import { Errors } from '../utils/errors.js';
 import {
@@ -105,19 +105,81 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
   // The Results page reads bracket.placements. Placements are computed from
   // the bracket's match results (winnerId of finals), not stored on the
   // bracket model. Compute them here so the response shape matches the
-  // client's expectations.
+  // client's expectations — from already-loaded matches (no N+1), then
+  // one bulk registration fetch for enrichment.
   if (withMatches) {
-    // Mutate the in-memory division objects to attach `bracket.placements`
-    // before serialization. We can't return a new typed shape because the
-    // route's outer `include` already fixes the inferred Prisma type;
-    // unknown stays local to this block.
-    await Promise.all(
-      divisions.map(async (d) => {
-        if (d.bracket?.id) {
-          (d.bracket as { placements?: unknown }).placements = await getBracketPlacementsEnriched(prisma, d.bracket.id);
-        }
-      })
-    );
+    const baseByDivision = new Map<string, { place: number; competitorId: string }[]>();
+    const allRegIds = new Set<string>();
+
+    // Prisma's ternary `include` widens bracket to the no-matches shape;
+    // when withMatches is true the nested matches are always present.
+    type BracketWithMatches = {
+      id: string;
+      structure: string;
+      matches: Array<{
+        matchNumber: number;
+        bracketType: string;
+        status: string;
+        winnerId: string | null;
+        competitor1Id: string | null;
+        competitor2Id: string | null;
+      }>;
+    };
+
+    for (const d of divisions) {
+      const bracket = d.bracket as BracketWithMatches | null;
+      if (!bracket?.id || !bracket.matches) continue;
+      const base = getBracketPlacementsFromLoaded(
+        bracket.structure,
+        bracket.matches.map((m) => ({
+          matchNumber: m.matchNumber,
+          bracketType: m.bracketType as 'winners' | 'losers' | 'finals',
+          status: m.status,
+          winnerId: m.winnerId,
+          competitor1Id: m.competitor1Id,
+          competitor2Id: m.competitor2Id,
+        })),
+      );
+      baseByDivision.set(d.id, base);
+      for (const p of base) allRegIds.add(p.competitorId);
+    }
+
+    const registrations = allRegIds.size
+      ? await prisma.registration.findMany({
+          where: { id: { in: [...allRegIds] } },
+          include: {
+            competitor: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                schoolDojang: true,
+                belt: true,
+              },
+            },
+          },
+        })
+      : [];
+    const regById = new Map(registrations.map((r) => [r.id, r]));
+
+    for (const d of divisions) {
+      if (!d.bracket?.id) continue;
+      const base = baseByDivision.get(d.id) || [];
+      (d.bracket as { placements?: unknown }).placements = base
+        .map((p) => {
+          const reg = regById.get(p.competitorId);
+          if (!reg) return null;
+          return {
+            place: p.place,
+            registrationId: reg.id,
+            registration: {
+              id: reg.id,
+              competitor: reg.competitor,
+            },
+          };
+        })
+        .filter(Boolean);
+    }
   }
 
   res.json(divisions);

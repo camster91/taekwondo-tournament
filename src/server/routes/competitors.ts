@@ -162,6 +162,26 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     if (parsedWeightMax !== undefined) where.weightLbs.lte = parsedWeightMax;
   }
 
+  // Push age filters into SQL via DOB bounds so take/skip/count stay
+  // correct (post-filter on a page used to shrink pages and lie about total).
+  const now = new Date();
+  const ageMinParsed = age_min ? parseInt(String(age_min), 10) : NaN;
+  const ageMaxParsed = age_max ? parseInt(String(age_max), 10) : NaN;
+  if (!Number.isNaN(ageMinParsed) || !Number.isNaN(ageMaxParsed)) {
+    const dobFilter: Prisma.DateTimeFilter = {};
+    if (!Number.isNaN(ageMinParsed)) {
+      const latestDob = new Date(now);
+      latestDob.setFullYear(latestDob.getFullYear() - ageMinParsed);
+      dobFilter.lte = latestDob;
+    }
+    if (!Number.isNaN(ageMaxParsed)) {
+      const earliestDob = new Date(now);
+      earliestDob.setFullYear(earliestDob.getFullYear() - ageMaxParsed - 1);
+      dobFilter.gt = earliestDob;
+    }
+    where.dateOfBirth = dobFilter;
+  }
+
   const [competitors, total] = await Promise.all([
     prisma.competitor.findMany({
       where,
@@ -178,7 +198,6 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     let age: number | null = null;
     if (c.dateOfBirth) {
       const dob = new Date(c.dateOfBirth);
-      const now = new Date();
       age = now.getFullYear() - dob.getFullYear();
       const m = now.getMonth() - dob.getMonth();
       if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age--;
@@ -187,12 +206,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     return { ...c, age, tier: isBlack ? 'BB' : 'CB' };
   });
 
-  // Post-filter by age in JS (cheaper to do it here than a Prisma raw query)
-  let filtered = enriched;
-  if (age_min) filtered = filtered.filter((c) => c.age != null && c.age >= parseInt(age_min));
-  if (age_max) filtered = filtered.filter((c) => c.age != null && c.age <= parseInt(age_max));
-
-  res.json({ competitors: filtered, total, filteredCount: filtered.length });
+  res.json({ competitors: enriched, total, filteredCount: enriched.length });
 });
 
 // Aggregates for faceted UI (count by belt, gender, school, age band).
@@ -329,9 +343,27 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
   res.json(competitor);
 });
 
-// Create competitor (requires authentication + admin/director role)
+// Create competitor (requires authentication + admin/director role).
+// Multi-tenant: non-admins may only create when they have at least
+// one accessible tournament (legacy single-tenant still passes the
+// null filter). Orphan global creates by foreign directors are blocked
+// when the user has org memberships.
 router.post('/', authenticate, requireRole('admin', 'director'), validateRequest(competitorCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const authReq = req as AuthenticatedRequest;
+  const tournamentFilter = await buildTournamentAccessFilter(authReq, prisma);
+  // Non-admin with an active access filter must belong to at least one
+  // tournament — creating floating competitors that no scoped list
+  // would show (and that later IDOR-scoped updates couldn't touch)
+  // is disallowed.
+  if (tournamentFilter !== null && authReq.user?.role !== 'admin') {
+    const accessible = await prisma.tournament.count({
+      where: { deletedAt: null, ...tournamentFilter },
+    });
+    if (accessible === 0) {
+      return res.status(403).json({ error: 'No accessible tournament to attach competitors to' });
+    }
+  }
   const {
     firstName,
     lastName,
@@ -365,9 +397,31 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
   res.status(201).json(competitor);
 });
 
+async function assertCompetitorWritable(
+  req: AuthenticatedRequest,
+  prisma: PrismaClient,
+  competitorId: string,
+): Promise<boolean> {
+  if (req.user?.role === 'admin') return true;
+  const tournamentFilter = await buildTournamentAccessFilter(req, prisma);
+  if (tournamentFilter === null) return true; // legacy single-tenant
+  const found = await prisma.competitor.findFirst({
+    where: {
+      id: competitorId,
+      registrations: { some: { tournament: tournamentFilter } },
+    },
+    select: { id: true },
+  });
+  return !!found;
+}
+
 // Update competitor (requires authentication + admin/director role)
 router.put('/:id', authenticate, requireRole('admin', 'director'), validateRequest(competitorUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+  if (!(await assertCompetitorWritable(req as AuthenticatedRequest, prisma, id))) {
+    return res.status(404).json({ error: 'Competitor not found' });
+  }
   const {
     firstName,
     lastName,
@@ -383,7 +437,7 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
   } = req.body;
 
   const competitor = await prisma.competitor.update({
-    where: { id: getParam(req.params.id) },
+    where: { id },
     data: {
       firstName,
       lastName,
@@ -413,9 +467,13 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
 // to a single `update` with a not-found catch.
 router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+  if (!(await assertCompetitorWritable(req as AuthenticatedRequest, prisma, id))) {
+    return res.status(404).json({ error: 'Competitor not found' });
+  }
   try {
     await prisma.competitor.update({
-      where: { id: getParam(req.params.id) },
+      where: { id },
       data: { deletedAt: new Date() },
     });
     res.status(204).send();
