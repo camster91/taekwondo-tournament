@@ -235,10 +235,14 @@ export default function Divisions() {
 
   const clearDivisionsMutation = useMutation({
     mutationFn: async () => {
-      await fetch(`/api/divisions/tournament/${id}/all`, {
+      const res = await fetch(`/api/divisions/tournament/${id}/all`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || 'Failed to clear divisions');
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
@@ -249,10 +253,14 @@ export default function Divisions() {
 
   const deleteDivisionMutation = useMutation({
     mutationFn: async (divisionId: string) => {
-      await fetch(`/api/divisions/${divisionId}`, {
+      const res = await fetch(`/api/divisions/${divisionId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || 'Failed to delete division');
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });

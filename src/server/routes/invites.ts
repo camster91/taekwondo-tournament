@@ -12,6 +12,7 @@ import {
   validateRole,
   FIELD_LIMITS,
 } from './field-validation.js';
+import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
 
 const router = Router();
 
@@ -91,7 +92,7 @@ router.post('/send', authenticate, async (req: AuthenticatedRequest, res: Respon
         firstName: firstName?.trim() || null,
         lastName: lastName?.trim() || null,
         role: role || 'viewer',
-        token,
+        token: hashSecret(token),
         tokenExpiry,
         invitedBy: req.user!.id,
       },
@@ -193,7 +194,7 @@ router.post('/resend/:id', authenticate, async (req: AuthenticatedRequest, res: 
 
     await prisma.invitation.update({
       where: { id },
-      data: { token, tokenExpiry, status: 'pending' },
+      data: { token: hashSecret(token), tokenExpiry, status: 'pending' },
     });
 
     const inviteUrl = `${getBaseUrl()}/accept-invite?token=${token}`;
@@ -247,8 +248,8 @@ router.get('/verify/:token', inviteVerifyLimiter, async (req: Request, res: Resp
   const { token } = req.params;
 
   try {
-    const invitation = await prisma.invitation.findUnique({
-      where: { token },
+    const invitation = await prisma.invitation.findFirst({
+      where: { token: { in: secretLookupValues(token) } },
       select: {
         id: true,
         email: true,

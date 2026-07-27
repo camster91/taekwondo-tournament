@@ -284,13 +284,20 @@ model User {
 
 // Magic link / code authentication
 model MagicLink {
-  id        String    @id @default(uuid())
-  email     String
-  token     String    @unique
-  code      String
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  id             String    @id @default(uuid())
+  email          String
+  // Stored as SHA-256 hex of the raw token emailed to the user.
+  // Legacy plaintext rows (pre-hash deploy) remain readable via
+  // dual-lookup until their 10-minute TTL expires.
+  token          String    @unique
+  // Stored as SHA-256 hex of the 6-digit code (same dual-read rule).
+  code           String
+  // Wrong-code attempts against this link. Caps brute-force at
+  // MAX_CODE_ATTEMPTS regardless of which replica handles the request.
+  failedAttempts Int       @default(0)
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
 
   @@index([email])
   @@index([token])
@@ -385,6 +392,8 @@ model Invitation {
   firstName   String?
   lastName    String?
   role        String   @default("viewer")
+  // SHA-256 of the raw invite token (emailed once). Dual-read
+  // accepts legacy plaintext until tokenExpiry.
   token       String   @unique
   tokenExpiry DateTime
   invitedBy   String

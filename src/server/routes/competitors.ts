@@ -69,7 +69,8 @@ router.post('/auto-map', authenticate, requireRole('admin', 'director'), validat
     const result = autoDetectMapping(buffer);
     res.json({ ...result, fileName: fileName || 'uploaded' });
   } catch (err: unknown) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to parse file' });
+    console.error('[competitors/auto-map] parse failed:', err);
+    res.status(500).json({ error: 'Failed to parse file' });
   }
 });
 
@@ -161,6 +162,26 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     if (parsedWeightMax !== undefined) where.weightLbs.lte = parsedWeightMax;
   }
 
+  // Push age filters into SQL via DOB bounds so take/skip/count stay
+  // correct (post-filter on a page used to shrink pages and lie about total).
+  const now = new Date();
+  const ageMinParsed = age_min ? parseInt(String(age_min), 10) : NaN;
+  const ageMaxParsed = age_max ? parseInt(String(age_max), 10) : NaN;
+  if (!Number.isNaN(ageMinParsed) || !Number.isNaN(ageMaxParsed)) {
+    const dobFilter: Prisma.DateTimeFilter = {};
+    if (!Number.isNaN(ageMinParsed)) {
+      const latestDob = new Date(now);
+      latestDob.setFullYear(latestDob.getFullYear() - ageMinParsed);
+      dobFilter.lte = latestDob;
+    }
+    if (!Number.isNaN(ageMaxParsed)) {
+      const earliestDob = new Date(now);
+      earliestDob.setFullYear(earliestDob.getFullYear() - ageMaxParsed - 1);
+      dobFilter.gt = earliestDob;
+    }
+    where.dateOfBirth = dobFilter;
+  }
+
   const [competitors, total] = await Promise.all([
     prisma.competitor.findMany({
       where,
@@ -177,7 +198,6 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     let age: number | null = null;
     if (c.dateOfBirth) {
       const dob = new Date(c.dateOfBirth);
-      const now = new Date();
       age = now.getFullYear() - dob.getFullYear();
       const m = now.getMonth() - dob.getMonth();
       if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age--;
@@ -186,26 +206,51 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     return { ...c, age, tier: isBlack ? 'BB' : 'CB' };
   });
 
-  // Post-filter by age in JS (cheaper to do it here than a Prisma raw query)
-  let filtered = enriched;
-  if (age_min) filtered = filtered.filter((c) => c.age != null && c.age >= parseInt(age_min));
-  if (age_max) filtered = filtered.filter((c) => c.age != null && c.age <= parseInt(age_max));
-
-  res.json({ competitors: filtered, total, filteredCount: filtered.length });
+  res.json({ competitors: enriched, total, filteredCount: enriched.length });
 });
 
-// Aggregates for faceted UI (count by belt, gender, school, age band)
+// Aggregates for faceted UI (count by belt, gender, school, age band).
+// Scoped to accessible tournaments; belt/gender/school use groupBy so
+// we don't load the full registry into Node memory.
 router.get('/meta/aggregates', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const all = await prisma.competitor.findMany({
-    where: { deletedAt: null },
-    select: { belt: true, gender: true, schoolDojang: true, dateOfBirth: true, weightLbs: true },
-  });
+  const tournamentFilter = await buildTournamentAccessFilter(
+    req as AuthenticatedRequest,
+    prisma,
+  );
+  const where: Prisma.CompetitorWhereInput = { deletedAt: null };
+  if (tournamentFilter !== null) {
+    where.registrations = { some: { tournament: tournamentFilter } };
+  }
+
+  const [total, byBeltRows, byGenderRows, bySchoolRows, slim] = await Promise.all([
+    prisma.competitor.count({ where }),
+    prisma.competitor.groupBy({ by: ['belt'], where, _count: { _all: true } }),
+    prisma.competitor.groupBy({ by: ['gender'], where, _count: { _all: true } }),
+    prisma.competitor.groupBy({
+      by: ['schoolDojang'],
+      where: { ...where, schoolDojang: { not: null } },
+      _count: { _all: true },
+      orderBy: { _count: { schoolDojang: 'desc' } },
+      take: 20,
+    }),
+    // Age/weight histograms need the values — select only those two columns.
+    prisma.competitor.findMany({
+      where,
+      select: { dateOfBirth: true, weightLbs: true },
+    }),
+  ]);
+
+  const byBelt: Record<string, number> = {};
+  for (const row of byBeltRows) byBelt[row.belt] = row._count._all;
+  const byGender: Record<string, number> = {};
+  for (const row of byGenderRows) byGender[row.gender] = row._count._all;
+  const bySchool: Record<string, number> = {};
+  for (const row of bySchoolRows) {
+    if (row.schoolDojang) bySchool[row.schoolDojang] = row._count._all;
+  }
 
   const now = new Date();
-  const byBelt: Record<string, number> = {};
-  const byGender: Record<string, number> = {};
-  const bySchool: Record<string, number> = {};
   const byAge: Record<string, number> = {
     '4-5': 0, '6-7': 0, '8-9': 0, '10-11': 0, '12-14': 0, '15-17': 0, '18-35': 0, '36+': 0,
   };
@@ -213,11 +258,7 @@ router.get('/meta/aggregates', authenticate, async (req: Request, res: Response)
     'Under 50': 0, '50-75': 0, '75-100': 0, '100-150': 0, '150+': 0,
   };
 
-  for (const c of all) {
-    byBelt[c.belt] = (byBelt[c.belt] || 0) + 1;
-    byGender[c.gender] = (byGender[c.gender] || 0) + 1;
-    if (c.schoolDojang) bySchool[c.schoolDojang] = (bySchool[c.schoolDojang] || 0) + 1;
-
+  for (const c of slim) {
     if (c.dateOfBirth) {
       const dob = new Date(c.dateOfBirth);
       let age = now.getFullYear() - dob.getFullYear();
@@ -232,7 +273,6 @@ router.get('/meta/aggregates', authenticate, async (req: Request, res: Response)
       else if (age <= 35) byAge['18-35']++;
       else byAge['36+']++;
     }
-
     if (c.weightLbs != null) {
       if (c.weightLbs < 50) byWeight['Under 50']++;
       else if (c.weightLbs < 75) byWeight['50-75']++;
@@ -242,16 +282,7 @@ router.get('/meta/aggregates', authenticate, async (req: Request, res: Response)
     }
   }
 
-  res.json({
-    total: all.length,
-    byBelt,
-    byGender,
-    bySchool: Object.fromEntries(
-      Object.entries(bySchool).sort((a, b) => b[1] - a[1]).slice(0, 20)
-    ),
-    byAge,
-    byWeight,
-  });
+  res.json({ total, byBelt, byGender, bySchool, byAge, byWeight });
 });
 
 // Get unique schools for filtering (requires authentication)
@@ -282,21 +313,28 @@ router.get('/meta/belts', authenticate, async (req: Request, res: Response) => {
   res.json(belts.map((b) => b.belt));
 });
 
-// Get single competitor (requires authentication). Closes S17:
-// the original `include: { tournament: true }` leaked every tournament
-// a competitor has ever been in, including from other orgs. Now
-// returns only the basic competitor row; the per-tournament
-// registration history is fetched via the registration list endpoint
-// which already enforces the tournament access filter.
+// Get single competitor (requires authentication). Closes S17 + IDOR:
+// list is scoped via buildTournamentAccessFilter; get-by-id must use
+// the same scope so a viewer can't fetch arbitrary competitor PII
+// (DOB, specialNeeds, weight) by UUID.
 router.get('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  // Soft-deleted competitors are not accessible via direct ID — restore
-  // them via POST /:id/restore first. findUnique with a deletedAt filter
-  // returns null for the trash; we return 404 so the UI doesn't render
-  // a competitor the operator already removed.
-  const competitor = await prisma.competitor.findFirst({
-    where: { id: getParam(req.params.id), deletedAt: null },
-  });
+  const tournamentFilter = await buildTournamentAccessFilter(
+    req as AuthenticatedRequest,
+    prisma,
+  );
+
+  const where: Prisma.CompetitorWhereInput = {
+    id: getParam(req.params.id),
+    deletedAt: null,
+  };
+  if (tournamentFilter !== null) {
+    where.registrations = {
+      some: { tournament: tournamentFilter },
+    };
+  }
+
+  const competitor = await prisma.competitor.findFirst({ where });
 
   if (!competitor) {
     return res.status(404).json({ error: 'Competitor not found' });
@@ -305,9 +343,27 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
   res.json(competitor);
 });
 
-// Create competitor (requires authentication + admin/director role)
+// Create competitor (requires authentication + admin/director role).
+// Multi-tenant: non-admins may only create when they have at least
+// one accessible tournament (legacy single-tenant still passes the
+// null filter). Orphan global creates by foreign directors are blocked
+// when the user has org memberships.
 router.post('/', authenticate, requireRole('admin', 'director'), validateRequest(competitorCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const authReq = req as AuthenticatedRequest;
+  const tournamentFilter = await buildTournamentAccessFilter(authReq, prisma);
+  // Non-admin with an active access filter must belong to at least one
+  // tournament — creating floating competitors that no scoped list
+  // would show (and that later IDOR-scoped updates couldn't touch)
+  // is disallowed.
+  if (tournamentFilter !== null && authReq.user?.role !== 'admin') {
+    const accessible = await prisma.tournament.count({
+      where: { deletedAt: null, ...tournamentFilter },
+    });
+    if (accessible === 0) {
+      return res.status(403).json({ error: 'No accessible tournament to attach competitors to' });
+    }
+  }
   const {
     firstName,
     lastName,
@@ -341,9 +397,31 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
   res.status(201).json(competitor);
 });
 
+async function assertCompetitorWritable(
+  req: AuthenticatedRequest,
+  prisma: PrismaClient,
+  competitorId: string,
+): Promise<boolean> {
+  if (req.user?.role === 'admin') return true;
+  const tournamentFilter = await buildTournamentAccessFilter(req, prisma);
+  if (tournamentFilter === null) return true; // legacy single-tenant
+  const found = await prisma.competitor.findFirst({
+    where: {
+      id: competitorId,
+      registrations: { some: { tournament: tournamentFilter } },
+    },
+    select: { id: true },
+  });
+  return !!found;
+}
+
 // Update competitor (requires authentication + admin/director role)
 router.put('/:id', authenticate, requireRole('admin', 'director'), validateRequest(competitorUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+  if (!(await assertCompetitorWritable(req as AuthenticatedRequest, prisma, id))) {
+    return res.status(404).json({ error: 'Competitor not found' });
+  }
   const {
     firstName,
     lastName,
@@ -359,7 +437,7 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
   } = req.body;
 
   const competitor = await prisma.competitor.update({
-    where: { id: getParam(req.params.id) },
+    where: { id },
     data: {
       firstName,
       lastName,
@@ -389,9 +467,13 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
 // to a single `update` with a not-found catch.
 router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+  if (!(await assertCompetitorWritable(req as AuthenticatedRequest, prisma, id))) {
+    return res.status(404).json({ error: 'Competitor not found' });
+  }
   try {
     await prisma.competitor.update({
-      where: { id: getParam(req.params.id) },
+      where: { id },
       data: { deletedAt: new Date() },
     });
     res.status(204).send();
@@ -499,8 +581,8 @@ router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin'
       const result = await importFromExcel(prisma, data, parsed.data.columnMapping);
       return res.json({ ...result, parsedServerSide: true });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Import failed';
-      res.status(500).json({ error: message });
+      console.error('[competitors/import] failed:', err);
+      res.status(500).json({ error: 'Import failed' });
     }
   }
 

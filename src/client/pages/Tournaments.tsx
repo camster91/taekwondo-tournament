@@ -75,6 +75,10 @@ export default function Tournaments() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(data),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || 'Failed to create tournament');
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -86,7 +90,11 @@ export default function Tournaments() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await fetch(`/api/tournaments/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+      const res = await fetch(`/api/tournaments/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || 'Failed to delete tournament');
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournaments'] });

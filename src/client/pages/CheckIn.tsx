@@ -210,9 +210,9 @@ export default function CheckIn() {
     }
     setIsBulkCheckingIn(true);
     try {
-      await Promise.all(
-        eligibleForBulk.map((r) =>
-          fetch(`/api/tournaments/${tournamentId}/registrations/${r.id}`, {
+      const results = await Promise.all(
+        eligibleForBulk.map(async (r) => {
+          const res = await fetch(`/api/tournaments/${tournamentId}/registrations/${r.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({
@@ -220,11 +220,20 @@ export default function CheckIn() {
               checkInTime: new Date().toISOString(),
               checkInWeight: null,
             }),
-          })
-        )
+          });
+          return res.ok;
+        })
       );
+      const okCount = results.filter(Boolean).length;
+      const failCount = results.length - okCount;
       queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
-      toast.success(`Checked in ${eligibleForBulk.length} competitor${eligibleForBulk.length === 1 ? '' : 's'}`);
+      if (failCount === 0) {
+        toast.success(`Checked in ${okCount} competitor${okCount === 1 ? '' : 's'}`);
+      } else if (okCount === 0) {
+        toast.error('Bulk check-in failed. Please try again.');
+      } else {
+        toast.warning(`Checked in ${okCount}; ${failCount} failed.`);
+      }
     } catch {
       toast.error('Some check-ins failed. Please try again.');
     } finally {

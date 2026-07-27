@@ -2,7 +2,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
-import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { normalizeBelt } from '../../shared/constants/belts.js';
@@ -19,8 +18,22 @@ const router = Router();
 // In dev/test, set RATE_LIMIT_DISABLED=1 to bypass rate limiters entirely.
 // (Mirrors the same flag used in routes/auth.ts — keeps the e2e suite
 // fast and lets the dev server absorb self-imposed traffic without
-// hitting the cap.)
-const rateLimitDisabled = process.env.RATE_LIMIT_DISABLED === '1';
+// hitting the cap.) NEVER honor in production.
+const rateLimitDisabled =
+  process.env.RATE_LIMIT_DISABLED === '1' && process.env.NODE_ENV !== 'production';
+
+/** Expose only public-safe fields from tournament.settings JSON. */
+function publicRegistrationSettings(raw: string | null): { registrationFee?: string } | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const fee = parsed.registrationFee;
+    if (typeof fee === 'string' && fee.trim()) return { registrationFee: fee };
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // Rate limit public registration to prevent abuse: 10 submissions per 15 minutes per IP
 const registrationLimiter = rateLimit({
@@ -64,9 +77,8 @@ router.get('/tournaments', async (req: Request, res: Response) => {
       date: true,
       location: true,
       sportProfileSlug: true,
-      // Settings carries registrationFee (free-text), which the public
-      // register page surfaces next to the tournament name. Don't expose
-      // anything else from settings — most of it is director-only.
+      // Settings carries director-only config; only registrationFee
+      // is safe for the public register page.
       settings: true,
       _count: {
         select: { registrations: true },
@@ -75,7 +87,12 @@ router.get('/tournaments', async (req: Request, res: Response) => {
     orderBy: { date: 'asc' },
   });
 
-  res.json(tournaments);
+  res.json(
+    tournaments.map((t) => ({
+      ...t,
+      settings: publicRegistrationSettings(t.settings),
+    })),
+  );
 });
 
 // Get tournament details for registration
@@ -109,7 +126,10 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
   // needs the tournament name + date to render its header, and that's not
   // sensitive. Status is exposed so the client can show "Registration closed"
   // on its own if it wants — the server no longer hard-blocks.
-  res.json(tournament);
+  res.json({
+    ...tournament,
+    settings: publicRegistrationSettings(tournament.settings),
+  });
 });
 
 // Public self-registration
@@ -335,7 +355,9 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
           <p style="color: #6B7280; font-size: 14px;">Please keep this email for your records. You may be asked to provide registration confirmation at check-in.</p>
         </div>
       `;
-      sendEmail(parentEmail, `Registration Confirmed - ${escapeHtml(registration.tournament.name)}`, html).catch(() => {});
+      sendEmail(parentEmail, `Registration Confirmed - ${escapeHtml(registration.tournament.name)}`, html).catch((err) => {
+        console.error('[public/register] confirmation email failed:', err);
+      });
     }
   } catch (error) {
     console.error('Registration error:', error);
@@ -410,47 +432,29 @@ router.get('/scoreboard/:publicSlug', scoreboardLimiter, async (req: Request, re
   res.json(divisions);
 });
 
-// Back-compat shim: the OLD public scoreboard route was
-// /api/public/tournaments/:id/scoreboard (UUID-based, unauthenticated).
-// The client (PublicScoreboard.tsx) still calls that path. Rather than
-// rewiring the client AND adding a "Get share link" UI in
-// TournamentSettings to make the new slug-based route useful, we
-// resolve the old UUID to the tournament, look up or lazily-generate
-// the publicSlug, and internally call the new handler. This keeps
-// the public scoreboard working without code changes to the client
-// and without exposing all tournaments to anonymous enumeration
-// (the slug is generated on first access, the ID-to-slug mapping
-// is not exposed).
-//
-// If a future migration moves the client to slug-based URLs, this
-// shim can be deleted. The new slug-based route is the canonical
-// API.
+// Public scoreboard by tournament UUID. Requires an existing publicSlug
+// (director must have generated a share link). Does NOT auto-create a
+// slug — that previously defeated revoke/rotation and exposed roster
+// data to anyone who knew/guessed the UUID (e.g. from /register?tournament=).
 router.get('/tournaments/:id/scoreboard', scoreboardLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const id = req.params.id;
 
   const tournament = await prisma.tournament.findUnique({
     where: { id },
+    select: {
+      id: true,
+      publicSlug: true,
+      settings: true,
+      deletedAt: true,
+    },
   });
-  if (!tournament) {
-    return res.status(404).json({ error: 'Tournament not found' });
-  }
-
-  // Lazily generate the publicSlug if missing. Same entropy as the
-  // director-triggered path (see POST /api/tournaments/:id/public-slug).
-  let slug = tournament.publicSlug;
-  if (!slug) {
-    slug = crypto.randomBytes(10).toString('base64url').slice(0, 16);
-    await prisma.tournament.update({
-      where: { id },
-      data: { publicSlug: slug },
-    });
+  if (!tournament || tournament.deletedAt || !tournament.publicSlug) {
+    // Identical 404 whether missing, soft-deleted, or unpublished.
+    return res.status(404).json({ error: 'Scoreboard not found' });
   }
 
   // Director-controlled display mode + featured match override (M8).
-  // The director can pin the venue TV to a specific match (e.g. the
-  // finals) or filter to a single ring. Settings live in the
-  // tournament.settings JSON string under `display`.
   let displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string } = {};
   try {
     if (tournament.settings) {
@@ -463,11 +467,6 @@ router.get('/tournaments/:id/scoreboard', scoreboardLimiter, async (req: Request
     // settings JSON corrupt — fall through with empty displaySettings
   }
 
-  // Reuse the slug-handler's logic by setting the param and recursing.
-  // (Express doesn't have a clean way to forward a request to another
-  // handler in the same router, so we just call the underlying query
-  // directly here — duplicates a few lines but keeps the routes
-  // independent.)
   const divisions = await prisma.division.findMany({
     where: { tournamentId: id },
     include: {
@@ -777,13 +776,21 @@ router.get(
   schoolPortalLimiter,
   async (req: Request, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
+    const shareSlug = typeof req.query.slug === 'string' ? req.query.slug : '';
 
     const tournament = await prisma.tournament.findUnique({
       where: { id: req.params.id },
-      select: { id: true, name: true, deletedAt: true },
+      select: { id: true, name: true, deletedAt: true, publicSlug: true },
     });
 
-    if (!tournament || tournament.deletedAt) {
+    // Require the director-issued publicSlug so UUID-only links cannot
+    // enumerate school rosters. Same 404 shape as "not found".
+    if (
+      !tournament ||
+      tournament.deletedAt ||
+      !tournament.publicSlug ||
+      shareSlug !== tournament.publicSlug
+    ) {
       return res.status(404).json({ error: 'Tournament not found' });
     }
 
@@ -810,13 +817,28 @@ router.get(
   async (req: Request, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
     const schoolName = decodeURIComponent(req.params.schoolName);
+    const shareSlug = typeof req.query.slug === 'string' ? req.query.slug : '';
 
     const tournament = await prisma.tournament.findUnique({
       where: { id: req.params.id },
-      select: { id: true, name: true, date: true, location: true, status: true, sportProfileSlug: true, deletedAt: true },
+      select: {
+        id: true,
+        name: true,
+        date: true,
+        location: true,
+        status: true,
+        sportProfileSlug: true,
+        deletedAt: true,
+        publicSlug: true,
+      },
     });
 
-    if (!tournament || tournament.deletedAt) {
+    if (
+      !tournament ||
+      tournament.deletedAt ||
+      !tournament.publicSlug ||
+      shareSlug !== tournament.publicSlug
+    ) {
       return res.status(404).json({ error: 'Tournament not found' });
     }
 

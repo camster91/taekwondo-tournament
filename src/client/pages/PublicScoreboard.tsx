@@ -102,7 +102,7 @@ export default function PublicScoreboard() {
       setLastFetchAt(new Date());
       return res.json();
     },
-    refetchInterval: 3000, // TV mode: refresh every 3s
+    refetchInterval: 5000, // TV mode: refresh every 5s (was 3s — cuts poll load)
     refetchIntervalInBackground: false,
     enabled: !tournamentError, // Don't keep retrying the scoreboard if the tournament is bad
   });

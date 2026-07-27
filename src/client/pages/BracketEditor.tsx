@@ -132,10 +132,14 @@ export default function BracketEditor() {
 
   const resetBracketMutation = useMutation({
     mutationFn: async () => {
-      await fetch(`/api/brackets/division/${divisionId}/reset`, {
+      const res = await fetch(`/api/brackets/division/${divisionId}/reset`, {
         method: 'POST',
         headers: getAuthHeaders(),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || 'Failed to reset bracket');
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['division', divisionId] });

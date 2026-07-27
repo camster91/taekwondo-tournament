@@ -107,30 +107,35 @@ export default function SchoolPortal() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const schoolName = searchParams.get('name') || '';
+  const shareSlug = searchParams.get('slug') || '';
   const [schoolSearch, setSchoolSearch] = useState('');
   const [competitorSearch, setCompetitorSearch] = useState('');
 
-  // Fetch schools list
+  // Fetch schools list — requires ?slug=<publicSlug> matching the
+  // tournament's share link (same gate as the public scoreboard).
   const { data: schoolList, isLoading: schoolsLoading, error: schoolsError } = useQuery<SchoolListData>({
-    queryKey: ['school-list', tournamentId],
+    queryKey: ['school-list', tournamentId, shareSlug],
     queryFn: async () => {
-      const res = await fetch(`/api/public/tournaments/${tournamentId}/schools`);
+      const res = await fetch(
+        `/api/public/tournaments/${tournamentId}/schools?slug=${encodeURIComponent(shareSlug)}`
+      );
       if (!res.ok) throw new Error('Failed to fetch schools');
       return res.json();
     },
+    enabled: !!tournamentId && !!shareSlug,
   });
 
   // Fetch school data when a school is selected
   const { data: schoolData, isLoading: dataLoading, error: schoolDataError } = useQuery<SchoolData>({
-    queryKey: ['school-portal', tournamentId, schoolName],
+    queryKey: ['school-portal', tournamentId, schoolName, shareSlug],
     queryFn: async () => {
       const res = await fetch(
-        `/api/public/tournaments/${tournamentId}/school/${encodeURIComponent(schoolName)}`
+        `/api/public/tournaments/${tournamentId}/school/${encodeURIComponent(schoolName)}?slug=${encodeURIComponent(shareSlug)}`
       );
       if (!res.ok) throw new Error('Failed to fetch school data');
       return res.json();
     },
-    enabled: !!schoolName,
+    enabled: !!schoolName && !!shareSlug,
     refetchInterval: 15000, // Refresh every 15 seconds when visible
     // Pause polling when the tab is in the background so a director
     // leaving the page open all day doesn't hammer the API with
@@ -158,7 +163,9 @@ export default function SchoolPortal() {
   }, [schoolData?.competitors, competitorSearch]);
 
   const selectSchool = (name: string) => {
-    setSearchParams({ name });
+    const next: Record<string, string> = { name };
+    if (shareSlug) next.slug = shareSlug;
+    setSearchParams(next);
     setCompetitorSearch('');
   };
 
@@ -197,6 +204,20 @@ export default function SchoolPortal() {
   };
 
   const tournamentName = schoolData?.tournament?.name || schoolList?.tournament?.name || 'Tournament';
+
+  if (!shareSlug) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center px-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 max-w-md w-full">
+          <EmptyState
+            icon={AlertCircle}
+            title="Share link required"
+            description="Open this portal from the tournament share link (Settings → Share Link), or ask your director for the school portal URL that includes the slug."
+          />
+        </div>
+      </div>
+    );
+  }
 
   // Show school selection if no school is selected
   if (!schoolName) {

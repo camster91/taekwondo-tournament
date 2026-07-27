@@ -812,10 +812,11 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
       await handleByeMatches(prisma, division.id);
       generated++;
     } catch (err: unknown) {
+      console.error(`[brackets/generate-all] ${division.name}:`, err);
       errors.push({
         divisionId: division.id,
         divisionName: division.name,
-        error: err instanceof Error ? err.message : 'Unknown error',
+        error: 'Bracket generation failed',
       });
     }
   }
@@ -1270,30 +1271,47 @@ router.get('/tournament/:tournamentId/certificates', authenticate, requireTourna
     eventType: string;
   }> = [];
 
+  // Collect placements for every division first, then one bulk
+  // registration load — avoids N+1 findUnique per medal.
+  const pending: Array<{
+    place: number;
+    competitorId: string;
+    divisionName: string;
+    eventType: string;
+  }> = [];
+
   for (const division of tournament.divisions) {
     if (!division.bracket) continue;
 
     const placements = await getBracketPlacements(prisma, division.bracket.id);
 
     for (const placement of placements) {
-      // Only include 1st, 2nd, 3rd place
       if (placement.place > 3) continue;
-      // Apply place filter if specified
       if (placeFilter && placement.place !== placeFilter) continue;
-
-      const registration = await prisma.registration.findUnique({
-        where: { id: placement.competitorId },
-        include: { competitor: true },
+      pending.push({
+        place: placement.place,
+        competitorId: placement.competitorId,
+        divisionName: division.name,
+        eventType: division.eventType,
       });
+    }
+  }
 
-      if (registration) {
-        winners.push({
-          competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
-          place: placement.place,
-          divisionName: division.name,
-          eventType: division.eventType,
-        });
-      }
+  if (pending.length > 0) {
+    const regs = await prisma.registration.findMany({
+      where: { id: { in: pending.map((p) => p.competitorId) } },
+      include: { competitor: true },
+    });
+    const regById = new Map(regs.map((r) => [r.id, r]));
+    for (const row of pending) {
+      const registration = regById.get(row.competitorId);
+      if (!registration) continue;
+      winners.push({
+        competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+        place: row.place,
+        divisionName: row.divisionName,
+        eventType: row.eventType,
+      });
     }
   }
 

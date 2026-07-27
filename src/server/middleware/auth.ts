@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express-serve-static-core';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 
 // JWT secret - REQUIRED in production
@@ -46,12 +47,17 @@ export interface AuthenticatedRequest extends Request {
     firstName: string;
     lastName: string;
   };
+  /** True when the JWT came from the session cookie (not Bearer). */
+  authViaCookie?: boolean;
 }
 
 // Name of the HttpOnly session cookie. Browser auto-sends on
 // same-origin requests (no credentials: 'include' needed) so the
 // SPA doesn't have to manage the token at all.
 export const SESSION_COOKIE = 'bowin_session';
+
+/** Readable double-submit CSRF cookie (NOT HttpOnly). */
+export const CSRF_COOKIE = 'bowin_csrf';
 
 export const SESSION_COOKIE_OPTIONS = {
   httpOnly: true,
@@ -61,6 +67,21 @@ export const SESSION_COOKIE_OPTIONS = {
   // 7 days — matches JWT_EXPIRES_IN
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
+
+export const CSRF_COOKIE_OPTIONS = {
+  httpOnly: false,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
+/** Issue a fresh CSRF cookie (call on every successful login). */
+export function setCsrfCookie(res: Response): string {
+  const value = crypto.randomBytes(32).toString('hex');
+  res.cookie(CSRF_COOKIE, value, CSRF_COOKIE_OPTIONS);
+  return value;
+}
 
 /**
  * Creates a JWT token for a user. Pass `expiresIn` to override the
@@ -110,13 +131,13 @@ export function verifyToken(token: string): JWTPayload | null {
  * and other non-browser clients). Returns null when neither is
  * present or both are malformed.
  */
-function extractToken(req: AuthenticatedRequest): string | null {
+function extractToken(req: AuthenticatedRequest): { token: string; viaCookie: boolean } | null {
   const cookieToken = (req as AuthenticatedRequest & { cookies?: Record<string, string> }).cookies?.[SESSION_COOKIE];
-  if (cookieToken) return cookieToken;
+  if (cookieToken) return { token: cookieToken, viaCookie: true };
 
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
-    return authHeader.substring(7);
+    return { token: authHeader.substring(7), viaCookie: false };
   }
 
   return null;
@@ -195,16 +216,31 @@ export function invalidateAuthCache(userId: string): void {
  * Adds user info to request if authenticated
  */
 export function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  const token = extractToken(req);
+  const extracted = extractToken(req);
 
-  if (!token) {
+  if (!extracted) {
     return res.status(401).json({ error: 'Authentication required' });
   }
+
+  const { token, viaCookie } = extracted;
+  req.authViaCookie = viaCookie;
 
   const payload = verifyToken(token);
 
   if (!payload) {
     return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+
+  // Cookie-authenticated mutations require double-submit CSRF.
+  // Bearer clients (tests, scripts) are exempt — they already prove
+  // possession of the token via a non-automatically-attached header.
+  if (viaCookie && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    const cookies = (req as AuthenticatedRequest & { cookies?: Record<string, string> }).cookies;
+    const csrfCookie = cookies?.[CSRF_COOKIE];
+    const csrfHeader = req.get('x-csrf-token') || req.get('X-CSRF-Token');
+    if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+      return res.status(403).json({ error: 'CSRF token missing or invalid' });
+    }
   }
 
   // Attach user info to request
@@ -284,12 +320,12 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
  * Optional authentication - doesn't fail if no token, but attaches user if present
  */
 export function optionalAuthenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  const token = extractToken(req);
+  const extracted = extractToken(req);
 
-  if (!token) {
+  if (!extracted) {
     return next();
   }
-  const payload = verifyToken(token);
+  const payload = verifyToken(extracted.token);
 
   if (!payload) {
     return next();

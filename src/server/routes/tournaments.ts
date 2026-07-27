@@ -161,6 +161,7 @@ router.get('/:id', authenticate, requireTournamentAccess('viewer'), async (req: 
 // Create tournament (requires authentication + admin/director role)
 router.post('/', authenticate, requireRole('admin', 'director'), validateRequest(tournamentCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const authReq = req as AuthenticatedRequest;
   const { name, date, location, settings, sportProfileSlug, organizationId } = req.body;
 
   // Normalize the incoming date to noon UTC. The schema column is a
@@ -174,6 +175,22 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
     return new Date(dateOnly + 'T12:00:00.000Z');
   };
 
+  // organizationId is admin-only. Directors inherit their org from
+  // membership — accepting a client-supplied orgId let a director
+  // plant tournaments into another org (or leave orphans visible to
+  // every global director via the null-org legacy fallback).
+  let resolvedOrgId: string | null = null;
+  if (authReq.user?.role === 'admin' && typeof organizationId === 'string' && organizationId) {
+    resolvedOrgId = organizationId;
+  } else if (authReq.user) {
+    const membership = await prisma.organizationMember.findFirst({
+      where: { userId: authReq.user.id },
+      select: { organizationId: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    resolvedOrgId = membership?.organizationId ?? null;
+  }
+
   const tournament = await prisma.tournament.create({
     data: {
       name,
@@ -182,7 +199,7 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
       settings: settings ? JSON.stringify(settings) : null,
       status: 'draft',
       sportProfileSlug: sportProfileSlug || 'taekwondo',
-      organizationId: organizationId || null,
+      organizationId: resolvedOrgId,
     },
   });
 
@@ -535,11 +552,52 @@ router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer')
 
   const registrations = await prisma.registration.findMany({
     where,
-    include: {
-      competitor: true,
+    select: {
+      id: true,
+      competitorId: true,
+      tournamentId: true,
+      patterns: true,
+      sparring: true,
+      checkedIn: true,
+      checkInTime: true,
+      checkInWeight: true,
+      weightAtRegistration: true,
+      ageAtTournament: true,
+      competeWithOlder: true,
+      specialNeeds: true,
+      manualDivisionId: true,
+      seeding: true,
+      parentName: true,
+      parentEmail: true,
+      parentPhone: true,
+      competitor: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          gender: true,
+          belt: true,
+          beltStripe: true,
+          danRank: true,
+          weightLbs: true,
+          dateOfBirth: true,
+          schoolDojang: true,
+          specialNeeds: true,
+        },
+      },
       assignments: {
-        include: {
-          division: true,
+        select: {
+          id: true,
+          seedPosition: true,
+          division: {
+            select: {
+              id: true,
+              name: true,
+              eventType: true,
+              beltLevel: true,
+              gender: true,
+            },
+          },
         },
       },
     },
@@ -548,6 +606,8 @@ router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer')
         lastName: 'asc',
       },
     },
+    // Hard cap — check-in / assign UIs should page if they ever hit this.
+    take: 5000,
   });
 
   res.json(registrations);
@@ -755,10 +815,18 @@ router.post('/:id/schedule', authenticate, requireTournamentAccess('director'), 
     const schedule = await generateSchedule(prisma, getParam(req.params.id), configOverrides);
     res.json(schedule);
   } catch (error: unknown) {
-    // Validation errors get a 400; everything else (DB errors, etc.)
-    // gets a 400 too. The error message is surfaced verbatim — it's
-    // either a user-supplied config problem or a server-side issue.
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Schedule generation failed' });
+    // Validation errors get a 400; never echo raw Error.message —
+    // schedule config may embed internal details and Prisma errors
+    // can leak schema/connection hints.
+    console.error('[schedule] POST generation failed:', error);
+    const isValidation =
+      error instanceof Error &&
+      /invalid|required|must be|config/i.test(error.message);
+    res.status(400).json({
+      error: isValidation && error instanceof Error
+        ? error.message
+        : 'Schedule generation failed',
+    });
   }
 });
 
@@ -770,7 +838,8 @@ router.get('/:id/schedule', authenticate, requireTournamentAccess('viewer'), asy
     const schedule = await generateSchedule(prisma, getParam(req.params.id));
     res.json(schedule);
   } catch (error: unknown) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Schedule generation failed' });
+    console.error('[schedule] GET generation failed:', error);
+    res.status(400).json({ error: 'Schedule generation failed' });
   }
 });
 
