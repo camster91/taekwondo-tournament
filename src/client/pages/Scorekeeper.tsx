@@ -17,13 +17,16 @@ import {
 } from 'lucide-react';
 import MatchTimer from '../components/MatchTimer';
 import SpecialNeedsBadge from '../components/SpecialNeedsBadge';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import CloseButton from '../components/ui/CloseButton';
 import { useToast } from '../context/ToastContext';
 import { getSportProfile } from '../../shared/constants/sport-profiles';
 import { Card, CardBody } from '../components/ui';
 import { Button } from '../components/ui';
 import { StatTile } from '../components/ui';
+import { activateDialogFocus } from '../utils/dialog-focus';
+import { makeScoreOperation } from '../utils/offline-operation-queue';
+import { useOfflineOperations } from '../hooks/useOfflineOperations';
 
 interface Match {
   id: string;
@@ -76,10 +79,20 @@ interface Tournament {
 
 type ResultType = 'win' | 'dq' | 'forfeit' | 'injury';
 
+interface ScoreSubmission {
+  matchId: string;
+  winnerId: string;
+  score1: string;
+  score2: string;
+  notes: string;
+}
+
 export default function Scorekeeper() {
   const { tournamentId } = useParams();
   const queryClient = useQueryClient();
   const { addToast } = useToast();
+  const { user } = useAuth();
+  const offlineOperations = useOfflineOperations(tournamentId, 'score_result');
 
   const [selectedRing, setSelectedRing] = useState<number | null>(null);
   const [selectedDivision, setSelectedDivision] = useState<string | null>(null);
@@ -108,6 +121,7 @@ export default function Scorekeeper() {
   const [incidentDescription, setIncidentDescription] = useState('');
   const [pendingUndoId, setPendingUndoId] = useState<string | null>(null);
   const [incidentAction, setIncidentAction] = useState<string>('');
+  const incidentDialogRef = useRef<HTMLDivElement>(null);
 
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['tournament', tournamentId],
@@ -144,15 +158,21 @@ export default function Scorekeeper() {
       .map((match) => match.ringNumber)
       .filter((ring): ring is number => ring != null),
   )).sort((a, b) => a - b), [divisions]);
+  const stagedScoreIds = useMemo(() => new Set(
+    offlineOperations.operations
+      .filter((operation) => operation.kind === 'score_result')
+      .map((operation) => operation.targetId),
+  ), [offlineOperations.operations]);
 
   // Get ready matches for selected division — safe with optional chaining
   const readyMatches = useMemo(() => {
     const div = divisions?.find((d) => d.id === selectedDivision);
     return div?.bracket?.matches
       ?.filter((m) => (m.status === 'ready' || m.status === 'in_progress')
-        && (selectedRing == null || m.ringNumber === selectedRing))
+        && (selectedRing == null || m.ringNumber === selectedRing)
+        && !stagedScoreIds.has(m.id))
       .sort((a, b) => a.matchNumber - b.matchNumber) || [];
-  }, [divisions, selectedDivision, selectedRing]);
+  }, [divisions, selectedDivision, selectedRing, stagedScoreIds]);
 
   // Total + completed counts for the selected division. Used to distinguish
   // "all done" (truly complete) from "no ready match yet" (still pending/in-progress
@@ -169,14 +189,32 @@ export default function Scorekeeper() {
 
   const currentMatch = readyMatches[currentMatchIndex];
 
+  const finishResultEntry = (queued: boolean) => {
+    const wasLast = currentMatchIndex >= readyMatches.length - 1;
+    resetForm();
+    setShowConfirm(false);
+    if (!wasLast && !queued) setCurrentMatchIndex((prev) => prev + 1);
+    const state = queued ? 'staged offline' : 'recorded';
+    setAnnounce(wasLast
+      ? `Result ${state}. No more ready matches in this division.`
+      : `Result ${state}. Advanced to next match.`);
+  };
+
+  const stageScoreResult = (data: ScoreSubmission) => {
+    if (!tournamentId || !user) return;
+    offlineOperations.enqueue(makeScoreOperation(user.id, tournamentId, data.matchId, {
+      winnerId: data.winnerId,
+      score1: data.score1,
+      score2: data.score2,
+      status: 'completed',
+      notes: data.notes,
+    }));
+    addToast('Result saved on this device and will sync when the connection returns.', 'warning');
+    finishResultEntry(true);
+  };
+
   const recordResult = useMutation({
-    mutationFn: async (data: {
-      matchId: string;
-      winnerId: string;
-      score1: string;
-      score2: string;
-      notes: string;
-    }) => {
+    mutationFn: async (data: ScoreSubmission) => {
       const res = await fetch(`/api/brackets/match/${data.matchId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -195,17 +233,13 @@ export default function Scorekeeper() {
       queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
       queryClient.invalidateQueries({ queryKey: ['director-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['divisions'] });
-      const wasLast = currentMatchIndex >= readyMatches.length - 1;
-      resetForm();
-      setShowConfirm(false);
-      if (!wasLast) {
-        setCurrentMatchIndex((prev) => prev + 1);
-        setAnnounce('Result recorded. Advanced to next match.');
-      } else {
-        setAnnounce('Result recorded. No more ready matches in this division.');
-      }
+      finishResultEntry(false);
     },
-    onError: (error: Error) => {
+    onError: (error: Error, data) => {
+      if (error instanceof TypeError) {
+        stageScoreResult(data);
+        return;
+      }
       addToast(error.message || 'Operation failed', 'error');
       setAnnounce(`Error recording result: ${error.message || 'Operation failed'}`);
     },
@@ -306,13 +340,15 @@ export default function Scorekeeper() {
       noteText = noteText ? `${noteText}. ${notes}` : notes;
     }
 
-    recordResult.mutate({
+    const submission = {
       matchId: currentMatch.id,
       winnerId: selectedWinner,
       score1,
       score2,
       notes: noteText,
-    });
+    };
+    if (!navigator.onLine) stageScoreResult(submission);
+    else recordResult.mutate(submission);
   };
 
   const getCompetitorName = (competitor: Match['competitor1']) => {
@@ -431,6 +467,11 @@ export default function Scorekeeper() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  useEffect(() => {
+    if (!showIncidentModal || !incidentDialogRef.current) return;
+    return activateDialogFocus(incidentDialogRef.current, () => setShowIncidentModal(false));
+  }, [showIncidentModal]);
+
   // After arrow-key navigation, move focus to the active match heading so
   // screen reader and keyboard users follow the scorekeeper through a division.
   // Auto-advance after submit does NOT steal focus — only keyboard navigation does.
@@ -440,6 +481,35 @@ export default function Scorekeeper() {
     }
     userNavigatedRef.current = null;
   }, [currentMatchIndex]);
+
+  const syncStagedResults = async () => {
+    const result = await offlineOperations.sync();
+    if (!result) return;
+    if (result.synced > 0) {
+      await queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
+      addToast(`${result.synced} staged result${result.synced === 1 ? '' : 's'} synced.`, 'success');
+    }
+    if (result.needsReview > 0) {
+      addToast('A staged result conflicts with server state and needs director review.', 'error');
+    }
+  };
+
+  const offlineStatus = offlineOperations.operations.length > 0 && (
+    <div role="status" className="max-w-4xl mx-auto mb-4 p-3 rounded-lg border border-amber-500/50 bg-amber-950 text-amber-100 flex flex-wrap items-center justify-between gap-3">
+      <span>
+        {offlineOperations.pending.length} result{offlineOperations.pending.length === 1 ? '' : 's'} pending sync
+        {offlineOperations.needsReview.length > 0 && ` · ${offlineOperations.needsReview.length} needs director review`}
+      </span>
+      <div className="flex gap-2">
+        <Button size="sm" variant="secondary" onClick={() => void syncStagedResults()} loading={offlineOperations.syncing}>Sync now</Button>
+        {offlineOperations.needsReview.map((operation) => (
+          <Button key={operation.id} size="sm" variant="secondary" onClick={() => offlineOperations.remove(operation.id)}>
+            Discard rejected #{operation.targetId.slice(0, 8)}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
 
   // Division selector view
   if (!selectedDivision) {
@@ -456,6 +526,7 @@ export default function Scorekeeper() {
         >
           {announce}
         </div>
+        {offlineStatus}
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center">
@@ -614,6 +685,7 @@ export default function Scorekeeper() {
       >
         {announce}
       </div>
+      {offlineStatus}
       {/* Header */}
       <div className="bg-gray-800 p-4">
         <div className="flex items-center justify-between">
@@ -1138,6 +1210,7 @@ export default function Scorekeeper() {
       {/* Incident Report Modal */}
       {showIncidentModal && (
         <div
+          ref={incidentDialogRef}
           className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
           role="dialog"
           aria-modal="true"

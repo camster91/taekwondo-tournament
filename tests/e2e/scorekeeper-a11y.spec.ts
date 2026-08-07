@@ -237,4 +237,49 @@ test.describe('scorekeeper (a11y)', () => {
     const buttons = dialog.locator('button');
     expect(await buttons.count()).toBeGreaterThanOrEqual(2);
   });
+
+  test('incident dialog traps focus, closes with Escape, and restores the opener', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: /\d+ ready/i }).first().click();
+
+    const opener = page.getByRole('button', { name: /Report Incident/i });
+    await opener.click();
+    const dialog = page.getByRole('dialog', { name: /Report Incident/i });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /Close incident/i })).toBeFocused();
+
+    const cancel = dialog.getByRole('button', { name: /^Cancel$/i });
+    await cancel.focus();
+    await page.keyboard.press('Tab');
+    await expect(dialog.getByRole('button', { name: /Close incident/i })).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(opener).toBeFocused();
+  });
+
+  test('offline result persists locally and syncs after reconnection', async ({ page, context }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: /\d+ ready/i }).first().click();
+    await page.locator('button[aria-label*="select as winner"]').first().click();
+    await page.locator('#scorekeeper-score1').fill('5');
+    await page.locator('#scorekeeper-score2').fill('2');
+    await page.getByRole('button', { name: /^Record Result$/i }).click();
+    await expect(page.getByRole('dialog', { name: /Confirm Result/i })).toBeVisible();
+
+    await context.setOffline(true);
+    await page.getByRole('button', { name: /^Confirm/i }).click();
+    await expect(page.getByText(/saved on this device/i)).toBeVisible();
+    await expect(page.getByText(/1 result pending sync/i)).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toContain('score_result');
+
+    await context.setOffline(false);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await expect(page.getByText(/1 result pending sync/i)).toBeHidden({ timeout: 10_000 });
+    expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toBe('[]');
+  });
 });

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import Spinner from '../components/ui/Spinner';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Card, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
@@ -20,6 +20,8 @@ import { Input } from '../components/ui';
 import { Modal } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { Select } from '../components/ui';
+import { useOfflineOperations } from '../hooks/useOfflineOperations';
+import { makeCheckInOperation } from '../utils/offline-operation-queue';
 
 interface Registration {
   id: string;
@@ -51,6 +53,8 @@ export default function CheckIn() {
   const { tournamentId } = useParams();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { user } = useAuth();
+  const offlineOperations = useOfflineOperations(tournamentId, 'check_in');
   const searchRef = useRef<HTMLInputElement>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -100,8 +104,21 @@ export default function CheckIn() {
   refetchIntervalInBackground: false,
   });
 
+  type CheckInSubmission = { registrationId: string; weight?: number };
+  const stageCheckIn = (data: CheckInSubmission) => {
+    if (!tournamentId || !user) return;
+    offlineOperations.enqueue(makeCheckInOperation(user.id, tournamentId, data.registrationId, {
+      checkedIn: true,
+      checkInTime: new Date().toISOString(),
+      checkInWeight: data.weight || null,
+    }));
+    setSelectedRegistration(null);
+    setCheckInWeight('');
+    toast.warning('Check-in saved on this device and will sync when the connection returns.');
+  };
+
   const checkInMutation = useMutation({
-    mutationFn: async (data: { registrationId: string; weight?: number }) => {
+    mutationFn: async (data: CheckInSubmission) => {
       const res = await fetch(`/api/tournaments/${tournamentId}/registrations/${data.registrationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -119,8 +136,16 @@ export default function CheckIn() {
       setSelectedRegistration(null);
       setCheckInWeight('');
     },
-    onError: () => toast.addToast('Check-in failed. Check the venue connection and try again.', 'error'),
+    onError: (error, data) => {
+      if (error instanceof TypeError) stageCheckIn(data);
+      else toast.addToast('Check-in failed. Check the venue connection and try again.', 'error');
+    },
   });
+
+  const submitCheckIn = (data: CheckInSubmission) => {
+    if (!navigator.onLine) stageCheckIn(data);
+    else checkInMutation.mutate(data);
+  };
 
   const undoCheckInMutation = useMutation({
     mutationFn: async (registrationId: string) => {
@@ -145,6 +170,12 @@ export default function CheckIn() {
   const uniqueSchools = registrations
     ? [...new Set(registrations.map((r) => r.competitor.schoolDojang).filter(Boolean))].sort() as string[]
     : [];
+  const stagedCheckInIds = new Set(
+    offlineOperations.pending
+      .filter((operation) => operation.kind === 'check_in')
+      .map((operation) => operation.targetId),
+  );
+  const isCheckedIn = (registration: Registration) => registration.checkedIn || stagedCheckInIds.has(registration.id);
 
   const filteredRegistrations = registrations?.filter((r) => {
     const matchesSearch =
@@ -156,8 +187,8 @@ export default function CheckIn() {
 
     const matchesStatus =
       filterStatus === 'all' ||
-      (filterStatus === 'checked' && r.checkedIn) ||
-      (filterStatus === 'unchecked' && !r.checkedIn);
+      (filterStatus === 'checked' && isCheckedIn(r)) ||
+      (filterStatus === 'unchecked' && !isCheckedIn(r));
 
     const matchesEvent =
       filterEvent === 'all' ||
@@ -180,17 +211,17 @@ export default function CheckIn() {
         if (sortBy === 'school')
           return (a.competitor.schoolDojang || '').localeCompare(b.competitor.schoolDojang || '');
         if (sortBy === 'status')
-          return (a.checkedIn ? 1 : 0) - (b.checkedIn ? 1 : 0);
+          return (isCheckedIn(a) ? 1 : 0) - (isCheckedIn(b) ? 1 : 0);
         return 0;
       })
     : [];
 
-  const uncheckedFiltered = sortedRegistrations.filter((r) => !r.checkedIn);
+  const uncheckedFiltered = sortedRegistrations.filter((r) => !isCheckedIn(r));
   const hasActiveFilter = searchTerm !== '' || schoolFilter !== '';
 
   const stats = {
     total: registrations?.length || 0,
-    checkedIn: registrations?.filter((r) => r.checkedIn).length || 0,
+    checkedIn: registrations?.filter((r) => isCheckedIn(r)).length || 0,
     sparring: registrations?.filter((r) => r.sparring).length || 0,
     patterns: registrations?.filter((r) => r.patterns).length || 0,
   };
@@ -200,7 +231,7 @@ export default function CheckIn() {
       setSelectedRegistration(registration);
       setCheckInWeight(registration.weightAtRegistration?.toString() || '');
     } else {
-      checkInMutation.mutate({ registrationId: registration.id });
+      submitCheckIn({ registrationId: registration.id });
     }
   };
 
@@ -208,6 +239,18 @@ export default function CheckIn() {
     const eligibleForBulk = uncheckedFiltered.filter((r) => !r.sparring);
     if (eligibleForBulk.length === 0) {
       toast.warning('All filtered unchecked competitors require weigh-in (sparring). Check them in individually.');
+      return;
+    }
+    if (!navigator.onLine) {
+      eligibleForBulk.forEach((registration) => {
+        if (!tournamentId || !user) return;
+        offlineOperations.enqueue(makeCheckInOperation(user.id, tournamentId, registration.id, {
+          checkedIn: true,
+          checkInTime: new Date().toISOString(),
+          checkInWeight: null,
+        }));
+      });
+      toast.warning(`${eligibleForBulk.length} check-ins saved on this device for later sync.`);
       return;
     }
     setIsBulkCheckingIn(true);
@@ -241,6 +284,16 @@ export default function CheckIn() {
     } finally {
       setIsBulkCheckingIn(false);
     }
+  };
+
+  const syncStagedCheckIns = async () => {
+    const result = await offlineOperations.sync();
+    if (!result) return;
+    if (result.synced > 0) {
+      await queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
+      toast.success(`${result.synced} staged check-in${result.synced === 1 ? '' : 's'} synced.`);
+    }
+    if (result.needsReview > 0) toast.error('A staged check-in was rejected and needs staff review.');
   };
 
   return (
@@ -284,6 +337,23 @@ export default function CheckIn() {
           </p>
         </div>
       </div>
+
+      {offlineOperations.operations.length > 0 && (
+        <div role="status" className="m-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100 flex flex-wrap items-center justify-between gap-3">
+          <span>
+            {offlineOperations.pending.length} check-in{offlineOperations.pending.length === 1 ? '' : 's'} pending sync
+            {offlineOperations.needsReview.length > 0 && ` · ${offlineOperations.needsReview.length} needs staff review`}
+          </span>
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" onClick={() => void syncStagedCheckIns()} loading={offlineOperations.syncing}>Sync now</Button>
+            {offlineOperations.needsReview.map((operation) => (
+              <Button key={operation.id} size="sm" variant="secondary" onClick={() => offlineOperations.remove(operation.id)}>
+                Discard rejected #{operation.targetId.slice(0, 8)}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10 space-y-3">
@@ -374,7 +444,7 @@ export default function CheckIn() {
               <div
                 key={registration.id}
                 className={`bg-white dark:bg-gray-800 rounded-lg shadow p-4 ${
-                  registration.checkedIn ? 'border-l-4 border-green-500 dark:border-green-400' : ''
+                  isCheckedIn(registration) ? 'border-l-4 border-green-500 dark:border-green-400' : ''
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -383,7 +453,7 @@ export default function CheckIn() {
                       <span className="font-semibold text-gray-900 dark:text-white">
                         {registration.competitor.firstName} {registration.competitor.lastName}
                       </span>
-                      {registration.checkedIn && (
+                      {isCheckedIn(registration) && (
                         <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400 ml-2" />
                       )}
                     </div>
@@ -408,7 +478,9 @@ export default function CheckIn() {
                   </div>
 
                   <div className="ml-4">
-                    {registration.checkedIn ? (
+                    {stagedCheckInIds.has(registration.id) ? (
+                      <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Pending sync</span>
+                    ) : registration.checkedIn ? (
                       <Button
                         variant="secondary"
                         size="sm"
@@ -487,7 +559,7 @@ export default function CheckIn() {
                 className="flex-1"
                 loading={checkInMutation.isPending}
                 onClick={() =>
-                  checkInMutation.mutate({
+                  submitCheckIn({
                     registrationId: selectedRegistration.id,
                     weight: parseFloat(checkInWeight) || undefined,
                   })

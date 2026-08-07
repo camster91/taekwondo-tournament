@@ -86,10 +86,21 @@ Weigh kids, mark them present. Each competitor shows their declared
 weight vs. measured. Anyone who fails to show up is greyed-out and
 excluded from bracket generation.
 
+If venue Wi-Fi drops, individual and bulk check-ins are saved on that
+device for the signed-in operator. The pending-work banner shows what is
+waiting. Reconnect and use **Sync now**; review or discard any item the
+server rejects instead of entering it twice.
+
 ### Scorekeeper (`/scorekeeper/:id`)
 
 The bracket view. Click a competitor to mark them winner, enter the
 score, press Enter to confirm. Division auto-advances to next match.
+
+If the connection drops while recording a result, the result is saved
+on that device for the signed-in scorekeeper and the match is removed
+from the ready queue. Reconnect and use **Sync now** in the pending-work
+banner. A rejected result is held for review and is never silently
+overwritten.
 
 **Keyboard shortcuts** (much faster than clicking):
 
@@ -108,7 +119,7 @@ score, press Enter to confirm. Division auto-advances to next match.
 
 ### Public Display (`/display/:id`)
 
-Big-screen TV mode. Auto-refreshes every 3 seconds. Shows now-competing
+Big-screen TV mode. Auto-refreshes every 5 seconds. Shows now-competing
 matches, recent results, up-next queue, and per-division progress.
 
 Put a laptop connected to the venue TV on this URL. No login needed —
@@ -158,6 +169,7 @@ PDF for the dojang newsletter.
 - **Lost your magic link:** sign in again with the same email; the
   system will send a new one.
 
-> Last verified: 2026-06-23 against the live app at
-> https://tkd.ashbi.ca (smoke test passed 17/17 — see
-> docs/PILOT-VERIFICATION-2026-06-23.md).
+> Release candidate verified locally on 2026-08-07 with 432 automated
+> unit/integration tests and 26 browser workflows against a disposable
+> PostgreSQL 16 database. Production deployment and venue-device smoke
+> testing remain required before launch.
