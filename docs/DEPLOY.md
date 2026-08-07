@@ -11,8 +11,14 @@ The supported production topology is the full-stack Docker image plus PostgreSQL
 - `ALLOWED_ORIGINS`: comma-separated HTTPS application origins
 - `PUBLIC_APP_URL`: canonical HTTPS origin used in sign-in and registration-management emails
 - `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`: verified production email configuration
+- `RETENTION_PURGE_ENABLED=true`: enables the destructive soft-delete purge only after the retention policy is approved
+- `SOFT_DELETE_RETENTION_DAYS`: whole days before soft-deleted competitors, tournaments, divisions, and incidents are permanently purged (default `7` when enabled)
+- `REGISTRATION_CONSENT_VERSION`: immutable identifier for the approved notice/terms presented during registration
+- `PRIVACY_NOTICE_URL`, `TOURNAMENT_TERMS_URL`: public HTTPS URLs for those exact approved versions; production startup fails if they are absent or non-HTTPS
 
 Keep `ENABLE_DEV_AUTH`, `ENABLE_DEMO_LOGIN`, `ENABLE_E2E_AUTH_BYPASS`, and `RATE_LIMIT_DISABLED` unset in production. `POSTGRES_PASSWORD` is mandatory when using `docker-compose.yml`.
+
+Automatic retention is deliberately disabled by default. Verify a backup and obtain operator/legal approval before enabling it; expired records are deleted at startup and then once per day and cannot be restored from the Trash view.
 
 ## Release sequence
 

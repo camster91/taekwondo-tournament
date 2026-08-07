@@ -107,9 +107,14 @@ model Registration {
   checkInWeight        Float? // Weight at check-in (for verification)
   parentName           String?
   parentEmail          String?
-    parentPhone          String?
-    managementTokenHash String?   @unique
-    createdAt            DateTime  @default(now())
+  parentPhone          String?
+  managementTokenHash String?   @unique
+  consentVersion       String?
+  consentAcceptedAt    DateTime?
+  privacyAccepted      Boolean   @default(false)
+  rulesAccepted        Boolean   @default(false)
+  guardianAttested     Boolean   @default(false)
+  createdAt            DateTime  @default(now())
 
   // Enhanced attributes for fair matching
   heightAtRegistration Float? // Height at registration time

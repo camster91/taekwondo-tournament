@@ -18,6 +18,12 @@ services:
       - ADMIN_SETUP_KEY=${ADMIN_SETUP_KEY:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
       - ENABLE_DEMO_LOGIN=${ENABLE_DEMO_LOGIN:-}
+      # Destructive retention stays opt-in until the operator's policy is approved.
+      - RETENTION_PURGE_ENABLED=${RETENTION_PURGE_ENABLED:-false}
+      - SOFT_DELETE_RETENTION_DAYS=${SOFT_DELETE_RETENTION_DAYS:-7}
+      - REGISTRATION_CONSENT_VERSION=${REGISTRATION_CONSENT_VERSION:-}
+      - PRIVACY_NOTICE_URL=${PRIVACY_NOTICE_URL:-}
+      - TOURNAMENT_TERMS_URL=${TOURNAMENT_TERMS_URL:-}
     depends_on:
       taekwondo-db:
         condition: service_healthy

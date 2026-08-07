@@ -22,6 +22,11 @@ import rulesRouter from './routes/rules.js';
 import incidentsRouter from './routes/incidents.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
+import {
+  retentionConfigFromEnv,
+  startRetentionPurgeJob,
+} from './services/retention-policy.js';
+import { registrationLegalConfigFromEnv } from './routes/public-validation.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,6 +50,8 @@ const prisma: PrismaClient = new Proxy({} as PrismaClient, {
 });
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
+const retentionConfig = retentionConfigFromEnv(process.env);
+registrationLegalConfigFromEnv(process.env, isProduction);
 
 // Closes D9 (env validation): without this check, a typo or missing
 // var in the deploy env file crashes the server on the first DB
@@ -259,6 +266,12 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 //   4. Hard-exit after 25 s in case anything hangs.
 const server = app.listen(Number(PORT), '0.0.0.0', async () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
+
+  if (retentionConfig) {
+    await startRetentionPurgeJob({ database: prisma, ...retentionConfig });
+  } else {
+    console.log('[retention] automatic purge disabled');
+  }
 
   if (isEmailConfigured()) {
     const ok = await verifyEmailConnection();

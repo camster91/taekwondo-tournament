@@ -9,9 +9,91 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildRegistrationPatch,
+  buildRegistrationConsent,
+  registrationLegalConfigFromEnv,
   validateLookupParams,
   PUBLIC_REGISTRATION_LIMITS,
 } from './public-validation.js';
+
+describe('buildRegistrationConsent', () => {
+  const acceptedAt = new Date('2026-08-07T12:00:00.000Z');
+
+  it('requires separate privacy and tournament-rules acceptance', () => {
+    expect(buildRegistrationConsent({}, false, 'pilot-v1', acceptedAt).ok).toBe(false);
+    expect(buildRegistrationConsent({ privacyAccepted: true }, false, 'pilot-v1', acceptedAt).ok).toBe(false);
+    expect(buildRegistrationConsent({ rulesAccepted: true }, false, 'pilot-v1', acceptedAt).ok).toBe(false);
+  });
+
+  it('requires guardian authority for a minor', () => {
+    const result = buildRegistrationConsent(
+      { privacyAccepted: true, rulesAccepted: true, guardianAttested: false },
+      true,
+      'pilot-v1',
+      acceptedAt,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/guardian/i);
+  });
+
+  it('records the configured version, timestamp, and each accepted choice', () => {
+    expect(buildRegistrationConsent(
+      { privacyAccepted: true, rulesAccepted: true, guardianAttested: true },
+      true,
+      'pilot-v1',
+      acceptedAt,
+    )).toEqual({
+      ok: true,
+      data: {
+        consentVersion: 'pilot-v1',
+        consentAcceptedAt: acceptedAt,
+        privacyAccepted: true,
+        rulesAccepted: true,
+        guardianAttested: true,
+      },
+    });
+  });
+
+  it('rejects registration when the deployed consent version is missing', () => {
+    expect(() => buildRegistrationConsent(
+      { privacyAccepted: true, rulesAccepted: true },
+      false,
+      '',
+      acceptedAt,
+    )).toThrow(/consent version/i);
+  });
+});
+
+describe('registrationLegalConfigFromEnv', () => {
+  it('requires versioned HTTPS legal documents in production', () => {
+    expect(() => registrationLegalConfigFromEnv({}, true)).toThrow(/REGISTRATION_CONSENT_VERSION/);
+    expect(() => registrationLegalConfigFromEnv({
+      REGISTRATION_CONSENT_VERSION: 'pilot-v1',
+      PRIVACY_NOTICE_URL: 'http://example.com/privacy',
+      TOURNAMENT_TERMS_URL: 'https://example.com/terms',
+    }, true)).toThrow(/HTTPS/);
+  });
+
+  it('returns the exact deployed version and document URLs', () => {
+    expect(registrationLegalConfigFromEnv({
+      REGISTRATION_CONSENT_VERSION: 'pilot-v1',
+      PRIVACY_NOTICE_URL: 'https://example.com/privacy/v1',
+      TOURNAMENT_TERMS_URL: 'https://example.com/terms/v1',
+    }, true)).toEqual({
+      consentVersion: 'pilot-v1',
+      privacyNoticeUrl: 'https://example.com/privacy/v1',
+      tournamentTermsUrl: 'https://example.com/terms/v1',
+    });
+  });
+
+  it('uses unmistakable local-only placeholders outside production', () => {
+    expect(registrationLegalConfigFromEnv({}, false)).toEqual({
+      consentVersion: 'development-draft-v0',
+      privacyNoticeUrl: '/legal/privacy-draft',
+      tournamentTermsUrl: '/legal/terms-draft',
+    });
+  });
+});
 
 describe('buildRegistrationPatch', () => {
   it('returns empty data + regData for empty body', () => {

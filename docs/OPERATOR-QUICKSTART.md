@@ -133,7 +133,9 @@ it's the share-link URL you generated in Settings.
 PDF for the dojang newsletter.
 
 **Tournament detail → Trash** — if you delete by mistake, you have
-7 days to recover from the Trash view. After that it's purged.
+the configured retention window to recover from the Trash view. The
+production operator currently plans a 7-day window, but permanent purge
+must be enabled only after the published retention policy is approved.
 
 ---
 
@@ -148,7 +150,7 @@ PDF for the dojang newsletter.
   divisions. Check the Divisions page warning banner.
 
 - **"I can't find my tournament."** — Soft-deleted tournaments go to
-  Trash for 7 days. Check there.
+  Trash for the configured retention window. Check there.
 
 - **"Demo data is showing instead of my real tournament."** — You
   logged in via the demo button. Sign out and sign in with your real

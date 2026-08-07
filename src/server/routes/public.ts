@@ -7,6 +7,8 @@ import { calculateAge } from '../../shared/constants/age-groups.js';
 import { normalizeBelt } from '../../shared/constants/belts.js';
 import {
   buildRegistrationPatch,
+  buildRegistrationConsent,
+  registrationLegalConfigFromEnv,
   validateLookupParams,
   PUBLIC_REGISTRATION_LIMITS,
 } from './public-validation.js';
@@ -24,6 +26,11 @@ import {
 } from '../utils/registration-management-token.js';
 
 const router = Router();
+
+const legalConfig = () => registrationLegalConfigFromEnv(
+  process.env,
+  process.env.NODE_ENV === 'production',
+);
 
 // In dev/test, set RATE_LIMIT_DISABLED=1 to bypass rate limiters entirely.
 // (Mirrors the same flag used in routes/auth.ts — keeps the e2e suite
@@ -68,6 +75,10 @@ const schoolPortalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => rateLimitDisabled,
+});
+
+router.get('/legal-config', (_req: Request, res: Response) => {
+  res.json(legalConfig());
 });
 
 // Get open tournaments (status = 'registration')
@@ -165,6 +176,9 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     parentEmail,
     parentPhone,
     competeWithOlder,
+    privacyAccepted,
+    rulesAccepted,
+    guardianAttested,
   } = req.body;
 
   // Validation
@@ -239,6 +253,17 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     // Calculate age at tournament
     const dob = new Date(dateOfBirth);
     const ageAtTournament = calculateAge(dob, tournament.date);
+    const isMinor = calculateAge(dob, new Date()) < 18;
+
+    const consent = buildRegistrationConsent(
+      { privacyAccepted, rulesAccepted, guardianAttested },
+      isMinor,
+      legalConfig().consentVersion,
+      new Date(),
+    );
+    if (!consent.ok) {
+      return res.status(400).json({ error: 'Validation failed', details: [consent.error] });
+    }
 
     if (ageAtTournament < 4) {
       return res.status(400).json({ error: 'Competitors must be at least 4 years old' });
@@ -312,6 +337,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         competeWithOlder: competeWithOlder === true,
         specialNeeds: specialNeeds?.trim() || null,
         managementTokenHash: hashManagementToken(managementToken),
+        ...consent.data,
       },
       include: {
         competitor: true,
