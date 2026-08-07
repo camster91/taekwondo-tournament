@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = 5173;
 const BASE_URL = `http://localhost:${PORT}`;
 const E2E_STRIPE_WEBHOOK_SECRET = ['whsec', 'e2e', 'bowin', 'webhook', 'secret'].join('_');
+const E2E_METRICS_TOKEN = ['metrics', 'e2e', 'bowin', 'private', 'monitoring', 'token'].join('-');
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -66,6 +67,7 @@ export default defineConfig({
       STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || E2E_STRIPE_WEBHOOK_SECRET,
       STRIPE_STARTER_PRICE_ID: process.env.STRIPE_STARTER_PRICE_ID || 'price_e2e_starter',
       STRIPE_PRO_PRICE_ID: process.env.STRIPE_PRO_PRICE_ID || 'price_e2e_pro',
+      METRICS_TOKEN: process.env.METRICS_TOKEN || E2E_METRICS_TOKEN,
       ...process.env,
     },
     url: BASE_URL,

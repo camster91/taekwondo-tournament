@@ -9,6 +9,7 @@ const valid = {
   MAILGUN_API_KEY: 'key-example',
   MAILGUN_DOMAIN: 'mg.example.com',
   EMAIL_FROM_ADDRESS: 'support@mg.example.com',
+  METRICS_TOKEN: 'metrics-token-with-at-least-32-characters',
   REGISTRATION_CONSENT_VERSION: 'pilot-v1',
   PRIVACY_NOTICE_URL: 'https://example.com/privacy/v1',
   TOURNAMENT_TERMS_URL: 'https://example.com/terms/v1',

@@ -9,6 +9,7 @@ export function validateProductionServiceConfig(
     'MAILGUN_API_KEY',
     'MAILGUN_DOMAIN',
     'EMAIL_FROM_ADDRESS',
+    'METRICS_TOKEN',
   ] as const;
   const missing = required.filter((name) => !env[name]?.trim());
   if (missing.length) {
@@ -16,6 +17,9 @@ export function validateProductionServiceConfig(
   }
   if (env.JWT_SECRET!.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters in production');
+  }
+  if (env.METRICS_TOKEN!.length < 32) {
+    throw new Error('METRICS_TOKEN must be at least 32 characters in production');
   }
 
   const publicAppUrl = env.PUBLIC_APP_URL!.trim().replace(/\/$/, '');

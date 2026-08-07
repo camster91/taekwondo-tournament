@@ -7,6 +7,7 @@ The supported production topology is the full-stack Docker image plus PostgreSQL
 - `NODE_ENV=production`
 - `DATABASE_URL`: PostgreSQL connection string with a unique production password
 - `JWT_SECRET`: at least 32 random characters
+- `METRICS_TOKEN`: at least 32 random characters used only by the private `/api/internal/metrics` collector
 - `ADMIN_SETUP_KEY`: random bootstrap key; remove it after the first administrator is created
 - `ALLOWED_ORIGINS`: comma-separated HTTPS application origins
 - `PUBLIC_APP_URL`: canonical HTTPS origin used in sign-in and registration-management emails
@@ -28,7 +29,7 @@ Automatic retention is deliberately disabled by default. Verify a backup and obt
 3. Review `npm audit` and the bounded exception in `SECURITY.md`.
 4. Run `npx prisma migrate deploy` against a staging database restored from production-compatible data.
 5. Deploy the immutable image. The Docker entrypoint runs `prisma migrate deploy` before starting Node.
-6. Require `/api/health` and `/api/health/ready` to return HTTP 200 before routing traffic.
+6. Require `/api/health` and `/api/health/ready` to return HTTP 200 before routing traffic, then verify `/api/internal/metrics` rejects anonymous requests and succeeds with the collector token.
 7. Smoke-test admin sign-in, invitation email, tournament creation, public registration, private registration-management link, public scoreboard key rotation, check-in, scoring, and result correction.
 8. Confirm the previous image and pre-deploy database backup remain available for rollback.
 

@@ -5,6 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import path from 'path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'url';
 import 'express-async-errors';
 import { PrismaClient } from '@prisma/client';
@@ -30,6 +31,11 @@ import {
 } from './services/retention-policy.js';
 import { registrationLegalConfigFromEnv } from './routes/public-validation.js';
 import { validateProductionServiceConfig } from './services/production-config.js';
+import {
+  createHttpMetrics,
+  metricsTokenFromEnv,
+  normalizeMetricRoute,
+} from './services/observability.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,6 +59,7 @@ const prisma: PrismaClient = new Proxy({} as PrismaClient, {
 });
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
+const httpMetrics = createHttpMetrics();
 const retentionConfig = retentionConfigFromEnv(process.env);
 registrationLegalConfigFromEnv(process.env, isProduction);
 
@@ -71,6 +78,7 @@ if (isProduction) {
     process.exit(1);
   }
 }
+const metricsToken = metricsTokenFromEnv(process.env, false);
 
 // Trust proxy only in production (behind Coolify/Docker reverse proxy)
 if (isProduction) {
@@ -87,6 +95,27 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 };
 app.use(cors(corsOptions));
+
+// Correlate API errors with reverse-proxy and provider logs. An incoming ID
+// is accepted only when it is short and header-safe; otherwise generate one.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const incoming = req.header('x-request-id');
+  const requestId = incoming && /^[A-Za-z0-9._-]{8,80}$/.test(incoming)
+    ? incoming
+    : crypto.randomUUID();
+  const startedAt = performance.now();
+  res.setHeader('X-Request-ID', requestId);
+  res.on('finish', () => {
+    httpMetrics.record({
+      method: req.method,
+      route: normalizeMetricRoute(req.path),
+      statusCode: res.statusCode,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+  });
+  res.locals.requestId = requestId;
+  next();
+});
 
 // Security headers — HSTS, X-Content-Type-Options, X-Frame-Options, etc.
 // Helmet's defaults are sensible for an internal dashboard. We override
@@ -165,6 +194,17 @@ app.use((await import('compression')).default());
 // Make prisma available to routes
 app.locals.prisma = prisma;
 
+app.get('/api/internal/metrics', (req: Request, res: Response) => {
+  if (!metricsToken) return res.status(404).json({ error: 'Not found' });
+  const supplied = req.header('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+  const expectedBuffer = Buffer.from(metricsToken);
+  const suppliedBuffer = Buffer.from(supplied);
+  const authorized = expectedBuffer.length === suppliedBuffer.length
+    && crypto.timingSafeEqual(expectedBuffer, suppliedBuffer);
+  if (!authorized) return res.status(401).json({ error: 'Invalid metrics credentials.' });
+  res.type('text/plain; version=0.0.4').send(httpMetrics.render());
+});
+
 // API Routes
 app.use('/api/auth', authRouter);
 app.use('/api/public', publicRouter);
@@ -237,6 +277,7 @@ if (isProduction) {
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   // Log error for debugging
   console.error('Error:', {
+    requestId: res.locals.requestId,
     message: err.message,
     stack: isProduction ? undefined : err.stack,
     path: req.path,
