@@ -23,6 +23,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   HelpCircle,
+  Building2,
   type LucideIcon,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -64,6 +65,7 @@ const AcceptInvite = lazy(() => import('./pages/AcceptInvite'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const FairnessRules = lazy(() => import('./pages/FairnessRules'));
 const SchoolPortal = lazy(() => import('./pages/SchoolPortal'));
+const OrganizationSettings = lazy(() => import('./pages/OrganizationSettings'));
 
 // Fallback rendered while a lazy page chunk is fetched. Centred spinner
 // keeps the chrome stable so the page doesn't reflow when the real
@@ -361,6 +363,15 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                   >
                     <SettingsIcon className="h-3.5 w-3.5" /> Profile
                   </Link>
+                  {['admin', 'director'].includes(user.role) && (
+                    <Link
+                      to="/organization"
+                      onClick={() => { setUserMenuOpen(false); closeMobile(); }}
+                      className="flex items-center gap-2 px-2.5 py-1.5 text-sm text-white/80 hover:bg-white/5 rounded-md"
+                    >
+                      <Building2 className="h-3.5 w-3.5" /> Organization & billing
+                    </Link>
+                  )}
                   <button
                     onClick={toggleTheme}
                     className="w-full flex items-center gap-2 px-2.5 py-1.5 text-sm text-white/80 hover:bg-white/5 rounded-md"
@@ -559,6 +570,14 @@ function AppRoutes() {
               element={<BracketEditor />}
             />
             <Route path="/profile" element={<Profile />} />
+            <Route
+              path="/organization"
+              element={
+                <ProtectedRoute requiredRoles={['admin', 'director']}>
+                  <OrganizationSettings />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Director+ pages - admin or director only */}
             <Route

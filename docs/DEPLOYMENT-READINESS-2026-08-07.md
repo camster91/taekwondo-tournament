@@ -9,7 +9,7 @@
 ## Verified pass
 
 - Security regressions, tenant boundaries, signed management links, consent capture, atomic scoring, offline queues, accessibility workflows, and plan enforcement have automated coverage.
-- 468 unit/integration tests and 29 Chromium browser workflows pass.
+- 468 unit/integration tests and 30 Chromium browser workflows pass, including responsive organization onboarding and billing-plan presentation.
 - Type checks, lint, production build, Prisma validation, `npm audit`, and nine migrations from an empty PostgreSQL 16 database pass.
 - The image runs as a non-root user and now includes database-aware health, read-only filesystem, temporary filesystem, dropped capabilities, no-new-privileges, graceful shutdown, and bounded Docker logs.
 - Production startup fails closed for core database, authentication, URL, CORS, email, and legal-consent configuration.
