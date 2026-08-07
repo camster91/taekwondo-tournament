@@ -20,6 +20,8 @@ import invitesRouter from './routes/invites.js';
 import sportsRouter from './routes/sports.js';
 import rulesRouter from './routes/rules.js';
 import incidentsRouter from './routes/incidents.js';
+import organizationsRouter from './routes/organizations.js';
+import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 import {
@@ -109,6 +111,10 @@ app.use(
   }),
 );
 
+// Stripe signs the exact request bytes. Mount this before express.json(),
+// otherwise signature verification receives a re-serialized object.
+app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: '256kb' }), stripeWebhookHandler);
+
 // 1 MB JSON body limit. Heavy endpoints (Excel auto-map, import) accept
 // multipart/form-data or pre-parsed JSON from the client. A larger
 // default + a single huge endpoint was an OOM vector.
@@ -171,6 +177,8 @@ app.use('/api/invites', invitesRouter);
 app.use('/api/sports', sportsRouter);
 app.use('/api/rules', rulesRouter);
 app.use('/api/incidents', incidentsRouter);
+app.use('/api/organizations', organizationsRouter);
+app.use('/api/billing', billingRouter);
 
 // Health check (liveness — the process is up and the HTTP server
 // is bound). This is the cheap probe for the load balancer.
