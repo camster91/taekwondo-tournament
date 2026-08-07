@@ -70,6 +70,6 @@ jobs:
           if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 400 ]; then
             echo "Deployment queued!"
           else
-            echo "Warning: deploy endpoint returned ${HTTP_CODE}"
-            # Don't fail the job — build passed; manual deploy is still possible
+            echo "::error::Deploy endpoint returned ${HTTP_CODE}"
+            exit 1
           fi

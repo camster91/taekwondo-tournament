@@ -12,8 +12,8 @@ services:
       - NODE_ENV=production
       - PORT=3001
       # Require secrets from the host env — never bake production passwords
-      # into the compose file. Local defaults only apply when unset.
-      - DATABASE_URL=postgresql://taekwondo:${POSTGRES_PASSWORD:-taekwondo}@taekwondo-db:5432/taekwondo_tournament
+      # into the compose file.
+      - DATABASE_URL=postgresql://taekwondo:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@taekwondo-db:5432/taekwondo_tournament
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - ADMIN_SETUP_KEY=${ADMIN_SETUP_KEY:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
@@ -32,7 +32,7 @@ services:
     environment:
       POSTGRES_DB: taekwondo_tournament
       POSTGRES_USER: taekwondo
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taekwondo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

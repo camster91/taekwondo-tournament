@@ -61,15 +61,14 @@ jobs:
           DATABASE_URL: postgresql://placeholder:***@localhost:5432/placeholder
           JWT_SECRET: ci-throwaway-secret-not-used-in-tests-min-32-chars-xx
 
-      - name: Lint (if configured)
-        run: |
-          if grep -q '"lint"' package.json; then
-            echo "Running lint..."
-            npm run lint
-          else
-            echo "No lint script found, skipping."
-          fi
-        continue-on-error: true
+      - name: Lint
+        run: npm run lint
+
+      - name: Dependency audit
+        # React Router 7.18.2 has a high advisory in its optional RSC action
+        # runtime, which this BrowserRouter SPA does not import or execute.
+        # See SECURITY.md. Keep critical findings as a hard release gate.
+        run: npm audit --audit-level=critical
 
       - name: Build
         run: npm run build
