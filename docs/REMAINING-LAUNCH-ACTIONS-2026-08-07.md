@@ -46,7 +46,7 @@ This record separates verified repository work from changes that need operator a
 
 ### Licensing and approvals
 
-- The private repository is detected as MIT because `LICENSE` is an unfinished MIT template, while `package.json` declares ISC. The commercial operator must choose proprietary distribution or intentionally open-source the code, then provide the legal owner name and year.
+- Proprietary distribution is selected: copyright 2026 Cameron Ashley, repository package metadata `UNLICENSED`, with a retained third-party license inventory. Customer/privacy terms still require qualified legal approval.
 - Privacy, terms, organizer agreement, guardian waiver/consent, retention, subprocessors, incident process, and rules configuration remain drafts until approved by the operator and qualified counsel/rules authority.
 
 ## Approval-gated execution batches

@@ -221,7 +221,7 @@ The current release candidate is intended for a controlled, supervised pilot—n
 
 ## License
 
-The repository's license metadata is not release-ready: `LICENSE` is an unfilled MIT template while `package.json` declares ISC. The legal operator must choose one license, insert the correct owner/year, and make all three locations agree before distribution.
+Bowin is proprietary software, copyright 2026 Cameron Ashley. The repository is marked `UNLICENSED`; hosted access does not grant source-code copying, modification, or redistribution rights. Third-party components remain subject to their own licenses and attribution requirements.
 
 ---
 Developed by Cameron Ashley / Nexus AI.

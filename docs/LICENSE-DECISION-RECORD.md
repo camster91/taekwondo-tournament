@@ -1,24 +1,24 @@
 # Bowin software license decision record
 
-**Status:** decision required before merge or commercial distribution
+**Status:** operator decision recorded 2026-08-07; customer/legal terms remain subject to counsel review
 
 The repository currently conflicts: `LICENSE` is an unfinished MIT template and `package.json` declares ISC. Neither accurately records an intentional commercial licensing decision.
 
 ## Decision
 
-- [ ] Proprietary commercial software (recommended for a closed-source managed SaaS)
+- [x] Proprietary commercial software (closed-source managed SaaS)
 - [ ] MIT open source
 - [ ] Other license reviewed by counsel: ____________________
 
 | Field | Approved value |
 |---|---|
-| Legal copyright owner | |
-| Copyright year | |
-| Public source distribution permitted | Yes / No |
-| Customer right to copy, modify, or redistribute | |
+| Legal copyright owner | Cameron Ashley |
+| Copyright year | 2026 |
+| Public source distribution permitted | No |
+| Customer right to copy, modify, or redistribute | None unless separately agreed in writing |
 | Third-party attribution owner | |
-| Approved by | |
-| Approval date | |
+| Approved by | Cameron Ashley, operator instruction to launch |
+| Approval date | 2026-08-07 |
 
 ## Repository changes after approval
 
