@@ -208,6 +208,7 @@ export async function generateSchedule(
         select: {
           registration: {
             select: {
+              id: true,
               competitor: {
                 select: { firstName: true, lastName: true },
               },
@@ -244,6 +245,19 @@ export async function generateSchedule(
   // Group divisions by event type and category for better scheduling
   const patternsDiv = divisions.filter((d) => d.eventType === 'patterns');
   const sparringDiv = divisions.filter((d) => d.eventType === 'sparring');
+
+  const competitorsByDivision = new Map(
+    divisions.map((division) => [
+      division.id,
+      division.assignments.map((assignment) => {
+        const competitor = assignment.registration.competitor;
+        return {
+          registrationId: assignment.registration.id,
+          name: `${competitor.firstName} ${competitor.lastName}`.trim(),
+        };
+      }),
+    ])
+  );
 
   // Schedule patterns first (typically shorter)
   const scheduled: ScheduledDivision[] = [];
@@ -323,15 +337,21 @@ export async function generateSchedule(
   // director approved; better to surface the conflict and let a
   // human decide. A future iteration could mark conflicting
   // divisions with a "needs review" badge in the UI.
-  const competitorSlots = new Map<string, { divId: string; start: number; end: number; ring: number }[]>();
+  const competitorSlots = new Map<string, {
+    name: string;
+    slots: { divId: string; start: number; end: number; ring: number }[];
+  }>();
   for (const slot of scheduled) {
     const startMin = timeToMinutes(slot.startTime);
     const endMin = timeToMinutes(slot.endTime);
-    for (const name of slot.competitorNames) {
-      // Normalise to handle whitespace differences ("Minho Kim" vs "Minho  Kim")
-      const key = name.replace(/\s+/g, ' ').trim();
-      if (!competitorSlots.has(key)) competitorSlots.set(key, []);
-      competitorSlots.get(key)!.push({
+    for (const competitor of competitorsByDivision.get(slot.divisionId) ?? []) {
+      if (!competitorSlots.has(competitor.registrationId)) {
+        competitorSlots.set(competitor.registrationId, {
+          name: competitor.name,
+          slots: [],
+        });
+      }
+      competitorSlots.get(competitor.registrationId)!.slots.push({
         divId: slot.divisionId,
         start: startMin,
         end: endMin,
@@ -343,7 +363,8 @@ export async function generateSchedule(
   // different divisions (a competitor doing the same division twice
   // is a data error, not a scheduling conflict).
   const seenWarnings = new Set<string>();
-  for (const [name, slots] of competitorSlots) {
+  for (const [registrationId, competitor] of competitorSlots) {
+    const { name, slots } = competitor;
     if (slots.length < 2) continue;
     for (let i = 0; i < slots.length; i++) {
       for (let j = i + 1; j < slots.length; j++) {
@@ -353,7 +374,7 @@ export async function generateSchedule(
         if (!slotsOverlap(a, b)) continue;
         // Sort the two for a stable warning key (alphabetical)
         const [first, second] = [a, b].sort((x, y) => x.divId.localeCompare(y.divId));
-        const warnKey = `${name}|${first.divId}|${second.divId}`;
+        const warnKey = `${registrationId}|${first.divId}|${second.divId}`;
         if (seenWarnings.has(warnKey)) continue;
         seenWarnings.add(warnKey);
         warnings.push(
