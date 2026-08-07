@@ -83,7 +83,7 @@ export default function CheckIn() {
     },
   });
 
-  const { data: registrations, isLoading } = useQuery<Registration[]>({
+  const { data: registrations, isLoading, isError: registrationsError, refetch: retryRegistrations } = useQuery<Registration[]>({
     queryKey: ['checkin-registrations', tournamentId],
     queryFn: async () => {
       const res = await fetch(`/api/tournaments/${tournamentId}/registrations`, { headers: getAuthHeaders() });
@@ -119,6 +119,7 @@ export default function CheckIn() {
       setSelectedRegistration(null);
       setCheckInWeight('');
     },
+    onError: () => toast.addToast('Check-in failed. Check the venue connection and try again.', 'error'),
   });
 
   const undoCheckInMutation = useMutation({
@@ -138,6 +139,7 @@ export default function CheckIn() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
     },
+    onError: () => toast.addToast('Could not undo check-in. Check the venue connection and try again.', 'error'),
   });
 
   const uniqueSchools = registrations
@@ -356,6 +358,11 @@ export default function CheckIn() {
             <CardSkeleton />
             <CardSkeleton />
             <CardSkeleton />
+          </div>
+        ) : registrationsError ? (
+          <div role="alert" className="text-center py-12 text-red-700 dark:text-red-300">
+            <p className="mb-4">Could not load registrations. Check the venue connection and try again.</p>
+            <Button onClick={() => void retryRegistrations()}>Retry</Button>
           </div>
         ) : sortedRegistrations.length === 0 ? (
           <div className="text-center py-12 text-gray-600 dark:text-gray-400">

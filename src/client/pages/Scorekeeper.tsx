@@ -30,6 +30,7 @@ interface Match {
   matchNumber: number;
   roundNumber: number;
   bracketType: string;
+  ringNumber?: number | null;
   status: string;
   score1: string | null;
   score2: string | null;
@@ -127,7 +128,7 @@ export default function Scorekeeper() {
     return sportProfile.eventTypes[idx]?.name ?? eventType;
   };
 
-  const { data: divisions, isLoading } = useQuery<Division[]>({
+  const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions } = useQuery<Division[]>({
     queryKey: ['scorekeeper-divisions', tournamentId],
     queryFn: async () => {
       const res = await fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`, { headers: getAuthHeaders() });
@@ -138,13 +139,20 @@ export default function Scorekeeper() {
   refetchIntervalInBackground: false,
   });
 
+  const availableRings = useMemo(() => Array.from(new Set(
+    (divisions || []).flatMap((division) => division.bracket?.matches || [])
+      .map((match) => match.ringNumber)
+      .filter((ring): ring is number => ring != null),
+  )).sort((a, b) => a - b), [divisions]);
+
   // Get ready matches for selected division — safe with optional chaining
   const readyMatches = useMemo(() => {
     const div = divisions?.find((d) => d.id === selectedDivision);
     return div?.bracket?.matches
-      ?.filter((m) => m.status === 'ready' || m.status === 'in_progress')
+      ?.filter((m) => (m.status === 'ready' || m.status === 'in_progress')
+        && (selectedRing == null || m.ringNumber === selectedRing))
       .sort((a, b) => a.matchNumber - b.matchNumber) || [];
-  }, [divisions, selectedDivision]);
+  }, [divisions, selectedDivision, selectedRing]);
 
   // Total + completed counts for the selected division. Used to distinguish
   // "all done" (truly complete) from "no ready match yet" (still pending/in-progress
@@ -318,7 +326,9 @@ export default function Scorekeeper() {
   };
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+
+    if (showIncidentModal || showKeyboardHelp) return;
 
     if (showConfirm) {
       if (e.key === 'Enter') { e.preventDefault(); handleSubmit(); }
@@ -414,7 +424,7 @@ export default function Scorekeeper() {
           break;
       }
     }
-  }, [showConfirm, selectedDivision, currentMatch, selectedWinner, readyMatches]);
+  }, [showConfirm, showIncidentModal, showKeyboardHelp, selectedDivision, currentMatch, selectedWinner, readyMatches]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -470,9 +480,23 @@ export default function Scorekeeper() {
 
           {isLoading ? (
             <div className="text-center py-12 text-gray-600">Loading divisions...</div>
+          ) : divisionsError ? (
+            <div role="alert" className="text-center py-12 text-red-300">
+              <p className="mb-4">Could not load divisions. Check the venue connection and try again.</p>
+              <Button onClick={() => void retryDivisions()}>Retry</Button>
+            </div>
           ) : (
             <>
               <h2 className="text-lg font-semibold mb-4 text-gray-300">Select Division</h2>
+              {availableRings.length > 0 && (
+                <div className="mb-4">
+                  <label htmlFor="scorekeeper-ring" className="block text-sm text-gray-300 mb-1">Assigned ring</label>
+                  <select id="scorekeeper-ring" value={selectedRing ?? ''} onChange={(event) => setSelectedRing(event.target.value ? Number(event.target.value) : null)} className="w-full px-4 py-2 rounded-lg bg-gray-800 text-white border border-gray-700">
+                    <option value="">All rings</option>
+                    {availableRings.map((ring) => <option key={ring} value={ring}>Ring {ring}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="relative mb-4">
                 <label htmlFor="division-search" className="sr-only">
                   Search divisions
@@ -512,7 +536,9 @@ export default function Scorekeeper() {
                   </div>
                 )}
                 {divisions
-                  ?.filter((d) => d.bracket && (!divisionSearch || d.name.toLowerCase().includes(divisionSearch.toLowerCase())))
+                  ?.filter((d) => d.bracket
+                    && (selectedRing == null || d.bracket.matches.some((match) => match.ringNumber === selectedRing))
+                    && (!divisionSearch || d.name.toLowerCase().includes(divisionSearch.toLowerCase())))
                   .map((division) => {
                     const readyCount = division.bracket?.matches?.filter((m) => m.status === 'ready' || m.status === 'in_progress').length || 0;
                     const completedCount = division.bracket?.matches?.filter((m) => m.status === 'completed').length || 0;

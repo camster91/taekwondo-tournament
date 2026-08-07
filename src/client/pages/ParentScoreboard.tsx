@@ -100,14 +100,19 @@ export default function ParentScoreboard() {
     return matches;
   }, [divisions]);
 
-  const nowCompeting = allMatches
+  const modeRing = Number(displaySettings?.mode?.match(/^ring:(\d+)$/)?.[1] || 0) || undefined;
+  const configuredRing = displaySettings?.ringNumber ?? modeRing;
+  const visibleMatches = configuredRing
+    ? allMatches.filter((match) => match.ringNumber === configuredRing)
+    : allMatches;
+  const nowCompeting = visibleMatches
     .filter((m) => m.status === 'in_progress')
     .sort((a, b) => a.roundNumber - b.roundNumber || a.matchNumber - b.matchNumber);
-  const upNext = allMatches
+  const upNext = visibleMatches
     .filter((m) => m.status === 'ready')
     .sort((a, b) => a.roundNumber - b.roundNumber || a.matchNumber - b.matchNumber)
     .slice(0, 5);
-  const recent = allMatches
+  const recent = visibleMatches
     .filter((m) => m.status === 'completed')
     .sort((a, b) => a.roundNumber - b.roundNumber || a.matchNumber - b.matchNumber)
     .slice(-3)
@@ -116,8 +121,9 @@ export default function ParentScoreboard() {
   // If director set featuredMatchId, override the "now competing" with
   // that match (even if it's not in_progress). Used for finals.
   let featured: (Match & { divisionName: string; eventType: string }) | null = null;
-  if (displaySettings?.featuredMatchId) {
-    featured = allMatches.find((m) => m.id === displaySettings.featuredMatchId) || null;
+  const featuredMatchId = displaySettings?.featuredMatchId || displaySettings?.mode?.match(/^featured:(.+)$/)?.[1];
+  if (featuredMatchId) {
+    featured = allMatches.find((m) => m.id === featuredMatchId) || null;
   }
 
   return (
