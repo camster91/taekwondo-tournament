@@ -1,6 +1,6 @@
-# Prisma 7 requires Node 20.19+ (also 22.12+ / 24.0+). 20.18.0 fails at
-# `npm ci` with "Prisma only supports Node.js versions 20.19+…".
-FROM node:20.19-alpine3.20 AS builder
+# Prisma's current stream dependency requires Node 22, so the build and
+# runtime use the same pinned, supported baseline.
+FROM node:22.18-alpine3.22 AS builder
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ RUN ./node_modules/.bin/prisma generate && \
     npx tsc -p tsconfig.server.json
 
 # ─── Production Dependencies Stage ─────────────────────────────────
-FROM node:20.19-alpine3.20 AS deps
+FROM node:22.18-alpine3.22 AS deps
 
 WORKDIR /app
 COPY package*.json ./
@@ -26,7 +26,7 @@ COPY prisma ./prisma
 RUN npm ci --omit=dev && ./node_modules/.bin/prisma generate
 
 # ─── Production Image ────────────────────────────────────────────────
-FROM node:20.19-alpine3.20 AS runner
+FROM node:22.18-alpine3.22 AS runner
 
 WORKDIR /app
 
@@ -43,6 +43,7 @@ COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/dist-server ./dist-server
 COPY --from=builder --chown=node:node /app/prisma ./prisma
+COPY --from=builder --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 COPY --chown=node:node package.json ./
 COPY --chown=node:node server.js ./
 
@@ -50,6 +51,9 @@ COPY --chown=node:node server.js ./
 USER node
 
 EXPOSE 3001
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
+  CMD wget -q -O /dev/null http://127.0.0.1:3001/api/health/ready || exit 1
 
 # Run schema migrations and start server (use local prisma binary to ensure correct version).
 # Closes D1 + D2: previously the deploy used `prisma db push --accept-data-loss`,

@@ -9,6 +9,7 @@ import { validateRequest } from '../middleware/validate.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
 import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
+import { publicAppUrlFromEnv } from '../services/production-config.js';
 
 const router = Router();
 
@@ -170,14 +171,9 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
       },
     });
 
-    // Build magic link URL. Prefer the explicit public app URL, then any
-    // allowed origin, then fall back to localhost for local dev.
-    const publicAppUrl = process.env.PUBLIC_APP_URL;
-    const baseUrl = publicAppUrl
-      || (process.env.ALLOWED_ORIGINS && process.env.ALLOWED_ORIGINS !== '*'
-          ? process.env.ALLOWED_ORIGINS.split(',')[0]
-          : null)
-      || 'http://localhost:5173';
+    // Always use the explicit canonical URL in deploys. CORS origins can
+    // contain admin/staging hosts and are not a safe source for emailed links.
+    const baseUrl = publicAppUrlFromEnv(process.env);
     const magicUrl = `${baseUrl}/verify?token=${token}`;
 
     const template = magicLinkEmail({
@@ -500,6 +496,43 @@ router.post('/logout', authenticate, async (req: AuthenticatedRequest, res: Resp
   res.clearCookie(SESSION_COOKIE, { path: '/' });
   res.clearCookie('bowin_csrf', { path: '/' });
   res.json({ success: true });
+});
+
+router.delete('/account', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.id },
+    include: { organizationMembers: { select: { id: true } } },
+  });
+  if (!user) return res.status(404).json({ error: 'Account not found' });
+  if (req.body?.confirmation !== user.email) {
+    return res.status(400).json({ error: 'Enter the exact account email to confirm permanent deletion.' });
+  }
+  if (user.organizationMembers.length) {
+    return res.status(409).json({
+      error: 'Export, close, or leave every organization before deleting this account.',
+    });
+  }
+  if (!user.lastLogin || Date.now() - user.lastLogin.getTime() > 15 * 60 * 1000) {
+    return res.status(403).json({ error: 'Sign in again before permanently deleting this account.' });
+  }
+  if (user.role === 'admin') {
+    const otherActiveAdmins = await prisma.user.count({
+      where: { role: 'admin', isActive: true, id: { not: user.id } },
+    });
+    if (otherActiveAdmins === 0) {
+      return res.status(409).json({ error: 'Transfer system administration before deleting the last administrator.' });
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.magicLink.deleteMany({ where: { email: user.email } }),
+    prisma.user.delete({ where: { id: user.id } }),
+  ]);
+  invalidateAuthCache(user.id);
+  res.clearCookie(SESSION_COOKIE, { path: '/' });
+  res.clearCookie('bowin_csrf', { path: '/' });
+  return res.status(204).send();
 });
 
 router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response) => {
@@ -852,7 +885,7 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
     setCsrfCookie(res);
 
     // Send welcome email (non-blocking)
-    const baseUrl = process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:5173';
+    const baseUrl = publicAppUrlFromEnv(process.env);
     const template = welcomeEmail({
       recipientName: firstName.trim(),
       role: user.role,

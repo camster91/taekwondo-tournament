@@ -494,9 +494,13 @@ router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req
 // 404-on-missing handling as DELETE above.
 router.post('/:id/restore', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+  if (!(await assertCompetitorWritable(req as AuthenticatedRequest, prisma, id))) {
+    return res.status(404).json({ error: 'Competitor not found' });
+  }
   try {
     const updated = await prisma.competitor.update({
-      where: { id: getParam(req.params.id) },
+      where: { id },
       data: { deletedAt: null },
     });
     res.json(updated);

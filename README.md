@@ -1,23 +1,15 @@
 # Martial Arts Tournament Management System
 
-**A robust, real-time web application designed to orchestrate martial arts tournaments across multiple disciplines, manage competitor brackets, and display live schedules.**
+**A real-time tournament operations platform for independent Taekwondo schools, covering registration, categorization, brackets, check-in, scoring, schedules, and public results.**
 
-Originally developed for Taekwondo tournaments, this application has evolved into a multi-sport Martial Arts Tournament SaaS, allowing studio owners to seamlessly organize events for any martial art.
+Bowin is currently being prepared as an approval-based managed pilot. Taekwondo is the only market-supported discipline: its workflows and Newton's Championship-style rules have automated coverage and pilot data-fit evidence. Configurable profiles for other martial arts exist in the codebase, but they are experimental until each ruleset is reviewed and validated with qualified organizers.
 
-## Supported Disciplines
+## Discipline Status
 
-| Martial Art | Belt/Rank System | Event Types |
-|-------------|------------------|-------------|
-| Taekwondo | Yes | Sparring, Patterns |
-| Karate | Yes | Kumite, Kata |
-| Judo | Yes | Randori, Kata |
-| Brazilian Jiu-Jitsu (BJJ) | Yes (Belts) | Gi, No-Gi |
-| Wrestling | No | Folkstyle, Freestyle |
-| Muay Thai | No | Full Contact |
-| Boxing | No | Amateur, Pro |
-| Kickboxing | No | Point, Full Contact |
-| MMA | No | Amateur, Pro |
-| Kung Fu | Yes | Forms, Sparring |
+| Status | Discipline | Scope |
+|--------|------------|-------|
+| Managed-pilot candidate | Taekwondo | Sparring and patterns; organizer review of the event rules remains mandatory |
+| Experimental profiles | Karate, Judo, BJJ, Wrestling, Muay Thai, Boxing, Kickboxing, MMA, Kung Fu | Configuration starting points only; not commercially supported or federation-certified |
 
 ## Core Features
 
@@ -51,17 +43,17 @@ Originally developed for Taekwondo tournaments, this application has evolved int
 |----------|------------|
 | Frontend | React 19 + Vite + TypeScript |
 | Backend | Node.js + Express |
-| Database | Prisma ORM + SQLite |
+| Database | Prisma ORM + PostgreSQL 16 |
 | Styling | Tailwind CSS v4 |
 | Charts | Recharts |
 | PDF Export | jsPDF |
-| Deployment | Docker / Vercel |
+| Deployment | Docker / Coolify |
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 20.19+ (Node.js 22 LTS recommended)
 - npm 9+
-- SQLite (included)
+- PostgreSQL 16
 
 ## Installation
 
@@ -73,9 +65,9 @@ cd taekwondo-tournament
 # Install dependencies
 npm install
 
-# Initialize database
+# Configure DATABASE_URL, then initialize the development database
 npx prisma generate
-npx prisma db push
+npx prisma migrate dev
 
 # Start development server
 npm run dev
@@ -184,12 +176,14 @@ The system accepts `.xlsm` files with competitor rosters. Expected columns:
 docker build -t tournament-app .
 
 # Run container
-docker run -p 3000:3000 tournament-app
+docker run --env-file .env.production -p 3001:3001 tournament-app
 ```
 
 ### Docker Compose
 
 ```bash
+POSTGRES_PASSWORD="replace-with-a-strong-password" \
+JWT_SECRET="replace-with-at-least-32-random-characters" \
 docker-compose up -d
 ```
 
@@ -214,6 +208,10 @@ npm run test:coverage
 - [ ] Mobile app for judges
 - [ ] Live streaming integration
 
+## Release Status
+
+The current release candidate is intended for a controlled, supervised pilot—not unattended self-service signup or a federation-scale event. See [the SaaS launch checklist](docs/SAAS-LAUNCH-CHECKLIST.md), [deployment runbook](docs/DEPLOY.md), and [operator quickstart](docs/OPERATOR-QUICKSTART.md) before using real competitor data.
+
 ## Contributing
 
 1. Fork the repository
@@ -223,7 +221,7 @@ npm run test:coverage
 
 ## License
 
-Proprietary - All rights reserved.
+Bowin is proprietary software, copyright 2026 Cameron Ashley. The repository is marked `UNLICENSED`; hosted access does not grant source-code copying, modification, or redistribution rights. Third-party components remain subject to their own licenses and attribution requirements.
 
 ---
 Developed by Cameron Ashley / Nexus AI.

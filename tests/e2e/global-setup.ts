@@ -43,9 +43,9 @@ export default async function globalSetup() {
   // and every demo-auth test hangs / times out.
   process.env.ENABLE_DEMO_LOGIN = String(1);
 
-  // 1. Push schema (idempotent — no destructive resets, matches test expectation of
-  //    "data already exists" from `npm run seed`).
-  run('./node_modules/.bin/prisma db push --accept-data-loss');
+  // 1. Apply the same forward-only migration chain used in production.
+  // npm exec resolves the project-local binary consistently on Windows and Linux.
+  run('npm exec prisma -- migrate deploy');
 
   // 2. Run the project's seed so we have a tournament + 20 competitors + brackets.
   //    We DO NOT call this in tests — globalSetup runs once before all tests, so the
@@ -64,6 +64,20 @@ export default async function globalSetup() {
   });
 
   try {
+    // Ensure setup-status renders the normal sign-in card. The demo endpoint
+    // reuses this account when ENABLE_DEMO_LOGIN=1.
+    await prisma.user.upsert({
+      where: { email: 'demo@bowin.app' },
+      update: { isActive: true, role: 'admin' },
+      create: {
+        email: 'demo@bowin.app',
+        firstName: 'Demo',
+        lastName: 'Admin',
+        role: 'admin',
+        isActive: true,
+      },
+    });
+
     // 3a. Find the seeded tournament so we can copy weight classes for the new one.
     const seedTournament = await prisma.tournament.findFirst({
       where: { name: 'Spring Championship 2026' },

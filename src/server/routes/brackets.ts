@@ -23,6 +23,7 @@ import {
 } from '../middleware/auth.js';
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validate.js';
+import { AppError, ErrorCode } from '../utils/errors.js';
 
 const router = Router();
 
@@ -34,7 +35,7 @@ const getParam = (param: string | string[] | undefined): string => {
 
 // Validation schemas
 const matchResultSchema = z.object({
-  winnerId: z.string().uuid().optional(),
+  winnerId: z.string().uuid().nullable().optional(),
   // Scores must look like "5", "12", or "0" — at most 3 digits, no
   // negatives, no decimals, no letters. Stops a scorekeeper from
   // submitting "<script>" or 9999 by accident and lets the client
@@ -275,6 +276,27 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
     }
   }
 
+  if (
+    status === 'completed' &&
+    winnerId &&
+    score1 !== undefined &&
+    score2 !== undefined
+  ) {
+    const numericScore1 = Number(score1);
+    const numericScore2 = Number(score2);
+    const scoreWinnerId = numericScore1 > numericScore2
+      ? currentMatch.competitor1Id
+      : numericScore2 > numericScore1
+        ? currentMatch.competitor2Id
+        : null;
+
+    if (scoreWinnerId !== winnerId && !notes?.trim()) {
+      return res.status(400).json({
+        error: 'Winner contradicts the recorded score. Add notes explaining the override.',
+      });
+    }
+  }
+
   // Closes B15: status transition guard. The Zod schema accepts any
   // of the 5 statuses, but the bracket state machine only allows
   // certain transitions. Without this guard, a scorekeeper could
@@ -308,14 +330,16 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
     }
   }
 
-  // Wrap the match update + audit log in a single transaction so the
-  // audit log can never desync from the match state. advanceWinner
-  // stays outside the transaction because it makes its own round-trip
-  // reads to find downstream matches and writes that depend on the
-  // just-committed match.
+  // Compare-and-swap on updatedAt prevents simultaneous scorekeepers
+  // from both committing results based on the same stale match state.
+  // Advancement stays in this transaction so a downstream failure
+  // rolls back the match result and audit record together.
   const match = await prisma.$transaction(async (tx) => {
-    const updated = await tx.match.update({
-      where: { id: getParam(req.params.matchId) },
+    const write = await tx.match.updateMany({
+      where: {
+        id: getParam(req.params.matchId),
+        updatedAt: currentMatch.updatedAt,
+      },
       data: {
         winnerId,
         score1,
@@ -323,6 +347,19 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
         status,
         notes,
       },
+    });
+
+    if (write.count !== 1) {
+      throw new AppError(
+        'This match was updated by another scorekeeper. Refresh before submitting again.',
+        ErrorCode.INVALID_MATCH_UPDATE,
+        409,
+        { recoverable: true, suggestion: 'Refresh the match and confirm the latest result.' }
+      );
+    }
+
+    const updated = await tx.match.findUnique({
+      where: { id: getParam(req.params.matchId) },
       include: {
         competitor1: { include: { competitor: true } },
         competitor2: { include: { competitor: true } },
@@ -330,6 +367,10 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
         bracket: true,
       },
     });
+
+    if (!updated) {
+      throw new AppError('Match not found after update', ErrorCode.BRACKET_NOT_FOUND, 404);
+    }
 
     await tx.matchAuditLog.create({
       data: {
@@ -348,18 +389,13 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
       },
     });
 
+    if (winnerId && status === 'completed') {
+      const advanceResult = await advanceWinner(tx as unknown as PrismaClient, updated);
+      console.info('[bracket] advance:', advanceResult.message);
+    }
+
     return updated;
   });
-
-  // If winner set, advance to next match
-  if (winnerId && status === 'completed') {
-    const advanceResult = await advanceWinner(prisma, match);
-    // advanceResult.message is informational (e.g. "bye advanced
-    // competitor 2"); not an error. Logged at info level so operators
-    // can trace bracket progression in dev without a per-call
-    // console.log noise in production.
-    console.info('[bracket] advance:', advanceResult.message);
-  }
 
   // Return updated match without bracket relation
   const { bracket: _, ...matchWithoutBracket } = match;

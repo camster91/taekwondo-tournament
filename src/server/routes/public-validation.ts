@@ -17,6 +17,80 @@ export interface PatchResult {
   regData: Record<string, unknown>;
 }
 
+export type RegistrationConsentResult =
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      data: {
+        consentVersion: string;
+        consentAcceptedAt: Date;
+        privacyAccepted: true;
+        rulesAccepted: true;
+        guardianAttested: boolean;
+      };
+    };
+
+export function buildRegistrationConsent(
+  body: Record<string, unknown>,
+  isMinor: boolean,
+  consentVersion: string,
+  acceptedAt: Date,
+): RegistrationConsentResult {
+  if (!consentVersion.trim()) {
+    throw new Error('Registration consent version is not configured');
+  }
+  if (body.privacyAccepted !== true) {
+    return { ok: false, error: 'Privacy notice acceptance is required.' };
+  }
+  if (body.rulesAccepted !== true) {
+    return { ok: false, error: 'Tournament rules acceptance is required.' };
+  }
+  if (isMinor && body.guardianAttested !== true) {
+    return { ok: false, error: 'A parent or guardian must confirm their authority to register this minor.' };
+  }
+  return {
+    ok: true,
+    data: {
+      consentVersion,
+      consentAcceptedAt: acceptedAt,
+      privacyAccepted: true,
+      rulesAccepted: true,
+      guardianAttested: body.guardianAttested === true,
+    },
+  };
+}
+
+export type RegistrationLegalConfig = {
+  consentVersion: string;
+  privacyNoticeUrl: string;
+  tournamentTermsUrl: string;
+};
+
+export function registrationLegalConfigFromEnv(
+  env: Record<string, string | undefined>,
+  isProduction: boolean,
+): RegistrationLegalConfig {
+  if (!isProduction) {
+    return {
+      consentVersion: env.REGISTRATION_CONSENT_VERSION ?? 'development-draft-v0',
+      privacyNoticeUrl: env.PRIVACY_NOTICE_URL ?? '/legal/privacy-draft',
+      tournamentTermsUrl: env.TOURNAMENT_TERMS_URL ?? '/legal/terms-draft',
+    };
+  }
+
+  const consentVersion = env.REGISTRATION_CONSENT_VERSION?.trim();
+  if (!consentVersion) throw new Error('REGISTRATION_CONSENT_VERSION is required in production');
+  const privacyNoticeUrl = env.PRIVACY_NOTICE_URL?.trim();
+  const tournamentTermsUrl = env.TOURNAMENT_TERMS_URL?.trim();
+  if (!privacyNoticeUrl || !tournamentTermsUrl) {
+    throw new Error('PRIVACY_NOTICE_URL and TOURNAMENT_TERMS_URL are required in production');
+  }
+  if (!privacyNoticeUrl.startsWith('https://') || !tournamentTermsUrl.startsWith('https://')) {
+    throw new Error('Production legal document URLs must use HTTPS');
+  }
+  return { consentVersion, privacyNoticeUrl, tournamentTermsUrl };
+}
+
 const MAX_WEIGHT_LBS = 500;
 const MIN_DAN_RANK = 1;
 const MAX_DAN_RANK = 9;

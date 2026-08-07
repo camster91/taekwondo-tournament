@@ -9,6 +9,8 @@
 // strings (the only thing that matters for the user). If the loop
 // changes, this test will fail and force the change to be revisited.
 
+import { generateSchedule } from './schedule-generator.js';
+
 interface Slot {
   divId: string;
   start: number;
@@ -134,5 +136,72 @@ describe('schedule-generator: per-competitor double-booking detection', () => {
     const second = detectDoubleBookings(scheduled);
     expect(first).toEqual(second);
     expect(first).toHaveLength(1);
+  });
+});
+
+describe('generateSchedule: registration identity conflicts', () => {
+  const tournament = {
+    id: 'tournament-1',
+    name: 'Identity Test',
+    date: new Date('2026-08-07T12:00:00.000Z'),
+    settings: null,
+  };
+
+  function division(id: string, registrationId: string, firstName: string, lastName: string) {
+    return {
+      id,
+      name: id,
+      eventType: 'patterns',
+      beltLevel: 'CB',
+      gender: 'M',
+      ageMin: 10,
+      _count: { assignments: 1 },
+      assignments: [
+        {
+          registration: {
+            id: registrationId,
+            competitor: { firstName, lastName },
+          },
+        },
+      ],
+    };
+  }
+
+  function prismaWith(divisions: ReturnType<typeof division>[]) {
+    return {
+      tournament: {
+        findUnique: async () => tournament,
+        update: async () => tournament,
+      },
+      division: { findMany: async () => divisions },
+    };
+  }
+
+  it('does not flag different registrations that share the same display name', async () => {
+    const result = await generateSchedule(
+      prismaWith([
+        division('patterns-a', 'registration-a', 'Alex', 'Kim'),
+        division('patterns-b', 'registration-b', 'Alex', 'Kim'),
+      ]) as never,
+      tournament.id,
+      { ringCount: 2 }
+    );
+
+    expect(result.warnings.filter((warning) => warning.includes('double-booked'))).toEqual([]);
+  });
+
+  it('flags one registration in overlapping divisions even when its display name differs', async () => {
+    const result = await generateSchedule(
+      prismaWith([
+        division('patterns-a', 'registration-a', 'Alex', 'Kim'),
+        division('patterns-b', 'registration-a', 'Alexander', 'Kim'),
+      ]) as never,
+      tournament.id,
+      { ringCount: 2 }
+    );
+
+    const conflicts = result.warnings.filter((warning) => warning.includes('double-booked'));
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]).toContain('Alex Kim');
   });
 });

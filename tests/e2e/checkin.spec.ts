@@ -1,7 +1,26 @@
 import { test, expect } from '@playwright/test';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { loginAsDemo } from './helpers';
 
 test.describe('check-in (weigh-in flow)', () => {
+  test.beforeEach(async () => {
+    const prisma = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    });
+    try {
+      await prisma.registration.updateMany({
+        where: {
+          competitor: { firstName: 'Minho', lastName: 'Kim' },
+          tournament: { name: 'Spring Championship 2026' },
+        },
+        data: { checkedIn: false, checkInTime: null, checkInWeight: null },
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
   test('staff checks in a competitor with a weigh-in and the row updates', async ({ page }) => {
     await loginAsDemo(page);
 
@@ -51,5 +70,30 @@ test.describe('check-in (weigh-in flow)', () => {
     // The list should contain BOTH "Check In" and "Undo" buttons.
     await expect(page.getByRole('button', { name: /^Check In$/i }).first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: /^Undo$/i }).first()).toBeVisible();
+  });
+
+  test('offline check-in persists locally and syncs after reconnection', async ({ page, context }) => {
+    await loginAsDemo(page);
+    await page.goto('/tournaments');
+    const href = await page.locator('a', { hasText: 'Spring Championship 2026' }).first().getAttribute('href');
+    const tournamentId = href!.replace('/tournaments/', '');
+    await page.goto(`/checkin/${tournamentId}`);
+
+    await page.locator('input[placeholder*="Search"]').first().fill('Minho');
+    const unchecked = page.getByRole('button', { name: /^Check In$/i }).first();
+    await expect(unchecked).toBeVisible();
+    await context.setOffline(true);
+    await unchecked.click();
+    await page.getByRole('button', { name: /Confirm Check-In/i }).click();
+    await expect(page.getByText(/check-in saved on this device/i)).toBeVisible();
+    await expect(page.getByText(/1 check-in pending sync/i)).toBeVisible();
+    const stored = await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'));
+    expect(stored).toContain('check_in');
+
+    await context.setOffline(false);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await expect(page.getByText(/1 check-in pending sync/i)).toBeHidden({ timeout: 10_000 });
+    expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toBe('[]');
+
   });
 });

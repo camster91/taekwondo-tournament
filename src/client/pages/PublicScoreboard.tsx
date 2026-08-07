@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Trophy, Clock, Users, ChevronRight, Award, Zap, Radio, MapPin, Loader2, AlertCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Card, CardBody } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { Button } from '../components/ui';
+import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
+import { resolveDisplayRing } from '../utils/scoreboard-display';
 
 interface Match {
   id: string;
@@ -47,6 +49,8 @@ interface Tournament {
 
 export default function PublicScoreboard() {
   const { tournamentId } = useParams();
+  const [searchParams] = useSearchParams();
+  const publicKey = searchParams.get('key');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeRing, setActiveRing] = useState<number | 'all'>('all');
   const [cycleEnabled, setCycleEnabled] = useState(true);
@@ -95,9 +99,9 @@ export default function PublicScoreboard() {
     divisions: Division[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
-    queryKey: ['scoreboard-data', tournamentId],
+    queryKey: ['scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
-      const res = await fetch(`/api/public/tournaments/${tournamentId}/scoreboard`);
+      const res = await fetch(buildScoreboardApiUrl(tournamentId || '', publicKey));
       if (!res.ok) throw new Error('Failed to fetch scoreboard');
       setLastFetchAt(new Date());
       return res.json();
@@ -143,18 +147,16 @@ export default function PublicScoreboard() {
     return () => clearInterval(timer);
   }, [cycleEnabled, ringNumbers.length]);
 
-  useEffect(() => {
-    if (activeRing === 'all' && ringNumbers.length > 0) {
-      const next = ringNumbers[cycleIndex % ringNumbers.length];
-      if (next) setActiveRing(next);
-    }
-  }, [cycleIndex, ringNumbers.join(',')]);
-
   // All matches across all rings
   const allMatches = divisions?.flatMap((d) => d.bracket?.matches || []) || [];
-  const matchesInActiveRing = activeRing === 'all'
+  const effectiveRing = resolveDisplayRing(displaySettings || {}, ringNumbers, cycleEnabled, activeRing, cycleIndex);
+  const directorFeaturedMatchId = displaySettings?.featuredMatchId
+    || displaySettings?.mode?.match(/^featured:(.+)$/)?.[1];
+  const matchesInActiveRing = directorFeaturedMatchId
+    ? allMatches.filter((match) => match.id === directorFeaturedMatchId)
+    : effectiveRing === 'all'
     ? allMatches
-    : matchesByRing[activeRing] || [];
+    : matchesByRing[effectiveRing] || [];
 
   const inProgressMatches = matchesInActiveRing.filter((m) => m.status === 'in_progress');
   const readyMatches = matchesInActiveRing
@@ -279,7 +281,7 @@ export default function PublicScoreboard() {
             On the venue TV this banner hides (md:hidden). */}
         <div className="md:hidden px-4 py-2 bg-indigo-950/40 border-b border-white/5">
           <Link
-            to={`/scoreboard/parent/${tournamentId}`}
+            to={`/scoreboard/parent/${tournamentId}${publicKey ? `?key=${encodeURIComponent(publicKey)}` : ''}`}
             className="text-xs text-indigo-300 hover:text-indigo-200 underline"
           >
             📱 Better view for phones →
@@ -295,7 +297,7 @@ export default function PublicScoreboard() {
               variant="ghost"
               size="sm"
               onClick={() => { setActiveRing('all'); setCycleEnabled(false); }}
-              className={`rounded-t-lg ${activeRing === 'all' ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10' : 'text-slate-300 hover:text-white'}`}
+              className={`rounded-t-lg ${effectiveRing === 'all' ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10' : 'text-slate-300 hover:text-white'}`}
             >
               All rings
             </Button>
@@ -305,7 +307,7 @@ export default function PublicScoreboard() {
                 variant="ghost"
                 size="sm"
                 onClick={() => { setActiveRing(ring); setCycleEnabled(false); }}
-                className={`rounded-t-lg flex items-center gap-2 ${activeRing === ring ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10' : 'text-slate-300 hover:text-white'}`}
+                className={`rounded-t-lg flex items-center gap-2 ${effectiveRing === ring ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10' : 'text-slate-300 hover:text-white'}`}
               >
                 <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                 Ring {ring}
@@ -331,7 +333,7 @@ export default function PublicScoreboard() {
             <span data-testid="auto-refresh-status">
               {isStale
                 ? `STALE — no update for ${staleSeconds}s. Check venue Wi-Fi.`
-                : `Auto-refresh every 3s · Last update ${lastFetchAt ? lastFetchAt.toLocaleTimeString() : currentTime.toLocaleTimeString()}`}
+                : `Auto-refresh every 5s · Last update ${lastFetchAt ? lastFetchAt.toLocaleTimeString() : currentTime.toLocaleTimeString()}`}
             </span>
           </div>
         </div>

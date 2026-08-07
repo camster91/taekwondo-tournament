@@ -71,6 +71,10 @@ export function generateBracket(
 ): BracketStructure {
   const count = competitors.length;
 
+  if (count > 64) {
+    throw new RangeError('Double-elimination brackets support at most 64 competitors');
+  }
+
   if (count === 0) {
     return {
       winners: [], losers: [], finals: [],
@@ -531,58 +535,99 @@ function generateSmallBracket(competitors: (CompetitorSeed | null)[]): BracketSt
   // null entries are the BYE slots for non-power-of-2 counts.
 
   if (count <= 2) {
-    // N=1 or N=2: single match IS the final. No losers bracket.
+    // N=2: the first match establishes winners- and losers-side
+    // champions. The grand final may activate the reset match.
     return {
-      winners: [],
-      losers: [],
-      finals: [
+      winners: [
         {
           matchNumber: 1,
           round: 1,
           competitor1Id: competitors[0]?.registrationId || null,
           competitor2Id: competitors[1]?.registrationId || null,
+          nextWinnerMatch: 2,
+          nextLoserMatch: 2,
+        },
+      ],
+      losers: [],
+      finals: [
+        {
+          matchNumber: 2,
+          round: 2,
+          competitor1Id: null,
+          competitor2Id: null,
+        },
+        {
+          matchNumber: 3,
+          round: 3,
+          competitor1Id: null,
+          competitor2Id: null,
         },
       ],
       competitorCount: count,
-      positions: { winnersFinal: 1, losersFinal: null, grandFinals: 1, reset: null },
+      positions: { winnersFinal: 1, losersFinal: 1, grandFinals: 2, reset: 3 },
     };
   }
 
   if (count === 3) {
-    // 3-person DE: 2 R1 matches (one with a BYE), 1 grand final. No
-    // losers bracket because the BYE-advancer never has a "loser"
-    // to play. Equivalent to a 4-person DE with a phantom 4th slot.
     return {
       winners: [
-        // R1: competitors 0 vs 3 (one slot is a BYE)
         {
           matchNumber: 1,
           round: 1,
           competitor1Id: competitors[0]?.registrationId || null,
           competitor2Id: competitors[3]?.registrationId || null,
           nextWinnerMatch: 3,
+          nextLoserMatch: 4,
         },
-        // R1: competitors 1 vs 2
         {
           matchNumber: 2,
           round: 1,
           competitor1Id: competitors[1]?.registrationId || null,
           competitor2Id: competitors[2]?.registrationId || null,
           nextWinnerMatch: 3,
+          nextLoserMatch: 4,
         },
-      ],
-      losers: [],
-      finals: [
-        // Grand final = winner of match 1 vs winner of match 2
         {
           matchNumber: 3,
           round: 2,
           competitor1Id: null,
           competitor2Id: null,
+          nextWinnerMatch: 6,
+          nextLoserMatch: 5,
+        },
+      ],
+      losers: [
+        {
+          matchNumber: 4,
+          round: 1,
+          competitor1Id: null,
+          competitor2Id: null,
+          nextWinnerMatch: 5,
+        },
+        {
+          matchNumber: 5,
+          round: 2,
+          competitor1Id: null,
+          competitor2Id: null,
+          nextWinnerMatch: 6,
+        },
+      ],
+      finals: [
+        {
+          matchNumber: 6,
+          round: 3,
+          competitor1Id: null,
+          competitor2Id: null,
+        },
+        {
+          matchNumber: 7,
+          round: 4,
+          competitor1Id: null,
+          competitor2Id: null,
         },
       ],
       competitorCount: count,
-      positions: { winnersFinal: 3, losersFinal: null, grandFinals: 3, reset: null },
+      positions: { winnersFinal: 3, losersFinal: 5, grandFinals: 6, reset: 7 },
     };
   }
 
@@ -622,7 +667,8 @@ function generateSmallBracket(competitors: (CompetitorSeed | null)[]): BracketSt
         round: 2,
         competitor1Id: null,
         competitor2Id: null,
-        nextWinnerMatch: 5,
+        nextWinnerMatch: 6,
+        nextLoserMatch: 5,
       },
     ],
     losers: [
@@ -634,18 +680,31 @@ function generateSmallBracket(competitors: (CompetitorSeed | null)[]): BracketSt
         competitor2Id: null,
         nextWinnerMatch: 5,
       },
-    ],
-    finals: [
-      // Grand final: W R2 winner (M3) vs LB champion (M4)
       {
         matchNumber: 5,
+        round: 2,
+        competitor1Id: null,
+        competitor2Id: null,
+        nextWinnerMatch: 6,
+      },
+    ],
+    finals: [
+      // Grand final: W R2 winner (M3) vs LB champion (M5)
+      {
+        matchNumber: 6,
         round: 3,
+        competitor1Id: null,
+        competitor2Id: null,
+      },
+      {
+        matchNumber: 7,
+        round: 4,
         competitor1Id: null,
         competitor2Id: null,
       },
     ],
     competitorCount: count,
-    positions: { winnersFinal: 3, losersFinal: 4, grandFinals: 5, reset: null },
+    positions: { winnersFinal: 3, losersFinal: 5, grandFinals: 6, reset: 7 },
   };
 }
 

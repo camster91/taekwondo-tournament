@@ -20,6 +20,11 @@ import {
   type TournamentRules,
 } from '../../shared/constants/tournament-rules.js';
 import { Errors } from '../utils/errors.js';
+import {
+  canCreateTournament,
+  canOpenPublicRegistration,
+  getPlanEntitlements,
+} from '../services/entitlements.js';
 
 const router = Router();
 
@@ -189,6 +194,23 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
       orderBy: { createdAt: 'asc' },
     });
     resolvedOrgId = membership?.organizationId ?? null;
+  }
+
+  if (resolvedOrgId) {
+    const organization = await prisma.organization.findUnique({
+      where: { id: resolvedOrgId },
+      select: { plan: true },
+    });
+    if (!organization) return res.status(404).json({ error: 'Organization not found' });
+    const tournamentCount = await prisma.tournament.count({
+      where: { organizationId: resolvedOrgId, deletedAt: null },
+    });
+    if (!canCreateTournament(organization.plan, tournamentCount)) {
+      return res.status(402).json({
+        error: 'Your organization has reached its tournament limit.',
+        code: 'TOURNAMENT_LIMIT_REACHED',
+      });
+    }
   }
 
   const tournament = await prisma.tournament.create({
@@ -423,6 +445,18 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
   const { name, date, location, status, settings } = req.body;
 
   try {
+    if (status === 'registration') {
+      const existing = await prisma.tournament.findUnique({
+        where: { id: getParam(req.params.id) },
+        select: { organization: { select: { plan: true } } },
+      });
+      if (existing?.organization && !canOpenPublicRegistration(existing.organization.plan)) {
+        return res.status(402).json({
+          error: 'Public registration requires an active event plan.',
+          code: 'PLAN_UPGRADE_REQUIRED',
+        });
+      }
+    }
     const tournament = await prisma.tournament.update({
       where: { id: getParam(req.params.id) },
       data: {
@@ -811,6 +845,20 @@ router.post('/:id/schedule', authenticate, requireTournamentAccess('director'), 
     // an early, clear 400 before any DB calls.
     const mergedConfig: ScheduleConfig = { ...DEFAULT_CONFIG, ...configOverrides };
     validateScheduleConfig(mergedConfig);
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: getParam(req.params.id) },
+      select: { organization: { select: { plan: true } } },
+    });
+    if (tournament?.organization) {
+      const { maxRings } = getPlanEntitlements(tournament.organization.plan);
+      if (mergedConfig.ringCount > maxRings) {
+        return res.status(402).json({
+          error: `Your plan supports up to ${maxRings} rings.`,
+          code: 'RING_LIMIT_REACHED',
+        });
+      }
+    }
 
     const schedule = await generateSchedule(prisma, getParam(req.params.id), configOverrides);
     res.json(schedule);

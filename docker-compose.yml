@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build:
@@ -12,16 +10,46 @@ services:
       - NODE_ENV=production
       - PORT=3001
       # Require secrets from the host env — never bake production passwords
-      # into the compose file. Local defaults only apply when unset.
-      - DATABASE_URL=postgresql://taekwondo:${POSTGRES_PASSWORD:-taekwondo}@taekwondo-db:5432/taekwondo_tournament
+      # into the compose file.
+      - DATABASE_URL=postgresql://taekwondo:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@taekwondo-db:5432/taekwondo_tournament
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - ADMIN_SETUP_KEY=${ADMIN_SETUP_KEY:-}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?ALLOWED_ORIGINS must be set}
+      - PUBLIC_APP_URL=${PUBLIC_APP_URL:?PUBLIC_APP_URL must be set}
+      - METRICS_TOKEN=${METRICS_TOKEN:?METRICS_TOKEN must be set}
+      - MAILGUN_API_KEY=${MAILGUN_API_KEY:?MAILGUN_API_KEY must be set}
+      - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:?MAILGUN_DOMAIN must be set}
+      - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:?EMAIL_FROM_ADDRESS must be set}
+      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Bowin}
       - ENABLE_DEMO_LOGIN=${ENABLE_DEMO_LOGIN:-}
+      # Destructive retention stays opt-in until the operator's policy is approved.
+      - RETENTION_PURGE_ENABLED=${RETENTION_PURGE_ENABLED:-false}
+      - SOFT_DELETE_RETENTION_DAYS=${SOFT_DELETE_RETENTION_DAYS:-7}
+      - REGISTRATION_CONSENT_VERSION=${REGISTRATION_CONSENT_VERSION:?REGISTRATION_CONSENT_VERSION must be set}
+      - PRIVACY_NOTICE_URL=${PRIVACY_NOTICE_URL:?PRIVACY_NOTICE_URL must be set}
+      - TOURNAMENT_TERMS_URL=${TOURNAMENT_TERMS_URL:?TOURNAMENT_TERMS_URL must be set}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_STARTER_PRICE_ID=${STRIPE_STARTER_PRICE_ID:-}
+      - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID:-}
     depends_on:
       taekwondo-db:
         condition: service_healthy
     restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
     networks:
       - tkd-net
 
@@ -32,7 +60,7 @@ services:
     environment:
       POSTGRES_DB: taekwondo_tournament
       POSTGRES_USER: taekwondo
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taekwondo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -40,6 +68,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
     networks:
       - tkd-net
 

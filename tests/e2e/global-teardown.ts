@@ -49,11 +49,6 @@ export default async function globalTeardown() {
       select: { id: true, firstName: true, lastName: true, schoolDojang: true },
     });
 
-    if (testTournaments.length === 0 && testCompetitors.length === 0) {
-      console.log('[global-teardown] no e2e test records to wipe — DB already clean');
-      return;
-    }
-
     // 2. Delete registrations first (FK to tournament + competitor). Scope
     //    to rows whose tournament OR competitor is a test record so we
     //    never touch seeded Spring Championship 2026 registrations.
@@ -93,6 +88,18 @@ export default async function globalTeardown() {
       where: { id: { in: testCompetitors.map((c) => c.id) } },
     });
 
+    const organizationDelete = await prisma.organization.deleteMany({
+      where: {
+        OR: [
+          { name: { startsWith: 'E2E' } },
+          { name: { startsWith: 'Stripe E2E' } },
+        ],
+      },
+    });
+    const webhookDelete = await prisma.billingWebhookEvent.deleteMany({
+      where: { providerEventId: { startsWith: 'evt_e2e_' } },
+    });
+
     // 5. Delete the test Users themselves. The e2e suite creates
     //    `e2e-${Date.now()}@example.com` accounts in login.spec.ts and
     //    public-register.spec.ts via the magic-link endpoint. Without
@@ -115,7 +122,7 @@ export default async function globalTeardown() {
     }
 
     console.log(
-      `[global-teardown] wiped ${tournamentDelete.count} tournaments, ${competitorDelete.count} competitors, ${regDelete.count} registrations`,
+      `[global-teardown] wiped ${tournamentDelete.count} tournaments, ${competitorDelete.count} competitors, ${regDelete.count} registrations, ${organizationDelete.count} organizations, ${webhookDelete.count} billing events`,
     );
   } catch (err) {
     // Don't fail the test run because of teardown — log loudly so the

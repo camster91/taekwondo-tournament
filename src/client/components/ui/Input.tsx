@@ -23,9 +23,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     ref,
   ) => {
     const inputClasses = [
-      /* h-10 (40px) on both mobile + desktop — matches Button `md`. The old
-         `min-h-[44px] sm:h-10` caused a 4px height jump at the sm breakpoint. */
-      'w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700',
+      /* 44px on every viewport: consistent alignment and a mobile-safe target. */
+      'w-full h-11 px-3 rounded-lg border border-slate-200 dark:border-slate-700',
       'bg-white dark:bg-slate-900',
       'text-sm text-slate-900 dark:text-slate-100',
       'placeholder:text-slate-400',

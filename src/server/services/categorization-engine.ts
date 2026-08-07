@@ -97,6 +97,47 @@ export interface PreviewResult {
   warnings: string[];
 }
 
+function partitionRegistrationsForCategorization(
+  registrations: RegistrationWithCompetitor[]
+): {
+  patternsRegs: RegistrationWithCompetitor[];
+  sparringRegs: RegistrationWithCompetitor[];
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+  const ageReady = registrations.filter((registration) => registration.ageAtTournament != null);
+  const missingAgeCount = registrations.length - ageReady.length;
+
+  if (missingAgeCount > 0) {
+    warnings.push(
+      `${missingAgeCount} registration(s) need review before auto-categorization: missing tournament age.`
+    );
+  }
+
+  const missingWeightCount = ageReady.filter(
+    (registration) =>
+      registration.sparring &&
+      registration.weightAtRegistration == null &&
+      registration.competitor.weightLbs == null
+  ).length;
+
+  if (missingWeightCount > 0) {
+    warnings.push(
+      `${missingWeightCount} sparring registration(s) need review before auto-categorization: missing weight.`
+    );
+  }
+
+  return {
+    patternsRegs: ageReady.filter((registration) => registration.patterns),
+    sparringRegs: ageReady.filter(
+      (registration) =>
+        registration.sparring &&
+        (registration.weightAtRegistration != null || registration.competitor.weightLbs != null)
+    ),
+    warnings,
+  };
+}
+
 export function previewCategorization(
   registrations: RegistrationWithCompetitor[],
   config: CategorizationConfig
@@ -111,9 +152,9 @@ export function previewCategorization(
     warnings.push(`${pinnedCount} registration(s) are pinned to specific divisions and will be excluded from auto-categorization. Run "Restore pinned" to re-include them.`);
   }
 
-  // Separate into patterns and sparring registrations
-  const patternsRegs = unpinned.filter((r) => r.patterns);
-  const sparringRegs = unpinned.filter((r) => r.sparring);
+  const partitioned = partitionRegistrationsForCategorization(unpinned);
+  const { patternsRegs, sparringRegs } = partitioned;
+  warnings.push(...partitioned.warnings);
 
   const allGroups: DivisionGroup[] = [];
 
@@ -205,14 +246,21 @@ export async function autoCategorize(
 
   // v2: skip registrations manually pinned to a specific division
   const unpinned = registrations.filter((r) => !r.manualDivisionId);
+  const pinnedDivisionIds = Array.from(
+    new Set(
+      registrations
+        .map((registration) => registration.manualDivisionId)
+        .filter((divisionId): divisionId is string => Boolean(divisionId))
+    )
+  );
   const pinnedCount = registrations.length - unpinned.length;
   if (pinnedCount > 0) {
     warnings.push(`${pinnedCount} registration(s) are pinned to specific divisions and were excluded from auto-categorization.`);
   }
 
-  // Separate into patterns and sparring registrations
-  const patternsRegs = unpinned.filter((r) => r.patterns);
-  const sparringRegs = unpinned.filter((r) => r.sparring);
+  const partitioned = partitionRegistrationsForCategorization(unpinned);
+  const { patternsRegs, sparringRegs } = partitioned;
+  warnings.push(...partitioned.warnings);
 
   const allGroups: DivisionGroup[] = [];
 
@@ -247,7 +295,12 @@ export async function autoCategorize(
   await prisma.$transaction(async (tx) => {
     // Clear existing divisions and assignments
     await tx.division.deleteMany({
-      where: { tournamentId },
+      where: {
+        tournamentId,
+        ...(pinnedDivisionIds.length > 0
+          ? { id: { notIn: pinnedDivisionIds } }
+          : {}),
+      },
     });
 
     // Create divisions and assignments

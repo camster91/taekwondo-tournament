@@ -108,6 +108,12 @@ model Registration {
   parentName           String?
   parentEmail          String?
   parentPhone          String?
+  managementTokenHash String?   @unique
+  consentVersion       String?
+  consentAcceptedAt    DateTime?
+  privacyAccepted      Boolean   @default(false)
+  rulesAccepted        Boolean   @default(false)
+  guardianAttested     Boolean   @default(false)
   createdAt            DateTime  @default(now())
 
   // Enhanced attributes for fair matching
@@ -434,8 +440,56 @@ model Organization {
 
   members     OrganizationMember[]
   tournaments Tournament[]
+  billingSubscription OrganizationBillingSubscription?
+  planChanges         OrganizationPlanChange[]
 
   @@index([slug])
+}
+
+model OrganizationBillingSubscription {
+  id                     String    @id @default(uuid())
+  organizationId         String    @unique
+  provider               String    @default("manual")
+  providerCustomerId     String?   @unique
+  providerSubscriptionId String?   @unique
+  status                 String    @default("inactive")
+  plan                   String    @default("free")
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([plan])
+}
+
+model OrganizationPlanChange {
+  id             String   @id @default(uuid())
+  organizationId String
+  fromPlan       String
+  toPlan         String
+  source         String   @default("manual")
+  reason         String
+  changedBy      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+}
+
+model BillingWebhookEvent {
+  id              String   @id @default(uuid())
+  providerEventId String   @unique
+  type            String
+  payloadHash     String
+  processedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([processedAt])
 }
 
 // Organization membership

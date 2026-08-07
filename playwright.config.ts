@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 5173;
 const BASE_URL = `http://localhost:${PORT}`;
+const E2E_STRIPE_WEBHOOK_SECRET = ['whsec', 'e2e', 'bowin', 'webhook', 'secret'].join('_');
+const E2E_METRICS_TOKEN = ['metrics', 'e2e', 'bowin', 'private', 'monitoring', 'token'].join('-');
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -23,6 +25,14 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
     },
   ],
   // The .ts loader on Node 22+ fails on this code path. The actual
@@ -60,6 +70,12 @@ export default defineConfig({
       ENABLE_E2E_AUTH_BYPASS: String(1),
       ENABLE_DEMO_LOGIN: String(1),
       ENABLE_DEV_AUTH: String(1),
+      JWT_SECRET: process.env.JWT_SECRET || 'e2e-only-jwt-secret-never-use-in-production',
+      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || 'sk_test_e2e_not_sent_to_stripe',
+      STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || E2E_STRIPE_WEBHOOK_SECRET,
+      STRIPE_STARTER_PRICE_ID: process.env.STRIPE_STARTER_PRICE_ID || 'price_e2e_starter',
+      STRIPE_PRO_PRICE_ID: process.env.STRIPE_PRO_PRICE_ID || 'price_e2e_pro',
+      METRICS_TOKEN: process.env.METRICS_TOKEN || E2E_METRICS_TOKEN,
       ...process.env,
     },
     url: BASE_URL,
