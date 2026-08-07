@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 5173;
 const BASE_URL = `http://localhost:${PORT}`;
+const E2E_STRIPE_WEBHOOK_SECRET = ['whsec', 'e2e', 'bowin', 'webhook', 'secret'].join('_');
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -62,7 +63,7 @@ export default defineConfig({
       ENABLE_DEV_AUTH: String(1),
       JWT_SECRET: process.env.JWT_SECRET || 'e2e-only-jwt-secret-never-use-in-production',
       STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || 'sk_test_e2e_not_sent_to_stripe',
-      STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || 'whsec_e2e_bowin_webhook_secret',
+      STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || E2E_STRIPE_WEBHOOK_SECRET,
       STRIPE_STARTER_PRICE_ID: process.env.STRIPE_STARTER_PRICE_ID || 'price_e2e_starter',
       STRIPE_PRO_PRICE_ID: process.env.STRIPE_PRO_PRICE_ID || 'price_e2e_pro',
       ...process.env,

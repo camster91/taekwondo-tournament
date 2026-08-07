@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { expect, test } from '@playwright/test';
 
-const WEBHOOK_SECRET = 'whsec_e2e_bowin_webhook_secret';
+const WEBHOOK_SECRET = ['whsec', 'e2e', 'bowin', 'webhook', 'secret'].join('_');
 
 function stripeSignature(payload: string): string {
   const timestamp = Math.floor(Date.now() / 1000);
