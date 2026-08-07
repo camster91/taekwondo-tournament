@@ -20,8 +20,16 @@ import invitesRouter from './routes/invites.js';
 import sportsRouter from './routes/sports.js';
 import rulesRouter from './routes/rules.js';
 import incidentsRouter from './routes/incidents.js';
+import organizationsRouter from './routes/organizations.js';
+import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
+import {
+  retentionConfigFromEnv,
+  startRetentionPurgeJob,
+} from './services/retention-policy.js';
+import { registrationLegalConfigFromEnv } from './routes/public-validation.js';
+import { validateProductionServiceConfig } from './services/production-config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,6 +53,8 @@ const prisma: PrismaClient = new Proxy({} as PrismaClient, {
 });
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
+const retentionConfig = retentionConfigFromEnv(process.env);
+registrationLegalConfigFromEnv(process.env, isProduction);
 
 // Closes D9 (env validation): without this check, a typo or missing
 // var in the deploy env file crashes the server on the first DB
@@ -54,14 +64,10 @@ const isProduction = process.env.NODE_ENV === 'production';
 // with a clear list of which vars are missing, so an operator
 // notices before the first request lands.
 if (isProduction) {
-  const required = ['DATABASE_URL', 'JWT_SECRET'] as const;
-  const missing = required.filter((k) => !process.env[k] || process.env[k]!.length < 16);
-  if (missing.length > 0) {
-    console.error(`[startup] FATAL: required env vars missing or too short in production: ${missing.join(', ')}`);
-    process.exit(1);
-  }
-  if (!process.env.ALLOWED_ORIGINS) {
-    console.error('[startup] FATAL: ALLOWED_ORIGINS not set in production (CORS would fail closed)');
+  try {
+    validateProductionServiceConfig(process.env);
+  } catch (error) {
+    console.error(`[startup] FATAL: ${error instanceof Error ? error.message : 'invalid production configuration'}`);
     process.exit(1);
   }
 }
@@ -104,6 +110,10 @@ app.use(
     crossOriginEmbedderPolicy: false,
   }),
 );
+
+// Stripe signs the exact request bytes. Mount this before express.json(),
+// otherwise signature verification receives a re-serialized object.
+app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: '256kb' }), stripeWebhookHandler);
 
 // 1 MB JSON body limit. Heavy endpoints (Excel auto-map, import) accept
 // multipart/form-data or pre-parsed JSON from the client. A larger
@@ -167,6 +177,8 @@ app.use('/api/invites', invitesRouter);
 app.use('/api/sports', sportsRouter);
 app.use('/api/rules', rulesRouter);
 app.use('/api/incidents', incidentsRouter);
+app.use('/api/organizations', organizationsRouter);
+app.use('/api/billing', billingRouter);
 
 // Health check (liveness — the process is up and the HTTP server
 // is bound). This is the cheap probe for the load balancer.
@@ -259,6 +271,12 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 //   4. Hard-exit after 25 s in case anything hangs.
 const server = app.listen(Number(PORT), '0.0.0.0', async () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
+
+  if (retentionConfig) {
+    await startRetentionPurgeJob({ database: prisma, ...retentionConfig });
+  } else {
+    console.log('[retention] automatic purge disabled');
+  }
 
   if (isEmailConfigured()) {
     const ok = await verifyEmailConnection();

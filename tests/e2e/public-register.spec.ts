@@ -38,6 +38,9 @@ test.describe('public registration (self-register)', () => {
     const parentEmail = `e2e-parent-${Date.now()}@example.com`;
     await page.locator('input[name="parentEmail"]').fill(parentEmail);
     await page.locator('input[name="parentPhone"]').fill('5551234567');
+    await page.locator('input[name="privacyAccepted"]').check();
+    await page.locator('input[name="rulesAccepted"]').check();
+    await page.locator('input[name="guardianAttested"]').check();
 
     await page.getByRole('button', { name: /Complete Registration/i }).click();
 
@@ -48,6 +51,29 @@ test.describe('public registration (self-register)', () => {
     await expect(page.getByText(/Registration successful/i)).toBeVisible();
     await expect(page.getByText('TestKid').first()).toBeVisible();
     await expect(page.getByText(/E2E Open 2026/).first()).toBeVisible();
+  });
+
+  test('registration cannot be submitted without versioned privacy, rules, and guardian acceptance', async ({ page }) => {
+    await page.goto('/register');
+    const tournamentSelect = page.locator('select[name="tournamentId"]');
+    const e2eOption = page.locator('option', { hasText: 'E2E Open 2026' });
+    await expect(e2eOption).toHaveCount(1, { timeout: 10_000 });
+    const tournamentId = await e2eOption.first().getAttribute('value');
+    await tournamentSelect.selectOption(tournamentId!);
+    await page.locator('input[name="firstName"]').fill('Consent');
+    await page.locator('input[name="lastName"]').fill(`Required${Date.now()}`);
+    await page.locator('select[name="gender"]').selectOption('F');
+    await page.locator('input[name="dateOfBirth"]').fill('2016-01-15');
+    await page.locator('select[name="belt"]').selectOption('Yellow');
+    await page.locator('input[name="patterns"]').check();
+    await page.getByRole('button', { name: /Next: Parent & Consent/i }).click();
+    await page.locator('input[name="parentName"]').fill('Test Guardian');
+    await page.locator('input[name="parentEmail"]').fill(`guardian-${Date.now()}@example.com`);
+
+    await page.getByRole('button', { name: /Complete Registration/i }).click();
+
+    await expect(page.getByRole('alert')).toContainText(/guardian|privacy notice/i);
+    await expect(page.getByText('Registration Complete!')).toHaveCount(0);
   });
 
   test('form validation: missing required field shows an error and blocks advance', async ({ page }) => {

@@ -8,8 +8,9 @@
 // Reachable at /scoreboard/parent/:tournamentId. No auth required -
 // this is intentionally a public URL a parent can bookmark.
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 import { Trophy, Clock, Users, ChevronRight, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { Card, CardBody } from '../components/ui';
 
@@ -50,6 +51,8 @@ interface Tournament {
 
 export default function ParentScoreboard() {
   const { tournamentId } = useParams();
+  const [searchParams] = useSearchParams();
+  const publicKey = searchParams.get('key');
 
   // Refresh every 5s - slower than the TV version (3s) to save battery
   // on the parent's phone.
@@ -69,9 +72,9 @@ export default function ParentScoreboard() {
     divisions: Division[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
-    queryKey: ['parent-scoreboard-data', tournamentId],
+    queryKey: ['parent-scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
-      const res = await fetch(`/api/public/tournaments/${tournamentId}/scoreboard`);
+      const res = await fetch(buildScoreboardApiUrl(tournamentId || '', publicKey));
       if (!res.ok) throw new Error('Scoreboard fetch failed');
       return res.json();
     },
@@ -97,14 +100,19 @@ export default function ParentScoreboard() {
     return matches;
   }, [divisions]);
 
-  const nowCompeting = allMatches
+  const modeRing = Number(displaySettings?.mode?.match(/^ring:(\d+)$/)?.[1] || 0) || undefined;
+  const configuredRing = displaySettings?.ringNumber ?? modeRing;
+  const visibleMatches = configuredRing
+    ? allMatches.filter((match) => match.ringNumber === configuredRing)
+    : allMatches;
+  const nowCompeting = visibleMatches
     .filter((m) => m.status === 'in_progress')
     .sort((a, b) => a.roundNumber - b.roundNumber || a.matchNumber - b.matchNumber);
-  const upNext = allMatches
+  const upNext = visibleMatches
     .filter((m) => m.status === 'ready')
     .sort((a, b) => a.roundNumber - b.roundNumber || a.matchNumber - b.matchNumber)
     .slice(0, 5);
-  const recent = allMatches
+  const recent = visibleMatches
     .filter((m) => m.status === 'completed')
     .sort((a, b) => a.roundNumber - b.roundNumber || a.matchNumber - b.matchNumber)
     .slice(-3)
@@ -113,8 +121,9 @@ export default function ParentScoreboard() {
   // If director set featuredMatchId, override the "now competing" with
   // that match (even if it's not in_progress). Used for finals.
   let featured: (Match & { divisionName: string; eventType: string }) | null = null;
-  if (displaySettings?.featuredMatchId) {
-    featured = allMatches.find((m) => m.id === displaySettings.featuredMatchId) || null;
+  const featuredMatchId = displaySettings?.featuredMatchId || displaySettings?.mode?.match(/^featured:(.+)$/)?.[1];
+  if (featuredMatchId) {
+    featured = allMatches.find((m) => m.id === featuredMatchId) || null;
   }
 
   return (

@@ -86,10 +86,21 @@ Weigh kids, mark them present. Each competitor shows their declared
 weight vs. measured. Anyone who fails to show up is greyed-out and
 excluded from bracket generation.
 
+If venue Wi-Fi drops, individual and bulk check-ins are saved on that
+device for the signed-in operator. The pending-work banner shows what is
+waiting. Reconnect and use **Sync now**; review or discard any item the
+server rejects instead of entering it twice.
+
 ### Scorekeeper (`/scorekeeper/:id`)
 
 The bracket view. Click a competitor to mark them winner, enter the
 score, press Enter to confirm. Division auto-advances to next match.
+
+If the connection drops while recording a result, the result is saved
+on that device for the signed-in scorekeeper and the match is removed
+from the ready queue. Reconnect and use **Sync now** in the pending-work
+banner. A rejected result is held for review and is never silently
+overwritten.
 
 **Keyboard shortcuts** (much faster than clicking):
 
@@ -108,7 +119,7 @@ score, press Enter to confirm. Division auto-advances to next match.
 
 ### Public Display (`/display/:id`)
 
-Big-screen TV mode. Auto-refreshes every 3 seconds. Shows now-competing
+Big-screen TV mode. Auto-refreshes every 5 seconds. Shows now-competing
 matches, recent results, up-next queue, and per-division progress.
 
 Put a laptop connected to the venue TV on this URL. No login needed —
@@ -122,7 +133,9 @@ it's the share-link URL you generated in Settings.
 PDF for the dojang newsletter.
 
 **Tournament detail → Trash** — if you delete by mistake, you have
-7 days to recover from the Trash view. After that it's purged.
+the configured retention window to recover from the Trash view. The
+production operator currently plans a 7-day window, but permanent purge
+must be enabled only after the published retention policy is approved.
 
 ---
 
@@ -137,7 +150,7 @@ PDF for the dojang newsletter.
   divisions. Check the Divisions page warning banner.
 
 - **"I can't find my tournament."** — Soft-deleted tournaments go to
-  Trash for 7 days. Check there.
+  Trash for the configured retention window. Check there.
 
 - **"Demo data is showing instead of my real tournament."** — You
   logged in via the demo button. Sign out and sign in with your real
@@ -158,6 +171,7 @@ PDF for the dojang newsletter.
 - **Lost your magic link:** sign in again with the same email; the
   system will send a new one.
 
-> Last verified: 2026-06-23 against the live app at
-> https://tkd.ashbi.ca (smoke test passed 17/17 — see
-> docs/PILOT-VERIFICATION-2026-06-23.md).
+> Release candidate verified locally on 2026-08-07 with 432 automated
+> unit/integration tests and 26 browser workflows against a disposable
+> PostgreSQL 16 database. Production deployment and venue-device smoke
+> testing remain required before launch.

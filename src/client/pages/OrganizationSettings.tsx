@@ -1,0 +1,265 @@
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Building2,
+  Check,
+  CreditCard,
+  ExternalLink,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Trophy,
+} from 'lucide-react';
+import { getAuthHeaders } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { Button, Card, Input, Label, PageHeader, Spinner } from '../components/ui';
+
+type Entitlements = {
+  maxTournaments: number;
+  maxMembers: number;
+  maxRings: number;
+  publicRegistration: boolean;
+  eventOperations: boolean;
+};
+
+type Organization = {
+  id: string;
+  name: string;
+  slug: string;
+  plan: 'free' | 'pilot' | 'starter' | 'pro';
+  membershipRole: string;
+  entitlements: Entitlements;
+  _count: { tournaments: number; members: number };
+  billingSubscription?: {
+    provider: string;
+    status: string;
+    cancelAtPeriodEnd: boolean;
+    currentPeriodEnd?: string | null;
+    providerCustomerId?: string | null;
+  } | null;
+};
+
+async function responseJson<T>(response: Response): Promise<T> {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error((data as { error?: string }).error || 'The request could not be completed.');
+  }
+  return data as T;
+}
+
+function UsageBar({ label, value, limit, icon: Icon }: {
+  label: string;
+  value: number;
+  limit: number;
+  icon: typeof Trophy;
+}) {
+  const percent = Math.min(100, Math.round((value / Math.max(limit, 1)) * 100));
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-4 text-sm">
+        <span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
+          <Icon className="h-4 w-4 text-indigo-500" /> {label}
+        </span>
+        <span className="text-slate-500 dark:text-slate-400">{value} of {limit}</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+        <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
+export default function OrganizationSettings() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+
+  const organizationsQuery = useQuery({
+    queryKey: ['organizations', 'current'],
+    queryFn: async () => responseJson<{ organizations: Organization[] }>(
+      await fetch('/api/organizations/current', { headers: getAuthHeaders() }),
+    ),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => responseJson(
+      await fetch('/api/organizations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ name }),
+      }),
+    ),
+    onSuccess: async () => {
+      setName('');
+      toast.success('Organization created.');
+      await queryClient.invalidateQueries({ queryKey: ['organizations', 'current'] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const billingMutation = useMutation({
+    mutationFn: async ({ endpoint, plan }: { endpoint: 'checkout' | 'portal'; plan?: 'starter' | 'pro' }) => {
+      const organization = organizationsQuery.data?.organizations[0];
+      if (!organization) throw new Error('Create an organization first.');
+      return responseJson<{ url: string }>(await fetch(`/api/billing/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ organizationId: organization.id, plan }),
+      }));
+    },
+    onSuccess: ({ url }) => window.location.assign(url),
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  if (organizationsQuery.isLoading) {
+    return <div className="flex min-h-[50vh] items-center justify-center"><Spinner size="lg" /></div>;
+  }
+
+  if (organizationsQuery.isError) {
+    return (
+      <Card className="mx-auto max-w-xl text-center">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Organization settings unavailable</h1>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{organizationsQuery.error.message}</p>
+        <Button className="mt-5" onClick={() => organizationsQuery.refetch()}>Try again</Button>
+      </Card>
+    );
+  }
+
+  const organization = organizationsQuery.data?.organizations[0];
+  if (!organization) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <PageHeader title="Organization & billing" description="Create the workspace that owns your tournaments, staff, and subscription." />
+        <Card className="overflow-hidden p-0">
+          <div className="bg-gradient-to-br from-indigo-600 to-violet-700 px-6 py-8 text-white sm:px-10">
+            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
+              <Building2 className="h-6 w-6" />
+            </div>
+            <h2 className="text-2xl font-bold">Set up your organization</h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-indigo-100">
+              Start on the free evaluation plan. You can configure one draft tournament before choosing a pilot or paid plan.
+            </p>
+          </div>
+          <form
+            className="space-y-5 p-6 sm:p-10"
+            onSubmit={(event) => { event.preventDefault(); createMutation.mutate(); }}
+          >
+            <div>
+              <Label htmlFor="organization-name">Organization name</Label>
+              <Input
+                id="organization-name"
+                autoComplete="organization"
+                placeholder="e.g. Northside Taekwondo"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                minLength={2}
+                maxLength={100}
+                required
+              />
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Use the school or tournament company name customers recognize.</p>
+            </div>
+            <Button type="submit" size="lg" loading={createMutation.isPending} disabled={name.trim().length < 2}>
+              Create organization
+            </Button>
+          </form>
+        </Card>
+      </div>
+    );
+  }
+
+  const canManageBilling = ['owner', 'admin'].includes(organization.membershipRole);
+  const hasStripeCustomer = Boolean(organization.billingSubscription?.providerCustomerId);
+  const planLabel = organization.plan.charAt(0).toUpperCase() + organization.plan.slice(1);
+
+  return (
+    <div className="mx-auto max-w-6xl">
+      <PageHeader title="Organization & billing" description="Review workspace usage, entitlements, and billing status." />
+
+      <div className="mb-6 grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
+        <Card>
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-500/10">
+                <Building2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-950 dark:text-white">{organization.name}</h1>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">/{organization.slug} · {organization.membershipRole}</p>
+            </div>
+            <span className="self-start rounded-full bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
+              {planLabel} plan
+            </span>
+          </div>
+          <div className="mt-8 grid gap-6 sm:grid-cols-2">
+            <UsageBar label="Tournament usage" value={organization._count.tournaments} limit={organization.entitlements.maxTournaments} icon={Trophy} />
+            <UsageBar label="Team members" value={organization._count.members} limit={organization.entitlements.maxMembers} icon={Users} />
+          </div>
+        </Card>
+
+        <Card>
+          <div className="flex items-center gap-3">
+            <CreditCard className="h-5 w-5 text-indigo-500" />
+            <h2 className="font-semibold text-slate-950 dark:text-white">Billing status</h2>
+          </div>
+          <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+            {organization.billingSubscription
+              ? `${organization.billingSubscription.status.replace(/_/g, ' ')} via ${organization.billingSubscription.provider}`
+              : 'No payment method or subscription is attached.'}
+          </p>
+          {organization.billingSubscription?.cancelAtPeriodEnd && (
+            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">Cancellation is scheduled at the end of the billing period.</p>
+          )}
+          {canManageBilling && hasStripeCustomer && (
+            <Button
+              variant="secondary"
+              className="mt-5 w-full"
+              loading={billingMutation.isPending}
+              onClick={() => billingMutation.mutate({ endpoint: 'portal' })}
+            >
+              Manage billing <ExternalLink className="h-4 w-4" />
+            </Button>
+          )}
+        </Card>
+      </div>
+
+      <div className="mb-4">
+        <h2 className="text-xl font-bold text-slate-950 dark:text-white">Plans built for tournament day</h2>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Plan changes take effect only after Stripe confirms the subscription.</p>
+      </div>
+      <div className="grid gap-5 lg:grid-cols-3">
+        {([
+          { plan: 'free' as const, label: 'Free', tournaments: 1, members: 1, rings: 1, icon: ShieldCheck },
+          { plan: 'starter' as const, label: 'Starter', tournaments: 10, members: 15, rings: 8, icon: Sparkles },
+          { plan: 'pro' as const, label: 'Pro', tournaments: 100, members: 100, rings: 32, icon: Trophy },
+        ]).map((item) => {
+          const Icon = item.icon;
+          const current = organization.plan === item.plan;
+          return (
+            <Card key={item.plan} className={item.plan === 'starter' ? 'border-indigo-300 dark:border-indigo-700' : ''}>
+              <Icon className="h-6 w-6 text-indigo-500" />
+              <h3 className="mt-4 text-lg font-bold text-slate-950 dark:text-white">{item.label}</h3>
+              <ul className="mt-5 space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.tournaments} active tournament{item.tournaments === 1 ? '' : 's'}</li>
+                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.members} team member{item.members === 1 ? '' : 's'}</li>
+                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Up to {item.rings} ring{item.rings === 1 ? '' : 's'}</li>
+                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.plan === 'free' ? 'Draft evaluation' : 'Public registration and event operations'}</li>
+              </ul>
+              {item.plan === 'free' ? (
+                <Button className="mt-6 w-full" variant="secondary" disabled>{current ? 'Current plan' : 'Free evaluation'}</Button>
+              ) : (
+                <Button
+                  className="mt-6 w-full"
+                  variant={item.plan === 'starter' ? 'primary' : 'secondary'}
+                  disabled={!canManageBilling || current}
+                  loading={billingMutation.isPending}
+                  onClick={() => billingMutation.mutate({ endpoint: 'checkout', plan: item.plan })}
+                >
+                  {current ? 'Current plan' : `Choose ${item.label}`}
+                </Button>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

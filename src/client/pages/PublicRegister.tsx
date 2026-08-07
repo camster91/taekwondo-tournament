@@ -46,12 +46,19 @@ interface RegistrationResult {
   registration: {
     id: string;
     confirmationCode?: string;
+    managementToken?: string;
     competitorName: string;
     tournamentName: string;
     tournamentDate: string;
     events: { patterns: boolean; sparring: boolean };
     ageGroup: string;
   };
+}
+
+interface RegistrationLegalConfig {
+  consentVersion: string;
+  privacyNoticeUrl: string;
+  tournamentTermsUrl: string;
 }
 
 // Taekwondo-specific detailed belt options (for stripe-level granularity in TKD tournaments)
@@ -87,6 +94,7 @@ export default function PublicRegister() {
   const [result, setResult] = useState<RegistrationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [legalConfig, setLegalConfig] = useState<RegistrationLegalConfig | null>(null);
 
   // Refs for a11y: focus the error region on submit failure, focus the first
   // invalid field if we can identify one from the server response.
@@ -133,6 +141,9 @@ export default function PublicRegister() {
     parentEmail: '',
     parentPhone: '',
     competeWithOlder: false,
+    privacyAccepted: false,
+    rulesAccepted: false,
+    guardianAttested: false,
   });
 
   const selectedTournament = useMemo(
@@ -236,15 +247,22 @@ export default function PublicRegister() {
   const selectedTournamentFeeNotes = selectedTournamentSettings.feeNotes ?? '';
 
   useEffect(() => {
-    fetch('/api/public/tournaments')
-      .then((res) => res.json())
-      .then((data) => {
-        setTournaments(data);
+    Promise.all([
+      fetch('/api/public/tournaments'),
+      fetch('/api/public/legal-config'),
+    ])
+      .then(async ([tournamentsResponse, legalResponse]) => {
+        if (!tournamentsResponse.ok || !legalResponse.ok) throw new Error('Registration configuration unavailable');
+        return Promise.all([tournamentsResponse.json(), legalResponse.json()]);
+      })
+      .then(([data, deployedLegalConfig]) => {
+        setTournaments(data as Tournament[]);
+        setLegalConfig(deployedLegalConfig as RegistrationLegalConfig);
         if (data.length === 1 && !formData.tournamentId) {
           setFormData((prev) => ({ ...prev, tournamentId: data[0].id }));
         }
       })
-      .catch(() => setError('Failed to load tournaments'))
+      .catch(() => setError('Registration is temporarily unavailable because its tournament or legal configuration could not be loaded.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -287,11 +305,19 @@ export default function PublicRegister() {
     setValidationErrors([]);
     setSubmitting(true);
 
+    if (!legalConfig) {
+      setError('Registration legal documents are unavailable. Please contact the tournament organizer.');
+      setSubmitting(false);
+      queueMicrotask(() => focusErrorRegion());
+      return;
+    }
+
     // Client-side validation: parent contact required for minors
     if (isMinor) {
       const clientErrors: string[] = [];
       if (!formData.parentName.trim()) clientErrors.push('Parent/Guardian name is required for competitors under 18');
       if (!formData.parentEmail.trim()) clientErrors.push('Parent/Guardian email is required for competitors under 18');
+      if (!formData.guardianAttested) clientErrors.push('A parent or guardian must confirm their authority to register this minor');
       if (clientErrors.length > 0) {
         setValidationErrors(clientErrors);
         setSubmitting(false);
@@ -303,6 +329,13 @@ export default function PublicRegister() {
         });
         return;
       }
+    }
+
+    if (!formData.privacyAccepted || !formData.rulesAccepted) {
+      setValidationErrors(['You must accept the privacy notice and tournament terms to register.']);
+      setSubmitting(false);
+      queueMicrotask(() => focusErrorRegion());
+      return;
     }
 
     try {
@@ -417,7 +450,7 @@ export default function PublicRegister() {
                     </a>
                     {' '}·{' '}
                     <a
-                      href={`/manage-registration?code=${result.registration.confirmationCode || ''}`}
+                      href={`/manage-registration?token=${encodeURIComponent(result.registration.managementToken || '')}`}
                       className="underline hover:no-underline"
                     >
                       Edit or withdraw
@@ -493,6 +526,9 @@ export default function PublicRegister() {
                       patterns: false,
                       sparring: false,
                       competeWithOlder: false,
+                      privacyAccepted: false,
+                      rulesAccepted: false,
+                      guardianAttested: false,
                     });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                     // Re-focus first field for fast re-entry.
@@ -531,6 +567,9 @@ export default function PublicRegister() {
                       parentEmail: '',
                       parentPhone: '',
                       competeWithOlder: false,
+                      privacyAccepted: false,
+                      rulesAccepted: false,
+                      guardianAttested: false,
                     });
                   }}
                 >
@@ -1095,6 +1134,60 @@ export default function PublicRegister() {
                 </div>
               </fieldset>
 
+              <fieldset className="border-t border-gray-200 dark:border-gray-700 pt-6 space-y-4">
+                <legend className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  Notices and authorization
+                </legend>
+                <label className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
+                  <input
+                    type="checkbox"
+                    name="privacyAccepted"
+                    checked={formData.privacyAccepted}
+                    onChange={handleChange}
+                    required
+                    className="mt-0.5 h-5 w-5 min-w-[20px] rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>
+                    I have read and accept the{' '}
+                    <a className="font-medium text-blue-700 underline dark:text-blue-300" href={legalConfig?.privacyNoticeUrl} target="_blank" rel="noopener noreferrer">
+                      privacy notice
+                    </a>.
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
+                  <input
+                    type="checkbox"
+                    name="rulesAccepted"
+                    checked={formData.rulesAccepted}
+                    onChange={handleChange}
+                    required
+                    className="mt-0.5 h-5 w-5 min-w-[20px] rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>
+                    I accept the{' '}
+                    <a className="font-medium text-blue-700 underline dark:text-blue-300" href={legalConfig?.tournamentTermsUrl} target="_blank" rel="noopener noreferrer">
+                      tournament terms and rules
+                    </a>.
+                  </span>
+                </label>
+                {isMinor && (
+                  <label className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      name="guardianAttested"
+                      checked={formData.guardianAttested}
+                      onChange={handleChange}
+                      required
+                      className="mt-0.5 h-5 w-5 min-w-[20px] rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>I confirm that I am the competitor's parent/legal guardian or am otherwise authorized to register this minor.</span>
+                  </label>
+                )}
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Document version: {legalConfig?.consentVersion ?? 'unavailable'}
+                </p>
+              </fieldset>
+
               {/* Submit Button */}
               <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center">
                 <Button
@@ -1114,9 +1207,6 @@ export default function PublicRegister() {
                   {submitting ? 'Submitting...' : 'Complete Registration'}
                 </Button>
               </div>
-              <p className="text-xs text-gray-600 dark:text-gray-400 text-center mt-3">
-                By registering, you agree to follow all tournament rules and regulations.
-              </p>
               </>)}
             </form>
           </CardBody>

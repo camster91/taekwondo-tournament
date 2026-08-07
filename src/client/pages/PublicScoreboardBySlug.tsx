@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, AlertCircle } from 'lucide-react';
+import { buildResolvedScoreboardPath } from '../utils/public-scoreboard-url';
 
 export default function PublicScoreboardBySlug() {
   const { publicSlug } = useParams<{ publicSlug: string }>();
@@ -30,7 +31,7 @@ export default function PublicScoreboardBySlug() {
           return;
         }
         const data = await res.json();
-        navigate(`/display/${data.id}`, { replace: true });
+        navigate(buildResolvedScoreboardPath(data.id, publicSlug), { replace: true });
       } catch {
         if (!cancelled) setError('Network error. Please try again.');
       }
