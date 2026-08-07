@@ -8,8 +8,9 @@
 // Reachable at /scoreboard/parent/:tournamentId. No auth required -
 // this is intentionally a public URL a parent can bookmark.
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 import { Trophy, Clock, Users, ChevronRight, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { Card, CardBody } from '../components/ui';
 
@@ -50,6 +51,8 @@ interface Tournament {
 
 export default function ParentScoreboard() {
   const { tournamentId } = useParams();
+  const [searchParams] = useSearchParams();
+  const publicKey = searchParams.get('key');
 
   // Refresh every 5s - slower than the TV version (3s) to save battery
   // on the parent's phone.
@@ -69,9 +72,9 @@ export default function ParentScoreboard() {
     divisions: Division[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
-    queryKey: ['parent-scoreboard-data', tournamentId],
+    queryKey: ['parent-scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
-      const res = await fetch(`/api/public/tournaments/${tournamentId}/scoreboard`);
+      const res = await fetch(buildScoreboardApiUrl(tournamentId || '', publicKey));
       if (!res.ok) throw new Error('Scoreboard fetch failed');
       return res.json();
     },

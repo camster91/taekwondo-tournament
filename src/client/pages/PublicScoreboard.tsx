@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Trophy, Clock, Users, ChevronRight, Award, Zap, Radio, MapPin, Loader2, AlertCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Card, CardBody } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { Button } from '../components/ui';
+import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 
 interface Match {
   id: string;
@@ -47,6 +48,8 @@ interface Tournament {
 
 export default function PublicScoreboard() {
   const { tournamentId } = useParams();
+  const [searchParams] = useSearchParams();
+  const publicKey = searchParams.get('key');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeRing, setActiveRing] = useState<number | 'all'>('all');
   const [cycleEnabled, setCycleEnabled] = useState(true);
@@ -95,9 +98,9 @@ export default function PublicScoreboard() {
     divisions: Division[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
-    queryKey: ['scoreboard-data', tournamentId],
+    queryKey: ['scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
-      const res = await fetch(`/api/public/tournaments/${tournamentId}/scoreboard`);
+      const res = await fetch(buildScoreboardApiUrl(tournamentId || '', publicKey));
       if (!res.ok) throw new Error('Failed to fetch scoreboard');
       setLastFetchAt(new Date());
       return res.json();
@@ -279,7 +282,7 @@ export default function PublicScoreboard() {
             On the venue TV this banner hides (md:hidden). */}
         <div className="md:hidden px-4 py-2 bg-indigo-950/40 border-b border-white/5">
           <Link
-            to={`/scoreboard/parent/${tournamentId}`}
+            to={`/scoreboard/parent/${tournamentId}${publicKey ? `?key=${encodeURIComponent(publicKey)}` : ''}`}
             className="text-xs text-indigo-300 hover:text-indigo-200 underline"
           >
             📱 Better view for phones →

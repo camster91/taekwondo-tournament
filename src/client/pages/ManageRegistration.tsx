@@ -1,5 +1,5 @@
 // Parent-facing "Manage Registration" page. The parent enters their
-// confirmation code + last name + DOB (3-factor verify), then sees
+// private high-entropy link, then sees
 // their kid's full registration and can:
 //   - fix a typo in the name or school
 //   - change the belt rank
@@ -62,12 +62,9 @@ const TKD_BELT_OPTIONS = [
 
 export default function ManageRegistration() {
   const [searchParams] = useSearchParams();
-  const initialCode = searchParams.get('code') || '';
+  const managementToken = searchParams.get('token') || '';
 
   // Step 1: lookup form
-  const [code, setCode] = useState(initialCode);
-  const [lastName, setLastName] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [registration, setRegistration] = useState<ManageRegistration | null>(null);
@@ -82,42 +79,22 @@ export default function ManageRegistration() {
   const [withdrawn, setWithdrawn] = useState(false);
 
   useEffect(() => {
-    if (initialCode && !registration) {
-      // Auto-fill only the code; user still needs lastName + DOB
-      setCode(initialCode.toUpperCase());
+    if (managementToken && !registration && !lookupLoading && !lookupError) {
+      void lookupRegistration();
     }
-  }, [initialCode, registration]);
+  // Run once for the tokenized link; lookupRegistration updates these states.
+  }, [managementToken]);
 
-  const handleLookup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLookupError(null);
-    setRegistration(null);
-    setSavedAt(null);
-
-    if (!code.trim() || !lastName.trim() || !dateOfBirth) {
-      setLookupError('Please fill in all three fields.');
+  const lookupRegistration = async () => {
+    if (!managementToken) {
+      setLookupError('This management link is missing its private token. Use the link from your confirmation screen or email.');
       return;
     }
-
     setLookupLoading(true);
+    setLookupError(null);
     try {
-      const params = new URLSearchParams({
-        lastName: lastName.trim(),
-        dateOfBirth,
-      });
-      const res = await fetch(
-        `/api/public/registrations/${encodeURIComponent(code.trim().toLowerCase())}?${params}`,
-      );
-      if (res.status === 404) {
-        setLookupError(
-          'No matching registration found. Check the confirmation code, spelling, and date of birth.'
-        );
-        return;
-      }
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: 'Lookup failed.' }));
-        throw new Error(body.error || 'Lookup failed.');
-      }
+      const res = await fetch(`/api/public/registrations/${encodeURIComponent(managementToken)}`);
+      if (!res.ok) throw new Error('This management link is invalid or has expired. Contact the tournament director for help.');
       const data = await res.json();
       setRegistration(data.registration);
       setForm(data.registration);
@@ -128,19 +105,26 @@ export default function ManageRegistration() {
     }
   };
 
+  const handleLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLookupError(null);
+    setRegistration(null);
+    setSavedAt(null);
+
+    await lookupRegistration();
+  };
+
   const handleSave = async () => {
     if (!registration) return;
     setGlobalError(null);
     setSaving(true);
     try {
       const res = await fetch(
-        `/api/public/registrations/${encodeURIComponent(registration.confirmationCode)}`,
+        `/api/public/registrations/${encodeURIComponent(managementToken)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            lastName,
-            dateOfBirth,
             firstName: form.firstName,
             gender: form.gender,
             belt: form.belt,
@@ -168,9 +152,8 @@ export default function ManageRegistration() {
         throw new Error(body.error || 'Save failed.');
       }
       // Re-fetch the registration to get the fresh state
-      const params = new URLSearchParams({ lastName, dateOfBirth });
       const refreshed = await fetch(
-        `/api/public/registrations/${encodeURIComponent(registration.confirmationCode)}?${params}`,
+        `/api/public/registrations/${encodeURIComponent(managementToken)}`,
       );
       const fresh = await refreshed.json();
       setRegistration(fresh.registration);
@@ -193,11 +176,10 @@ export default function ManageRegistration() {
     setWithdrawing(true);
     try {
       const res = await fetch(
-        `/api/public/registrations/${encodeURIComponent(registration.confirmationCode)}`,
+        `/api/public/registrations/${encodeURIComponent(managementToken)}`,
         {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lastName, dateOfBirth }),
         },
       );
       if (res.status === 404) {
@@ -512,49 +494,11 @@ export default function ManageRegistration() {
               <Edit3 className="h-12 w-12 text-indigo-500 mx-auto mb-3" aria-hidden="true" />
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Manage registration</h1>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Update your kid's details or withdraw. We need 3 things to verify it's you.
+                Update competitor details or withdraw using the private link from your confirmation screen or email.
               </p>
             </div>
 
             <form onSubmit={handleLookup} className="space-y-4" aria-describedby={lookupError ? 'lookup-error' : undefined}>
-              <div>
-                <Label htmlFor="m-code" required>Confirmation code</Label>
-                <Input
-                  id="m-code"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  placeholder="8-character code"
-                  required
-                  aria-required="true"
-                  maxLength={8}
-                  className="font-mono uppercase tracking-widest"
-                />
-                <p className="text-xs text-gray-500 mt-1">From the success screen or your confirmation email.</p>
-              </div>
-              <div>
-                <Label htmlFor="m-last" required>Last name</Label>
-                <Input
-                  id="m-last"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  required
-                  aria-required="true"
-                  autoComplete="family-name"
-                />
-              </div>
-              <div>
-                <Label htmlFor="m-dob" required>Date of birth</Label>
-                <Input
-                  id="m-dob"
-                  type="date"
-                  value={dateOfBirth}
-                  onChange={(e) => setDateOfBirth(e.target.value)}
-                  required
-                  aria-required="true"
-                  autoComplete="bday"
-                />
-              </div>
-
               {lookupError && (
                 <div
                   role="alert"
@@ -566,14 +510,12 @@ export default function ManageRegistration() {
               )}
 
               <Button type="submit" variant="primary" loading={lookupLoading} className="w-full">
-                Find registration
+                Open private management link
               </Button>
             </form>
 
             <p className="text-xs text-gray-500 mt-6 text-center">
-              Don't have a confirmation code?{' '}
-              <Link to="/check-registration" className="underline">Look it up by tournament + name + DOB</Link>
-              {' '}first.
+              For security, confirmation codes cannot reveal or change personal information. Contact the tournament director if you lost the private link.
             </p>
           </CardBody>
         </Card>

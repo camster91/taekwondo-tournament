@@ -12,6 +12,16 @@ import {
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { escapeHtml } from '../services/email-templates.js';
+import {
+  optionalAuthenticate,
+  checkTournamentAccess,
+  type AuthenticatedRequest,
+} from '../middleware/auth.js';
+import {
+  generateManagementToken,
+  hashManagementToken,
+  isValidManagementToken,
+} from '../utils/registration-management-token.js';
 
 const router = Router();
 
@@ -112,12 +122,13 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
       date: true,
       location: true,
       status: true,
+      deletedAt: true,
       settings: true,
       sportProfileSlug: true,
     },
   });
 
-  if (!tournament) {
+  if (!tournament || tournament.deletedAt) {
     return res.status(404).json({ error: 'Tournament not found' });
   }
 
@@ -283,7 +294,9 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       });
     }
 
-    // Create registration
+    // Create registration. The raw bearer token is returned/sent once;
+    // only its digest is persisted.
+    const managementToken = generateManagementToken();
     const registration = await prisma.registration.create({
       data: {
         tournamentId,
@@ -298,6 +311,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         // v2: parent opt-in fields
         competeWithOlder: competeWithOlder === true,
         specialNeeds: specialNeeds?.trim() || null,
+        managementTokenHash: hashManagementToken(managementToken),
       },
       include: {
         competitor: true,
@@ -318,6 +332,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         // on the success screen AND in the confirmation email so they
         // can match the two if needed.
         confirmationCode: registration.id.slice(0, 8),
+        managementToken,
         competitorName: `${competitor.firstName} ${competitor.lastName}`,
         tournamentName: registration.tournament.name,
         tournamentDate: registration.tournament.date,
@@ -352,6 +367,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
             <p style="margin: 4px 0;"><strong>Events:</strong> ${escapeHtml(eventList)}</p>
             <p style="margin: 4px 0;"><strong>Age Group:</strong> ${escapeHtml(getAgeGroupLabel(ageAtTournament))}</p>
           </div>
+          <p><a href="${escapeHtml(`${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`)}">Edit or withdraw this registration</a></p>
           <p style="color: #6B7280; font-size: 14px;">Please keep this email for your records. You may be asked to provide registration confirmation at check-in.</p>
         </div>
       `;
@@ -389,7 +405,7 @@ router.get('/scoreboard/:publicSlug', scoreboardLimiter, async (req: Request, re
     where: { publicSlug },
   });
 
-  if (!tournament) {
+  if (!tournament || tournament.deletedAt) {
     // Identical response for "no such slug" and "no such tournament" so
     // an attacker can't tell whether a slug exists.
     return res.status(404).json({ error: 'Scoreboard not found' });
@@ -436,7 +452,7 @@ router.get('/scoreboard/:publicSlug', scoreboardLimiter, async (req: Request, re
 // (director must have generated a share link). Does NOT auto-create a
 // slug — that previously defeated revoke/rotation and exposed roster
 // data to anyone who knew/guessed the UUID (e.g. from /register?tournament=).
-router.get('/tournaments/:id/scoreboard', scoreboardLimiter, async (req: Request, res: Response) => {
+router.get('/tournaments/:id/scoreboard', scoreboardLimiter, optionalAuthenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const id = req.params.id;
 
@@ -452,6 +468,18 @@ router.get('/tournaments/:id/scoreboard', scoreboardLimiter, async (req: Request
   if (!tournament || tournament.deletedAt || !tournament.publicSlug) {
     // Identical 404 whether missing, soft-deleted, or unpublished.
     return res.status(404).json({ error: 'Scoreboard not found' });
+  }
+
+  const suppliedKey = typeof req.query.key === 'string' ? req.query.key : '';
+  if (suppliedKey !== tournament.publicSlug) {
+    const authenticatedReq = req as AuthenticatedRequest;
+    if (!authenticatedReq.user) {
+      return res.status(404).json({ error: 'Scoreboard not found' });
+    }
+    const access = await checkTournamentAccess(authenticatedReq, prisma, id, 'viewer');
+    if (!access.ok) {
+      return res.status(404).json({ error: 'Scoreboard not found' });
+    }
   }
 
   // Director-controlled display mode + featured match override (M8).
@@ -574,22 +602,15 @@ const manageLimiter = rateLimit({
   skip: () => rateLimitDisabled,
 });
 
-router.get('/registrations/:code', manageLimiter, async (req: Request, res: Response) => {
+router.get('/registrations/:token', manageLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const code = String(req.params.code || '').slice(0, 8);
-  const lastName = String(req.query.lastName || '').trim();
-  const dob = String(req.query.dateOfBirth || '');
-
-  const lookupError = validateLookupParams(code, lastName, dob);
-  if (lookupError) {
-    return res.status(400).json({ error: lookupError });
-  }
+  const token = String(req.params.token || '');
+  if (!isValidManagementToken(token)) return res.status(404).json({ error: 'No matching registration found.' });
 
   // Match by registration.id prefix (first 8 chars)
   const registration = await prisma.registration.findFirst({
     where: {
-      id: { startsWith: code },
-      competitor: { lastName, dateOfBirth: new Date(dob) },
+      managementTokenHash: hashManagementToken(token),
     },
     include: {
       competitor: true,
@@ -636,21 +657,14 @@ const manageUpdateLimiter = rateLimit({
 // Update a registration by confirmation code. Parents can fix typos,
 // change belts, toggle which events they're entered in. Director-side
 // changes go through /api/tournaments/:id/registrations/:id.
-router.patch('/registrations/:code', manageUpdateLimiter, async (req: Request, res: Response) => {
+router.patch('/registrations/:token', manageUpdateLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const code = String(req.params.code || '').slice(0, 8);
-  const lastName = String(req.body?.lastName || '').trim();
-  const dob = String(req.body?.dateOfBirth || '');
-
-  const lookupError = validateLookupParams(code, lastName, dob);
-  if (lookupError) {
-    return res.status(400).json({ error: lookupError });
-  }
+  const token = String(req.params.token || '');
+  if (!isValidManagementToken(token)) return res.status(404).json({ error: 'No matching registration found.' });
 
   const registration = await prisma.registration.findFirst({
     where: {
-      id: { startsWith: code },
-      competitor: { lastName, dateOfBirth: new Date(dob) },
+      managementTokenHash: hashManagementToken(token),
     },
     include: { tournament: { select: { status: true, date: true } } },
   });
@@ -713,21 +727,14 @@ router.patch('/registrations/:code', manageUpdateLimiter, async (req: Request, r
 
 // Withdraw a registration by confirmation code. Parents can do this
 // when their kid is sick, has a schedule conflict, etc.
-router.delete('/registrations/:code', manageUpdateLimiter, async (req: Request, res: Response) => {
+router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const code = String(req.params.code || '').slice(0, 8);
-  const lastName = String(req.body?.lastName || '').trim();
-  const dob = String(req.body?.dateOfBirth || '');
-
-  const lookupError = validateLookupParams(code, lastName, dob);
-  if (lookupError) {
-    return res.status(400).json({ error: lookupError });
-  }
+  const token = String(req.params.token || '');
+  if (!isValidManagementToken(token)) return res.status(404).json({ error: 'No matching registration found.' });
 
   const registration = await prisma.registration.findFirst({
     where: {
-      id: { startsWith: code },
-      competitor: { lastName, dateOfBirth: new Date(dob) },
+      managementTokenHash: hashManagementToken(token),
     },
     include: { tournament: { select: { status: true } } },
   });

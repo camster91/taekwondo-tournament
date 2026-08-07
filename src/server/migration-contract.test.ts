@@ -14,4 +14,15 @@ describe('production migration contract', () => {
       /ALTER TABLE "MagicLink"\s+ADD COLUMN "failedAttempts" INTEGER NOT NULL DEFAULT 0/
     );
   });
+
+  it('creates the hashed registration management token required for private self-service', () => {
+    const migrationsRoot = join(process.cwd(), 'prisma', 'migrations');
+    const sql = readdirSync(migrationsRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => readFileSync(join(migrationsRoot, entry.name, 'migration.sql'), 'utf8'))
+      .join('\n');
+
+    expect(sql).toMatch(/ALTER TABLE "Registration"\s+ADD COLUMN "managementTokenHash" TEXT/);
+    expect(sql).toMatch(/CREATE UNIQUE INDEX "Registration_managementTokenHash_key"/);
+  });
 });

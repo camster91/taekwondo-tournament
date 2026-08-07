@@ -46,6 +46,7 @@ interface RegistrationResult {
   registration: {
     id: string;
     confirmationCode?: string;
+    managementToken?: string;
     competitorName: string;
     tournamentName: string;
     tournamentDate: string;
@@ -417,7 +418,7 @@ export default function PublicRegister() {
                     </a>
                     {' '}·{' '}
                     <a
-                      href={`/manage-registration?code=${result.registration.confirmationCode || ''}`}
+                      href={`/manage-registration?token=${encodeURIComponent(result.registration.managementToken || '')}`}
                       className="underline hover:no-underline"
                     >
                       Edit or withdraw
