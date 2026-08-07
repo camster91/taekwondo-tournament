@@ -13,6 +13,7 @@ import {
   FIELD_LIMITS,
 } from './field-validation.js';
 import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
+import { publicAppUrlFromEnv } from '../services/production-config.js';
 
 const router = Router();
 
@@ -32,7 +33,7 @@ const inviteVerifyLimiter = rateLimit({
 });
 
 function getBaseUrl(): string {
-  return process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:5173';
+  return publicAppUrlFromEnv(process.env);
 }
 
 // POST /api/invites/send — Admin sends an invitation

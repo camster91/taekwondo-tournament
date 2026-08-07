@@ -9,6 +9,7 @@ import { validateRequest } from '../middleware/validate.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
 import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
+import { publicAppUrlFromEnv } from '../services/production-config.js';
 
 const router = Router();
 
@@ -170,14 +171,9 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
       },
     });
 
-    // Build magic link URL. Prefer the explicit public app URL, then any
-    // allowed origin, then fall back to localhost for local dev.
-    const publicAppUrl = process.env.PUBLIC_APP_URL;
-    const baseUrl = publicAppUrl
-      || (process.env.ALLOWED_ORIGINS && process.env.ALLOWED_ORIGINS !== '*'
-          ? process.env.ALLOWED_ORIGINS.split(',')[0]
-          : null)
-      || 'http://localhost:5173';
+    // Always use the explicit canonical URL in deploys. CORS origins can
+    // contain admin/staging hosts and are not a safe source for emailed links.
+    const baseUrl = publicAppUrlFromEnv(process.env);
     const magicUrl = `${baseUrl}/verify?token=${token}`;
 
     const template = magicLinkEmail({
@@ -852,7 +848,7 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
     setCsrfCookie(res);
 
     // Send welcome email (non-blocking)
-    const baseUrl = process.env.ALLOWED_ORIGINS?.split(',')[0] || 'http://localhost:5173';
+    const baseUrl = publicAppUrlFromEnv(process.env);
     const template = welcomeEmail({
       recipientName: firstName.trim(),
       role: user.role,

@@ -27,6 +27,7 @@ import {
   startRetentionPurgeJob,
 } from './services/retention-policy.js';
 import { registrationLegalConfigFromEnv } from './routes/public-validation.js';
+import { validateProductionServiceConfig } from './services/production-config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,14 +62,10 @@ registrationLegalConfigFromEnv(process.env, isProduction);
 // with a clear list of which vars are missing, so an operator
 // notices before the first request lands.
 if (isProduction) {
-  const required = ['DATABASE_URL', 'JWT_SECRET'] as const;
-  const missing = required.filter((k) => !process.env[k] || process.env[k]!.length < 16);
-  if (missing.length > 0) {
-    console.error(`[startup] FATAL: required env vars missing or too short in production: ${missing.join(', ')}`);
-    process.exit(1);
-  }
-  if (!process.env.ALLOWED_ORIGINS) {
-    console.error('[startup] FATAL: ALLOWED_ORIGINS not set in production (CORS would fail closed)');
+  try {
+    validateProductionServiceConfig(process.env);
+  } catch (error) {
+    console.error(`[startup] FATAL: ${error instanceof Error ? error.message : 'invalid production configuration'}`);
     process.exit(1);
   }
 }
