@@ -14,11 +14,11 @@ const variantClasses: Record<Variant, string> = {
   gradient: 'btn-gradient text-white shadow-sm',
 };
 
-/* Size scale: 36 / 40 / 48 — chosen to align with Input/Select (h-10 = 40px on
-   desktop) so buttons and form controls sit on the same visual baseline. */
+/* Size scale: 36 / 44 / 48. The default meets the mobile target-size floor
+   and stays aligned with Input/Select. */
 const sizeClasses: Record<Size, string> = {
   sm: 'h-9 px-3 text-xs',
-  md: 'h-10 px-4 text-sm',
+  md: 'h-11 px-4 text-sm',
   lg: 'h-12 px-6 text-base',
 };
 

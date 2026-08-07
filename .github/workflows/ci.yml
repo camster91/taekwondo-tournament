@@ -21,8 +21,8 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    # 45m gives the e2e step (which runs 23 tests at ~70s each on
-    # the CI runner) comfortable headroom. If this gets too tight,
+    # 45m gives the three-engine e2e matrix comfortable headroom on
+    # the CI runner. If this gets too tight,
     # the scorekeeper tests share login state and could be made
     # faster via test.beforeAll + shared context — see tests/e2e/
     # scorekeeper-a11y.spec.ts.
@@ -81,7 +81,7 @@ jobs:
 
       - name: Install Playwright browsers
         # Required for `npm run test:e2e` below. ~150MB download.
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Start Postgres
         # The e2e suite needs a real Postgres (Prisma driver-adapter

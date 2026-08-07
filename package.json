@@ -23,7 +23,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:install": "playwright install chromium",
+    "test:e2e:install": "playwright install chromium firefox webkit",
     "seed": "tsx prisma/seed.ts",
     "build:full": "prisma generate && prisma db push && vite build && tsc -p tsconfig.server.json"
   },

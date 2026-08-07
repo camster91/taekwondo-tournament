@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   User,
   Mail,
@@ -8,19 +8,23 @@ import {
   ArrowLeft,
   Shield,
   Calendar,
+  Trash2,
 } from 'lucide-react';
 import { useAuth, getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import Spinner from '../components/ui/Spinner';
-import { Card, CardHeader, CardBody } from '../components/ui';
+import { Card, CardHeader, CardBody, Modal } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
 
 export default function Profile() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const toast = useToast();
+  const navigate = useNavigate();
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
   const [profileData, setProfileData] = useState({
     firstName: user?.firstName || '',
@@ -50,6 +54,25 @@ export default function Profile() {
     onError: (err: Error) => {
       toast.error(err.message);
     },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/auth/account', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ confirmation: deleteConfirmation }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || 'The account could not be deleted.');
+      }
+    },
+    onSuccess: async () => {
+      await logout();
+      navigate('/login', { replace: true });
+    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   const handleProfileSubmit = (e: React.FormEvent) => {
@@ -176,6 +199,52 @@ export default function Profile() {
           </form>
         </CardBody>
       </Card>
+
+      <Card className="mt-6 border-red-200 dark:border-red-900/70">
+        <CardHeader title="Delete account" />
+        <CardBody>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="max-w-lg text-sm text-gray-600 dark:text-gray-400">
+              First export and close every organization you own. Account deletion removes your profile and sign-in records permanently.
+            </p>
+            <Button variant="danger" onClick={() => setShowDelete(true)}>
+              <Trash2 className="h-4 w-4" /> Delete account
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
+      <Modal
+        isOpen={showDelete}
+        onClose={() => !deleteAccountMutation.isPending && setShowDelete(false)}
+        title="Delete account"
+        subtitle="This permanently removes your profile and sign-in records."
+        footer={(
+          <>
+            <Button variant="secondary" disabled={deleteAccountMutation.isPending} onClick={() => setShowDelete(false)}>Cancel</Button>
+            <Button
+              variant="danger"
+              loading={deleteAccountMutation.isPending}
+              disabled={deleteConfirmation !== user.email}
+              onClick={() => deleteAccountMutation.mutate()}
+            >
+              Permanently delete account
+            </Button>
+          </>
+        )}
+      >
+        <p className="mb-4 text-sm text-gray-700 dark:text-gray-300">
+          Enter <strong>{user.email}</strong> to confirm.
+        </p>
+        <Label htmlFor="account-delete-confirmation">Account email confirmation</Label>
+        <Input
+          id="account-delete-confirmation"
+          type="email"
+          autoComplete="off"
+          value={deleteConfirmation}
+          onChange={(event) => setDeleteConfirmation(event.target.value)}
+        />
+      </Modal>
     </div>
   );
 }

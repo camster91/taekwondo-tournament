@@ -4,15 +4,17 @@ import {
   Building2,
   Check,
   CreditCard,
+  Download,
   ExternalLink,
   ShieldCheck,
   Sparkles,
   Users,
   Trophy,
+  Trash2,
 } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { Button, Card, Input, Label, PageHeader, Spinner } from '../components/ui';
+import { Button, Card, Input, Label, Modal, PageHeader, Spinner } from '../components/ui';
 
 type Entitlements = {
   maxTournaments: number;
@@ -73,6 +75,9 @@ export default function OrganizationSettings() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [exportAcknowledged, setExportAcknowledged] = useState(false);
 
   const organizationsQuery = useQuery({
     queryKey: ['organizations', 'current'],
@@ -108,6 +113,30 @@ export default function OrganizationSettings() {
       }));
     },
     onSuccess: ({ url }) => window.location.assign(url),
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const organization = organizationsQuery.data?.organizations[0];
+      if (!organization) throw new Error('Organization not found.');
+      const response = await fetch(`/api/organizations/${organization.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ confirmation: deleteConfirmation, exportAcknowledged }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || 'The organization could not be deleted.');
+      }
+    },
+    onSuccess: async () => {
+      setShowDelete(false);
+      setDeleteConfirmation('');
+      setExportAcknowledged(false);
+      toast.success('Organization permanently deleted.');
+      await queryClient.invalidateQueries({ queryKey: ['organizations', 'current'] });
+    },
     onError: (error: Error) => toast.error(error.message),
   });
 
@@ -260,6 +289,75 @@ export default function OrganizationSettings() {
           );
         })}
       </div>
+
+      {organization.membershipRole === 'owner' && (
+        <Card className="mt-8 border-red-200 dark:border-red-900/70">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-950 dark:text-white">Data export and account closure</h2>
+              <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
+                Export a complete copy first. Deletion permanently removes the organization and its tournaments and cannot be undone.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <a
+                href={`/api/organizations/${organization.id}/export`}
+                download={`${organization.slug}-export.json`}
+                className="btn btn-secondary"
+              >
+                <Download className="h-4 w-4" /> Export organization data
+              </a>
+              <Button variant="danger" onClick={() => setShowDelete(true)}>
+                <Trash2 className="h-4 w-4" /> Delete organization
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <Modal
+        isOpen={showDelete}
+        onClose={() => !deleteMutation.isPending && setShowDelete(false)}
+        title="Delete organization"
+        subtitle="This action deletes tournament records and cannot be undone."
+        footer={(
+          <>
+            <Button variant="secondary" onClick={() => setShowDelete(false)} disabled={deleteMutation.isPending}>Cancel</Button>
+            <Button
+              variant="danger"
+              loading={deleteMutation.isPending}
+              disabled={deleteConfirmation !== organization.slug || !exportAcknowledged}
+              onClick={() => deleteMutation.mutate()}
+            >
+              Permanently delete organization
+            </Button>
+          </>
+        )}
+      >
+        <div className="space-y-5">
+          <p className="text-sm text-slate-700 dark:text-slate-300">
+            Enter <strong>{organization.slug}</strong> to confirm.
+          </p>
+          <div>
+            <Label htmlFor="organization-delete-confirmation">Organization URL confirmation</Label>
+            <Input
+              id="organization-delete-confirmation"
+              autoComplete="off"
+              value={deleteConfirmation}
+              onChange={(event) => setDeleteConfirmation(event.target.value)}
+            />
+          </div>
+          <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              className="mt-1 h-5 w-5"
+              checked={exportAcknowledged}
+              onChange={(event) => setExportAcknowledged(event.target.checked)}
+            />
+            <span>I have exported the organization data</span>
+          </label>
+        </div>
+      </Modal>
     </div>
   );
 }

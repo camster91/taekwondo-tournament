@@ -7,12 +7,25 @@ import {
   type AuthenticatedRequest,
 } from '../middleware/auth.js';
 import { getPlanEntitlements } from '../services/entitlements.js';
+import { validateOrganizationDeletion } from '../services/organization-closure.js';
 import {
   normalizeOrganizationCreateInput,
   normalizePlanChangeInput,
 } from './organizations-validation.js';
 
 const router = Router();
+
+async function ownedOrganization(
+  prisma: PrismaClient,
+  organizationId: string,
+  userId: string,
+) {
+  const membership = await prisma.organizationMember.findUnique({
+    where: { organizationId_userId: { organizationId, userId } },
+    include: { organization: { include: { billingSubscription: true } } },
+  });
+  return membership?.role === 'owner' ? membership.organization : null;
+}
 
 router.get('/current', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
@@ -139,5 +152,79 @@ router.post(
     res.json({ ...result, entitlements: getPlanEntitlements(result.organization.plan) });
   },
 );
+
+router.get('/:id/export', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const organization = await ownedOrganization(prisma, req.params.id, req.user!.id);
+  if (!organization) return res.status(404).json({ error: 'Organization not found' });
+
+  const tournaments = await prisma.tournament.findMany({
+    where: { organizationId: organization.id },
+    include: {
+      registrations: { include: { competitor: true } },
+      divisions: {
+        include: {
+          assignments: true,
+          bracket: { include: { matches: true } },
+        },
+      },
+      weightClasses: true,
+      rules: true,
+      incidents: true,
+      competitorHistories: true,
+      matchupHistories: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+  const members = await prisma.organizationMember.findMany({
+    where: { organizationId: organization.id },
+    include: { user: { select: { id: true, email: true, firstName: true, lastName: true } } },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  res.setHeader('Content-Disposition', `attachment; filename="${organization.slug}-export.json"`);
+  return res.json({
+    exportedAt: new Date().toISOString(),
+    organization,
+    members,
+    tournaments,
+  });
+});
+
+router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const organization = await ownedOrganization(prisma, req.params.id, req.user!.id);
+  if (!organization) return res.status(404).json({ error: 'Organization not found' });
+  const deletion = validateOrganizationDeletion({
+    slug: organization.slug,
+    confirmation: req.body?.confirmation,
+    exportAcknowledged: req.body?.exportAcknowledged,
+    billingStatus: organization.billingSubscription?.status ?? null,
+  });
+  if (!deletion.ok) return res.status(deletion.status).json({ error: deletion.error });
+
+  await prisma.$transaction(async (tx) => {
+    const tournaments = await tx.tournament.findMany({
+      where: { organizationId: organization.id },
+      select: {
+        id: true,
+        registrations: { select: { competitorId: true } },
+      },
+    });
+    const competitorIds = [...new Set(tournaments.flatMap((item) => (
+      item.registrations.map((registration) => registration.competitorId)
+    )))];
+
+    await tx.tournament.deleteMany({ where: { organizationId: organization.id } });
+    await tx.organization.delete({ where: { id: organization.id } });
+    if (competitorIds.length) {
+      await tx.competitor.deleteMany({
+        where: { id: { in: competitorIds }, registrations: { none: {} } },
+      });
+    }
+  });
+
+  return res.status(204).send();
+});
 
 export default router;

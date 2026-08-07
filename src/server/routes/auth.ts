@@ -498,6 +498,43 @@ router.post('/logout', authenticate, async (req: AuthenticatedRequest, res: Resp
   res.json({ success: true });
 });
 
+router.delete('/account', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.id },
+    include: { organizationMembers: { select: { id: true } } },
+  });
+  if (!user) return res.status(404).json({ error: 'Account not found' });
+  if (req.body?.confirmation !== user.email) {
+    return res.status(400).json({ error: 'Enter the exact account email to confirm permanent deletion.' });
+  }
+  if (user.organizationMembers.length) {
+    return res.status(409).json({
+      error: 'Export, close, or leave every organization before deleting this account.',
+    });
+  }
+  if (!user.lastLogin || Date.now() - user.lastLogin.getTime() > 15 * 60 * 1000) {
+    return res.status(403).json({ error: 'Sign in again before permanently deleting this account.' });
+  }
+  if (user.role === 'admin') {
+    const otherActiveAdmins = await prisma.user.count({
+      where: { role: 'admin', isActive: true, id: { not: user.id } },
+    });
+    if (otherActiveAdmins === 0) {
+      return res.status(409).json({ error: 'Transfer system administration before deleting the last administrator.' });
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.magicLink.deleteMany({ where: { email: user.email } }),
+    prisma.user.delete({ where: { id: user.id } }),
+  ]);
+  invalidateAuthCache(user.id);
+  res.clearCookie(SESSION_COOKIE, { path: '/' });
+  res.clearCookie('bowin_csrf', { path: '/' });
+  return res.status(204).send();
+});
+
 router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 

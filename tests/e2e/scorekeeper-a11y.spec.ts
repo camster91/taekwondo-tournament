@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { loginAsDemo } from './helpers';
 
 /**
@@ -180,13 +182,59 @@ test.describe('scorekeeper (a11y)', () => {
 
   test('arrow-key navigation moves focus to the new match heading', async ({ page }) => {
     const tournamentId = await setupScorekeeperTest(page);
+
+    // Earlier scoring tests intentionally advance the shared seeded bracket.
+    // Give this navigation test two deterministic ready matches so its
+    // prerequisite does not depend on browser-project or test order.
+    const prisma = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    });
+    try {
+      const bracket = await prisma.bracket.findFirst({
+        where: {
+          division: { tournamentId },
+          matches: {
+            some: {
+              competitor1Id: { not: null },
+              competitor2Id: { not: null },
+            },
+          },
+        },
+        select: {
+          matches: {
+            where: {
+              competitor1Id: { not: null },
+              competitor2Id: { not: null },
+            },
+            orderBy: [{ roundNumber: 'asc' }, { matchNumber: 'asc' }],
+            take: 2,
+            select: { id: true },
+          },
+        },
+      });
+      const matches = bracket?.matches ?? [];
+      expect(matches).toHaveLength(2);
+      await prisma.match.updateMany({
+        where: { id: { in: matches.map((match) => match.id) } },
+        data: {
+          status: 'ready',
+          winnerId: null,
+          score1: null,
+          score2: null,
+        },
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
+
     await page.goto(`/scorekeeper/${tournamentId}`);
     await page.waitForLoadState('networkidle');
 
     const readyDivision = page
       .locator('button')
-      .filter({ has: page.locator('text=/\\d+ ready/i') })
+      .filter({ hasText: /(?:[2-9]|\d{2,}) ready/i })
       .first();
+    await expect(readyDivision).toBeVisible();
     await readyDivision.click();
 
     // Wait for the match view to load.
@@ -194,6 +242,8 @@ test.describe('scorekeeper (a11y)', () => {
 
     // Press right arrow — focus should move to the new match heading.
     await page.keyboard.press('ArrowRight');
+    const activeHeading = page.locator('[tabindex="-1"][aria-label*="match"]').first();
+    await expect(activeHeading).toBeFocused();
     // The active match heading has tabindex=-1 and its aria-label is
     // "<division> match N of M" — the visible text is just the division
     // name, so check aria-label and tabindex instead of textContent.

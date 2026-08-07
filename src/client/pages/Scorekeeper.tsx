@@ -122,6 +122,8 @@ export default function Scorekeeper() {
   const [pendingUndoId, setPendingUndoId] = useState<string | null>(null);
   const [incidentAction, setIncidentAction] = useState<string>('');
   const incidentDialogRef = useRef<HTMLDivElement>(null);
+  const incidentOpenerRef = useRef<HTMLButtonElement>(null);
+  const incidentWasOpenRef = useRef(false);
 
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['tournament', tournamentId],
@@ -470,6 +472,17 @@ export default function Scorekeeper() {
   useEffect(() => {
     if (!showIncidentModal || !incidentDialogRef.current) return;
     return activateDialogFocus(incidentDialogRef.current, () => setShowIncidentModal(false));
+  }, [showIncidentModal]);
+
+  useEffect(() => {
+    if (showIncidentModal) {
+      incidentWasOpenRef.current = true;
+      return;
+    }
+    if (!incidentWasOpenRef.current) return;
+    incidentWasOpenRef.current = false;
+    const frame = requestAnimationFrame(() => incidentOpenerRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [showIncidentModal]);
 
   // After arrow-key navigation, move focus to the active match heading so
@@ -1058,6 +1071,7 @@ export default function Scorekeeper() {
 
             {/* Report Incident Button */}
             <button
+              ref={incidentOpenerRef}
               onClick={() => setShowIncidentModal(true)}
               className="w-full mt-2 py-3 bg-orange-600 hover:bg-orange-500 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
             >

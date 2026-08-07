@@ -9,7 +9,9 @@
 ## Verified pass
 
 - Security regressions, tenant boundaries, signed management links, consent capture, atomic scoring, offline queues, accessibility workflows, and plan enforcement have automated coverage.
-- 470 unit/integration tests and 31 Chromium browser workflows pass, including responsive organization onboarding, billing-plan presentation, request correlation, and private metrics access control.
+- 473 unit/integration tests and all 120 browser workflows pass across Chromium, Firefox, and WebKit.
+- Account self-deletion and owner-controlled organization export/permanent deletion are implemented with recent-authentication, membership, billing-state, and exact-confirmation safeguards and verified through API and browser workflows.
+- Responsive automation covers 375, 768, 1024, 1440, and 1920 pixel widths and a 44-pixel mobile touch-target baseline. Physical-device and assistive-technology checks remain open.
 - Type checks, lint, production build, Prisma validation, `npm audit`, and nine migrations from an empty PostgreSQL 16 database pass.
 - The image runs as a non-root user and now includes database-aware health, read-only filesystem, temporary filesystem, dropped capabilities, no-new-privileges, graceful shutdown, and bounded Docker logs.
 - Production startup fails closed for core database, authentication, URL, CORS, email, and legal-consent configuration.
@@ -25,7 +27,7 @@
 4. Connect the private metrics endpoint to an external collector, configure a readiness monitor, centralized error tracking/log retention, alert thresholds, and a named on-call recipient; fire test alerts.
 5. Reconcile the repository license/owner/year and obtain operator/counsel approval for privacy, terms, organizer agreement, guardian consent/waiver, retention, subprocessors, and incident process.
 6. Complete current Chrome, Edge, Firefox, iOS Safari, Android Chrome, venue-TV, NVDA/VoiceOver, responsive, and throttled performance checks with screenshots.
-7. Run a production-shaped capacity test for the accepted 50–300 competitor and 1–6 ring pilot envelope.
+7. Repeat capacity and complete workflow-load testing on isolated staging. The local production image sustained 50 concurrent readiness clients for 20 seconds at about 1,317 requests/second, 37.45 ms average, 67 ms p99, and 207 ms maximum across 26,000 requests; this is a baseline, not venue-workflow proof.
 8. Verify Stripe in test mode end-to-end, or formally choose managed invoicing and hide self-service billing for the pilot. Tax, refund, dunning, and cancellation policy must be approved.
 9. Conduct network-loss, duplicate-submit, result-correction, link-revocation, device-replacement, backup/restore, and printed-fallback rehearsals.
 10. Obtain rules acceptance, run one fabricated-data rehearsal, then obtain written consent for a supervised customer pilot.
