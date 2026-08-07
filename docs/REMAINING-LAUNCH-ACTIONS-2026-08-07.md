@@ -42,7 +42,7 @@ This record separates verified repository work from changes that need operator a
 
 - Mailgun reports `ashbi.ca` active and not disabled; its two sending TXT records and sending CNAME are valid. Public DNS has Google plus Mailgun SPF and a quarantine DMARC policy.
 - Mailgun receiving MX records report `unknown`, which is acceptable only if Bowin is send-only. A real sign-in delivery, bounce, complaint, and suppression drill has not been run. Mailgun's domain setting does not currently require TLS.
-- Uptime Kuma is present on the VPS, but a Bowin readiness monitor, notification route, and received test alert have not been verified.
+- Uptime Kuma v2 is present on the VPS. Its live embedded-MariaDB inventory contains zero monitors and zero notification routes, so Bowin currently has no readiness monitor or alert delivery path.
 
 ### Licensing and approvals
 

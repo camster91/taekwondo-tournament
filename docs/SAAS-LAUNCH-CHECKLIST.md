@@ -1,6 +1,6 @@
 # SaaS launch checklist
 
-This repository is technically suitable for a controlled pilot after the automated and external checks below pass. It is not a self-serve paid SaaS yet: organization plans exist in the data model, but checkout, subscription lifecycle, entitlements, invoices, and webhook reconciliation are not implemented.
+This repository is technically suitable for a controlled pilot after the automated and external checks below pass. Checkout, signed/idempotent subscription webhooks, plan entitlements, billing portal access, account deletion, and customer-controlled organization export/deletion are implemented. Provider-side Stripe, tax, invoice, cancellation, dunning, refund, and paid-customer deletion behavior still require end-to-end verification before paid self-service launch.
 
 ## Automated release gates
 
@@ -22,13 +22,13 @@ This repository is technically suitable for a controlled pilot after the automat
 - Name an on-call operator and rehearse database restore, public-link revocation, account disablement, and tournament-day network failure procedures.
 - Run a pilot tournament with non-sensitive test data, then one explicitly consented limited customer before broad availability.
 
-## Paid self-service work not present
+## Paid self-service work still requiring provider or policy verification
 
-- Pricing and plan limits
-- Stripe Checkout or equivalent
-- Subscription and webhook state machine with idempotency
-- Server-side entitlement enforcement
-- Billing portal, invoices, taxes, refunds, cancellation, and dunning
-- Organization self-signup, ownership transfer, and account/data deletion workflow
+- Stripe test and live product/price configuration
+- Hosted Checkout, signed webhook, duplicate delivery, portal, plan-change, failed-payment, cancellation, and expiry drills
+- Tax registration and calculation decision
+- Invoice, refund, cancellation, and dunning policy approval
+- Paid-customer export/deletion after provider cancellation and retention obligations
+- Ownership transfer policy and workflow
 
-Until those are implemented, sell and provision the product as an approval-based managed pilot, not an automated subscription service.
+Until those checks pass, sell and provision the product as an approval-based managed pilot, not an unattended paid subscription service.

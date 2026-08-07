@@ -14,8 +14,8 @@ You'll get an email from the platform admin with a magic link. Click it
 once and you're in for 7 days — no password to remember during a busy
 week.
 
-If you don't have an invite yet, click **Try the demo** on the login
-page to take a 4-hour tour with pre-loaded data.
+If a separately approved demo environment has demo login enabled, click
+**Try the demo** for a pre-loaded tour. Production keeps demo login disabled.
 
 ---
 
@@ -171,7 +171,8 @@ must be enabled only after the published retention policy is approved.
 - **Lost your magic link:** sign in again with the same email; the
   system will send a new one.
 
-> Release candidate verified locally on 2026-08-07 with 432 automated
-> unit/integration tests and 26 browser workflows against a disposable
+> Release candidate verified locally on 2026-08-07 with 473 automated
+> unit/integration tests and 120 browser workflows across Chromium,
+> Firefox, and WebKit against a disposable
 > PostgreSQL 16 database. Production deployment and venue-device smoke
 > testing remain required before launch.
