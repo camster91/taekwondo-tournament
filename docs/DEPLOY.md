@@ -15,6 +15,7 @@ The supported production topology is the full-stack Docker image plus PostgreSQL
 - `SOFT_DELETE_RETENTION_DAYS`: whole days before soft-deleted competitors, tournaments, divisions, and incidents are permanently purged (default `7` when enabled)
 - `REGISTRATION_CONSENT_VERSION`: immutable identifier for the approved notice/terms presented during registration
 - `PRIVACY_NOTICE_URL`, `TOURNAMENT_TERMS_URL`: public HTTPS URLs for those exact approved versions; production startup fails if they are absent or non-HTTPS
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_STARTER_PRICE_ID`, `STRIPE_PRO_PRICE_ID`: configure all four to enable self-service billing; omit them for a managed-invoice pilot
 
 Keep `ENABLE_DEV_AUTH`, `ENABLE_DEMO_LOGIN`, `ENABLE_E2E_AUTH_BYPASS`, and `RATE_LIMIT_DISABLED` unset in production. `POSTGRES_PASSWORD` is mandatory when using `docker-compose.yml`.
 
@@ -37,4 +38,4 @@ Application rollback means redeploying the previous immutable image. Database ro
 
 ## GitHub and Coolify
 
-CI runs on pushes and pull requests to `main`. Deployment requires `COOLIFY_URL`, `COOLIFY_TOKEN`, and `COOLIFY_APP_UUID` repository secrets. A non-2xx/3xx Coolify response fails the workflow; a queued deployment is not proof that the application became healthy, so verify the readiness endpoint and Coolify rollout status separately.
+CI runs on pushes and pull requests to `main`. Production deployment is manual-only and targets the GitHub `production` environment. Configure required reviewers for that environment and store `COOLIFY_URL`, `COOLIFY_TOKEN`, `COOLIFY_APP_UUID`, and `DEPLOY_HEALTHCHECK_URL` there. A non-2xx/3xx Coolify response fails the workflow, and the workflow then polls the database-aware readiness endpoint for up to five minutes.

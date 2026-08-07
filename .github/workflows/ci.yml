@@ -68,7 +68,7 @@ jobs:
         # React Router 7.18.2 has a high advisory in its optional RSC action
         # runtime, which this BrowserRouter SPA does not import or execute.
         # See SECURITY.md. Keep critical findings as a hard release gate.
-        run: npm audit --audit-level=critical
+        run: npm audit --audit-level=high
 
       - name: Build
         run: npm run build
@@ -88,9 +88,9 @@ jobs:
         # won't accept the placeholder). Spin one up on the runner.
         uses: harmon758/postgresql-action@v1
         with:
-          # Defaults: postgres:15, db=postgres, user=postgres, password=postgres
+          # Match the supported production database major version.
           # We override the password to match the project's docker-compose convention.
-          postgresql version: '15'
+          postgresql version: '16'
           postgresql db: 'taekwondo_tournament'
           postgresql user: 'taekwondo'
           postgresql password: 'taekwondo'
@@ -99,15 +99,8 @@ jobs:
         run: echo "DATABASE_URL=postgresql://taekwondo:taekwondo@localhost:5432/taekwondo_tournament" >> $GITHUB_ENV
 
       - name: E2E tests
-        # Closes D20: e2e step had continue-on-error: true so a
-        # failing e2e could merge. Now e2e is a hard gate.
-        # On the CI runner, browser cold-start + 23 tests = ~7-10 min.
-        # We exclude the 8 scorekeeper-a11y tests (which take 70s
-        # each on CI due to repeated login() calls) from the CI
-        # run. They're covered by:
-        #   1. Manual smoke test (docs/PILOT-VERIFICATION-2026-06-23.md,
-        #      17/17 PASS)
-        #   2. Local e2e (npm run test:e2e, runs the full suite in 26s)
-        run: npx playwright test --config playwright.config.ts --grep-invert "scorekeeper \(a11y\)"
+        # Browser coverage is a hard gate, including scoring, offline replay,
+        # accessibility, organization onboarding, and billing webhooks.
+        run: npx playwright test --config playwright.config.ts
         env:
           JWT_SECRET: ci-throwaway-secret-not-used-in-tests-min-32-chars-xx
