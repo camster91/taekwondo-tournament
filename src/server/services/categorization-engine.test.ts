@@ -22,7 +22,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { canMerge, type DivisionGroup } from './categorization-engine.js';
+import { autoCategorize, canMerge, previewCategorization, type DivisionGroup } from './categorization-engine.js';
 
 // ─── helpers ──────────────────────────────────────────────────────────
 
@@ -281,5 +281,92 @@ describe('canMerge — age-gap coverage (custom age groups)', () => {
     const a = mkGroup({ ageMin: 6, ageMax: 9, beltColors: ['Yellow'], registrations: [reg({ id: 'a', ageAtTournament: 7, belt: 'Yellow' })] });
     const b = mkGroup({ ageMin: 11, ageMax: 14, beltColors: ['Yellow'], registrations: [reg({ id: 'b', ageAtTournament: 12, belt: 'Yellow' })] });
     expect(canMerge(a, b)).toBe(canMerge(b, a));
+  });
+});
+
+describe('previewCategorization — incomplete registration safety', () => {
+  const config = { divisionThreshold: 8 };
+
+  it('excludes a registration with no tournament age and warns staff', () => {
+    const incomplete = {
+      ...reg({ id: 'missing-age', ageAtTournament: 10 }),
+      ageAtTournament: null,
+      competitorId: 'competitor-missing-age',
+    };
+
+    const result = previewCategorization([incomplete], config);
+
+    expect(result.divisions).toHaveLength(0);
+    expect(result.totalCompetitors).toBe(0);
+    expect(result.warnings).toContain(
+      '1 registration(s) need review before auto-categorization: missing tournament age.'
+    );
+  });
+
+  it('does not place a sparring registration with no weight into the lightest class', () => {
+    const incomplete = {
+      ...reg({ id: 'missing-weight', ageAtTournament: 10, weightAtRegistration: null }),
+      competitorId: 'competitor-missing-weight',
+      patterns: false,
+      sparring: true,
+      competitor: {
+        ...reg().competitor,
+        weightLbs: null,
+      },
+    };
+
+    const result = previewCategorization([incomplete], config);
+
+    expect(result.divisions).toHaveLength(0);
+    expect(result.totalCompetitors).toBe(0);
+    expect(result.warnings).toContain(
+      '1 sparring registration(s) need review before auto-categorization: missing weight.'
+    );
+  });
+});
+
+describe('autoCategorize — pinned division preservation', () => {
+  it('deletes only generated divisions and preserves manually pinned divisions', async () => {
+    const deleteCalls: unknown[] = [];
+    const tx = {
+      division: {
+        deleteMany: async (args: unknown) => {
+          deleteCalls.push(args);
+          return { count: 1 };
+        },
+        create: async () => ({ id: 'generated-division' }),
+      },
+      divisionAssignment: {
+        createMany: async () => ({ count: 1 }),
+      },
+    };
+    const prisma = {
+      $transaction: async (callback: (client: typeof tx) => Promise<void>) => callback(tx),
+    };
+    const pinned = {
+      ...reg({ id: 'pinned-registration', ageAtTournament: 10 }),
+      competitorId: 'pinned-competitor',
+      manualDivisionId: 'pinned-division',
+    };
+    const generated = {
+      ...reg({ id: 'generated-registration', ageAtTournament: 10 }),
+      competitorId: 'generated-competitor',
+    };
+
+    await autoCategorize(
+      prisma as never,
+      'tournament-1',
+      [pinned, generated],
+      { divisionThreshold: 8 }
+    );
+
+    expect(deleteCalls).toEqual([
+      {
+        where: {
+          tournamentId: 'tournament-1',
+          id: { notIn: ['pinned-division'] },
+        },
+      },
+    ]);
   });
 });
