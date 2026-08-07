@@ -1,7 +1,9 @@
 # Deployment readiness report: Bowin
 
-**Date:** 2026-08-07  
-**Stack:** React/Vite SPA, Express/Node API, Prisma, PostgreSQL 16, Docker/Coolify  
+**Date:** 2026-08-07
+
+**Stack:** React/Vite SPA, Express/Node API, Prisma, PostgreSQL 16, Docker/Coolify
+
 **Decision:** **Do not deploy publicly yet.** The repository is a controlled-pilot release candidate; external production evidence is incomplete.
 
 ## Verified pass
