@@ -22,6 +22,7 @@ import { StatTile } from '../components/ui';
 import { Select } from '../components/ui';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
 import { makeCheckInOperation } from '../utils/offline-operation-queue';
+import { CHECK_IN_ACCESSIBLE_LABELS, formatCheckInWeight } from '../utils/check-in-display';
 
 interface Registration {
   id: string;
@@ -305,6 +306,7 @@ export default function CheckIn() {
             <div className="flex items-center">
               <Link
                 to={`/tournaments/${tournamentId}`}
+                aria-label={CHECK_IN_ACCESSIBLE_LABELS.back}
                 className="mr-3 text-gray-600 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <ChevronLeft className="h-6 w-6" />
@@ -369,6 +371,7 @@ export default function CheckIn() {
 
         <div className="flex gap-2 overflow-x-auto pb-1 flex-wrap">
           <Select
+            aria-label={CHECK_IN_ACCESSIBLE_LABELS.status}
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as 'all' | 'checked' | 'unchecked')}
             className="text-sm"
@@ -379,6 +382,7 @@ export default function CheckIn() {
           </Select>
 
           <Select
+            aria-label={CHECK_IN_ACCESSIBLE_LABELS.event}
             value={filterEvent}
             onChange={(e) => setFilterEvent(e.target.value as 'all' | 'patterns' | 'sparring')}
             className="text-sm"
@@ -389,6 +393,7 @@ export default function CheckIn() {
           </Select>
 
           <Select
+            aria-label={CHECK_IN_ACCESSIBLE_LABELS.school}
             value={schoolFilter}
             onChange={(e) => setSchoolFilter(e.target.value)}
             className="text-sm"
@@ -402,6 +407,7 @@ export default function CheckIn() {
           </Select>
 
           <Select
+            aria-label={CHECK_IN_ACCESSIBLE_LABELS.sort}
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as 'name' | 'school' | 'status')}
             className="text-sm"
@@ -505,7 +511,7 @@ export default function CheckIn() {
                 {registration.checkedIn && registration.checkInWeight && (
                   <div className="mt-2 text-sm text-gray-600 dark:text-gray-400 flex items-center">
                     <Scale className="h-4 w-4 mr-1" />
-                    Weigh-in: {registration.checkInWeight} lbs
+                    Weigh-in: {formatCheckInWeight(registration.checkInWeight)} lbs
                     {registration.weightAtRegistration &&
                       registration.checkInWeight !== registration.weightAtRegistration && (
                         <span

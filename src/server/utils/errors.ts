@@ -266,6 +266,23 @@ export function toApiError(error: unknown): ApiError {
     return error.toJSON();
   }
 
+  // `express.json()` reports invalid JSON as a SyntaxError decorated by
+  // body-parser with `type: 'entity.parse.failed'` and `status: 400`.
+  // Treat it as client input instead of falling through to INTERNAL_ERROR.
+  if (
+    error instanceof SyntaxError
+    && typeof error === 'object'
+    && 'type' in error
+    && error.type === 'entity.parse.failed'
+  ) {
+    return {
+      error: 'Malformed JSON request body',
+      code: ErrorCode.VALIDATION_ERROR,
+      statusCode: 400,
+      recoverable: true,
+    };
+  }
+
   if (error instanceof Error) {
     // Handle Prisma errors
     if (error.message.includes('Unique constraint failed')) {
