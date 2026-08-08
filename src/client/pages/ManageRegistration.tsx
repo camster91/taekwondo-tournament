@@ -250,8 +250,8 @@ export default function ManageRegistration() {
           </button>
 
           {/* Tournament context */}
-          <div className="mb-4 p-4 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700">
-            <div className="flex items-center gap-2 text-indigo-800 dark:text-indigo-200">
+          <div className="mb-4 p-4 rounded-lg bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700">
+            <div className="flex items-center gap-2 text-primary-800 dark:text-primary-200">
               <Calendar className="h-4 w-4" />
               <span className="font-medium">{registration.tournamentName}</span>
               <span className="text-sm">·</span>
@@ -259,7 +259,7 @@ export default function ManageRegistration() {
                 {new Date(registration.tournamentDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </span>
             </div>
-            <div className="text-xs text-indigo-700 dark:text-indigo-300 mt-1">
+            <div className="text-xs text-primary-700 dark:text-primary-300 mt-1">
               Confirmation code: <span className="font-mono font-bold">{registration.confirmationCode}</span>
               {registration.checkedIn && (
                 <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
@@ -408,7 +408,7 @@ export default function ManageRegistration() {
                           checked={!!form[evt as keyof ManageRegistration]}
                           disabled={!editMode}
                           onChange={(e) => setForm({ ...form, [evt]: e.target.checked })}
-                          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                         />
                         <span className="capitalize">{evt}</span>
                       </label>
@@ -422,7 +422,7 @@ export default function ManageRegistration() {
                       checked={!!form.competeWithOlder}
                       disabled={!editMode}
                       onChange={(e) => setForm({ ...form, competeWithOlder: e.target.checked })}
-                      className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                     />
                     <span>
                       <span className="font-medium">Compete in older age band</span>
@@ -441,7 +441,7 @@ export default function ManageRegistration() {
                       onChange={(e) => setForm({ ...form, specialNeeds: e.target.value })}
                       rows={3}
                       placeholder="Any accommodations or medical info the director should know."
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
                     />
                   ) : (
                     <ReadonlyField value={registration.specialNeeds || 'None'} />
@@ -491,7 +491,7 @@ export default function ManageRegistration() {
         <Card>
           <CardBody className="p-8">
             <div className="text-center mb-6">
-              <Edit3 className="h-12 w-12 text-indigo-500 mx-auto mb-3" aria-hidden="true" />
+              <Edit3 className="h-12 w-12 text-primary-500 mx-auto mb-3" aria-hidden="true" />
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Manage registration</h1>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Update competitor details or withdraw using the private link from your confirmation screen or email.

@@ -1,7 +1,7 @@
 {
-  "name": "martial-arts-tournament-manager",
+  "name": "bowin-tournament-os",
   "version": "1.0.0",
-  "description": "Tournament management application for martial arts competitions",
+  "description": "Bowin Tournament OS for registration, brackets, scorekeeping, and live displays",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
@@ -28,9 +28,12 @@
     "build:full": "prisma generate && prisma db push && vite build && tsc -p tsconfig.server.json"
   },
   "keywords": [
+    "bowin",
+    "taekwondo",
     "martial-arts",
     "tournament",
-    "brackets"
+    "brackets",
+    "scorekeeping"
   ],
   "author": "",
   "license": "UNLICENSED",

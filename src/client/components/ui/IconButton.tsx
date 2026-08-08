@@ -29,7 +29,7 @@ const variantClasses: Record<Variant, string> = {
   ghost:
     'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700/50 rounded-md',
   primary:
-    'text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 dark:text-slate-400 dark:hover:text-indigo-400 dark:hover:bg-indigo-950/50 rounded-md',
+    'text-slate-700 hover:text-primary-600 hover:bg-primary-50 dark:text-slate-400 dark:hover:text-primary-400 dark:hover:bg-primary-950/50 rounded-md',
   danger:
     'text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:text-red-400 dark:hover:bg-red-950/50 rounded-md',
   success:
@@ -74,7 +74,7 @@ export default function IconButton({
   const finalVariant: Variant = destructive ? 'danger' : variant;
   const classes = [
     'inline-flex items-center justify-center flex-shrink-0 transition-colors',
-    'focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2',
+    'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
     'disabled:opacity-50 disabled:cursor-not-allowed',
     sizeClasses[size],
     variantClasses[finalVariant],

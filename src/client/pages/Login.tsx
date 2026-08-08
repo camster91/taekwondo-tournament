@@ -25,6 +25,7 @@ import { Card, CardBody } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
+import { BowinLogo } from '../components/brand/BowinLogo';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -168,14 +169,8 @@ export default function Login() {
       {/* Header — minimal brand bar */}
       <header className="border-b border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-950/60 backdrop-blur-xl sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/login" className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-[#0F172A] flex items-center justify-center shadow-md border border-slate-800">
-              <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 6 L12 18 L20 6" className="text-white" />
-                <circle cx="12" cy="18" r="1.4" fill="#DC2626" stroke="none" />
-              </svg>
-            </div>
-            <span className="text-base font-semibold tracking-tight">bowin</span>
+          <Link to="/login" aria-label="Bowin home">
+            <BowinLogo />
           </Link>
           <div className="flex items-center gap-4 text-sm">
             <span className="text-slate-600 hidden sm:inline">Real tournament management, end-to-end.</span>
@@ -427,16 +422,16 @@ function CodeForm({
     <div className="space-y-5 animate-slide-up">
       {/* Dev mode: show magic link directly */}
       {devModeData && (
-        <div className="relative overflow-hidden rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-gradient-to-br from-indigo-50 via-violet-50 to-fuchsia-50 dark:from-indigo-950/40 dark:via-violet-950/40 dark:to-fuchsia-950/40 p-5">
+        <div className="relative overflow-hidden rounded-xl border border-primary-200 dark:border-primary-800/60 bg-gradient-to-br from-primary-50 via-accent-50 to-fuchsia-50 dark:from-primary-950/40 dark:via-accent-950/40 dark:to-fuchsia-950/40 p-5">
           {/* Decorative glow */}
-          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-400/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute top-0 right-0 w-32 h-32 bg-primary-400/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
           
           <div className="relative">
             <div className="flex items-center gap-2 mb-3">
-              <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/50">
-                <Terminal className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-primary-100 dark:bg-primary-900/50">
+                <Terminal className="h-3.5 w-3.5 text-primary-600 dark:text-primary-400" />
               </div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Dev Mode — Email Not Configured</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-primary-600 dark:text-primary-400">Dev Mode — Email Not Configured</span>
             </div>
 
             <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
@@ -455,7 +450,7 @@ function CodeForm({
                 />
                 <button
                   onClick={() => handleCopy('url', devModeData.magicUrl)}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-colors"
                 >
                   <Copy className="h-3.5 w-3.5" />
                   {copied === 'url' ? 'Copied!' : 'Copy link'}
@@ -476,7 +471,7 @@ function CodeForm({
             <div>
               <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">6-digit code</div>
               <div className="flex items-center gap-2">
-                <div className="flex-1 text-center text-2xl font-mono font-bold tracking-[0.3em] text-indigo-700 dark:text-indigo-300 py-2">
+                <div className="flex-1 text-center text-2xl font-mono font-bold tracking-[0.3em] text-primary-700 dark:text-primary-300 py-2">
                   {devModeData.code}
                 </div>
                 <button

@@ -406,16 +406,16 @@ export default function TournamentDetail() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link
           to={`/tournaments/${id}/director`}
-          className="group flex items-start gap-4 p-4 rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
+          className="group flex items-start gap-4 p-4 rounded-xl border-2 border-primary-200 dark:border-primary-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="flex-shrink-0 bg-indigo-600 p-3 rounded-lg">
+          <div className="flex-shrink-0 bg-primary-600 p-3 rounded-lg">
             <LayoutDashboard className="h-6 w-6 text-white" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-900 dark:text-slate-100">Director Dashboard</p>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Tournament control center</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-indigo-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-primary-600 transition-colors flex-shrink-0" />
         </Link>
 
         <Link
@@ -494,15 +494,15 @@ export default function TournamentDetail() {
 
       {/* Share School Portal — requires a public scoreboard slug so the
           share link cannot be used with UUID alone. */}
-      <div className="mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
+      <div className="mb-6 p-4 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 flex-1 min-w-0">
+          <div className="flex items-center gap-2 text-primary-700 dark:text-primary-300 flex-1 min-w-0">
             <Building2 className="h-5 w-5 flex-shrink-0" />
             <span className="font-medium">School / Coach Portal</span>
             {schoolPortalUrl ? (
-              <span className="text-sm truncate hidden sm:block text-indigo-500 dark:text-indigo-400">{schoolPortalUrl}</span>
+              <span className="text-sm truncate hidden sm:block text-primary-500 dark:text-primary-400">{schoolPortalUrl}</span>
             ) : (
-              <span className="text-sm text-indigo-500 dark:text-indigo-400">
+              <span className="text-sm text-primary-500 dark:text-primary-400">
                 Generate a share link in Settings first
               </span>
             )}
@@ -1141,13 +1141,13 @@ function BroadcastModal({
         <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <Mail className="h-5 w-5 text-indigo-500" />
+              <Mail className="h-5 w-5 text-primary-500" />
               Email registered parents
             </h2>
             <CloseButton onClose={onClose} label="Close broadcast composer" />
           </div>
           <div className="p-6 space-y-4">
-            <div className="rounded-md bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 p-3 text-sm text-indigo-900 dark:text-indigo-200">
+            <div className="rounded-md bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700 p-3 text-sm text-primary-900 dark:text-primary-200">
               <strong>{recipientCount}</strong> parent{recipientCount === 1 ? '' : 's'} have an email on file.
               {testMode && <span className="ml-1 text-amber-700 dark:text-amber-300">Test mode: no one will receive this until you uncheck "Send as test".</span>}
             </div>
@@ -1159,7 +1159,7 @@ function BroadcastModal({
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="Reminder: Tournament starts Saturday at 9am"
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+                className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
               />
             </div>
             <div>
@@ -1170,7 +1170,7 @@ function BroadcastModal({
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder={'Hi {{parent_first_name}},\n\n{{competitor_first_name}} is registered for {{tournament_name}} on {{tournament_date}} at {{tournament_location}}.\n\nPlease arrive 30 minutes early.'}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 font-mono placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 font-mono placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
               />
               <details className="text-xs text-gray-500 mt-1">
                 <summary className="cursor-pointer font-medium">Available merge fields</summary>
@@ -1186,7 +1186,7 @@ function BroadcastModal({
                 type="checkbox"
                 checked={testMode}
                 onChange={(e) => setTestMode(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
               />
               <span>
                 <span className="font-medium">Send as test (no emails go out)</span>
@@ -1353,15 +1353,15 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
         </div>
 
         {/* Matches stat */}
-        <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/30 dark:to-slate-900/20 border border-indigo-200/60 dark:border-indigo-900/40">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Matches</div>
+        <div className="p-4 rounded-xl bg-gradient-to-br from-primary-50 to-white dark:from-primary-950/30 dark:to-slate-900/20 border border-primary-200/60 dark:border-primary-900/40">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary-600 dark:text-primary-400">Matches</div>
           <div className="text-2xl font-bold tabular-nums mt-0.5">
             <span className="text-slate-900 dark:text-white">{data.matches.completed}</span>
             <span className="text-slate-600"> / {data.matches.total}</span>
           </div>
-          <div className="mt-2 h-1.5 bg-indigo-100 dark:bg-indigo-950 rounded-full overflow-hidden">
+          <div className="mt-2 h-1.5 bg-primary-100 dark:bg-primary-950 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-700"
+              className="h-full bg-gradient-to-r from-primary-500 to-accent-500 transition-all duration-700"
               style={{ width: `${data.matches.total > 0 ? (data.matches.completed / data.matches.total) * 100 : 0}%` }}
             />
           </div>
@@ -1385,7 +1385,7 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
             <Link
               to={`/display/${tournamentId}`}
               target="_blank"
-              className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+              className="text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
             >
               Open public scoreboard <ExternalLink className="h-3 w-3" />
             </Link>

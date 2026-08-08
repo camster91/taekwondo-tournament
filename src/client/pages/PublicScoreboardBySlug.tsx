@@ -52,7 +52,7 @@ export default function PublicScoreboardBySlug() {
   }
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-      <Loader2 className="h-16 w-16 text-indigo-400 animate-spin" />
+      <Loader2 className="h-16 w-16 text-primary-400 animate-spin" />
     </div>
   );
 }

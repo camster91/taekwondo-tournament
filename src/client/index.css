@@ -11,26 +11,35 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* Brand: deep indigo → vivid blue (more confident than the old flat blue) */
-  --color-primary-50:  #eef2ff;
-  --color-primary-100: #e0e7ff;
-  --color-primary-200: #c7d2fe;
-  --color-primary-300: #a5b4fc;
-  --color-primary-400: #818cf8;
-  --color-primary-500: #6366f1;
-  --color-primary-600: #4f46e5;
-  --color-primary-700: #4338ca;
-  --color-primary-800: #3730a3;
-  --color-primary-900: #312e81;
+  /* Bowin: arena ink for operational trust, belt red for identity. */
+  --color-brand-ink: #0b1220;
+  --color-brand-red: #e11d48;
+  --color-brand-rose: #fb7185;
+  --color-brand-gold: #f59e0b;
+  --color-primary-50:  #f1f5f9;
+  --color-primary-100: #e2e8f0;
+  --color-primary-200: #cbd5e1;
+  --color-primary-300: #94a3b8;
+  --color-primary-400: #64748b;
+  --color-primary-500: #334155;
+  --color-primary-600: #1e293b;
+  --color-primary-700: #172033;
+  --color-primary-800: #111827;
+  --color-primary-900: #0b1220;
+  --color-primary-950: #080d17;
 
   /* Accent: amber for highlights, badges, the trophy */
-  --color-accent-50:  #fffbeb;
-  --color-accent-100: #fef3c7;
-  --color-accent-200: #fde68a;
-  --color-accent-400: #fbbf24;
-  --color-accent-500: #f59e0b;
-  --color-accent-600: #d97706;
-  --color-accent-700: #b45309;
+  --color-accent-50:  #fff1f2;
+  --color-accent-100: #ffe4e6;
+  --color-accent-200: #fecdd3;
+  --color-accent-300: #fda4af;
+  --color-accent-400: #fb7185;
+  --color-accent-500: #e11d48;
+  --color-accent-600: #be123c;
+  --color-accent-700: #9f1239;
+  --color-accent-800: #881337;
+  --color-accent-900: #4c0519;
+  --color-accent-950: #2a0612;
 
   /* Surface: cool neutral, near-white in light, deep in dark */
   --color-surface-0:  #ffffff;
@@ -80,7 +89,7 @@
   --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
   --shadow-lg: 0 12px 24px -6px rgba(15, 23, 42, 0.10), 0 4px 8px -4px rgba(15, 23, 42, 0.06);
   --shadow-xl: 0 24px 48px -12px rgba(15, 23, 42, 0.14), 0 8px 16px -8px rgba(15, 23, 42, 0.08);
-  --shadow-glow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+  --shadow-glow: 0 0 0 4px rgba(225, 29, 72, 0.14);
 }
 
 /* Base */
@@ -119,6 +128,8 @@ h1 { font-size: 1.875rem; font-weight: 700; letter-spacing: -0.028em; }
 h2 { font-size: 1.375rem; font-weight: 600; }
 h3 { font-size: 1.125rem; font-weight: 600; }
 h4 { font-size: 1rem; font-weight: 600; }
+
+.brand-wordmark { font-feature-settings: 'ss01', 'ss03', 'cv11'; }
 
 /* Scrollbars — thin, minimal */
 * {
@@ -262,13 +273,13 @@ a:focus:not(:focus-visible) {
   .btn-danger:hover:not(:disabled) { background: #dc2626; }
 
   .btn-gradient {
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    background: linear-gradient(135deg, #e11d48, #be123c);
     color: white;
-    box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    box-shadow: 0 2px 4px rgba(225, 29, 72, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   }
   .btn-gradient:hover:not(:disabled) {
-    background: linear-gradient(135deg, #4f46e5, #7c3aed);
-    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    background: linear-gradient(135deg, #be123c, #9f1239);
+    box-shadow: 0 8px 20px rgba(225, 29, 72, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.18);
     transform: translateY(-1px);
   }
 

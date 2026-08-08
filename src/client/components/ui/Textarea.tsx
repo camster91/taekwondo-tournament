@@ -14,7 +14,7 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           'bg-white dark:bg-slate-900',
           'text-sm text-slate-900 dark:text-slate-100',
           'placeholder:text-slate-400',
-          'focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500',
+          'focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500',
           'transition-all resize-y',
           error && 'border-red-500 focus:ring-red-500/30 focus:border-red-500',
           className,

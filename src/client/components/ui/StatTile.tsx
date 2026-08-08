@@ -19,11 +19,11 @@ const accentValueClasses: Record<NonNullable<StatTileProps['accent']>, string> =
   success: 'text-emerald-600 dark:text-emerald-400',
   warning: 'text-amber-600 dark:text-amber-400',
   danger: 'text-red-600 dark:text-red-400',
-  indigo: 'text-indigo-600 dark:text-indigo-400',
+  indigo: 'text-primary-600 dark:text-primary-400',
   blue: 'text-blue-600 dark:text-blue-400',
   green: 'text-emerald-600 dark:text-emerald-400',
   yellow: 'text-amber-600 dark:text-amber-400',
-  purple: 'text-violet-600 dark:text-violet-400',
+  purple: 'text-accent-600 dark:text-accent-400',
   red: 'text-red-600 dark:text-red-400',
 };
 
@@ -32,11 +32,11 @@ const accentIconBgClasses: Record<NonNullable<StatTileProps['accent']>, string> 
   success: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
   warning: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
   danger: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
-  indigo: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400',
+  indigo: 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400',
   blue: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
   green: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
   yellow: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
-  purple: 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400',
+  purple: 'bg-accent-100 dark:bg-accent-900/30 text-accent-600 dark:text-accent-400',
   red: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
 };
 

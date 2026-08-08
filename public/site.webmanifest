@@ -1,0 +1,23 @@
+{
+  "name": "Bowin Tournament OS",
+  "short_name": "Bowin",
+  "description": "Tournament operations for registration, brackets, scorekeeping, and live displays.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0B1220",
+  "icons": [
+    {
+      "src": "/brand/bowin-app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/brand/bowin-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

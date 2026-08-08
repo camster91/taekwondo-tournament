@@ -412,14 +412,14 @@ export default function PublicRegister() {
               <p className="text-gray-600 dark:text-gray-400 mb-6">{result.message}</p>
 
               {result.registration.confirmationCode && (
-                <div className="bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-lg p-5 mb-6">
-                  <p className="text-xs font-medium uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mb-2">
+                <div className="bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700 rounded-lg p-5 mb-6">
+                  <p className="text-xs font-medium uppercase tracking-wider text-primary-700 dark:text-primary-300 mb-2">
                     Your confirmation code
                   </p>
                   <div className="flex items-center justify-between gap-3">
                     <code
                       data-testid="confirmation-code"
-                      className="text-2xl font-mono font-bold text-indigo-900 dark:text-indigo-100 tracking-widest select-all"
+                      className="text-2xl font-mono font-bold text-primary-900 dark:text-primary-100 tracking-widest select-all"
                     >
                       {result.registration.confirmationCode}
                     </code>
@@ -429,7 +429,7 @@ export default function PublicRegister() {
                         navigator.clipboard?.writeText(result.registration.confirmationCode || '');
                       }}
                       aria-label="Copy confirmation code"
-                      className="text-xs px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
+                      className="text-xs px-3 py-1.5 rounded-md bg-primary-600 hover:bg-primary-700 text-white font-medium"
                     >
                       Copy
                     </button>
@@ -437,13 +437,13 @@ export default function PublicRegister() {
                       type="button"
                       onClick={() => window.print()}
                       aria-label="Print registration confirmation"
-                      className="text-xs px-3 py-1.5 rounded-md border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 font-medium"
+                      className="text-xs px-3 py-1.5 rounded-md border border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 font-medium"
                     >
                       <Printer className="inline h-3 w-3 mr-1" aria-hidden="true" />
                       Print
                     </button>
                   </div>
-                  <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-3">
+                  <p className="text-xs text-primary-700 dark:text-primary-300 mt-3">
                     Save this — you'll need it at check-in. Lost it?{' '}
                     <a href="/check-registration" className="underline hover:no-underline">
                       Look up your registration
@@ -495,7 +495,7 @@ export default function PublicRegister() {
               </div>
 
               {registeredCount > 1 && (
-                <p className="text-sm text-indigo-700 dark:text-indigo-300 mb-4 font-medium">
+                <p className="text-sm text-primary-700 dark:text-primary-300 mb-4 font-medium">
                   {registeredCount} competitors registered from this device.
                 </p>
               )}
@@ -668,13 +668,13 @@ export default function PublicRegister() {
             >
               {/* Step Indicator */}
               <div className="flex items-center gap-2 mb-2">
-                <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-700'}`}>
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[10px]">1</span>
+                <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' : 'bg-gray-100 text-gray-700'}`}>
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-white text-[10px]">1</span>
                   <span>Athlete</span>
                 </div>
-                <div className={`h-px flex-1 min-w-[1rem] ${step >= 2 ? 'bg-indigo-400' : 'bg-gray-200 dark:bg-gray-700'}`} />
-                <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 2 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300' : 'bg-gray-100 text-gray-700'}`}>
-                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-indigo-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
+                <div className={`h-px flex-1 min-w-[1rem] ${step >= 2 ? 'bg-primary-400' : 'bg-gray-200 dark:bg-gray-700'}`} />
+                <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 2 ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' : 'bg-gray-100 text-gray-700'}`}>
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-primary-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
                   {/* Show "Parent" on small screens, "Parent & Consent" on
                       sm+ — both labels fit in the pill without truncating. */}
                   <span>
@@ -823,7 +823,7 @@ export default function PublicRegister() {
                         preview matches the eventual division exactly. */}
                     {formData.dateOfBirth && ageBandPreview && (
                       <p
-                        className="text-xs text-indigo-700 dark:text-indigo-300 mt-1.5 font-medium"
+                        className="text-xs text-primary-700 dark:text-primary-300 mt-1.5 font-medium"
                         role="status"
                         aria-live="polite"
                       >

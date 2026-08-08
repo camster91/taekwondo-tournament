@@ -520,8 +520,8 @@ export default function BracketEditor() {
               Closes H2 from the UI audit — directors can fix a kid who
               showed up unregistered without rebuilding everything. */}
           {showAddPicker && (
-            <div className="mb-3 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30">
-              <div className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mb-2">
+            <div className="mb-3 p-3 rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/30">
+              <div className="text-xs font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-300 mb-2">
                 Add from this tournament
               </div>
               {unassignedData?.registrations && unassignedData.registrations.length > 0 ? (
@@ -919,7 +919,7 @@ function MatchCard({
           onClick={onSwap}
           aria-label={`Swap competitors in match ${label}`}
           title="Swap competitors (useful for fixing a bad auto-seed)"
-          className="w-full px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center justify-center gap-1"
+          className="w-full px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 flex items-center justify-center gap-1"
         >
           <ArrowLeftRight className="h-3 w-3" aria-hidden="true" />
           Swap

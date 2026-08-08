@@ -224,13 +224,13 @@ export default function SchoolPortal() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-500 to-violet-500 px-6 py-8">
+        <div className="bg-gradient-to-r from-primary-500 to-accent-500 px-6 py-8">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center gap-3 mb-2">
               <Building2 className="h-8 w-8 text-white/90" />
               <h1 className="text-2xl font-bold text-white">School / Dojang Portal</h1>
             </div>
-            <p className="text-indigo-200 text-sm">{tournamentName}</p>
+            <p className="text-primary-200 text-sm">{tournamentName}</p>
           </div>
         </div>
 
@@ -267,7 +267,7 @@ export default function SchoolPortal() {
                     value={schoolSearch}
                     onChange={(e) => setSchoolSearch(e.target.value)}
                     aria-label="Search schools"
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
                 </div>
               </div>
@@ -277,11 +277,11 @@ export default function SchoolPortal() {
                   <button
                     key={school}
                     onClick={() => selectSchool(school)}
-                    className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-md transition-all text-left group"
+                    className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-500 hover:shadow-md transition-all text-left group"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="bg-indigo-100 dark:bg-indigo-900/30 p-2 rounded-lg group-hover:bg-indigo-200 dark:group-hover:bg-indigo-900/50 transition-colors">
-                        <Building2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                      <div className="bg-primary-100 dark:bg-primary-900/30 p-2 rounded-lg group-hover:bg-primary-200 dark:group-hover:bg-primary-900/50 transition-colors">
+                        <Building2 className="h-5 w-5 text-primary-600 dark:text-primary-400" />
                       </div>
                       <span className="font-medium text-gray-900 dark:text-white text-sm">
                         {school}
@@ -307,7 +307,7 @@ export default function SchoolPortal() {
   if (dataLoading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-        <div className="bg-gradient-to-r from-indigo-500 to-violet-500 px-6 py-8">
+        <div className="bg-gradient-to-r from-primary-500 to-accent-500 px-6 py-8">
           <div className="max-w-6xl mx-auto">
             <h1 className="text-2xl font-bold text-white">Loading...</h1>
           </div>
@@ -355,11 +355,11 @@ export default function SchoolPortal() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-500 to-violet-500 px-6 py-6">
+      <div className="bg-gradient-to-r from-primary-500 to-accent-500 px-6 py-6">
         <div className="max-w-6xl mx-auto">
           <button
             onClick={() => setSearchParams({})}
-            className="inline-flex items-center text-sm text-indigo-200 hover:text-white mb-3 transition-colors"
+            className="inline-flex items-center text-sm text-primary-200 hover:text-white mb-3 transition-colors"
           >
             <ChevronLeft className="h-4 w-4 mr-1" />
             Change School
@@ -370,7 +370,7 @@ export default function SchoolPortal() {
                 <Building2 className="h-7 w-7 text-white/90" />
                 <h1 className="text-2xl font-bold text-white">{schoolData.schoolName}</h1>
               </div>
-              <div className="flex items-center gap-4 mt-2 text-indigo-200 text-sm">
+              <div className="flex items-center gap-4 mt-2 text-primary-200 text-sm">
                 <span className="flex items-center gap-1">
                   <Trophy className="h-4 w-4" />
                   {schoolData.tournament.name}
@@ -524,7 +524,7 @@ export default function SchoolPortal() {
                     value={competitorSearch}
                     onChange={(e) => setCompetitorSearch(e.target.value)}
                     aria-label="Search competitors"
-                    className="pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-56"
+                    className="pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-56"
                   />
                 </div>
               )}

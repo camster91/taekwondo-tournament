@@ -95,7 +95,7 @@ export default function CheckRegistration() {
         <Card>
           <CardBody className="p-8">
             <div className="text-center mb-6">
-              <Search className="h-12 w-12 text-indigo-500 mx-auto mb-3" aria-hidden="true" />
+              <Search className="h-12 w-12 text-primary-500 mx-auto mb-3" aria-hidden="true" />
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                 Look up your registration
               </h1>
@@ -113,7 +113,7 @@ export default function CheckRegistration() {
                   onChange={(e) => setTournamentId(e.target.value)}
                   required
                   aria-required="true"
-                  className="h-10 px-3 pr-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all appearance-none w-full"
+                  className="h-10 px-3 pr-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all appearance-none w-full"
                 >
                   <option value="">-- Select a Tournament --</option>
                   {tournaments.map((t) => (

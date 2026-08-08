@@ -613,7 +613,7 @@ export default function Scorekeeper() {
                     </p>
                     <Link
                       to={`/tournaments/${tournamentId}/divisions`}
-                      className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                      className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
                     >
                       Go to Divisions →
                     </Link>
