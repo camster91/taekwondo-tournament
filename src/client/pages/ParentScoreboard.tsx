@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 import { Trophy, Clock, Users, ChevronRight, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { Card, CardBody } from '../components/ui';
+import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availability';
 
 interface Match {
   id: string;
@@ -68,7 +69,7 @@ export default function ParentScoreboard() {
     retry: false,
   });
 
-  const { data: scoreboardData } = useQuery<{
+  const { data: scoreboardData, isLoading: scoreboardLoading, error: scoreboardError } = useQuery<{
     divisions: Division[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
@@ -86,6 +87,7 @@ export default function ParentScoreboard() {
 
   const divisions = scoreboardData?.divisions || [];
   const displaySettings = scoreboardData?.displaySettings;
+  const scoreboardUnavailableMessage = getScoreboardUnavailableMessage(scoreboardError);
 
   // Pick "now competing" + "up next" matches. Status values from the
   // bracket-generator: 'ready', 'in_progress', 'completed'.
@@ -157,6 +159,20 @@ export default function ParentScoreboard() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-4 space-y-4">
+        {scoreboardUnavailableMessage ? (
+          <Card>
+            <CardBody className="p-6 text-center">
+              <div role="alert">
+                <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" aria-hidden="true" />
+                <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Live scoreboard unavailable</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-300">{scoreboardUnavailableMessage}</p>
+              </div>
+            </CardBody>
+          </Card>
+        ) : scoreboardLoading ? (
+          <p className="text-sm text-gray-600 dark:text-gray-300" role="status">Loading live matches…</p>
+        ) : (
+        <>
         {/* NOW COMPETING - most attention-grabbing block */}
         <section>
           <h2 className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-1">
@@ -208,6 +224,8 @@ export default function ParentScoreboard() {
               </p>
             </CardBody>
           </Card>
+        )}
+        </>
         )}
 
         <p className="text-[10px] text-gray-400 text-center pt-4">

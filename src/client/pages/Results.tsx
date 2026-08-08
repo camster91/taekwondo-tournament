@@ -35,6 +35,7 @@ import {
   buildAgeBreakdown,
   buildResultsWorkbook,
 } from '../utils/excel-export';
+import { calculateResultsStats } from '../utils/results-stats';
 
 // Local interfaces `Division` and `SchoolStats` removed — they now come from
 // `../utils/csv-export` as `DivisionLike` and `SchoolStats`. The other shapes
@@ -132,10 +133,9 @@ export default function Results() {
   const ageBreakdown = buildAgeBreakdown(filteredDivisions ?? []);
 
   // Overall stats
+  const resultCounts = calculateResultsStats(divisions ?? []);
   const overallStats = {
-    totalDivisions: filteredDivisions?.length || 0,
-    completedDivisions: filteredDivisions?.filter((d) => d.bracket?.status === 'completed').length || 0,
-    totalMatches: filteredDivisions?.reduce((sum, d) => sum + (d.bracket?.matches?.length || 0), 0) || 0,
+    ...resultCounts,
     schools: schoolStats.length,
   };
 

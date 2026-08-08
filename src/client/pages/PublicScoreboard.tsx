@@ -9,6 +9,7 @@ import { Button } from '../components/ui';
 import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 import { resolveDisplayRing } from '../utils/scoreboard-display';
 import { BowinLogo } from '../components/brand/BowinLogo';
+import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availability';
 
 interface Match {
   id: string;
@@ -96,7 +97,7 @@ export default function PublicScoreboard() {
   // Returns `{ divisions, displaySettings }` — displaySettings carries
   // director overrides (mode: 'all' | 'ring:N' | 'featured:<matchId>').
   // Closes M8 from the UI audit.
-  const { data: scoreboardData, isLoading: divisionsLoading } = useQuery<{
+  const { data: scoreboardData, isLoading: divisionsLoading, error: scoreboardError } = useQuery<{
     divisions: Division[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
@@ -113,6 +114,7 @@ export default function PublicScoreboard() {
   });
   const divisions = scoreboardData?.divisions;
   const displaySettings = scoreboardData?.displaySettings;
+  const scoreboardUnavailableMessage = getScoreboardUnavailableMessage(scoreboardError);
 
   // Stale-data warning. If 15+ seconds have passed since the last successful
   // fetch, the venue Wi-Fi may be flaky or the backend is down. Show an
@@ -215,7 +217,7 @@ export default function PublicScoreboard() {
           in-flight. After the tournament loads we keep the layout rendered
           even while divisions re-fetch (3s polling) so the TV doesn't flash.
           Closes #33. */}
-      {tournamentLoading && !tournamentError && (
+      {(tournamentLoading || divisionsLoading) && !tournamentError && !scoreboardUnavailableMessage && (
         <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center">
           <Loader2 className="h-16 w-16 text-primary-400 mb-6 animate-spin" />
           <h1 className="text-2xl font-bold mb-2">Loading tournament…</h1>
@@ -223,7 +225,14 @@ export default function PublicScoreboard() {
         </div>
       )}
       {/* Main board — only render once we have a valid tournament. */}
-      {!tournamentLoading && !tournamentError && (
+      {scoreboardUnavailableMessage && !tournamentError && (
+        <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center" role="alert">
+          <AlertCircle className="h-20 w-20 text-amber-400 mb-6" aria-hidden="true" />
+          <h1 className="text-3xl font-bold mb-3">Live scoreboard unavailable</h1>
+          <p className="text-slate-300 max-w-md">{scoreboardUnavailableMessage}</p>
+        </div>
+      )}
+      {!tournamentLoading && !divisionsLoading && !tournamentError && !scoreboardUnavailableMessage && (
       <>
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-900 via-primary-950 to-slate-900 border-b border-white/5">

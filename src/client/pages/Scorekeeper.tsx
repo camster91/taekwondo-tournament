@@ -27,6 +27,7 @@ import { StatTile } from '../components/ui';
 import { activateDialogFocus } from '../utils/dialog-focus';
 import { makeScoreOperation } from '../utils/offline-operation-queue';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
+import AccessibleDialog from '../components/ui/AccessibleDialog';
 
 interface Match {
   id: string;
@@ -1169,31 +1170,12 @@ export default function Scorekeeper() {
 
       {/* Confirmation Modal */}
       {showConfirm && currentMatch && (
-        <div
+        <AccessibleDialog
+          label="Confirm Result"
+          onClose={() => setShowConfirm(false)}
           className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
-          onKeyDown={(e) => {
-            if (e.key === 'Tab') {
-              // Minimal focus trap: cycle focus between Cancel and Confirm.
-              const focusables = (e.currentTarget as HTMLDivElement).querySelectorAll<HTMLElement>(
-                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-              );
-              if (focusables.length === 0) return;
-              const first = focusables[0];
-              const last = focusables[focusables.length - 1];
-              if (e.shiftKey && document.activeElement === first) {
-                e.preventDefault();
-                last.focus();
-              } else if (!e.shiftKey && document.activeElement === last) {
-                e.preventDefault();
-                first.focus();
-              }
-            }
-          }}
         >
           <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="confirm-result-title"
             className="bg-gray-800 rounded-xl p-6 max-w-md w-full"
           >
             <h3 id="confirm-result-title" className="text-xl font-bold mb-4">Confirm Result</h3>
@@ -1218,7 +1200,7 @@ export default function Scorekeeper() {
               </Button>
             </div>
           </div>
-        </div>
+        </AccessibleDialog>
       )}
 
       {/* Incident Report Modal */}
