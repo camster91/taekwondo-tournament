@@ -1259,7 +1259,7 @@ function SortableDivisionRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isDragging ? 'bg-indigo-50 dark:bg-indigo-900/20 shadow-lg z-10' : ''}`}
+      className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isDragging ? 'bg-primary-50 dark:bg-primary-900/20 shadow-lg z-10' : ''}`}
     >
       <div className="flex items-center min-w-0 flex-1">
         <button
@@ -1268,7 +1268,7 @@ function SortableDivisionRow({
           type="button"
           aria-label={`Drag to reorder ${div.name}. Or use Tab + Space + arrow keys.`}
           title="Drag to reorder"
-          className="touch-target flex-shrink-0 mr-3 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
+          className="touch-target flex-shrink-0 mr-3 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-primary-500 rounded"
         >
           <GripVertical className="h-5 w-5" aria-hidden="true" />
         </button>

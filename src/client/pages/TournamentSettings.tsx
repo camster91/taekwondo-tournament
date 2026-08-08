@@ -347,7 +347,7 @@ export default function TournamentSettings() {
             onClick={() => setTab('setup')}
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
               tab === 'setup'
-                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
             }`}
           >
@@ -364,7 +364,7 @@ export default function TournamentSettings() {
             onClick={() => setTab('rules')}
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
               tab === 'rules'
-                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
             }`}
           >
@@ -526,7 +526,7 @@ export default function TournamentSettings() {
                   href={`/scoreboard/${shareSlug}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-600 dark:text-indigo-400 hover:underline"
+                  className="text-primary-600 dark:text-primary-400 hover:underline"
                 >
                   Open in new tab
                 </a>

@@ -16,8 +16,8 @@ export default function Toolbar({
       <div
         className={[
           'animate-slide-down px-4 py-3',
-          'bg-gradient-to-r from-indigo-50/80 via-white to-white',
-          'dark:from-indigo-950/40 dark:via-slate-900 dark:to-slate-900',
+          'bg-gradient-to-r from-primary-50/80 via-white to-white',
+          'dark:from-primary-950/40 dark:via-slate-900 dark:to-slate-900',
           'border-b border-slate-200 dark:border-slate-800',
           className,
         ]

@@ -383,7 +383,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       });
       const html = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #4F46E5;">Registration Confirmed!</h2>
+          <h2 style="color: #E11D48;">Registration Confirmed!</h2>
           <p>Hello${parentName ? ` ${escapeHtml(parentName)}` : ''},</p>
           <p><strong>${escapeHtml(competitor.firstName)} ${escapeHtml(competitor.lastName)}</strong> has been successfully registered for:</p>
           <div style="background: #F3F4F6; border-radius: 8px; padding: 16px; margin: 16px 0;">

@@ -8,6 +8,7 @@ import { StatTile } from '../components/ui';
 import { Button } from '../components/ui';
 import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 import { resolveDisplayRing } from '../utils/scoreboard-display';
+import { BowinLogo } from '../components/brand/BowinLogo';
 
 interface Match {
   id: string;
@@ -216,7 +217,7 @@ export default function PublicScoreboard() {
           Closes #33. */}
       {tournamentLoading && !tournamentError && (
         <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center">
-          <Loader2 className="h-16 w-16 text-indigo-400 mb-6 animate-spin" />
+          <Loader2 className="h-16 w-16 text-primary-400 mb-6 animate-spin" />
           <h1 className="text-2xl font-bold mb-2">Loading tournament…</h1>
           <p className="text-slate-300">Fetching live brackets and match data</p>
         </div>
@@ -225,15 +226,10 @@ export default function PublicScoreboard() {
       {!tournamentLoading && !tournamentError && (
       <>
       {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-b border-white/5">
+      <div className="bg-gradient-to-r from-slate-900 via-primary-950 to-slate-900 border-b border-white/5">
         <div className="px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-violet-500 blur-md opacity-50" />
-              <div className="relative h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg">
-                <Trophy className="h-6 w-6 text-white" strokeWidth={2.5} />
-              </div>
-            </div>
+            <BowinLogo compact inverse />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold tracking-tight">{tournament?.name || 'Tournament'}</h1>
@@ -265,7 +261,7 @@ export default function PublicScoreboard() {
             <div className="hidden md:flex flex-col items-center gap-1" data-testid="mobile-qr">
               <div className="bg-white p-1.5 rounded-md">
                 <QRCodeSVG
-                  value={typeof window !== 'undefined' ? window.location.href : `https://bowin.app/display/${tournament?.id ?? ''}`}
+                  value={typeof window !== 'undefined' ? window.location.href : `/display/${tournament?.id ?? ''}`}
                   size={64}
                   level="M"
                 />
@@ -279,10 +275,10 @@ export default function PublicScoreboard() {
 
         {/* Mobile-only banner: point parents to the simpler mobile view.
             On the venue TV this banner hides (md:hidden). */}
-        <div className="md:hidden px-4 py-2 bg-indigo-950/40 border-b border-white/5">
+        <div className="md:hidden px-4 py-2 bg-primary-950/40 border-b border-white/5">
           <Link
             to={`/scoreboard/parent/${tournamentId}${publicKey ? `?key=${encodeURIComponent(publicKey)}` : ''}`}
-            className="text-xs text-indigo-300 hover:text-indigo-200 underline"
+            className="text-xs text-primary-300 hover:text-primary-200 underline"
           >
             📱 Better view for phones →
           </Link>
@@ -341,7 +337,7 @@ export default function PublicScoreboard() {
         {/* Progress Bar */}
         <div className="h-1 bg-slate-800/60">
           <div
-            className="h-full bg-gradient-to-r from-indigo-500 via-violet-500 to-pink-500 transition-all duration-500"
+            className="h-full bg-gradient-to-r from-primary-500 via-accent-500 to-pink-500 transition-all duration-500"
             style={{ width: `${stats.totalMatches > 0 ? (stats.completed / stats.totalMatches) * 100 : 0}%` }}
           />
         </div>

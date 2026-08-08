@@ -60,12 +60,12 @@ function UsageBar({ label, value, limit, icon: Icon }: {
     <div>
       <div className="mb-2 flex items-center justify-between gap-4 text-sm">
         <span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
-          <Icon className="h-4 w-4 text-indigo-500" /> {label}
+          <Icon className="h-4 w-4 text-primary-500" /> {label}
         </span>
         <span className="text-slate-500 dark:text-slate-400">{value} of {limit}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-        <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${percent}%` }} />
+        <div className="h-full rounded-full bg-primary-500 transition-all" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -160,12 +160,12 @@ export default function OrganizationSettings() {
       <div className="mx-auto max-w-3xl">
         <PageHeader title="Organization & billing" description="Create the workspace that owns your tournaments, staff, and subscription." />
         <Card className="overflow-hidden p-0">
-          <div className="bg-gradient-to-br from-indigo-600 to-violet-700 px-6 py-8 text-white sm:px-10">
+          <div className="bg-gradient-to-br from-primary-600 to-accent-700 px-6 py-8 text-white sm:px-10">
             <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
               <Building2 className="h-6 w-6" />
             </div>
             <h2 className="text-2xl font-bold">Set up your organization</h2>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-indigo-100">
+            <p className="mt-2 max-w-xl text-sm leading-6 text-primary-100">
               Start on the free evaluation plan. You can configure one draft tournament before choosing a pilot or paid plan.
             </p>
           </div>
@@ -208,13 +208,13 @@ export default function OrganizationSettings() {
         <Card>
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-500/10">
-                <Building2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary-50 dark:bg-primary-500/10">
+                <Building2 className="h-5 w-5 text-primary-600 dark:text-primary-400" />
               </div>
               <h1 className="text-2xl font-bold text-slate-950 dark:text-white">{organization.name}</h1>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">/{organization.slug} · {organization.membershipRole}</p>
             </div>
-            <span className="self-start rounded-full bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
+            <span className="self-start rounded-full bg-primary-50 px-3 py-1.5 text-sm font-semibold text-primary-700 dark:bg-primary-500/10 dark:text-primary-300">
               {planLabel} plan
             </span>
           </div>
@@ -226,7 +226,7 @@ export default function OrganizationSettings() {
 
         <Card>
           <div className="flex items-center gap-3">
-            <CreditCard className="h-5 w-5 text-indigo-500" />
+            <CreditCard className="h-5 w-5 text-primary-500" />
             <h2 className="font-semibold text-slate-950 dark:text-white">Billing status</h2>
           </div>
           <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
@@ -263,8 +263,8 @@ export default function OrganizationSettings() {
           const Icon = item.icon;
           const current = organization.plan === item.plan;
           return (
-            <Card key={item.plan} className={item.plan === 'starter' ? 'border-indigo-300 dark:border-indigo-700' : ''}>
-              <Icon className="h-6 w-6 text-indigo-500" />
+            <Card key={item.plan} className={item.plan === 'starter' ? 'border-primary-300 dark:border-primary-700' : ''}>
+              <Icon className="h-6 w-6 text-primary-500" />
               <h3 className="mt-4 text-lg font-bold text-slate-950 dark:text-white">{item.label}</h3>
               <ul className="mt-5 space-y-3 text-sm text-slate-600 dark:text-slate-300">
                 <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.tournaments} active tournament{item.tournaments === 1 ? '' : 's'}</li>

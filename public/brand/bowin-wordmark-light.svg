@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" role="img" aria-labelledby="title">
+  <title id="title">Bowin</title>
+  <rect width="64" height="64" x="8" y="8" rx="15" fill="#fff"/>
+  <path d="M20 23 40 57 60 23" fill="none" stroke="#0B1220" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="40" cy="57" r="4.25" fill="#E11D48"/>
+  <text x="88" y="53" fill="#fff" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="44" font-weight="700" letter-spacing="-2">bowin</text>
+</svg>

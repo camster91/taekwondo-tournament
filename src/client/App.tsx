@@ -33,6 +33,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Tour from './components/Tour';
 import CloseButton from './components/ui/CloseButton';
 import Spinner from './components/ui/Spinner';
+import { BowinLogo } from './components/brand/BowinLogo';
 
 // All page components are loaded lazily so the initial bundle ships
 // only the App shell + chrome. A director who only opens Scorekeeper
@@ -127,7 +128,7 @@ function NavItem({ item, active, onClick, collapsed, indent = false }: {
         active ? 'text-white' : 'text-white/50 group-hover:text-white/80'
       )} />
       {!collapsed && <span className="truncate">{item.name}</span>}
-      {active && !collapsed && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-gradient-to-br from-indigo-400 to-violet-400" />}
+      {active && !collapsed && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-gradient-to-br from-primary-400 to-accent-400" />}
     </Link>
   );
 }
@@ -178,7 +179,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       {/* Skip to main content — a11y */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-indigo-600 focus:text-white focus:rounded-lg"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-lg"
       >
         Skip to main content
       </a>
@@ -201,22 +202,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           'flex items-center border-b border-white/5',
           sidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-2.5 px-5 h-16'
         )}>
-          <div className="relative flex-shrink-0">
-            <div className="absolute inset-0 bg-[#DC2626] blur-md opacity-40" />
-            <div className="relative h-9 w-9 rounded-xl bg-[#0F172A] flex items-center justify-center shadow-lg border border-slate-800">
-              {/* bowin mark: two converging strokes suggesting a bow */}
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 6 L12 18 L20 6" className="text-white" />
-                <circle cx="12" cy="18" r="1.4" fill="#DC2626" stroke="none" />
-              </svg>
-            </div>
-          </div>
-          {!sidebarCollapsed && (
-            <div className="flex flex-col leading-tight min-w-0">
-              <span className="text-sm font-semibold text-white tracking-tight truncate">bowin</span>
-              <span className="text-[10px] uppercase tracking-widest text-white/40 font-medium">Tournament OS</span>
-            </div>
-          )}
+          <BowinLogo compact={sidebarCollapsed} inverse showDescriptor />
           {/* Close button on mobile */}
           <CloseButton
             onClose={closeMobile}
@@ -338,7 +324,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                 aria-expanded={userMenuOpen}
                 title={sidebarCollapsed ? userName : undefined}
               >
-                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
                   {initials}
                 </div>
                 {!sidebarCollapsed && (

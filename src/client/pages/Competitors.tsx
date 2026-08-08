@@ -544,9 +544,9 @@ export default function Competitors() {
 
       {/* Bulk action toolbar (slides in when something is selected) */}
       {selectedIds.size > 0 && (
-        <Toolbar slideIn className="border-indigo-200 dark:border-indigo-800/60 bg-gradient-to-r from-indigo-50/80 via-white to-white dark:from-indigo-950/40 dark:via-slate-900 dark:to-slate-900">
+        <Toolbar slideIn className="border-primary-200 dark:border-primary-800/60 bg-gradient-to-r from-primary-50/80 via-white to-white dark:from-primary-950/40 dark:via-slate-900 dark:to-slate-900">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
+            <div className="h-8 w-8 rounded-full bg-primary-600 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
               {selectedIds.size}
             </div>
             <div className="text-sm text-slate-700 dark:text-slate-200">
@@ -621,7 +621,7 @@ export default function Competitors() {
                       onClick={() => setBeltFilter(active ? beltFilter.filter((b) => b !== belt) : [...beltFilter, belt])}
                       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-all flex-shrink-0 ${
                         active
-                          ? 'bg-indigo-600 text-white shadow-sm'
+                          ? 'bg-primary-600 text-white shadow-sm'
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                       }`}
                     >
@@ -764,7 +764,7 @@ export default function Competitors() {
                               setSelectedIds(new Set());
                             }
                           }}
-                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                         />
                       </th>
                       <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Name</th>
@@ -796,12 +796,12 @@ export default function Competitors() {
                               else next.delete(c.id);
                               setSelectedIds(next);
                             }}
-                            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                           />
                         </TableCell>
                         <TableCell className="px-2 py-2">
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="h-7 w-7 rounded-full bg-gradient-to-br from-indigo-500/10 to-violet-500/10 border border-indigo-200/40 dark:border-indigo-800/40 flex items-center justify-center text-indigo-700 dark:text-indigo-300 text-xs font-semibold flex-shrink-0">
+                            <div className="h-7 w-7 rounded-full bg-gradient-to-br from-primary-500/10 to-accent-500/10 border border-primary-200/40 dark:border-primary-800/40 flex items-center justify-center text-primary-700 dark:text-primary-300 text-xs font-semibold flex-shrink-0">
                               {c.firstName?.[0]}{c.lastName?.[0]}
                             </div>
                             <div className="min-w-0">
@@ -896,7 +896,7 @@ export default function Competitors() {
         title="Send to Trash?"
         message={
           <>
-            <span className="font-semibold">{deleteTarget?.firstName} {deleteTarget?.lastName}</span> will be removed from any tournaments they're registered in. They go to the <span className="font-semibold text-indigo-600 dark:text-indigo-400">Trash</span> for 7 days, then are permanently purged.
+            <span className="font-semibold">{deleteTarget?.firstName} {deleteTarget?.lastName}</span> will be removed from any tournaments they're registered in. They go to the <span className="font-semibold text-primary-600 dark:text-primary-400">Trash</span> for 7 days, then are permanently purged.
           </>
         }
         confirmText="Send to Trash"
@@ -911,7 +911,7 @@ export default function Competitors() {
         title={`Send ${selectedIds.size} competitor${selectedIds.size === 1 ? '' : 's'} to Trash?`}
         message={
           <>
-            {selectedIds.size} competitor{selectedIds.size === 1 ? '' : 's'} will be removed from every tournament they're registered in. They go to the <span className="font-semibold text-indigo-600 dark:text-indigo-400">Trash</span> and can be restored within 7 days. After 7 days they're permanently purged.
+            {selectedIds.size} competitor{selectedIds.size === 1 ? '' : 's'} will be removed from every tournament they're registered in. They go to the <span className="font-semibold text-primary-600 dark:text-primary-400">Trash</span> and can be restored within 7 days. After 7 days they're permanently purged.
           </>
         }
         confirmText={`Send ${selectedIds.size} to Trash`}
