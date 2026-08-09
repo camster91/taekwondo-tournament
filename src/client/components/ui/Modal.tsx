@@ -34,6 +34,8 @@ interface ModalProps {
    * where the panel itself should be scrollable.
    */
   noBodyPadding?: boolean;
+  /** Prevent Escape, backdrop, and close-button dismissal while work is pending. */
+  closeDisabled?: boolean;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -62,9 +64,17 @@ export default function Modal({
   size = 'md',
   panelClassName = '',
   noBodyPadding = false,
+  closeDisabled = false,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<Element | null>(null);
+  const onCloseRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    closeDisabledRef.current = closeDisabled;
+  }, [onClose, closeDisabled]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -81,7 +91,7 @@ export default function Modal({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        if (!closeDisabledRef.current) onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -119,13 +129,13 @@ export default function Modal({
         (prev as HTMLElement).focus();
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
     <div className="modal-container flex items-center justify-center p-4">
-      <div className="modal-backdrop" onClick={onClose} aria-hidden="true" />
+      <div className="modal-backdrop" onClick={() => { if (!closeDisabledRef.current) onCloseRef.current(); }} aria-hidden="true" />
       <div
         ref={panelRef}
         role="dialog"
@@ -151,7 +161,7 @@ export default function Modal({
               </p>
             )}
           </div>
-          <CloseButton onClose={onClose} size="lg" />
+          <CloseButton onClose={() => onCloseRef.current()} size="lg" disabled={closeDisabled} />
         </div>
         <div className={noBodyPadding ? 'flex-1 overflow-hidden' : 'modal-body'}>
           {children}

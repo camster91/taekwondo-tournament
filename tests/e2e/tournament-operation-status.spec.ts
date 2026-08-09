@@ -4,10 +4,16 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { loginAsEmail, skipOnboardingTour } from './helpers';
 
 const email = 'tournament-operations-e2e@example.com';
+const testTournamentId = '00000000-0000-4000-8000-00000000e201';
+const testCompetitorIds = [
+  '00000000-0000-4000-8000-00000000e211',
+  '00000000-0000-4000-8000-00000000e212',
+  '00000000-0000-4000-8000-00000000e213',
+];
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
-let tournamentId = '';
+let tournamentId = testTournamentId;
 
 test.beforeAll(async () => {
   await prisma.user.upsert({
@@ -15,15 +21,42 @@ test.beforeAll(async () => {
     update: { role: 'admin', isActive: true },
     create: { email, firstName: 'Tournament', lastName: 'Operator', role: 'admin', isActive: true },
   });
-  const tournament = await prisma.tournament.findFirst({
-    where: { registrations: { some: {} } },
-    orderBy: { createdAt: 'asc' },
+  await prisma.tournament.deleteMany({ where: { id: testTournamentId } });
+  await prisma.competitor.deleteMany({ where: { id: { in: testCompetitorIds } } });
+  await prisma.competitor.createMany({
+    data: testCompetitorIds.map((id, index) => ({
+      id,
+      firstName: `E2E-${index + 1}`,
+      lastName: 'Tournament Operator',
+      gender: index % 2 === 0 ? 'M' : 'F',
+      dateOfBirth: new Date(`201${index}-01-01T00:00:00.000Z`),
+      belt: 'Blue',
+      weightLbs: 100 + index,
+      schoolDojang: 'E2E Isolated Dojang',
+    })),
   });
-  if (!tournament) throw new Error('Expected a seeded tournament with registrations');
-  tournamentId = tournament.id;
+  await prisma.tournament.create({
+    data: {
+      id: testTournamentId,
+      name: '[E2E] Tournament Operations',
+      date: new Date('2027-10-10T13:00:00.000Z'),
+      location: 'E2E Isolated Venue',
+      status: 'in_progress',
+      registrations: {
+        create: testCompetitorIds.slice(0, 2).map((competitorId, index) => ({
+          competitorId,
+          patterns: index === 0,
+          sparring: index === 1,
+          ageAtTournament: 15 + index,
+        })),
+      },
+    },
+  });
 });
 
 test.afterAll(async () => {
+  await prisma.tournament.deleteMany({ where: { id: testTournamentId } });
+  await prisma.competitor.deleteMany({ where: { id: { in: testCompetitorIds } } });
   await prisma.user.deleteMany({ where: { email } });
   await prisma.$disconnect();
 });
@@ -154,4 +187,61 @@ test('lifecycle changes retain their exact operator intent through rejection and
   await expect(page.getByRole('status')).toContainText('Reopening tournament');
   await expect(page.getByRole('status')).not.toContainText('Closing public registration');
   await expect(page.getByRole('status')).toContainText('Reopening tournament completed');
+
+  await page.getByRole('button', { name: 'Add Competitors' }).click();
+  const addDialog = page.getByRole('dialog', { name: 'Add Competitors' });
+  await expect(addDialog).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.activeElement?.closest('[role="dialog"]') !== null)).toBe(true);
+  const competitorChoice = addDialog.locator('input[type="checkbox"]').nth(2);
+  await competitorChoice.check();
+  const addSelected = addDialog.getByRole('button', { name: /Add 1 Competitor/ });
+  await addSelected.focus();
+  await page.keyboard.press('Tab');
+  await expect(addDialog.getByRole('button', { name: 'Close' })).toBeFocused();
+  let bulkAttempts = 0;
+  let selectedBulkIds: string[] = [];
+  await page.route(`**/api/tournaments/${tournamentId}/registrations/bulk`, async (route) => {
+    bulkAttempts += 1;
+    selectedBulkIds = (route.request().postDataJSON() as { competitorIds: string[] }).competitorIds;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Registration service is temporarily unavailable' }),
+    });
+  });
+  await addSelected.click();
+  await expect(addDialog.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+  await expect(addDialog.getByRole('button', { name: 'Close' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(addDialog).toBeVisible();
+  await expect(addDialog.getByRole('alert')).toContainText('Registration service is temporarily unavailable');
+  await expect(competitorChoice).toBeChecked();
+  expect(bulkAttempts).toBe(1);
+
+  await page.unroute(`**/api/tournaments/${tournamentId}/registrations/bulk`);
+  await page.route(`**/api/tournaments/${tournamentId}/registrations/bulk`, async (route) => {
+    const body = route.request().postDataJSON() as { competitorIds: string[]; patterns: boolean; sparring: boolean };
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await prisma.registration.createMany({
+      data: body.competitorIds.map((competitorId) => ({
+        tournamentId,
+        competitorId,
+        patterns: body.patterns,
+        sparring: body.sparring,
+      })),
+    });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ created: body.competitorIds.length }),
+    });
+  });
+  await addSelected.click();
+  await expect(addDialog).toBeVisible();
+  await expect(addDialog).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Add Competitors' })).toBeFocused();
+  await expect.poll(async () => prisma.registration.count({
+    where: { tournamentId, competitorId: { in: selectedBulkIds } },
+  })).toBe(selectedBulkIds.length);
 });
