@@ -3,7 +3,7 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { type RateLimitExceededEventHandler } from 'express-rate-limit';
 import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, setCsrfCookie, type AuthenticatedRequest, invalidateAuthCache } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
@@ -46,6 +46,25 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => rateLimitDisabled,
+});
+const demoRateLimitMax = Number.parseInt(process.env.DEMO_RATE_LIMIT_MAX ?? '30', 10);
+const demoLimitHandler: RateLimitExceededEventHandler = (req, res) => {
+  const resetTime = (req as unknown as { rateLimit?: { resetTime?: Date } }).rateLimit?.resetTime;
+  const retryAfterSeconds = resetTime
+    ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 1000))
+    : 15 * 60;
+  (res as unknown as Response).status(429).json({
+    error: 'Too many demo sign-in attempts. Please try the demo again later.',
+    retryAfterSeconds,
+  });
+};
+const demoLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: Number.isSafeInteger(demoRateLimitMax) && demoRateLimitMax > 0 ? demoRateLimitMax : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => rateLimitDisabled,
+  handler: demoLimitHandler,
 });
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
@@ -1019,7 +1038,7 @@ const DEMO_TTL_SECONDS = 4 * 60 * 60; // 4 hours
 const demoLoginEnabled = process.env.ENABLE_DEMO_LOGIN === '1';
 
 if (demoLoginEnabled) {
-  router.post('/demo', authLimiter, async (_req: Request, res: Response) => {
+  router.post('/demo', demoLimiter, async (_req: Request, res: Response) => {
     try {
       const prisma: PrismaClient = _req.app.locals.prisma;
 
