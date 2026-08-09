@@ -52,6 +52,7 @@ integration('demo showcase reset against disposable Postgres', () => {
   });
 
   it('rolls back deletion of the existing demo when fixture insertion fails', async () => {
+    await resetDemoShowcase(prisma!);
     const live = fixture.tournaments.find((tournament) => tournament.status === 'in_progress')!;
     await prisma!.tournament.update({ where: { id: live.id }, data: { publicSlug: `${live.publicSlug}-before-rollback` } });
     await prisma!.tournament.create({ data: { id: rollbackSentinelTournamentId, organizationId: sentinelOrgId, name: 'Slug collision sentinel', date: new Date('2030-02-01'), publicSlug: live.publicSlug } });

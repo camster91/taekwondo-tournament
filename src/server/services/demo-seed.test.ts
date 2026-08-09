@@ -33,6 +33,10 @@ describe('demo showcase fixture', () => {
       new Set(['pending', 'ready', 'in_progress', 'completed']),
     );
     expect(new Set(fixture.matches.map((m) => m.ringNumber).filter(Boolean))).toEqual(new Set([1, 2, 3, 4]));
+    expect(fixture.matches.every((match) => match.scheduledTime instanceof Date && !Number.isNaN(match.scheduledTime.getTime()))).toBe(true);
+    expect(fixture.matches.map((match) => match.scheduledTime.getTime())).toEqual(
+      fixture.matches.map((_, index) => Date.parse('2027-04-18T14:00:00.000Z') + index * 10 * 60_000),
+    );
     expect(fixture.brackets.every((b) => JSON.parse(b.structure).positions)).toBe(true);
   });
 

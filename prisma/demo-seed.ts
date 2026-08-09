@@ -77,6 +77,7 @@ export function buildShowcaseFixture() {
   const assignments = groups.flatMap((group, groupIndex) => group.map((registration, index) => ({ id: id(320 + groupIndex * 4 + index), divisionId: divisions[groupIndex].id, registrationId: registration.id, seedPosition: index + 1 })));
   const brackets: Array<{ id: string; divisionId: string; structure: string; format: string }> = [];
   const matches: Array<Record<string, unknown>> = [];
+  const scheduleBase = new Date('2027-04-18T14:00:00.000Z');
   groups.forEach((group, groupIndex) => {
     const seeds: CompetitorSeed[] = group.map((registration, index) => ({ registrationId: registration.id, name: `${competitors[groupIndex * 4 + index].firstName} ${competitors[groupIndex * 4 + index].lastName}`, school: competitors[groupIndex * 4 + index].schoolDojang ?? '', seedPosition: index + 1 }));
     const structure = generateBracket(seeds, 'manual');
@@ -111,7 +112,7 @@ export function buildShowcaseFixture() {
         winnerId: winnerId ?? (hasResult ? competitor1Id : null),
         score1: hasResult ? '8' : null, score2: hasResult ? '5' : null,
         status, ringNumber: (matches.length % 4) + 1,
-        scheduledTime: new Date(`2027-04-18T${14 + Math.floor(matches.length / 4)}:${(matches.length % 4) * 10}:00.000Z`),
+        scheduledTime: new Date(scheduleBase.getTime() + matches.length * 10 * 60_000),
       });
     });
   });
