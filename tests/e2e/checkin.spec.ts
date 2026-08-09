@@ -90,10 +90,33 @@ test.describe('check-in (weigh-in flow)', () => {
     const stored = await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'));
     expect(stored).toContain('check_in');
 
+    let rejectSync = true;
+    await page.route('**/api/tournaments/*/registrations/*', async (route) => {
+      if (route.request().method() === 'PUT' && rejectSync) {
+        await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Registration changed during the venue outage' }) });
+        return;
+      }
+      await route.continue();
+    });
     await context.setOffline(false);
     await page.evaluate(() => window.dispatchEvent(new Event('online')));
-    await expect(page.getByText(/1 check-in pending sync/i)).toBeHidden({ timeout: 10_000 });
-    expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toBe('[]');
+    await expect(page.getByRole('alert').filter({ hasText: /Registration changed during the venue outage/i })).toBeVisible();
+    await expect(page.getByText(/Minho/i).filter({ hasText: /Attempted: Checked in/i })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toContain('needs_review');
+
+    await page.reload();
+    const persistedReview = page.getByRole('alert').filter({ hasText: /Registration changed during the venue outage/i });
+    await expect(persistedReview).toBeVisible();
+    await persistedReview.getByRole('button', { name: /Discard local change/i }).click();
+    const discardDialog = page.getByRole('dialog', { name: /Discard unsynced check-in/i });
+    await expect(discardDialog).toBeVisible();
+    await discardDialog.getByRole('button', { name: /^Cancel$/i }).click();
+    await expect(persistedReview).toBeVisible();
+
+    rejectSync = false;
+    await persistedReview.getByRole('button', { name: /^Retry$/i }).click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1')), { timeout: 10_000 }).toBe('[]');
+    await expect(page.getByText(/Registration changed during the venue outage/i)).toBeHidden();
 
   });
 });

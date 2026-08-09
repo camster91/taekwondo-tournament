@@ -21,7 +21,7 @@ import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import CloseButton from '../components/ui/CloseButton';
 import { useToast } from '../context/ToastContext';
 import { getSportProfile } from '../../shared/constants/sport-profiles';
-import { Card, CardBody } from '../components/ui';
+import { Card, CardBody, ConfirmDialog } from '../components/ui';
 import { Button } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { activateDialogFocus } from '../utils/dialog-focus';
@@ -29,7 +29,7 @@ import { makeScoreOperation } from '../utils/offline-operation-queue';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
 import AccessibleDialog from '../components/ui/AccessibleDialog';
 import OperationStatus from '../components/ui/OperationStatus';
-import { buildOfflineOperationStatuses } from '../utils/offline-operation-status';
+import { buildDeliveryUncertainMessage, buildOfflineOperationStatuses, buildOfflineReviewMessage, pendingOfflineTargetIds } from '../utils/offline-operation-status';
 
 interface Match {
   id: string;
@@ -96,6 +96,8 @@ export default function Scorekeeper() {
   const { addToast } = useToast();
   const { user } = useAuth();
   const offlineOperations = useOfflineOperations(tournamentId, 'score_result');
+  const [discardOfflineId, setDiscardOfflineId] = useState<string | null>(null);
+  const [discardOfflineError, setDiscardOfflineError] = useState('');
 
   const [selectedRing, setSelectedRing] = useState<number | null>(null);
   const [selectedDivision, setSelectedDivision] = useState<string | null>(null);
@@ -163,11 +165,10 @@ export default function Scorekeeper() {
       .map((match) => match.ringNumber)
       .filter((ring): ring is number => ring != null),
   )).sort((a, b) => a - b), [divisions]);
-  const stagedScoreIds = useMemo(() => new Set(
-    offlineOperations.operations
-      .filter((operation) => operation.kind === 'score_result')
-      .map((operation) => operation.targetId),
-  ), [offlineOperations.operations]);
+  const stagedScoreIds = useMemo(
+    () => pendingOfflineTargetIds(offlineOperations.operations, 'score_result'),
+    [offlineOperations.operations],
+  );
 
   // Get ready matches for selected division — safe with optional chaining
   const readyMatches = useMemo(() => {
@@ -207,13 +208,19 @@ export default function Scorekeeper() {
 
   const stageScoreResult = (data: ScoreSubmission) => {
     if (!tournamentId || !user) return;
-    offlineOperations.enqueue(makeScoreOperation(user.id, tournamentId, data.matchId, {
-      winnerId: data.winnerId,
-      score1: data.score1,
-      score2: data.score2,
-      status: 'completed',
-      notes: data.notes,
-    }));
+    try {
+      offlineOperations.enqueue(makeScoreOperation(user.id, tournamentId, data.matchId, {
+        winnerId: data.winnerId,
+        score1: data.score1,
+        score2: data.score2,
+        status: 'completed',
+        notes: data.notes,
+      }));
+    } catch {
+      addToast('Result was not saved on this device. Keep this match open, free device storage, and try again.', 'error');
+      setAnnounce('Result was not saved on this device. The current match remains open.');
+      return;
+    }
     addToast('Result saved on this device and will sync when the connection returns.', 'warning');
     finishResultEntry(true);
   };
@@ -505,28 +512,109 @@ export default function Scorekeeper() {
       await queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
       addToast(`${result.synced} staged result${result.synced === 1 ? '' : 's'} synced.`, 'success');
     }
-    if (result.needsReview > 0) {
+    if (result.newlyRejected > 0) {
       addToast('A staged result conflicts with server state and needs director review.', 'error');
+    }
+    if (result.persistenceFailuresBeforeSend > 0) {
+      addToast('Nothing was sent because this device could not safely prepare the sync. Free device storage and try again.', 'error');
+    }
+    if (result.persistenceFailuresAfterSend > 0) {
+      addToast('The server may have accepted a result, but this device could not clear its local copy. Refresh and review before syncing again.', 'error');
+    }
+    if (result.persistenceFailuresAfterRejection > 0) {
+      addToast('A result was rejected, but this device could not save the rejection details. It has been quarantined from retry; refresh and review it.', 'error');
+    }
+  };
+
+  const retryStagedResult = async (id: string) => {
+    const result = await offlineOperations.retry(id);
+    if (!result) return;
+    if (result.outcome === 'synced') {
+      await queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
+      addToast('Staged result synced.', 'success');
+    } else if (result.outcome === 'rejected') {
+      addToast('The staged result was rejected again. Review the server message before retrying.', 'error');
+    } else if (result.outcome === 'offline') {
+      addToast('Reconnect to retry this staged result.', 'warning');
+    } else if (result.outcome === 'superseded') {
+      addToast('A newer local result replaced this retry. The newer result remains queued.', 'warning');
+    } else if (result.outcome === 'persistence_failed_after_send') {
+      addToast('The server may have accepted this result, but this device could not clear the local copy. Refresh and review the match before retrying.', 'error');
+    } else if (result.outcome === 'delivery_uncertain' || result.outcome === 'persistence_failed_after_rejection') {
+      addToast('Delivery is uncertain. Refresh and verify the server match; retry is disabled for this local copy.', 'error');
+    } else if (result.outcome === 'persistence_failed_before_send') {
+      addToast('This device could not safely prepare the retry, so nothing was sent. Free device storage and try again.', 'error');
     }
   };
 
   const offlineStatus = offlineOperations.operations.length > 0 && (
+    <>
     <div className="mx-auto mb-4 max-w-4xl space-y-2">
       {buildOfflineOperationStatuses('result', offlineOperations.pending.length, offlineOperations.needsReview.length, offlineOperations.syncing)
         .map((status) => <OperationStatus key={status.state} {...status} />)}
-      <span className="hidden" aria-hidden="true">
-        {offlineOperations.pending.length} result{offlineOperations.pending.length === 1 ? '' : 's'} pending sync
-        {offlineOperations.needsReview.length > 0 && ` · ${offlineOperations.needsReview.length} needs director review`}
-      </span>
-      <div className="flex gap-2">
-        <Button size="sm" variant="secondary" onClick={() => void syncStagedResults()} loading={offlineOperations.syncing}>Sync now</Button>
-        {offlineOperations.needsReview.map((operation) => (
-          <Button key={operation.id} size="sm" variant="secondary" onClick={() => offlineOperations.remove(operation.id)}>
-            Discard rejected #{operation.targetId.slice(0, 8)}
+      {offlineOperations.pending.length > 0 && (
+        <Button size="sm" variant="secondary" onClick={() => void syncStagedResults()} loading={offlineOperations.syncing} disabled={offlineOperations.queueBusy}>Sync pending results</Button>
+      )}
+      {offlineOperations.needsReview.map((operation) => {
+        const retrying = offlineOperations.retryingIds.has(operation.id);
+        const retryable = operation.status === 'needs_review' && !retrying;
+        const division = divisions?.find((candidate) => candidate.bracket?.matches.some((match) => match.id === operation.targetId));
+        const match = division?.bracket?.matches.find((candidate) => candidate.id === operation.targetId);
+        const name = (entry: Match['competitor1']) => entry
+          ? `${entry.competitor.firstName} ${entry.competitor.lastName}`
+          : 'TBD';
+        const label = match
+          ? `${division?.name || 'Division'} · Match ${match.matchNumber} · ${name(match.competitor1)} vs ${name(match.competitor2)}`
+          : `Result #${operation.targetId.slice(0, 8)}`;
+        const winnerId = operation.payload.winnerId;
+        let winner = 'selected winner';
+        if (match) {
+          if (match.competitor1?.id === winnerId) winner = name(match.competitor1);
+          else if (match.competitor2?.id === winnerId) winner = name(match.competitor2);
+        }
+        const message = operation.status === 'delivery_uncertain'
+          ? buildDeliveryUncertainMessage('result', label)
+          : buildOfflineReviewMessage('result', operation.targetId, operation.lastError, {
+            label,
+            attempted: `${winner}, ${String(operation.payload.score1 ?? '-')}–${String(operation.payload.score2 ?? '-')}`,
+            createdAt: operation.createdAt,
+          });
+        return (
+        <OperationStatus
+          key={operation.id}
+          state={retrying ? 'retrying' : 'rejected'}
+          message={message}
+          actionLabel={retryable ? 'Retry' : undefined}
+          onAction={retryable ? () => void retryStagedResult(operation.id) : undefined}
+        >
+          <Button size="sm" variant="secondary" onClick={() => { setDiscardOfflineError(''); setDiscardOfflineId(operation.id); }} disabled={retrying}>
+            Discard local change
           </Button>
-        ))}
-      </div>
+        </OperationStatus>
+        );
+      })}
     </div>
+    <ConfirmDialog
+      isOpen={discardOfflineId !== null}
+      onClose={() => { setDiscardOfflineError(''); setDiscardOfflineId(null); }}
+      onConfirm={() => {
+        try {
+          if (discardOfflineId) offlineOperations.remove(discardOfflineId);
+          setDiscardOfflineError('');
+          setDiscardOfflineId(null);
+        } catch {
+          setDiscardOfflineError('The local change could not be removed from this device. Free device storage and try again.');
+        }
+      }}
+      title="Discard unsynced result?"
+      message={<>
+        <span className="block">This permanently removes the local score change. The server match will remain unchanged.</span>
+        {discardOfflineError && <span role="alert" className="mt-2 block text-red-300">{discardOfflineError}</span>}
+      </>}
+      confirmText="Discard local change"
+      variant="danger"
+    />
+    </>
   );
 
   // Division selector view

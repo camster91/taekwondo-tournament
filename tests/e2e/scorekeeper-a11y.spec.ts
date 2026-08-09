@@ -327,9 +327,29 @@ test.describe('scorekeeper (a11y)', () => {
     await expect(page.getByText(/1 result pending sync/i)).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toContain('score_result');
 
+    let rejectSync = true;
+    await page.route('**/api/brackets/match/*', async (route) => {
+      if (route.request().method() === 'PUT' && rejectSync) {
+        await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Match changed on another scorekeeper device' }) });
+        return;
+      }
+      await route.continue();
+    });
     await context.setOffline(false);
     await page.evaluate(() => window.dispatchEvent(new Event('online')));
-    await expect(page.getByText(/1 result pending sync/i)).toBeHidden({ timeout: 10_000 });
-    expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toBe('[]');
+    const review = page.getByRole('alert').filter({ hasText: /Match changed on another scorekeeper device/i });
+    await expect(review).toBeVisible();
+    await expect(review).toContainText(/Attempted: .+, 5–2/i);
+    await expect(page.getByRole('button', { name: /^Record Result$/i })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toContain('needs_review');
+
+    await page.reload();
+    const persistedReview = page.getByRole('alert').filter({ hasText: /Match changed on another scorekeeper device/i });
+    await expect(persistedReview).toBeVisible();
+
+    rejectSync = false;
+    await persistedReview.getByRole('button', { name: /^Retry$/i }).click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1')), { timeout: 10_000 }).toBe('[]');
+    await expect(persistedReview).toBeHidden();
   });
 });

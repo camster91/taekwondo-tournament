@@ -13,7 +13,7 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { Card, CardBody } from '../components/ui';
+import { Card, CardBody, ConfirmDialog } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
@@ -24,7 +24,7 @@ import { useOfflineOperations } from '../hooks/useOfflineOperations';
 import { makeCheckInOperation } from '../utils/offline-operation-queue';
 import { CHECK_IN_ACCESSIBLE_LABELS, formatCheckInWeight } from '../utils/check-in-display';
 import OperationStatus from '../components/ui/OperationStatus';
-import { buildOfflineOperationStatuses } from '../utils/offline-operation-status';
+import { buildDeliveryUncertainMessage, buildOfflineOperationStatuses, buildOfflineReviewMessage } from '../utils/offline-operation-status';
 
 interface Registration {
   id: string;
@@ -58,6 +58,8 @@ export default function CheckIn() {
   const toast = useToast();
   const { user } = useAuth();
   const offlineOperations = useOfflineOperations(tournamentId, 'check_in');
+  const [discardOfflineId, setDiscardOfflineId] = useState<string | null>(null);
+  const [discardOfflineError, setDiscardOfflineError] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -110,11 +112,16 @@ export default function CheckIn() {
   type CheckInSubmission = { registrationId: string; weight?: number };
   const stageCheckIn = (data: CheckInSubmission) => {
     if (!tournamentId || !user) return;
-    offlineOperations.enqueue(makeCheckInOperation(user.id, tournamentId, data.registrationId, {
-      checkedIn: true,
-      checkInTime: new Date().toISOString(),
-      checkInWeight: data.weight || null,
-    }));
+    try {
+      offlineOperations.enqueue(makeCheckInOperation(user.id, tournamentId, data.registrationId, {
+        checkedIn: true,
+        checkInTime: new Date().toISOString(),
+        checkInWeight: data.weight || null,
+      }));
+    } catch {
+      toast.error('Check-in was not saved on this device. Keep this form open, free device storage, and try again.');
+      return;
+    }
     setSelectedRegistration(null);
     setCheckInWeight('');
     toast.warning('Check-in saved on this device and will sync when the connection returns.');
@@ -245,15 +252,22 @@ export default function CheckIn() {
       return;
     }
     if (!navigator.onLine) {
-      eligibleForBulk.forEach((registration) => {
+      let staged = 0;
+      for (const registration of eligibleForBulk) {
         if (!tournamentId || !user) return;
-        offlineOperations.enqueue(makeCheckInOperation(user.id, tournamentId, registration.id, {
-          checkedIn: true,
-          checkInTime: new Date().toISOString(),
-          checkInWeight: null,
-        }));
-      });
-      toast.warning(`${eligibleForBulk.length} check-ins saved on this device for later sync.`);
+        try {
+          offlineOperations.enqueue(makeCheckInOperation(user.id, tournamentId, registration.id, {
+            checkedIn: true,
+            checkInTime: new Date().toISOString(),
+            checkInWeight: null,
+          }));
+          staged += 1;
+        } catch {
+          toast.error(`${staged} of ${eligibleForBulk.length} check-ins were saved on this device. Free device storage before retrying the rest.`);
+          return;
+        }
+      }
+      toast.warning(`${staged} check-ins saved on this device for later sync.`);
       return;
     }
     setIsBulkCheckingIn(true);
@@ -296,7 +310,37 @@ export default function CheckIn() {
       await queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
       toast.success(`${result.synced} staged check-in${result.synced === 1 ? '' : 's'} synced.`);
     }
-    if (result.needsReview > 0) toast.error('A staged check-in was rejected and needs staff review.');
+    if (result.newlyRejected > 0) toast.error('A staged check-in was rejected and needs staff review.');
+    if (result.persistenceFailuresBeforeSend > 0) {
+      toast.error('Nothing was sent because this device could not safely prepare the sync. Free device storage and try again.');
+    }
+    if (result.persistenceFailuresAfterSend > 0) {
+      toast.error('The server may have accepted a check-in, but this device could not clear its local copy. Refresh and review before syncing again.');
+    }
+    if (result.persistenceFailuresAfterRejection > 0) {
+      toast.error('A check-in was rejected, but this device could not save the rejection details. It has been quarantined from retry; refresh and review it.');
+    }
+  };
+
+  const retryStagedCheckIn = async (id: string) => {
+    const result = await offlineOperations.retry(id);
+    if (!result) return;
+    if (result.outcome === 'synced') {
+      await queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
+      toast.success('Staged check-in synced.');
+    } else if (result.outcome === 'rejected') {
+      toast.error('The staged check-in was rejected again. Review the server message before retrying.');
+    } else if (result.outcome === 'offline') {
+      toast.warning('Reconnect to retry this staged check-in.');
+    } else if (result.outcome === 'superseded') {
+      toast.warning('A newer local check-in replaced this retry. The newer change remains queued.');
+    } else if (result.outcome === 'persistence_failed_after_send') {
+      toast.error('The server may have accepted this check-in, but this device could not clear the local copy. Refresh and review the registration before retrying.');
+    } else if (result.outcome === 'delivery_uncertain' || result.outcome === 'persistence_failed_after_rejection') {
+      toast.error('Delivery is uncertain. Refresh and verify the server registration; retry is disabled for this local copy.');
+    } else if (result.outcome === 'persistence_failed_before_send') {
+      toast.error('This device could not safely prepare the retry, so nothing was sent. Free device storage and try again.');
+    }
   };
 
   return (
@@ -346,18 +390,38 @@ export default function CheckIn() {
         <div className="m-4 space-y-2">
           {buildOfflineOperationStatuses('check-in', offlineOperations.pending.length, offlineOperations.needsReview.length, offlineOperations.syncing)
             .map((status) => <OperationStatus key={status.state} {...status} />)}
-          <span className="hidden" aria-hidden="true">
-            {offlineOperations.pending.length} check-in{offlineOperations.pending.length === 1 ? '' : 's'} pending sync
-            {offlineOperations.needsReview.length > 0 && ` · ${offlineOperations.needsReview.length} needs staff review`}
-          </span>
-          <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => void syncStagedCheckIns()} loading={offlineOperations.syncing}>Sync now</Button>
-            {offlineOperations.needsReview.map((operation) => (
-              <Button key={operation.id} size="sm" variant="secondary" onClick={() => offlineOperations.remove(operation.id)}>
-                Discard rejected #{operation.targetId.slice(0, 8)}
+          {offlineOperations.pending.length > 0 && (
+            <Button size="sm" variant="secondary" onClick={() => void syncStagedCheckIns()} loading={offlineOperations.syncing} disabled={offlineOperations.queueBusy}>Sync pending check-ins</Button>
+          )}
+          {offlineOperations.needsReview.map((operation) => {
+            const retrying = offlineOperations.retryingIds.has(operation.id);
+            const retryable = operation.status === 'needs_review' && !retrying;
+            const registration = registrations?.find((candidate) => candidate.id === operation.targetId);
+            const label = registration
+              ? `${registration.competitor.firstName} ${registration.competitor.lastName}`
+              : `Check-in #${operation.targetId.slice(0, 8)}`;
+            const weight = operation.payload.checkInWeight;
+            const message = operation.status === 'delivery_uncertain'
+              ? buildDeliveryUncertainMessage('check-in', label)
+              : buildOfflineReviewMessage('check-in', operation.targetId, operation.lastError, {
+                label,
+                attempted: typeof weight === 'number' ? `Checked in at ${formatCheckInWeight(weight)} lbs` : 'Checked in',
+                createdAt: operation.createdAt,
+              });
+            return (
+            <OperationStatus
+              key={operation.id}
+              state={retrying ? 'retrying' : 'rejected'}
+              message={message}
+              actionLabel={retryable ? 'Retry' : undefined}
+              onAction={retryable ? () => void retryStagedCheckIn(operation.id) : undefined}
+            >
+              <Button size="sm" variant="secondary" onClick={() => { setDiscardOfflineError(''); setDiscardOfflineId(operation.id); }} disabled={retrying}>
+                Discard local change
               </Button>
-            ))}
-          </div>
+            </OperationStatus>
+            );
+          })}
         </div>
       )}
 
@@ -623,6 +687,26 @@ export default function CheckIn() {
             )}
         </Modal>
       )}
+      <ConfirmDialog
+        isOpen={discardOfflineId !== null}
+        onClose={() => { setDiscardOfflineError(''); setDiscardOfflineId(null); }}
+        onConfirm={() => {
+          try {
+            if (discardOfflineId) offlineOperations.remove(discardOfflineId);
+            setDiscardOfflineError('');
+            setDiscardOfflineId(null);
+          } catch {
+            setDiscardOfflineError('The local change could not be removed from this device. Free device storage and try again.');
+          }
+        }}
+        title="Discard unsynced check-in?"
+        message={<>
+          <span className="block">This permanently removes the local check-in change. The server registration will remain unchanged.</span>
+          {discardOfflineError && <span role="alert" className="mt-2 block text-red-700 dark:text-red-300">{discardOfflineError}</span>}
+        </>}
+        confirmText="Discard local change"
+        variant="danger"
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import {
   type OfflineOperation,
   type OfflineOperationKind,
 } from '../utils/offline-operation-queue';
+import { runWithOfflineOperationLock, type OfflineOperationLockManager } from '../utils/offline-operation-lock';
 
 async function sendOperation(operation: OfflineOperation): Promise<void> {
   const url = operation.kind === 'score_result'
@@ -26,6 +27,8 @@ export function useOfflineOperations(tournamentId: string | undefined, kind?: Of
   const queue = useMemo(() => browserOfflineOperationQueue(), []);
   const [operations, setOperations] = useState<OfflineOperation[]>(() => queue.list());
   const [syncing, setSyncing] = useState(false);
+  const [queueBusy, setQueueBusy] = useState(false);
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(() => new Set());
   const syncingRef = useRef(false);
 
   const refresh = useCallback(() => setOperations(queue.list()), [queue]);
@@ -34,19 +37,52 @@ export function useOfflineOperations(tournamentId: string | undefined, kind?: Of
   }, [queue]);
   const remove = useCallback((id: string) => setOperations(queue.remove(id)), [queue]);
 
-  const sync = useCallback(async () => {
-    if (!navigator.onLine || syncingRef.current) return null;
+  const retry = useCallback(async (id: string) => {
+    const operation = queue.list().find((candidate) => candidate.id === id);
+    if (!operation || operation.status !== 'needs_review' || syncingRef.current
+      || operation.ownerId !== user?.id
+      || (tournamentId && operation.tournamentId !== tournamentId)
+      || (kind && operation.kind !== kind)) return null;
+    if (!navigator.onLine) return { outcome: 'offline' as const };
     syncingRef.current = true;
-    setSyncing(true);
+    setQueueBusy(true);
+    setRetryingIds((current) => new Set(current).add(id));
     try {
-      const result = await queue.flush(sendOperation, (operation) =>
-        operation.ownerId === user?.id
-        && (!tournamentId || operation.tournamentId === tournamentId)
-        && (!kind || operation.kind === kind));
+      const result = await runWithOfflineOperationLock(
+        navigator.locks as unknown as OfflineOperationLockManager | undefined,
+        () => queue.retryOne(id, sendOperation),
+      );
       refresh();
       return result;
     } finally {
       syncingRef.current = false;
+      setQueueBusy(false);
+      setRetryingIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+    }
+  }, [kind, queue, refresh, tournamentId, user?.id]);
+
+  const sync = useCallback(async () => {
+    if (!navigator.onLine || syncingRef.current) return null;
+    syncingRef.current = true;
+    setQueueBusy(true);
+    setSyncing(true);
+    try {
+      const result = await runWithOfflineOperationLock(
+        navigator.locks as unknown as OfflineOperationLockManager | undefined,
+        () => queue.flush(sendOperation, (operation) =>
+          operation.ownerId === user?.id
+          && (!tournamentId || operation.tournamentId === tournamentId)
+          && (!kind || operation.kind === kind)),
+      );
+      refresh();
+      return result;
+    } finally {
+      syncingRef.current = false;
+      setQueueBusy(false);
       setSyncing(false);
     }
   }, [kind, queue, refresh, tournamentId, user?.id]);
@@ -65,10 +101,13 @@ export function useOfflineOperations(tournamentId: string | undefined, kind?: Of
   return {
     operations: scoped,
     pending: scoped.filter((operation) => operation.status === 'pending'),
-    needsReview: scoped.filter((operation) => operation.status === 'needs_review'),
+    needsReview: scoped.filter((operation) => operation.status === 'needs_review' || operation.status === 'delivery_uncertain'),
     enqueue,
     remove,
+    retry,
     sync,
     syncing,
+    queueBusy,
+    retryingIds,
   };
 }
