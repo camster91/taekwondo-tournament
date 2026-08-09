@@ -24,6 +24,15 @@ import {
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validate.js';
 import { AppError, ErrorCode } from '../utils/errors.js';
+import { randomUUID } from 'node:crypto';
+import {
+  applyBracketCorrection,
+  assertInitialBracketGeneration,
+  getBracketCorrectionStatus,
+  previewBracketCorrection,
+  undoBracketCorrection,
+  type BracketCorrectionConfig,
+} from '../services/bracket-correction.js';
 
 const router = Router();
 
@@ -49,6 +58,87 @@ const matchResultSchema = z.object({
   notes: z.string().max(500, 'Notes must be 500 characters or fewer').optional(),
 });
 
+const bracketCorrectionConfigSchema = z.object({
+  format: z.enum(['double_elim', 'single_elim', 'round_robin', 'pool_play']),
+  seedingStrategy: z.enum(['school_spread', 'manual', 'skill_based', 'balanced']),
+  poolCount: z.number().int().min(2).max(100).optional(),
+  advancePerPool: z.number().int().min(1).max(8).optional(),
+});
+
+const bracketCorrectionApplySchema = z.object({
+  config: bracketCorrectionConfigSchema,
+  expectedInputVersion: z.string().length(64),
+  expectedResultVersion: z.string().length(64),
+  operationKey: z.string().uuid(),
+});
+
+async function resolveDirectorTournament(req: AuthenticatedRequest, prisma: PrismaClient, divisionId: string) {
+  const division = await prisma.division.findUnique({ where: { id: divisionId }, select: { tournamentId: true } });
+  if (!division) return { error: { status: 404, message: 'Division not found' } } as const;
+  const access = await checkTournamentAccess(req, prisma, division.tournamentId, 'director');
+  if (!access.ok) return { error: { status: access.status || 403, message: access.error || 'Forbidden' } } as const;
+  return { tournamentId: division.tournamentId } as const;
+}
+
+router.post('/division/:divisionId/correction/preview', authenticate, validateRequest(z.object({ config: bracketCorrectionConfigSchema })), async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.divisionId);
+  const access = await resolveDirectorTournament(req, prisma, divisionId);
+  if (access.error) return res.status(access.error.status).json({ error: access.error.message });
+  try {
+    const preview = await previewBracketCorrection(prisma, divisionId, req.body.config as BracketCorrectionConfig, randomUUID());
+    res.json(preview);
+  } catch (error) {
+    console.error('[bracket-correction] preview failed:', error);
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Bracket preview failed' });
+  }
+});
+
+router.post('/division/:divisionId/correction/apply', authenticate, validateRequest(bracketCorrectionApplySchema), async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.divisionId);
+  const access = await resolveDirectorTournament(req, prisma, divisionId);
+  if (access.error) return res.status(access.error.status).json({ error: access.error.message });
+  try {
+    const result = await applyBracketCorrection(prisma, {
+      tournamentId: access.tournamentId,
+      divisionId,
+      config: req.body.config as BracketCorrectionConfig,
+      expectedInputVersion: req.body.expectedInputVersion,
+      expectedResultVersion: req.body.expectedResultVersion,
+      operationKey: req.body.operationKey,
+      approvedBy: req.user!.id,
+    });
+    res.json(result);
+  } catch (error) {
+    const conflict = error instanceof Error && /stale|in progress|already in use/i.test(error.message);
+    res.status(conflict ? 409 : 400).json({ error: error instanceof Error ? error.message : 'Bracket correction failed' });
+  }
+});
+
+router.get('/division/:divisionId/correction/status/:operationKey', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.divisionId);
+  const access = await resolveDirectorTournament(req, prisma, divisionId);
+  if (access.error) return res.status(access.error.status).json({ error: access.error.message });
+  const status = await getBracketCorrectionStatus(prisma, access.tournamentId, divisionId, getParam(req.params.operationKey));
+  if (!status) return res.status(404).json({ error: 'Bracket correction not found' });
+  res.json(status);
+});
+
+router.post('/division/:divisionId/correction/undo/:auditId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.divisionId);
+  const access = await resolveDirectorTournament(req, prisma, divisionId);
+  if (access.error) return res.status(access.error.status).json({ error: access.error.message });
+  try {
+    await undoBracketCorrection(prisma, access.tournamentId, divisionId, getParam(req.params.auditId), req.user!.id);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : 'Bracket correction cannot be undone' });
+  }
+});
+
 // Generate bracket for division (requires authentication + admin/director role)
 router.post('/division/:divisionId/generate', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
@@ -57,7 +147,7 @@ router.post('/division/:divisionId/generate', authenticate, async (req: Authenti
   // Per-tournament access: resolve division → tournamentId first.
   const divisionMeta = await prisma.division.findUnique({
     where: { id: divisionId },
-    select: { tournamentId: true },
+    select: { tournamentId: true, bracket: { select: { id: true } } },
   });
   if (!divisionMeta) {
     return res.status(404).json({ error: 'Division not found' });
@@ -65,6 +155,12 @@ router.post('/division/:divisionId/generate', authenticate, async (req: Authenti
   const access = await checkTournamentAccess(req, prisma, divisionMeta.tournamentId, 'director');
   if (!access.ok) {
     return res.status(access.status || 403).json({ error: access.error });
+  }
+
+  if (divisionMeta.bracket) {
+    return res.status(409).json({
+      error: 'Existing brackets must use the correction preview and audited undo workflow',
+    });
   }
 
   // format: 'double_elim' (default) | 'single_elim' | 'round_robin' | 'pool_play'
@@ -81,11 +177,17 @@ router.post('/division/:divisionId/generate', authenticate, async (req: Authenti
         },
         orderBy: { seedPosition: 'asc' },
       },
+      bracket: { select: { id: true } },
     },
   });
 
   if (!division) {
     return res.status(404).json({ error: 'Division not found' });
+  }
+  try {
+    assertInitialBracketGeneration(division.bracket);
+  } catch (error) {
+    return res.status(409).json({ error: error instanceof Error ? error.message : 'Use bracket correction preview' });
   }
 
   // Prisma narrows the result type via the `include` shape — no cast
@@ -114,11 +216,8 @@ router.post('/division/:divisionId/generate', authenticate, async (req: Authenti
     bracketStructure = generateBracket(competitors, seedingStrategy);
   }
 
-  // Wrap the destructive delete + create + per-match create in a single
-  // transaction. This prevents a race where a scorekeeper records a
-  // result on the old bracket between our deleteMany and the new
-  // bracket.create (which would either silently lose the score or
-  // update a deleted match).
+  // Initial generation never deletes. The unique divisionId constraint
+  // makes a concurrent creator fail safely instead of replacing its bracket.
   const allMatches = [
     ...bracketStructure.winners.map((m) => ({ ...m, bracketType: 'winners' })),
     ...bracketStructure.losers.map((m) => ({ ...m, bracketType: 'losers' })),
@@ -126,12 +225,6 @@ router.post('/division/:divisionId/generate', authenticate, async (req: Authenti
   ];
 
   const result = await prisma.$transaction(async (tx) => {
-    // Delete existing bracket (cascade-deletes its matches + audit log
-    // because schema has onDelete: Cascade on Bracket -> Match).
-    await tx.bracket.deleteMany({
-      where: { divisionId: division.id },
-    });
-
     // Create the new bracket record.
     const bracket = await tx.bracket.create({
       data: {
@@ -705,39 +798,23 @@ router.post('/division/:divisionId/reset', authenticate, async (req: Authenticat
 
   const divisionMeta = await prisma.division.findUnique({
     where: { id: divisionId },
-    select: { tournamentId: true },
+    select: { tournamentId: true, bracket: { select: { id: true } } },
   });
   if (!divisionMeta) {
     return res.status(404).json({ error: 'Division not found' });
   }
-  const access = await checkTournamentAccess(req, prisma, divisionMeta.tournamentId, 'scorekeeper');
+  const access = await checkTournamentAccess(req, prisma, divisionMeta.tournamentId, 'director');
   if (!access.ok) {
     return res.status(access.status || 403).json({ error: access.error });
   }
 
-  // Closes B17: schema cascades to Match via Match.bracket, but
-  // MatchAuditLog and MatchupHistory are not FK'd to Match and
-  // would orphan. Clean them up explicitly in a single tx.
-  // The match IDs in those tables are plain strings (no FK), so
-  // we resolve the set of match ids first, then delete by id.
-  const matchIds = await prisma.match.findMany({
-    where: { bracket: { divisionId } },
-    select: { id: true },
-  });
-  const matchIdList = matchIds.map((m) => m.id);
-
-  await prisma.$transaction([
-    prisma.matchAuditLog.deleteMany({
-      where: { matchId: { in: matchIdList } },
-    }),
-    prisma.matchupHistory.deleteMany({
-      where: { matchId: { in: matchIdList } },
-    }),
-    prisma.bracket.deleteMany({
-      where: { divisionId },
-    }),
-  ]);
-
+  if (divisionMeta.bracket) {
+    return res.status(409).json({
+      error: 'Existing brackets must use the correction preview and audited undo workflow',
+    });
+  }
+  // No bracket exists, so reset is deliberately a no-op. Existing brackets
+  // must go through correction preview/apply/undo above.
   res.status(204).send();
 });
 
@@ -756,6 +833,7 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
   const divisions = await prisma.division.findMany({
     where: { tournamentId: getParam(req.params.tournamentId) },
     include: {
+      bracket: { select: { id: true } },
       assignments: {
         include: {
           registration: {
@@ -765,6 +843,13 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
       },
     },
   });
+
+  const existingBracket = divisions.find((division) => division.bracket !== null);
+  if (existingBracket) {
+    return res.status(409).json({
+      error: `Existing bracket in ${existingBracket.name} must use the correction preview and audited undo workflow`,
+    });
+  }
 
   let generated = 0;
   let skipped = 0;
@@ -801,9 +886,8 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
       ...bracketStructure.finals.map((m) => ({ ...m, bracketType: 'finals' })),
     ];
 
-    // Closes B29: each division's generate is now wrapped in a
-    // $transaction so a partial failure (e.g. an FK conflict on the
-    // new bracket row) doesn't leave the old bracket half-deleted.
+    // Each initial generation is transactional. It never deletes an existing
+    // bracket; a concurrent creator is rejected by the unique constraint.
     // The handleByeMatches() call stays outside the transaction
     // because it depends on reading the just-committed bracket
     // state (matches created in the same transaction aren't
@@ -813,11 +897,7 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
     // 50 leaves divisions 1-24 done and 26-50 untouched, instead
     // of partially committed.
     try {
-      await prisma.$transaction(async (tx) => {
-        await tx.bracket.deleteMany({
-          where: { divisionId: division.id },
-        });
-
+      const bracket = await prisma.$transaction(async (tx) => {
         const bracket = await tx.bracket.create({
           data: {
             divisionId: division.id,
@@ -845,7 +925,7 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
 
       // Handle BYE matches outside the transaction so the reads see
       // committed state.
-      await handleByeMatches(prisma, division.id);
+      await handleByeMatches(prisma, bracket.id);
       generated++;
     } catch (err: unknown) {
       console.error(`[brackets/generate-all] ${division.name}:`, err);
