@@ -29,7 +29,10 @@ integration('demo showcase reset against disposable Postgres', () => {
     await prisma.organization.deleteMany({ where: { id: sentinelOrgId } });
     await prisma.competitor.deleteMany({ where: { id: sentinelCompetitorId, registrations: { none: {} } } });
     const demo = await prisma.organization.findUnique({ where: { slug: DEMO_ORGANIZATION_SLUG }, select: { id: true, settings: true } });
-    if (demo && JSON.parse(demo.settings ?? '{}').marker === DEMO_MARKER) await prisma.organization.delete({ where: { id: demo.id } });
+    if (demo && JSON.parse(demo.settings ?? '{}').marker === DEMO_MARKER) {
+      await prisma.tournament.deleteMany({ where: { organizationId: demo.id } });
+      await prisma.organization.delete({ where: { id: demo.id } });
+    }
     await prisma.competitor.deleteMany({ where: { id: { in: fixture.competitors.map((competitor) => competitor.id) }, registrations: { none: {} } } });
     await prisma.$disconnect();
   });

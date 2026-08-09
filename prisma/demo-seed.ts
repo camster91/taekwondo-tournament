@@ -149,7 +149,14 @@ export async function resetDemoShowcase(client: DemoClient): Promise<Fixture> {
     const current = await tx.organization.findUnique({ where: { slug: DEMO_ORGANIZATION_SLUG }, select: { id: true, settings: true } });
     if (current && !hasDemoMarker(current.settings)) throw new Error(`Refusing to reset organization '${DEMO_ORGANIZATION_SLUG}': demo marker changed`);
     const captured = current ? await tx.registration.findMany({ where: { tournament: { organizationId: current.id } }, select: { competitorId: true }, distinct: ['competitorId'] }) : [];
-    if (current) await tx.organization.delete({ where: { id: current.id } });
+    if (current) {
+      // Tournament.organization intentionally has no database-level
+      // ON DELETE CASCADE, so remove only this verified demo tenant's
+      // tournaments before its organization. Tournament-owned records
+      // cascade through their own foreign keys.
+      await tx.tournament.deleteMany({ where: { organizationId: current.id } });
+      await tx.organization.delete({ where: { id: current.id } });
+    }
     if (captured.length) await tx.competitor.deleteMany({ where: { id: { in: captured.map((row) => row.competitorId) }, registrations: { none: {} } } });
     await writeFixture(tx, fixture);
   });

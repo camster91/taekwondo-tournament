@@ -91,7 +91,10 @@ describe('resetDemoShowcase', () => {
     expect(competitorDeletes[0].args).toEqual({
       where: { id: { in: ['demo-c1', 'shared-c2'] }, registrations: { none: {} } },
     });
-    expect(calls.some((c) => c.model !== 'competitor' && c.operation === 'deleteMany')).toBe(false);
+    const tournamentDeletes = calls.filter((c) => c.model === 'tournament' && c.operation === 'deleteMany');
+    expect(tournamentDeletes).toHaveLength(2);
+    expect(tournamentDeletes[0].args).toEqual({ where: { organizationId: 'existing-demo' } });
+    expect(calls.some((c) => !['competitor', 'tournament'].includes(c.model) && c.operation === 'deleteMany')).toBe(false);
     expect(calls.filter((c) => c.model === 'organization' && c.operation === 'create')).toHaveLength(2);
     expect(second).toEqual(first);
   });
