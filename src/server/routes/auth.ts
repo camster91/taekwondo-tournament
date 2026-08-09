@@ -12,7 +12,6 @@ import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
 
 const router = Router();
-const DEMO_EMAIL = 'demo@bowin.app';
 
 // Rate limiting for auth routes. In dev/test, set RATE_LIMIT_DISABLED=1 to
 // bypass entirely (the limiter is in-memory so test suites that hit the
@@ -495,23 +494,16 @@ if (devAuthEndpointsEnabled) {
 router.post('/logout', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
-  // The public demo intentionally shares one synthetic user. Revoking that
-  // user's tokenVersion would terminate every other visitor's demo session.
-  // Clearing this caller's cookies is sufficient because the demo contains
-  // isolated synthetic data and its JWT already has a short expiry.
-  const isSharedDemoUser = req.user!.email === DEMO_EMAIL;
   try {
     // Bump tokenVersion to invalidate every outstanding JWT for
     // this user at once. The authenticate middleware compares the
     // embedded tokenVersion against the current DB value on every
     // request, so any token issued before this bump is rejected.
-    if (!isSharedDemoUser) {
-      await prisma.user.update({
-        where: { id: req.user!.id },
-        data: { tokenVersion: { increment: 1 } },
-      });
-      invalidateAuthCache(req.user!.id);
-    }
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { tokenVersion: { increment: 1 } },
+    });
+    invalidateAuthCache(req.user!.id);
   } catch (error) {
     console.error('Logout tokenVersion bump failed:', error);
     // Fall through — clearing the cookie still ends the current session.
@@ -1029,7 +1021,7 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
 });
 
 // Demo mode: anyone can sign in as a guest without an email.
-// - Creates (or reuses) a "demo@bowin.app" user
+// - Creates a unique synthetic demo principal for each login
 // - Mints a JWT with a 4-hour expiry
 // - Designed for the public live URL so visitors can try the app
 //   without needing to receive a magic-link email
@@ -1052,18 +1044,17 @@ if (demoLoginEnabled) {
     try {
       const prisma: PrismaClient = _req.app.locals.prisma;
 
-      // Find or create the demo user (idempotent, shared across all visitors)
-      let user = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            email: DEMO_EMAIL,
-            firstName: 'Demo',
-            lastName: 'Visitor',
-            role: 'admin', // demo gets full admin so they can poke every feature
-          },
-        });
-      }
+      // Each visitor gets an independent principal. Standard logout can then
+      // revoke only that visitor's JWT without affecting concurrent sessions.
+      const demoSessionId = crypto.randomBytes(16).toString('hex');
+      const user = await prisma.user.create({
+        data: {
+          email: `demo-${demoSessionId}@bowin.app`,
+          firstName: 'Demo',
+          lastName: 'Visitor',
+          role: 'admin', // safe only behind the isolated synthetic-data gate
+        },
+      });
 
       const { createToken } = await import('../middleware/auth.js');
       const token = createToken(

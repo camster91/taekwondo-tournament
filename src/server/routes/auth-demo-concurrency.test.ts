@@ -16,18 +16,13 @@ describe('concurrent demo sessions with real auth middleware', () => {
   let server: Server;
   let baseUrl: string;
   const originalEnv = { ...process.env };
-  const demoUser = {
-    id: 'real-demo-user',
-    email: 'demo@bowin.app',
-    firstName: 'Demo',
-    lastName: 'Visitor',
-    role: 'admin',
-    isActive: true,
-    tokenVersion: 0,
-    createdAt: new Date('2026-01-01T00:00:00Z'),
-    lastLogin: null,
+  const users = new Map<string, any>();
+  const sharedDemoUser = {
+    id: 'shared-demo-user', email: 'demo@bowin.app', firstName: 'Demo', lastName: 'Visitor',
+    role: 'admin', isActive: true, tokenVersion: 0, createdAt: new Date(), lastLogin: null,
     tournamentAccess: [],
   };
+  users.set(sharedDemoUser.id, sharedDemoUser);
 
   beforeAll(async () => {
     vi.resetModules();
@@ -40,11 +35,27 @@ describe('concurrent demo sessions with real auth middleware', () => {
     app.use(express.json());
     app.locals.prisma = {
       user: {
-        findUnique: vi.fn().mockResolvedValue(demoUser),
-        create: vi.fn(),
-        update: vi.fn().mockImplementation(() => {
-          demoUser.tokenVersion += 1;
-          return Promise.resolve(demoUser);
+        findUnique: vi.fn().mockImplementation(({ where }: { where: { id?: string; email?: string } }) => {
+          if (where.id) return Promise.resolve(users.get(where.id) ?? null);
+          return Promise.resolve([...users.values()].find((user) => user.email === where.email) ?? null);
+        }),
+        create: vi.fn().mockImplementation(({ data }: { data: any }) => {
+          const user = {
+            ...data,
+            id: `demo-user-${users.size}`,
+            isActive: true,
+            tokenVersion: 0,
+            createdAt: new Date(),
+            lastLogin: null,
+            tournamentAccess: [],
+          };
+          users.set(user.id, user);
+          return Promise.resolve(user);
+        }),
+        update: vi.fn().mockImplementation(({ where }: { where: { id: string } }) => {
+          const user = users.get(where.id);
+          user.tokenVersion += 1;
+          return Promise.resolve(user);
         }),
       },
     };
@@ -62,31 +73,32 @@ describe('concurrent demo sessions with real auth middleware', () => {
     process.env = { ...originalEnv };
   });
 
-  it('keeps visitor B authenticated after visitor A logs out', async () => {
+  it('revokes visitor A without affecting independently identified visitor B', async () => {
     const loginA = await fetch(`${baseUrl}/demo`, { method: 'POST' });
-    const tokenA = (await loginA.json() as { token: string }).token;
-
-    // JWT iat has one-second resolution; wait so the independently issued
-    // session has a demonstrably distinct signed token.
-    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    const sessionA = await loginA.json() as { token: string; user: { id: string } };
     const loginB = await fetch(`${baseUrl}/demo`, { method: 'POST' });
-    const tokenB = (await loginB.json() as { token: string }).token;
-    expect(tokenB).not.toBe(tokenA);
+    const sessionB = await loginB.json() as { token: string; user: { id: string } };
+    expect(sessionB.user.id).not.toBe(sessionA.user.id);
+    expect(sessionB.token).not.toBe(sessionA.token);
 
     const logoutA = await fetch(`${baseUrl}/logout`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${tokenA}` },
+      headers: { authorization: `Bearer ${sessionA.token}` },
     });
     expect(logoutA.status).toBe(200);
 
+    const meA = await fetch(`${baseUrl}/me`, {
+      headers: { authorization: `Bearer ${sessionA.token}` },
+    });
+    expect(meA.status).toBe(401);
+
     const meB = await fetch(`${baseUrl}/me`, {
-      headers: { authorization: `Bearer ${tokenB}` },
+      headers: { authorization: `Bearer ${sessionB.token}` },
     });
     expect(meB.status).toBe(200);
     expect(await meB.json()).toMatchObject({
-      id: demoUser.id,
-      email: demoUser.email,
-      role: demoUser.role,
+      id: sessionB.user.id,
+      role: 'admin',
     });
   });
 });

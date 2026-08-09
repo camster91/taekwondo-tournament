@@ -59,7 +59,11 @@ async function startAuthServer(options: {
         role: 'admin',
         tokenVersion: 0,
       }),
-      create: vi.fn(),
+      create: vi.fn().mockImplementation(({ data }: { data: any }) => Promise.resolve({
+        ...data,
+        id: 'unique-demo-user',
+        tokenVersion: 0,
+      })),
     },
   };
   app.use('/api/auth', authRouter);
@@ -85,7 +89,7 @@ afterEach(async () => {
 });
 
 describe('demo session isolation', () => {
-  it('does not bump the shared demo user tokenVersion on logout', async () => {
+  it('uses standard token invalidation even for the legacy shared demo identity', async () => {
     const { baseUrl, update } = await startAuthServer({ nodeEnv: 'test' });
 
     const response = await fetch(`${baseUrl}/logout`, {
@@ -94,8 +98,11 @@ describe('demo session isolation', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(update).not.toHaveBeenCalled();
-    expect(invalidateAuthCache).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'demo-user' },
+      data: { tokenVersion: { increment: 1 } },
+    });
+    expect(invalidateAuthCache).toHaveBeenCalledWith('demo-user');
     expect(response.headers.get('set-cookie')).toContain('bowin_session=');
     expect(response.headers.get('set-cookie')).toContain('bowin_csrf=');
   });

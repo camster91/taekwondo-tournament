@@ -48,7 +48,11 @@ async function startAuthServer(demoMax?: string) {
           tokenVersion: 0,
         }),
       ),
-      create: vi.fn(),
+      create: vi.fn().mockImplementation(({ data }) => Promise.resolve({
+        ...data,
+        id: `demo-${data.email}`,
+        tokenVersion: 0,
+      })),
     },
     magicLink: {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
