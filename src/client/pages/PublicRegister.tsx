@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Trophy, CheckCircle, AlertCircle, User, Calendar, Award, CreditCard, Printer } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
@@ -10,6 +10,7 @@ import { Label } from '../components/ui';
 import { Select } from '../components/ui';
 import { Textarea } from '../components/ui';
 import { getSportProfile } from '../../shared/constants/sport-profiles';
+import { fetchJson, getApiFailure } from '../utils/api-status';
 
 interface Tournament {
   id: string;
@@ -93,6 +94,7 @@ export default function PublicRegister() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<RegistrationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [legalConfig, setLegalConfig] = useState<RegistrationLegalConfig | null>(null);
 
@@ -246,25 +248,46 @@ export default function PublicRegister() {
   const selectedTournamentFeeCents = selectedTournamentSettings.tournamentFeeCents ?? 0;
   const selectedTournamentFeeNotes = selectedTournamentSettings.feeNotes ?? '';
 
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/public/tournaments'),
-      fetch('/api/public/legal-config'),
-    ])
-      .then(async ([tournamentsResponse, legalResponse]) => {
-        if (!tournamentsResponse.ok || !legalResponse.ok) throw new Error('Registration configuration unavailable');
-        return Promise.all([tournamentsResponse.json(), legalResponse.json()]);
-      })
-      .then(([data, deployedLegalConfig]) => {
-        setTournaments(data as Tournament[]);
-        setLegalConfig(deployedLegalConfig as RegistrationLegalConfig);
-        if (data.length === 1 && !formData.tournamentId) {
-          setFormData((prev) => ({ ...prev, tournamentId: data[0].id }));
-        }
-      })
-      .catch(() => setError('Registration is temporarily unavailable because its tournament or legal configuration could not be loaded.'))
-      .finally(() => setLoading(false));
+  const loadRegistrationConfig = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    const [tournamentResult, legalResult] = await Promise.allSettled([
+      fetchJson<Tournament[]>(fetch, '/api/public/tournaments').then((data) => {
+        if (!Array.isArray(data)) throw new Error('Invalid tournament response');
+        return data;
+      }),
+      fetchJson<RegistrationLegalConfig>(fetch, '/api/public/legal-config'),
+    ]);
+
+    if (tournamentResult.status === 'rejected') {
+      const failure = getApiFailure(tournamentResult.reason);
+      setLoadError(failure?.kind === 'rate_limited' && failure.retryAfterSeconds
+        ? `Tournament list is temporarily unavailable. Try again in ${failure.retryAfterSeconds} seconds.`
+        : 'Tournament list is temporarily unavailable. Please try again.');
+      setLoading(false);
+      return;
+    }
+    if (legalResult.status === 'rejected') {
+      const failure = getApiFailure(legalResult.reason);
+      setLoadError(failure?.kind === 'rate_limited' && failure.retryAfterSeconds
+        ? `Required registration terms are temporarily unavailable. Try again in ${failure.retryAfterSeconds} seconds.`
+        : 'Required registration terms are temporarily unavailable. Please try again.');
+      setLoading(false);
+      return;
+    }
+
+    const data = tournamentResult.value;
+    setTournaments(data);
+    setLegalConfig(legalResult.value);
+    if (data.length === 1) {
+      setFormData((prev) => prev.tournamentId ? prev : { ...prev, tournamentId: data[0].id });
+    }
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    void loadRegistrationConfig();
+  }, [loadRegistrationConfig]);
 
   // Map a field name from server validation errors to its DOM ref. We use a
   // regex match against the error string; if no match we fall back to focusing
@@ -396,6 +419,19 @@ export default function PublicRegister() {
         <div className="flex items-center text-gray-600 dark:text-gray-400">
           <Spinner className="mr-2" />
           Loading tournaments...
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+        <div className="max-w-md mx-auto text-center">
+          <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-5 mb-4 text-red-700 dark:text-red-300">
+            {loadError}
+          </div>
+          <Button variant="primary" onClick={() => void loadRegistrationConfig()}>Retry</Button>
         </div>
       </div>
     );

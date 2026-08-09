@@ -76,4 +76,35 @@ test.describe('truthful anonymous status', () => {
     await expect(page.getByRole('alert')).toContainText('Registration management is unavailable right now');
     await expect(page.getByRole('alert')).not.toContainText('invalid or has expired');
   });
+
+  test('public registration identifies a tournament-list outage and recovers on retry', async ({ page }) => {
+    let tournamentRequests = 0;
+    await page.route('**/api/public/tournaments', (route) => {
+      tournamentRequests += 1;
+      if (tournamentRequests === 1) {
+        return route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Tournament service unavailable' }),
+        });
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+    await page.route('**/api/public/legal-config', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        consentVersion: 'e2e-v1',
+        privacyNoticeUrl: '/privacy',
+        tournamentTermsUrl: '/terms',
+      }),
+    }));
+
+    await page.goto('/register');
+    await expect(page.getByRole('alert')).toContainText('Tournament list is temporarily unavailable');
+    const requestsBeforeRetry = tournamentRequests;
+    await page.getByRole('button', { name: 'Retry' }).click();
+    await expect(page.getByRole('heading', { name: 'No Open Tournaments' })).toBeVisible();
+    expect(tournamentRequests).toBe(requestsBeforeRetry + 1);
+  });
 });
