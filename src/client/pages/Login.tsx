@@ -31,7 +31,7 @@ import { BowinLogo } from '../components/brand/BowinLogo';
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { requestMagicLink, verifyCode, isAuthenticated } = useAuth();
+  const { requestMagicLink, verifyCode, retrySessionHydration, isAuthenticated } = useAuth();
 
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
@@ -39,6 +39,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [sessionVerified, setSessionVerified] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
 
   // Dev mode magic link data
@@ -131,7 +132,9 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
-    const result = await verifyCode(email, code);
+    const result = sessionVerified
+      ? await retrySessionHydration()
+      : await verifyCode(email, code);
 
     if (result.success) {
       // Same structural narrowing as the auth-effect above — keeps the
@@ -140,6 +143,7 @@ export default function Login() {
       const from = state?.from?.pathname || '/';
       navigate(from, { replace: true });
     } else {
+      setSessionVerified(result.sessionVerified === true);
       setError(result.error || 'Verification failed');
     }
 
@@ -283,7 +287,8 @@ export default function Login() {
                   <CodeForm
                     email={email} code={code} setCode={setCode}
                     onSubmit={handleCodeSubmit} loading={isLoading}
-                    onBack={() => { setStep('email'); setCode(''); setError(''); setDevModeData(null); }}
+                    sessionVerified={sessionVerified}
+                    onBack={() => { setStep('email'); setCode(''); setError(''); setSessionVerified(false); setDevModeData(null); }}
                     codeInputRef={codeInputRef}
                     devModeData={devModeData}
                   />
@@ -399,6 +404,7 @@ function CodeForm({
   setCode,
   onSubmit,
   loading,
+  sessionVerified,
   onBack,
   codeInputRef,
   devModeData,
@@ -408,6 +414,7 @@ function CodeForm({
   setCode: (v: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   loading: boolean;
+  sessionVerified: boolean;
   onBack: () => void;
   codeInputRef: React.RefObject<HTMLInputElement | null>;
   devModeData: { magicUrl: string; code: string; email: string } | null;
@@ -518,8 +525,10 @@ function CodeForm({
           />
         </div>
 
-        <Button type="submit" variant="primary" loading={loading} disabled={code.length !== 6} className="w-full">
-          {loading ? <><Spinner size="sm" className="mr-2" /> Verifying...</> : 'Verify code'}
+        <Button type="submit" variant="primary" loading={loading} disabled={!sessionVerified && code.length !== 6} className="w-full">
+          {loading
+            ? <><Spinner size="sm" className="mr-2" /> Loading session...</>
+            : sessionVerified ? 'Retry session' : 'Verify code'}
         </Button>
       </form>
 
