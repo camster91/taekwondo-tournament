@@ -103,9 +103,9 @@ export async function restoreDivisionState(
 
     // Restore each division
     for (const div of backup.divisions) {
-      try {
-        // Create division
-        const division = await tx.division.create({
+      // Any failure must escape the transaction. Catching per-division errors
+      // commits a partial restore after the current state has been deleted.
+      const division = await tx.division.create({
           data: {
             id: div.id,
             tournamentId: backup.tournamentId,
@@ -123,36 +123,32 @@ export async function restoreDivisionState(
             isSpecialNeeds: div.isSpecialNeeds,
             displayOrder: div.displayOrder,
           },
-        });
+      });
 
-        // Restore assignments
-        for (const assignment of div.assignments) {
-          await tx.divisionAssignment.create({
+      // Restore assignments
+      for (const assignment of div.assignments) {
+        await tx.divisionAssignment.create({
             data: {
               divisionId: division.id,
               registrationId: assignment.registrationId,
               seedPosition: assignment.seedPosition,
               manualOverride: assignment.manualOverride,
             },
-          });
-        }
+        });
+      }
 
-        // Restore bracket if exists
-        if (div.bracket) {
-          await tx.bracket.create({
+      // Restore bracket if exists
+      if (div.bracket) {
+        await tx.bracket.create({
             data: {
               id: div.bracket.id,
               divisionId: division.id,
               structure: div.bracket.structure,
             },
-          });
-        }
-
-        restored++;
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        errors.push(`Failed to restore ${div.name}: ${message}`);
+        });
       }
+
+      restored++;
     }
   });
 
@@ -255,8 +251,25 @@ export async function clearBackup(
     const code = (err as { code?: unknown } | null)?.code;
     if (code !== 'P2025') {
       console.error(`[backup-recovery] clearBackup failed for ${tournamentId}:`, err);
+      throw err;
     }
   }
+}
+
+/**
+ * Restore the currently saved artifact and clear it only after the entire
+ * transactional restore succeeds. A rejected restore deliberately leaves the
+ * artifact available for investigation and another recovery attempt.
+ */
+export async function restoreSavedDivisionBackup(
+  prisma: PrismaClient,
+  tournamentId: string
+): Promise<{ restored: number; errors: string[] } | undefined> {
+  const backup = await getBackup(prisma, tournamentId);
+  if (!backup) return undefined;
+  const result = await restoreDivisionState(prisma, backup);
+  await clearBackup(prisma, tournamentId);
+  return result;
 }
 
 /**
