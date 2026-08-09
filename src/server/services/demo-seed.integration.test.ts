@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -15,6 +15,30 @@ const sentinelPublicSlug = `demo-reset-sentinel-public-${randomUUID()}`;
 const fixture = buildShowcaseFixture();
 let prisma: PrismaClient | undefined;
 
+async function cleanExactDemoTestData(): Promise<void> {
+  if (!prisma) return;
+  await prisma.tournament.deleteMany({ where: { id: rollbackSentinelTournamentId, organizationId: sentinelOrgId } });
+  const demo = await prisma.organization.findUnique({
+    where: { slug: DEMO_ORGANIZATION_SLUG },
+    select: { id: true, settings: true },
+  });
+  if (!demo) return;
+  if (JSON.parse(demo.settings ?? '{}').marker !== DEMO_MARKER) {
+    throw new Error('Refusing integration cleanup: canonical organization marker is not the demo marker');
+  }
+  const captured = await prisma.registration.findMany({
+    where: { tournament: { organizationId: demo.id } },
+    select: { competitorId: true },
+    distinct: ['competitorId'],
+  });
+  await prisma.match.deleteMany({ where: { bracket: { division: { tournament: { organizationId: demo.id } } } } });
+  await prisma.tournament.deleteMany({ where: { organizationId: demo.id } });
+  await prisma.organization.delete({ where: { id: demo.id, settings: demo.settings } });
+  await prisma.competitor.deleteMany({
+    where: { id: { in: captured.map((row) => row.competitorId) }, registrations: { none: {} } },
+  });
+}
+
 integration('demo showcase reset against disposable Postgres', () => {
   beforeAll(async () => {
     assertSafeDemoDatabaseUrl(demoDatabaseUrl!);
@@ -24,17 +48,16 @@ integration('demo showcase reset against disposable Postgres', () => {
     await prisma.competitor.create({ data: { id: sentinelCompetitorId, firstName: 'Sentinel', lastName: 'Competitor', gender: 'F', dateOfBirth: new Date('2000-01-01'), belt: 'Black' } });
   });
 
+  beforeEach(async () => {
+    await cleanExactDemoTestData();
+  });
+
   afterAll(async () => {
     if (!prisma) return;
-    await prisma.tournament.deleteMany({ where: { id: { in: [sentinelTournamentId, rollbackSentinelTournamentId] } } });
+    await cleanExactDemoTestData();
+    await prisma.tournament.deleteMany({ where: { id: sentinelTournamentId, organizationId: sentinelOrgId } });
     await prisma.organization.deleteMany({ where: { id: sentinelOrgId } });
     await prisma.competitor.deleteMany({ where: { id: sentinelCompetitorId, registrations: { none: {} } } });
-    const demo = await prisma.organization.findUnique({ where: { slug: DEMO_ORGANIZATION_SLUG }, select: { id: true, settings: true } });
-    if (demo && JSON.parse(demo.settings ?? '{}').marker === DEMO_MARKER) {
-      await prisma.match.deleteMany({ where: { bracket: { division: { tournament: { organizationId: demo.id } } } } });
-      await prisma.tournament.deleteMany({ where: { organizationId: demo.id } });
-      await prisma.organization.delete({ where: { id: demo.id } });
-    }
     await prisma.competitor.deleteMany({ where: { id: { in: fixture.competitors.map((competitor) => competitor.id) }, registrations: { none: {} } } });
     await prisma.$disconnect();
   });
