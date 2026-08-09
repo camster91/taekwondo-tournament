@@ -1044,6 +1044,21 @@ if (demoLoginEnabled) {
     try {
       const prisma: PrismaClient = _req.app.locals.prisma;
 
+      try {
+        await prisma.user.deleteMany({
+          where: {
+            email: { startsWith: 'demo-', endsWith: '@bowin.app' },
+            createdAt: { lt: new Date(Date.now() - DEMO_TTL_SECONDS * 1000) },
+            tournamentAccess: { none: {} },
+            organizationMembers: { none: {} },
+          },
+        });
+      } catch {
+        // Cleanup is maintenance, not an authentication dependency. Avoid
+        // logging the database error because it may contain user data.
+        console.warn('Demo principal cleanup failed; continuing login.');
+      }
+
       // Each visitor gets an independent principal. Standard logout can then
       // revoke only that visitor's JWT without affecting concurrent sessions.
       const demoSessionId = crypto.randomBytes(16).toString('hex');

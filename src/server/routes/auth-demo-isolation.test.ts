@@ -35,6 +35,7 @@ async function startAuthServer(options: {
   isolatedData?: string;
   enableDemo?: string;
   update?: ReturnType<typeof vi.fn>;
+  deleteMany?: ReturnType<typeof vi.fn>;
 }) {
   vi.resetModules();
   process.env.NODE_ENV = options.nodeEnv;
@@ -45,6 +46,7 @@ async function startAuthServer(options: {
   process.env.RATE_LIMIT_DISABLED = '1';
 
   const update = options.update ?? vi.fn().mockResolvedValue({});
+  const deleteMany = options.deleteMany ?? vi.fn().mockResolvedValue({ count: 0 });
   const { default: authRouter } = await import('./auth.js');
   const app = express();
   app.use(express.json());
@@ -64,6 +66,7 @@ async function startAuthServer(options: {
         id: 'unique-demo-user',
         tokenVersion: 0,
       })),
+      deleteMany,
     },
   };
   app.use('/api/auth', authRouter);
@@ -73,7 +76,7 @@ async function startAuthServer(options: {
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Expected TCP server address');
-  return { baseUrl: `http://127.0.0.1:${address.port}/api/auth`, update };
+  return { baseUrl: `http://127.0.0.1:${address.port}/api/auth`, update, deleteMany };
 }
 
 beforeEach(() => {
@@ -146,5 +149,36 @@ describe('demo session isolation', () => {
       enableDemo: '0',
     });
     expect((await fetch(`${baseUrl}/demo`, { method: 'POST' })).status).toBe(404);
+  });
+
+  it('cleans only expired generated demo principals with no protected relations', async () => {
+    const beforeLogin = Date.now();
+    const { baseUrl, deleteMany } = await startAuthServer({ nodeEnv: 'test' });
+
+    expect((await fetch(`${baseUrl}/demo`, { method: 'POST' })).status).toBe(200);
+
+    expect(deleteMany).toHaveBeenCalledOnce();
+    const where = deleteMany.mock.calls[0][0].where;
+    expect(where).toMatchObject({
+      email: { startsWith: 'demo-', endsWith: '@bowin.app' },
+      tournamentAccess: { none: {} },
+      organizationMembers: { none: {} },
+    });
+    expect(where.createdAt.lt).toBeInstanceOf(Date);
+    expect(where.createdAt.lt.getTime()).toBeGreaterThanOrEqual(beforeLogin - (4 * 60 * 60 * 1000) - 1_000);
+    expect(where.createdAt.lt.getTime()).toBeLessThanOrEqual(Date.now() - (4 * 60 * 60 * 1000));
+  });
+
+  it('continues demo login when bounded cleanup fails without logging PII', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { baseUrl } = await startAuthServer({
+      nodeEnv: 'test',
+      deleteMany: vi.fn().mockRejectedValue(new Error('database included person@example.com')),
+    });
+
+    expect((await fetch(`${baseUrl}/demo`, { method: 'POST' })).status).toBe(200);
+    expect(warning).toHaveBeenCalledWith('Demo principal cleanup failed; continuing login.');
+    expect(warning.mock.calls.flat().join(' ')).not.toContain('person@example.com');
+    warning.mockRestore();
   });
 });

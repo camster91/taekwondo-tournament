@@ -38,6 +38,7 @@ async function startAuthServer(demoMax?: string) {
   app.use(express.json());
   app.locals.prisma = {
     user: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       findUnique: vi.fn().mockImplementation(({ where: { email } }) =>
         Promise.resolve({
           id: email === 'demo@bowin.app' ? 'demo-user' : 'magic-user',

@@ -35,6 +35,7 @@ describe('concurrent demo sessions with real auth middleware', () => {
     app.use(express.json());
     app.locals.prisma = {
       user: {
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
         findUnique: vi.fn().mockImplementation(({ where }: { where: { id?: string; email?: string } }) => {
           if (where.id) return Promise.resolve(users.get(where.id) ?? null);
           return Promise.resolve([...users.values()].find((user) => user.email === where.email) ?? null);
