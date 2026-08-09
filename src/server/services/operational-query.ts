@@ -5,6 +5,12 @@ export type OperationalQueryIntent =
   | { kind: 'schools_need_checkin' }
   | { kind: 'unsupported' };
 
+export interface OperationalQueryAnswer {
+  answer: string;
+  generatedAt: string;
+  evidence: Array<{ label: string; href: string; observedAt: string }>;
+}
+
 const normalized = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
 /**
@@ -30,4 +36,12 @@ export function parseOperationalQuery(question: string): OperationalQueryIntent 
     if (Number.isInteger(ringNumber) && ringNumber >= 1) return { kind: 'ring_delay', ring: ringNumber };
   }
   return { kind: 'unsupported' };
+}
+
+export function buildUnsupportedOperationalAnswer(now = new Date()): OperationalQueryAnswer {
+  return {
+    answer: 'I can answer: which divisions are blocked, who competes in the next number of minutes, why a ring is late, or which schools need check-in.',
+    generatedAt: now.toISOString(),
+    evidence: [],
+  };
 }

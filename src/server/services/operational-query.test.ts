@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseOperationalQuery } from './operational-query.js';
+import { buildUnsupportedOperationalAnswer, parseOperationalQuery } from './operational-query.js';
 
 describe('parseOperationalQuery', () => {
   it('recognizes the supported read-only operational questions', () => {
@@ -13,5 +13,13 @@ describe('parseOperationalQuery', () => {
     expect(parseOperationalQuery('Move Ring 3 matches to Ring 1')).toEqual({ kind: 'unsupported' });
     expect(parseOperationalQuery('Who is next?')).toEqual({ kind: 'unsupported' });
     expect(parseOperationalQuery('Who competes in the next 999 minutes?')).toEqual({ kind: 'unsupported' });
+  });
+
+  it('returns a timestamped, non-mutating explanation for unsupported requests', () => {
+    expect(buildUnsupportedOperationalAnswer(new Date('2026-08-09T15:00:00.000Z'))).toEqual({
+      answer: 'I can answer: which divisions are blocked, who competes in the next number of minutes, why a ring is late, or which schools need check-in.',
+      generatedAt: '2026-08-09T15:00:00.000Z',
+      evidence: [],
+    });
   });
 });
