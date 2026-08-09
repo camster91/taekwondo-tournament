@@ -29,6 +29,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Label from '../components/ui/Label';
 import Select from '../components/ui/Select';
+import { classifyWithdrawalResponse } from '../utils/registration-withdrawal';
 
 interface ManageRegistration {
   confirmationCode: string;
@@ -182,21 +183,21 @@ export default function ManageRegistration() {
           headers: { 'Content-Type': 'application/json' },
         },
       );
-      if (res.status === 404) {
-        setGlobalError('Already withdrawn or not found.');
-        setWithdrawn(true);
+      const outcome = classifyWithdrawalResponse(res.status);
+      if (outcome.outcome === 'unavailable') {
+        setGlobalError(outcome.message);
         return;
       }
-      if (res.status === 409) {
+      if (outcome.outcome === 'conflict') {
         const body = await res.json().catch(() => ({ error: 'Conflict' }));
         setGlobalError(body.error || 'Cannot withdraw.');
         return;
       }
-      if (!res.ok) {
+      if (outcome.outcome === 'failure') {
         const body = await res.json().catch(() => ({ error: 'Withdraw failed.' }));
         throw new Error(body.error || 'Withdraw failed.');
       }
-      setWithdrawn(true);
+      if (outcome.outcome === 'withdrawn') setWithdrawn(true);
     } catch (err) {
       setGlobalError(err instanceof Error ? err.message : 'Withdraw failed.');
     } finally {

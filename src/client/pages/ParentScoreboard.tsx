@@ -14,6 +14,7 @@ import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 import { Trophy, Clock, Users, ChevronRight, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { Card, CardBody } from '../components/ui';
 import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availability';
+import { resolveParentScoreboardState } from '../utils/parent-scoreboard-state';
 
 interface Match {
   id: string;
@@ -57,7 +58,7 @@ export default function ParentScoreboard() {
 
   // Refresh every 5s - slower than the TV version (3s) to save battery
   // on the parent's phone.
-  const { data: tournament, error: tournamentError } = useQuery<Tournament>({
+  const { data: tournament, isLoading: tournamentLoading, error: tournamentError, refetch: retryTournament } = useQuery<Tournament>({
     queryKey: ['parent-scoreboard-tournament', tournamentId],
     queryFn: async () => {
       const res = await fetch(`/api/public/tournaments/${tournamentId}`);
@@ -69,7 +70,7 @@ export default function ParentScoreboard() {
     retry: false,
   });
 
-  const { data: scoreboardData, isLoading: scoreboardLoading, error: scoreboardError } = useQuery<{
+  const { data: scoreboardData, isLoading: scoreboardLoading, error: scoreboardError, refetch: retryScoreboard } = useQuery<{
     divisions: Division[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
@@ -88,6 +89,13 @@ export default function ParentScoreboard() {
   const divisions = scoreboardData?.divisions || [];
   const displaySettings = scoreboardData?.displaySettings;
   const scoreboardUnavailableMessage = getScoreboardUnavailableMessage(scoreboardError);
+  const pageState = resolveParentScoreboardState({
+    tournamentLoading,
+    tournamentError: Boolean(tournamentError),
+    tournamentReady: Boolean(tournament),
+    scoreboardLoading,
+    scoreboardError: Boolean(scoreboardError),
+  });
 
   // Pick "now competing" + "up next" matches. Status values from the
   // bracket-generator: 'ready', 'in_progress', 'completed'.
@@ -159,17 +167,31 @@ export default function ParentScoreboard() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-4 space-y-4">
-        {scoreboardUnavailableMessage ? (
+        {pageState === 'tournament-unavailable' ? (
+          <Card>
+            <CardBody className="p-6 text-center">
+              <div role="alert">
+                <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" aria-hidden="true" />
+                <h1 className="font-semibold text-gray-900 dark:text-white mb-1">Tournament unavailable</h1>
+                <p className="text-sm text-gray-600 dark:text-gray-300">This link may be inactive. Ask the tournament director for the current scoreboard link.</p>
+                <button type="button" onClick={() => void retryTournament()} className="mt-4 min-h-11 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold">Try again</button>
+              </div>
+            </CardBody>
+          </Card>
+        ) : pageState === 'loading-tournament' ? (
+          <p className="text-sm text-gray-600 dark:text-gray-300" role="status">Loading tournament…</p>
+        ) : pageState === 'scoreboard-unavailable' ? (
           <Card>
             <CardBody className="p-6 text-center">
               <div role="alert">
                 <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" aria-hidden="true" />
                 <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Live scoreboard unavailable</h2>
                 <p className="text-sm text-gray-600 dark:text-gray-300">{scoreboardUnavailableMessage}</p>
+                <button type="button" onClick={() => void retryScoreboard()} className="mt-4 min-h-11 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold">Try again</button>
               </div>
             </CardBody>
           </Card>
-        ) : scoreboardLoading ? (
+        ) : pageState === 'loading-scoreboard' ? (
           <p className="text-sm text-gray-600 dark:text-gray-300" role="status">Loading live matches…</p>
         ) : (
         <>

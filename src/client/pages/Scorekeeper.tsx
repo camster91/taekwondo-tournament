@@ -28,6 +28,8 @@ import { activateDialogFocus } from '../utils/dialog-focus';
 import { makeScoreOperation } from '../utils/offline-operation-queue';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
 import AccessibleDialog from '../components/ui/AccessibleDialog';
+import OperationStatus from '../components/ui/OperationStatus';
+import { buildOfflineOperationStatuses } from '../utils/offline-operation-status';
 
 interface Match {
   id: string;
@@ -509,8 +511,10 @@ export default function Scorekeeper() {
   };
 
   const offlineStatus = offlineOperations.operations.length > 0 && (
-    <div role="status" className="max-w-4xl mx-auto mb-4 p-3 rounded-lg border border-amber-500/50 bg-amber-950 text-amber-100 flex flex-wrap items-center justify-between gap-3">
-      <span>
+    <div className="mx-auto mb-4 max-w-4xl space-y-2">
+      {buildOfflineOperationStatuses('result', offlineOperations.pending.length, offlineOperations.needsReview.length, offlineOperations.syncing)
+        .map((status) => <OperationStatus key={status.state} {...status} />)}
+      <span className="hidden" aria-hidden="true">
         {offlineOperations.pending.length} result{offlineOperations.pending.length === 1 ? '' : 's'} pending sync
         {offlineOperations.needsReview.length > 0 && ` · ${offlineOperations.needsReview.length} needs director review`}
       </span>

@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import { browserSessionEvidence } from '../utils/session-evidence';
 
 interface User {
   id: string;
@@ -42,6 +43,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const sessionEvidence = useMemo(browserSessionEvidence, []);
 
   // Hydrate from the cookie session on mount.
   useEffect(() => {
@@ -53,11 +55,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (res.ok) {
             const userData = (await res.json()) as User;
             setUser(userData);
+            sessionEvidence.markAuthenticated();
           } else if (res.status === 401) {
             // Stale / invalid cookie — clear any lingering local state and
             // notify the rest of the app (ToastContext listens for this).
             setUser(null);
-            if (typeof window !== 'undefined') {
+            if (typeof window !== 'undefined' && sessionEvidence.consumeExpiredSessionEvidence()) {
               window.dispatchEvent(new CustomEvent('session-expired'));
             }
           }
@@ -101,9 +104,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ) {
           setUser((current) => {
             if (current) {
+              sessionEvidence.clear();
               window.dispatchEvent(new CustomEvent('session-expired'));
             }
-            return current;
+            return null;
           });
         }
       }
@@ -116,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = (data: { user: User }) => {
     setUser(data.user);
+    sessionEvidence.markAuthenticated();
   };
 
   const requestMagicLink = async (email: string) => {
@@ -167,6 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (meRes.ok) {
         const userData = (await meRes.json()) as User;
         setUser(userData);
+        sessionEvidence.markAuthenticated();
       }
       return { success: true };
     } catch {
@@ -192,6 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (meRes.ok) {
         const userData = (await meRes.json()) as User;
         setUser(userData);
+        sessionEvidence.markAuthenticated();
       }
       return { success: true };
     } catch {
@@ -213,6 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // the UI from acting as if the user is still signed in.
     }
     setUser(null);
+    sessionEvidence.clear();
   };
 
   const hasRole = (roles: string[]) => {
@@ -226,6 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         const userData = (await res.json()) as User;
         setUser(userData);
+        sessionEvidence.markAuthenticated();
       }
     } catch {
       // Network error — leave state alone.

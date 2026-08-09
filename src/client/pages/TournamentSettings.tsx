@@ -28,6 +28,7 @@ import { Input } from '../components/ui';
 import { Label } from '../components/ui';
 import { Select } from '../components/ui';
 import { DataTable, TableHead, TableBody } from '../components/ui';
+import { saveTournamentSettingsRequest } from '../utils/tournament-settings-save';
 
 interface Tournament {
   id: string;
@@ -190,24 +191,7 @@ export default function TournamentSettings() {
 
   const saveMutation = useMutation({
     mutationFn: async (newSettings: TournamentSettings) => {
-      // Save tournament settings JSON
-      const res = await fetch(`/api/tournaments/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ settings: newSettings }),
-      });
-      if (!res.ok) throw new Error('Failed to save settings');
-
-      // Also persist weight classes to the DB if any are defined
-      if (newSettings.weightClasses.length > 0) {
-        await fetch(`/api/tournaments/${id}/weight-classes`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-          body: JSON.stringify({ weightClasses: newSettings.weightClasses }),
-        });
-      }
-
-      return res.json();
+      return saveTournamentSettingsRequest(fetch, id!, newSettings, getAuthHeaders());
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
@@ -215,6 +199,7 @@ export default function TournamentSettings() {
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 3000);
     },
+    onError: (error: Error) => addToast(error.message, 'error'),
   });
 
   const updateSettings = (updates: Partial<TournamentSettings>) => {

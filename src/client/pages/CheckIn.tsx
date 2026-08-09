@@ -23,6 +23,8 @@ import { Select } from '../components/ui';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
 import { makeCheckInOperation } from '../utils/offline-operation-queue';
 import { CHECK_IN_ACCESSIBLE_LABELS, formatCheckInWeight } from '../utils/check-in-display';
+import OperationStatus from '../components/ui/OperationStatus';
+import { buildOfflineOperationStatuses } from '../utils/offline-operation-status';
 
 interface Registration {
   id: string;
@@ -341,8 +343,10 @@ export default function CheckIn() {
       </div>
 
       {offlineOperations.operations.length > 0 && (
-        <div role="status" className="m-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100 flex flex-wrap items-center justify-between gap-3">
-          <span>
+        <div className="m-4 space-y-2">
+          {buildOfflineOperationStatuses('check-in', offlineOperations.pending.length, offlineOperations.needsReview.length, offlineOperations.syncing)
+            .map((status) => <OperationStatus key={status.state} {...status} />)}
+          <span className="hidden" aria-hidden="true">
             {offlineOperations.pending.length} check-in{offlineOperations.pending.length === 1 ? '' : 's'} pending sync
             {offlineOperations.needsReview.length > 0 && ` · ${offlineOperations.needsReview.length} needs staff review`}
           </span>
