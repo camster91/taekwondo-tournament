@@ -1030,6 +1030,32 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
 // DEMO_ISOLATED_DATA=1 as an operator attestation that this admin account can
 // access only synthetic, isolated data.
 const DEMO_TTL_SECONDS = 4 * 60 * 60; // 4 hours
+const DEMO_CLEANUP_BATCH_SIZE = 100;
+
+async function cleanupExpiredDemoPrincipals(prisma: PrismaClient): Promise<void> {
+  try {
+    const expiredUsers = await prisma.user.findMany({
+      where: {
+        demoExpiresAt: { lt: new Date() },
+        tournamentAccess: { none: {} },
+        organizationMembers: { none: {} },
+      },
+      orderBy: { demoExpiresAt: 'asc' },
+      take: DEMO_CLEANUP_BATCH_SIZE,
+      select: { id: true },
+    });
+
+    if (expiredUsers.length === 0) return;
+
+    await prisma.user.deleteMany({
+      where: { id: { in: expiredUsers.map(({ id }) => id) } },
+    });
+  } catch {
+    // Cleanup is maintenance, not an authentication dependency. Avoid
+    // logging the database error because it may contain user data.
+    console.warn('Demo principal cleanup failed; continuing login.');
+  }
+}
 // Closes S2 — old gate "on unless NODE_ENV=production" let the
 // demo account activate on any deploy where NODE_ENV was unset
 // or set to "staging". The demo user is admin. Now requires an
@@ -1044,30 +1070,19 @@ if (demoLoginEnabled) {
     try {
       const prisma: PrismaClient = _req.app.locals.prisma;
 
-      try {
-        await prisma.user.deleteMany({
-          where: {
-            email: { startsWith: 'demo-', endsWith: '@bowin.app' },
-            createdAt: { lt: new Date(Date.now() - DEMO_TTL_SECONDS * 1000) },
-            tournamentAccess: { none: {} },
-            organizationMembers: { none: {} },
-          },
-        });
-      } catch {
-        // Cleanup is maintenance, not an authentication dependency. Avoid
-        // logging the database error because it may contain user data.
-        console.warn('Demo principal cleanup failed; continuing login.');
-      }
+      void cleanupExpiredDemoPrincipals(prisma);
 
       // Each visitor gets an independent principal. Standard logout can then
       // revoke only that visitor's JWT without affecting concurrent sessions.
       const demoSessionId = crypto.randomBytes(16).toString('hex');
+      const demoExpiresAt = new Date(Date.now() + DEMO_TTL_SECONDS * 1000);
       const user = await prisma.user.create({
         data: {
           email: `demo-${demoSessionId}@bowin.app`,
           firstName: 'Demo',
           lastName: 'Visitor',
           role: 'admin', // safe only behind the isolated synthetic-data gate
+          demoExpiresAt,
         },
       });
 

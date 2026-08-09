@@ -35,6 +35,7 @@ async function startAuthServer(options: {
   isolatedData?: string;
   enableDemo?: string;
   update?: ReturnType<typeof vi.fn>;
+  findMany?: ReturnType<typeof vi.fn>;
   deleteMany?: ReturnType<typeof vi.fn>;
 }) {
   vi.resetModules();
@@ -46,7 +47,13 @@ async function startAuthServer(options: {
   process.env.RATE_LIMIT_DISABLED = '1';
 
   const update = options.update ?? vi.fn().mockResolvedValue({});
+  const findMany = options.findMany ?? vi.fn().mockResolvedValue([]);
   const deleteMany = options.deleteMany ?? vi.fn().mockResolvedValue({ count: 0 });
+  const create = vi.fn().mockImplementation(({ data }: { data: any }) => Promise.resolve({
+    ...data,
+    id: 'unique-demo-user',
+    tokenVersion: 0,
+  }));
   const { default: authRouter } = await import('./auth.js');
   const app = express();
   app.use(express.json());
@@ -61,11 +68,8 @@ async function startAuthServer(options: {
         role: 'admin',
         tokenVersion: 0,
       }),
-      create: vi.fn().mockImplementation(({ data }: { data: any }) => Promise.resolve({
-        ...data,
-        id: 'unique-demo-user',
-        tokenVersion: 0,
-      })),
+      create,
+      findMany,
       deleteMany,
     },
   };
@@ -76,7 +80,7 @@ async function startAuthServer(options: {
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Expected TCP server address');
-  return { baseUrl: `http://127.0.0.1:${address.port}/api/auth`, update, deleteMany };
+  return { baseUrl: `http://127.0.0.1:${address.port}/api/auth`, update, create, findMany, deleteMany };
 }
 
 beforeEach(() => {
@@ -151,33 +155,68 @@ describe('demo session isolation', () => {
     expect((await fetch(`${baseUrl}/demo`, { method: 'POST' })).status).toBe(404);
   });
 
-  it('cleans only expired generated demo principals with no protected relations', async () => {
+  it('writes the explicit expiry marker on each demo principal', async () => {
     const beforeLogin = Date.now();
-    const { baseUrl, deleteMany } = await startAuthServer({ nodeEnv: 'test' });
+    const { baseUrl, create } = await startAuthServer({ nodeEnv: 'test' });
 
     expect((await fetch(`${baseUrl}/demo`, { method: 'POST' })).status).toBe(200);
 
-    expect(deleteMany).toHaveBeenCalledOnce();
-    const where = deleteMany.mock.calls[0][0].where;
-    expect(where).toMatchObject({
-      email: { startsWith: 'demo-', endsWith: '@bowin.app' },
-      tournamentAccess: { none: {} },
-      organizationMembers: { none: {} },
+    const expiresAt = create.mock.calls[0][0].data.demoExpiresAt;
+    expect(expiresAt).toBeInstanceOf(Date);
+    expect(expiresAt.getTime()).toBeGreaterThanOrEqual(beforeLogin + (4 * 60 * 60 * 1000));
+    expect(expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + (4 * 60 * 60 * 1000));
+  });
+
+  it('selects a capped oldest-first batch by explicit expiry marker and protected relations', async () => {
+    const expired = [{ id: 'expired-1' }, { id: 'expired-2' }];
+    const beforeLogin = Date.now();
+    const { baseUrl, findMany, deleteMany } = await startAuthServer({
+      nodeEnv: 'test',
+      findMany: vi.fn().mockResolvedValue(expired),
     });
-    expect(where.createdAt.lt).toBeInstanceOf(Date);
-    expect(where.createdAt.lt.getTime()).toBeGreaterThanOrEqual(beforeLogin - (4 * 60 * 60 * 1000) - 1_000);
-    expect(where.createdAt.lt.getTime()).toBeLessThanOrEqual(Date.now() - (4 * 60 * 60 * 1000));
+
+    expect((await fetch(`${baseUrl}/demo`, { method: 'POST' })).status).toBe(200);
+    await vi.waitFor(() => expect(deleteMany).toHaveBeenCalledOnce());
+
+    expect(findMany).toHaveBeenCalledOnce();
+    const query = findMany.mock.calls[0][0];
+    expect(query).toMatchObject({
+      where: {
+        demoExpiresAt: { lt: expect.any(Date) },
+        tournamentAccess: { none: {} },
+        organizationMembers: { none: {} },
+      },
+      orderBy: { demoExpiresAt: 'asc' },
+      take: 100,
+      select: { id: true },
+    });
+    expect(query.where).not.toHaveProperty('email');
+    expect(query.where.demoExpiresAt.lt.getTime()).toBeGreaterThanOrEqual(beforeLogin);
+    expect(query.where.demoExpiresAt.lt.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ['expired-1', 'expired-2'] } },
+    });
+  });
+
+  it('does not issue a delete when no expired principals are selected', async () => {
+    const { baseUrl, findMany, deleteMany } = await startAuthServer({ nodeEnv: 'test' });
+
+    expect((await fetch(`${baseUrl}/demo`, { method: 'POST' })).status).toBe(200);
+    await vi.waitFor(() => expect(findMany).toHaveBeenCalledOnce());
+    expect(deleteMany).not.toHaveBeenCalled();
   });
 
   it('continues demo login when bounded cleanup fails without logging PII', async () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { baseUrl } = await startAuthServer({
       nodeEnv: 'test',
-      deleteMany: vi.fn().mockRejectedValue(new Error('database included person@example.com')),
+      findMany: vi.fn().mockRejectedValue(new Error('database included person@example.com')),
     });
 
     expect((await fetch(`${baseUrl}/demo`, { method: 'POST' })).status).toBe(200);
-    expect(warning).toHaveBeenCalledWith('Demo principal cleanup failed; continuing login.');
+    await vi.waitFor(() => {
+      expect(warning).toHaveBeenCalledWith('Demo principal cleanup failed; continuing login.');
+    });
     expect(warning.mock.calls.flat().join(' ')).not.toContain('person@example.com');
     warning.mockRestore();
   });
