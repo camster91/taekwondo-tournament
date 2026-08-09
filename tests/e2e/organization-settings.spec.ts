@@ -32,7 +32,7 @@ test.describe('organization settings', () => {
     await expect(page.getByText('Tournament usage')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Choose Starter' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Choose Pro' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Export organization data' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Export organization data' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Delete organization' })).toBeVisible();
     await page.screenshot({ path: 'test-results/visual-qa/organization-plans-desktop.png', fullPage: true });
 

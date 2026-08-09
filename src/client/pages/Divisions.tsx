@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import {
@@ -53,6 +53,8 @@ import { Label } from '../components/ui';
 import { Modal } from '../components/ui';
 import { Select } from '../components/ui';
 import { StatTile } from '../components/ui';
+import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
+import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
 
 interface Division {
   id: string;
@@ -151,6 +153,8 @@ export default function Divisions() {
     eventType: '',
   });
   const [exportingAll, setExportingAll] = useState(false);
+  const exportLockRef = useRef(false);
+  const [exportStatus, setExportStatus] = useState<{ state: OperationState; message: string } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -504,39 +508,35 @@ export default function Divisions() {
   };
 
   const exportAllPDFs = async () => {
-    if (!divisions || divisions.length === 0) return;
+    if (exportLockRef.current || !divisions || divisions.length === 0) return;
+    exportLockRef.current = true;
 
     setExportingAll(true);
+    setExportStatus({ state: 'pending', message: 'Preparing all generated brackets as a PDF.' });
 
     try {
       const divisionsWithBrackets = divisions.filter((d) => d.bracket);
 
       if (divisionsWithBrackets.length === 0) {
         addToast('No brackets to export. Generate brackets first.', 'warning');
+        setExportStatus({ state: 'rejected', message: 'No brackets are available. Generate brackets before exporting.' });
         setExportingAll(false);
+        exportLockRef.current = false;
         return;
       }
 
-      const res = await fetch(`/api/brackets/tournament/${id}/pdf`);
-      if (!res.ok) {
-        throw new Error('Failed to generate PDF');
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${tournament?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Tournament'}_All_Brackets.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const blob = await fetchAuthenticatedBlob(fetch, `/api/brackets/tournament/${id}/pdf`, 'application/pdf', getAuthHeaders());
+      downloadBlob(blob, `${tournament?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Tournament'}_All_Brackets.pdf`);
+      setExportStatus({ state: 'resolved', message: 'All bracket PDFs download started.' });
     } catch (error) {
       console.error('Export error:', error);
-      addToast('Error exporting PDFs. Please try again.', 'error');
+      const message = error instanceof Error ? error.message : 'Error exporting PDFs. Please try again.';
+      addToast(message, 'error');
+      setExportStatus({ state: 'rejected', message });
     }
 
     setExportingAll(false);
+    exportLockRef.current = false;
   };
 
   return (
@@ -602,6 +602,16 @@ export default function Divisions() {
           Back to Tournament
         </Link>
       </PageHeader>
+
+      {exportStatus && (
+        <OperationStatus
+          className="mb-4"
+          state={exportStatus.state}
+          message={exportStatus.message}
+          actionLabel={exportStatus.state === 'rejected' ? 'Dismiss' : undefined}
+          onAction={exportStatus.state === 'rejected' ? () => setExportStatus(null) : undefined}
+        />
+      )}
 
       {/* Filters */}
       <Card className="mb-6">

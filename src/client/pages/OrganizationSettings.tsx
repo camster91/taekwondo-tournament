@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
@@ -15,6 +15,8 @@ import {
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Button, Card, Input, Label, Modal, PageHeader, Spinner } from '../components/ui';
+import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
+import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
 
 type Entitlements = {
   maxTournaments: number;
@@ -78,6 +80,9 @@ export default function OrganizationSettings() {
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [exportAcknowledged, setExportAcknowledged] = useState(false);
+  const [exportStatus, setExportStatus] = useState<{ state: OperationState; message: string } | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const exportLockRef = useRef(false);
 
   const organizationsQuery = useQuery({
     queryKey: ['organizations', 'current'],
@@ -139,6 +144,23 @@ export default function OrganizationSettings() {
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  const exportOrganization = async (organization: Organization) => {
+    if (exportLockRef.current) return;
+    exportLockRef.current = true;
+    setExporting(true);
+    setExportStatus({ state: 'pending', message: 'Preparing the complete organization data export.' });
+    try {
+      const blob = await fetchAuthenticatedBlob(fetch, `/api/organizations/${organization.id}/export`, 'application/json', getAuthHeaders());
+      downloadBlob(blob, `${organization.slug}-export.json`);
+      setExportStatus({ state: 'resolved', message: 'Organization data export download started.' });
+    } catch (error) {
+      setExportStatus({ state: 'rejected', message: error instanceof Error ? error.message : 'Organization export failed.' });
+    } finally {
+      setExporting(false);
+      exportLockRef.current = false;
+    }
+  };
 
   if (organizationsQuery.isLoading) {
     return <div className="flex min-h-[50vh] items-center justify-center"><Spinner size="lg" /></div>;
@@ -292,6 +314,15 @@ export default function OrganizationSettings() {
 
       {organization.membershipRole === 'owner' && (
         <Card className="mt-8 border-red-200 dark:border-red-900/70">
+          {exportStatus && (
+            <OperationStatus
+              className="mb-5"
+              state={exportStatus.state}
+              message={exportStatus.message}
+              actionLabel={exportStatus.state === 'rejected' ? 'Dismiss' : undefined}
+              onAction={exportStatus.state === 'rejected' ? () => setExportStatus(null) : undefined}
+            />
+          )}
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-semibold text-slate-950 dark:text-white">Data export and account closure</h2>
@@ -300,13 +331,14 @@ export default function OrganizationSettings() {
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <a
-                href={`/api/organizations/${organization.id}/export`}
-                download={`${organization.slug}-export.json`}
-                className="btn btn-secondary"
+              <Button
+                variant="secondary"
+                loading={exporting}
+                disabled={exporting}
+                onClick={() => void exportOrganization(organization)}
               >
                 <Download className="h-4 w-4" /> Export organization data
-              </a>
+              </Button>
               <Button variant="danger" onClick={() => setShowDelete(true)}>
                 <Trash2 className="h-4 w-4" /> Delete organization
               </Button>
