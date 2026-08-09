@@ -1,5 +1,8 @@
 import crypto from 'node:crypto';
 import { expect, test } from '@playwright/test';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { loginRequestAsEmail } from './helpers';
 
 const WEBHOOK_SECRET = ['whsec', 'e2e', 'bowin', 'webhook', 'secret'].join('_');
 
@@ -14,11 +17,11 @@ function stripeSignature(payload: string): string {
 
 test('Stripe subscription webhooks are verified, idempotent, and activate entitlements', async ({ request }) => {
   const suffix = Date.now();
-  const login = await request.post('/api/auth/demo');
-  const { token } = await login.json() as { token: string };
-  const state = await request.storageState();
-  const csrf = state.cookies.find((cookie) => cookie.name === 'bowin_csrf')?.value;
-  const headers = { Authorization: `Bearer ${token}`, 'X-CSRF-Token': csrf! };
+  const email = `billing-webhook-${suffix}@example.com`;
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+  await prisma.user.create({ data: { email, firstName: 'Billing', lastName: 'Webhook', role: 'admin', isActive: true } });
+  await prisma.$disconnect();
+  const headers = await loginRequestAsEmail(request, email);
   const organizationResponse = await request.post('/api/organizations', {
     headers,
     data: { name: `E2E Stripe ${suffix}` },

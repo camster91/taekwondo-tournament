@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { loginAsDemo } from './helpers';
+import { loginAsEmail, skipOnboardingTour } from './helpers';
+
+const email = 'organization-settings-e2e@example.com';
 
 test.describe('organization settings', () => {
   test.beforeEach(async () => {
@@ -9,6 +11,7 @@ test.describe('organization settings', () => {
       adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
     });
     try {
+      await prisma.user.upsert({ where: { email }, update: { role: 'admin', isActive: true }, create: { email, firstName: 'Organization', lastName: 'Settings', role: 'admin', isActive: true } });
       await prisma.organization.deleteMany({ where: { name: { startsWith: 'E2E' } } });
     } finally {
       await prisma.$disconnect();
@@ -16,7 +19,8 @@ test.describe('organization settings', () => {
   });
 
   test('an operator can create a workspace and see plan usage and billing choices', async ({ page }) => {
-    await loginAsDemo(page);
+    await skipOnboardingTour(page);
+    await loginAsEmail(page, email);
     await page.goto('/organization');
 
     await expect(page.getByRole('heading', { name: 'Organization & billing' })).toBeVisible();
