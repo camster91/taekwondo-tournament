@@ -83,8 +83,12 @@ export function readStoredScheduleConfig(raw: string | null): ScheduleConfig {
 
 export function mergeScheduleSettings(raw: string | null, config: ScheduleConfig): string {
   const current = parseSettings(raw, true);
+  // A configuration regeneration creates a new generated schedule. An older
+  // optimized row snapshot cannot remain authoritative against that new
+  // configuration, so invalidate it atomically with the confirmed change.
+  const { canonicalSchedule: _staleCanonicalSchedule, ...preserved } = current;
   return JSON.stringify({
-    ...current,
+    ...preserved,
     schedule: config,
     rings: { count: config.ringCount, startTime: config.startTime, endTime: config.endTime },
   });

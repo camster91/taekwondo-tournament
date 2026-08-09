@@ -36,6 +36,7 @@ import {
   getScheduleOperationStatus,
   undoScheduleCorrection,
 } from '../services/schedule-correction.js';
+import { materializeCanonicalTournamentSchedule } from '../services/canonical-schedule.js';
 
 const router = Router();
 
@@ -914,7 +915,10 @@ router.post('/:id/schedule/preview', authenticate, requireTournamentAccess('dire
       const { maxRings } = getPlanEntitlements(tournament.organization.plan);
       if (proposedConfig.ringCount > maxRings) throw new Error(`Your plan supports up to ${maxRings} rings.`);
     }
-    const before = await generateSchedule(tx as never, tournamentId, readStoredScheduleConfig(tournament.settings));
+    const before = materializeCanonicalTournamentSchedule(
+      await generateSchedule(tx as never, tournamentId, readStoredScheduleConfig(tournament.settings)),
+      tournament.settings,
+    );
     const after = await generateSchedule(tx as never, tournamentId, proposedConfig);
     return {
       before, after, proposedConfig, impact: buildScheduleImpact(before, after),
@@ -955,7 +959,10 @@ router.post('/:id/schedule', authenticate, requireTournamentAccess('director'), 
     }
 
     if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
-    const before = await generateSchedule(prisma, tournamentId, readStoredScheduleConfig(tournament.settings));
+    const before = materializeCanonicalTournamentSchedule(
+      await generateSchedule(prisma, tournamentId, readStoredScheduleConfig(tournament.settings)),
+      tournament.settings,
+    );
     const schedule = await generateSchedule(prisma, tournamentId, mergedConfig);
     const impact = buildScheduleImpact(before, schedule);
     const applied = await applyScheduleCorrection(prisma, {
@@ -1014,7 +1021,10 @@ router.get('/:id/schedule', authenticate, requireTournamentAccess('viewer'), asy
     const tournamentId = getParam(req.params.id);
     const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { settings: true } });
     if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
-    const schedule = await generateSchedule(prisma, tournamentId, readStoredScheduleConfig(tournament.settings));
+    const schedule = materializeCanonicalTournamentSchedule(
+      await generateSchedule(prisma, tournamentId, readStoredScheduleConfig(tournament.settings)),
+      tournament.settings,
+    );
     res.json(schedule);
   } catch (error: unknown) {
     console.error('[schedule] GET generation failed:', error);

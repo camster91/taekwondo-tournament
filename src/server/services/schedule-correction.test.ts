@@ -16,7 +16,10 @@ const config = {
 
 describe('schedule correction safety', () => {
   it('reads a complete saved config and preserves unrelated tournament settings', () => {
-    const settings = JSON.stringify({ registrationFee: '45', schedule: config, rules: { avoidSameSchool: true } });
+    const settings = JSON.stringify({
+      registrationFee: '45', schedule: config, rules: { avoidSameSchool: true },
+      canonicalSchedule: { version: 1, rows: [{ divisionId: 'd1', ring: 1, startMinutes: 540, durationMinutes: 10, locked: false }] },
+    });
     expect(readStoredScheduleConfig(settings)).toEqual(config);
     expect(JSON.parse(mergeScheduleSettings(settings, { ...config, ringCount: 4 }))).toEqual({
       registrationFee: '45', rules: { avoidSameSchool: true },
