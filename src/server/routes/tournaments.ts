@@ -27,6 +27,7 @@ import {
 } from '../services/entitlements.js';
 import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from '../services/tournament-settings.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
+import { answerOperationalQuery } from '../services/operational-query.js';
 import {
   applyScheduleCorrection,
   buildScheduleImpact,
@@ -39,6 +40,10 @@ import {
 import { materializeCanonicalTournamentSchedule } from '../services/canonical-schedule.js';
 
 const router = Router();
+
+const operationalQuerySchema = z.object({
+  question: z.string().trim().min(1, 'A question is required').max(500, 'Question is too long'),
+});
 
 // Validation schemas
 const tournamentCreateSchema = z.object({
@@ -486,6 +491,12 @@ router.get('/:id/attention', authenticate, requireTournamentAccess('viewer'), as
   const alerts = await loadTournamentAttention(prisma, getParam(req.params.id));
   if (!alerts) return res.status(404).json({ error: 'Tournament not found' });
   res.json({ alerts, generatedAt: new Date().toISOString() });
+});
+
+router.post('/:id/operational-query', authenticate, requireTournamentAccess('director'), validateRequest(operationalQuerySchema), async (req: Request, res: Response) => {
+  const answer = await answerOperationalQuery(req.app.locals.prisma as PrismaClient, getParam(req.params.id), req.body.question);
+  if (!answer) return res.status(404).json({ error: 'Tournament not found' });
+  res.json(answer);
 });
 
 router.put('/:id', authenticate, requireTournamentAccess('director'), validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {

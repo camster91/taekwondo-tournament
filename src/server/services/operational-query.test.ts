@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildUnsupportedOperationalAnswer, parseOperationalQuery } from './operational-query.js';
+import { answerOperationalQuery, buildRingDelayOperationalAnswer, buildUnsupportedOperationalAnswer, parseOperationalQuery } from './operational-query.js';
 
 describe('parseOperationalQuery', () => {
   it('recognizes the supported read-only operational questions', () => {
@@ -21,5 +21,21 @@ describe('parseOperationalQuery', () => {
       generatedAt: '2026-08-09T15:00:00.000Z',
       evidence: [],
     });
+  });
+
+  it('answers a recorded ring delay with timestamped, linked evidence', () => {
+    expect(buildRingDelayOperationalAnswer({
+      tournamentId: 'tournament-1', ring: 3, delayedMatches: [{ label: 'Junior Sparring, match 12', observedAt: '2026-08-09T14:45:00.000Z' }],
+    }, new Date('2026-08-09T15:00:00.000Z'))).toEqual({
+      answer: 'Ring 3 may be late because 1 match has remained in progress for more than ten minutes.',
+      generatedAt: '2026-08-09T15:00:00.000Z',
+      evidence: [{ label: 'Junior Sparring, match 12', href: '/tournaments/tournament-1/director', observedAt: '2026-08-09T14:45:00.000Z' }],
+    });
+  });
+
+  it('does not query tournament data for an unsupported request', async () => {
+    const prisma = { tournament: { findUnique: () => { throw new Error('must not query'); } } };
+    await expect(answerOperationalQuery(prisma as never, 'tournament-1', 'Move matches now', new Date('2026-08-09T15:00:00.000Z')))
+      .resolves.toEqual(buildUnsupportedOperationalAnswer(new Date('2026-08-09T15:00:00.000Z')));
   });
 });
