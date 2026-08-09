@@ -1034,9 +1034,10 @@ const DEMO_CLEANUP_BATCH_SIZE = 100;
 
 async function cleanupExpiredDemoPrincipals(prisma: PrismaClient): Promise<void> {
   try {
+    const cleanupNow = new Date();
     const expiredUsers = await prisma.user.findMany({
       where: {
-        demoExpiresAt: { lt: new Date() },
+        demoExpiresAt: { lt: cleanupNow },
         tournamentAccess: { none: {} },
         organizationMembers: { none: {} },
       },
@@ -1048,7 +1049,12 @@ async function cleanupExpiredDemoPrincipals(prisma: PrismaClient): Promise<void>
     if (expiredUsers.length === 0) return;
 
     await prisma.user.deleteMany({
-      where: { id: { in: expiredUsers.map(({ id }) => id) } },
+      where: {
+        id: { in: expiredUsers.map(({ id }) => id) },
+        demoExpiresAt: { lt: cleanupNow },
+        tournamentAccess: { none: {} },
+        organizationMembers: { none: {} },
+      },
     });
   } catch {
     // Cleanup is maintenance, not an authentication dependency. Avoid

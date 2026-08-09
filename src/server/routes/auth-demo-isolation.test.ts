@@ -194,7 +194,12 @@ describe('demo session isolation', () => {
     expect(query.where.demoExpiresAt.lt.getTime()).toBeGreaterThanOrEqual(beforeLogin);
     expect(query.where.demoExpiresAt.lt.getTime()).toBeLessThanOrEqual(Date.now());
     expect(deleteMany).toHaveBeenCalledWith({
-      where: { id: { in: ['expired-1', 'expired-2'] } },
+      where: {
+        id: { in: ['expired-1', 'expired-2'] },
+        demoExpiresAt: { lt: query.where.demoExpiresAt.lt },
+        tournamentAccess: { none: {} },
+        organizationMembers: { none: {} },
+      },
     });
   });
 
