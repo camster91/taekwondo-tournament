@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": {
+    "outDir": "./dist-demo",
+    "rootDir": "."
+  },
+  "include": ["prisma/demo-seed.ts", "src/server/services/bracket-generator.ts"]
+}

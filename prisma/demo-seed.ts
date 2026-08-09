@@ -7,6 +7,16 @@ import { generateBracket, type CompetitorSeed } from '../src/server/services/bra
 export const DEMO_ORGANIZATION_SLUG = 'bowin-showcase-demo';
 export const DEMO_MARKER = 'bowin-resettable-showcase-v1';
 
+export function assertDemoResetAuthorized(env: Record<string, string | undefined>): void {
+  if (!env.DATABASE_URL) throw new Error('DATABASE_URL is required');
+  if (env.DEMO_ISOLATED_DATA !== '1') {
+    throw new Error('Demo reset requires an isolated synthetic-data database');
+  }
+  if (env.DEMO_RESET_CONFIRM !== DEMO_MARKER) {
+    throw new Error(`Demo reset attestation must equal ${DEMO_MARKER}`);
+  }
+}
+
 const id = (n: number) => `00000000-0000-4000-8000-${n.toString().padStart(12, '0')}`;
 const organizationId = id(1);
 const openTournamentId = id(2);
@@ -208,7 +218,7 @@ export async function resetDemoShowcase(client: DemoClient): Promise<Fixture> {
 }
 
 async function main() {
-  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
+  assertDemoResetAuthorized(process.env);
   const client = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }), log: ['warn', 'error'] });
   try { const fixture = await resetDemoShowcase(client); console.log(`Reset ${fixture.organization.name}: ${fixture.tournaments.length} tournaments, ${fixture.competitors.length} fabricated competitors.`); }
   finally { await client.$disconnect(); }

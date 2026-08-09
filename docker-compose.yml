@@ -22,6 +22,8 @@ services:
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:?EMAIL_FROM_ADDRESS must be set}
       - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Bowin}
       - ENABLE_DEMO_LOGIN=${ENABLE_DEMO_LOGIN:-}
+      - DEMO_ISOLATED_DATA=${DEMO_ISOLATED_DATA:-}
+      - DEMO_RATE_LIMIT_MAX=${DEMO_RATE_LIMIT_MAX:-30}
       # Destructive retention stays opt-in until the operator's policy is approved.
       - RETENTION_PURGE_ENABLED=${RETENTION_PURGE_ENABLED:-false}
       - SOFT_DELETE_RETENTION_DAYS=${SOFT_DELETE_RETENTION_DAYS:-7}

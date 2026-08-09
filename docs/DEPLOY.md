@@ -20,6 +20,18 @@ The supported production topology is the full-stack Docker image plus PostgreSQL
 
 Keep `ENABLE_DEV_AUTH`, `ENABLE_DEMO_LOGIN`, `ENABLE_E2E_AUTH_BYPASS`, and `RATE_LIMIT_DISABLED` unset in production. `POSTGRES_PASSWORD` is mandatory when using `docker-compose.yml`.
 
+### Isolated public showcase
+
+The public showcase is a separate deployment profile, never a customer or mixed-use production database. It requires both `ENABLE_DEMO_LOGIN=1` and `DEMO_ISOLATED_DATA=1`; `DEMO_RATE_LIMIT_MAX` defaults to 30 sign-ins per IP per 15 minutes. Production fails closed by leaving the demo route unmounted when the isolation attestation is absent.
+
+After migrations and readiness succeed, reset only the marker-protected fabricated tenant with:
+
+```sh
+DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 npm run demo:reset:production
+```
+
+The command additionally requires `DEMO_ISOLATED_DATA=1` in its environment. It refuses an absent or mismatched attestation and will not replace an organization whose canonical slug lacks the expected marker. Never persist `DEMO_RESET_CONFIRM` as a normal application secret.
+
 Automatic retention is deliberately disabled by default. Verify a backup and obtain operator/legal approval before enabling it; expired records are deleted at startup and then once per day and cannot be restored from the Trash view.
 
 ## Release sequence

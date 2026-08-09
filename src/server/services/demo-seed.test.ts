@@ -3,6 +3,7 @@ import { getBracketPlacementsFromLoaded } from './match-advancement.js';
 import {
   DEMO_MARKER,
   DEMO_ORGANIZATION_SLUG,
+  assertDemoResetAuthorized,
   assertSafeDemoDatabaseUrl,
   buildShowcaseFixture,
   resetDemoShowcase,
@@ -76,6 +77,18 @@ describe('demo showcase fixture', () => {
     expect(() => assertSafeDemoDatabaseUrl('postgresql://user:secret@db.example.com/bowin_test')).toThrow(/local/i);
     expect(() => assertSafeDemoDatabaseUrl('postgresql://user:secret@localhost:5432/bowin')).toThrow(/_test.*_e2e/i);
     expect(() => assertSafeDemoDatabaseUrl('not-a-url')).toThrow(/valid/i);
+  });
+
+  it('requires explicit isolated-data and reset attestations for the CLI', () => {
+    const authorized = {
+      DATABASE_URL: 'postgresql://demo:secret@db.internal/bowin_showcase',
+      DEMO_ISOLATED_DATA: '1',
+      DEMO_RESET_CONFIRM: DEMO_MARKER,
+    };
+    expect(() => assertDemoResetAuthorized(authorized)).not.toThrow();
+    expect(() => assertDemoResetAuthorized({ ...authorized, DEMO_ISOLATED_DATA: '' })).toThrow(/isolated/i);
+    expect(() => assertDemoResetAuthorized({ ...authorized, DEMO_RESET_CONFIRM: '' })).toThrow(/attestation/i);
+    expect(() => assertDemoResetAuthorized({ ...authorized, DATABASE_URL: '' })).toThrow(/DATABASE_URL/i);
   });
 
   it('completes a production four-person double-elimination bracket with derived podium places', () => {
