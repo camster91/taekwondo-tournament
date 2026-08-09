@@ -12,6 +12,7 @@ import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
 
 const router = Router();
+const DEMO_EMAIL = 'demo@bowin.app';
 
 // Rate limiting for auth routes. In dev/test, set RATE_LIMIT_DISABLED=1 to
 // bypass entirely (the limiter is in-memory so test suites that hit the
@@ -494,16 +495,23 @@ if (devAuthEndpointsEnabled) {
 router.post('/logout', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
 
+  // The public demo intentionally shares one synthetic user. Revoking that
+  // user's tokenVersion would terminate every other visitor's demo session.
+  // Clearing this caller's cookies is sufficient because the demo contains
+  // isolated synthetic data and its JWT already has a short expiry.
+  const isSharedDemoUser = req.user!.email === DEMO_EMAIL;
   try {
     // Bump tokenVersion to invalidate every outstanding JWT for
     // this user at once. The authenticate middleware compares the
     // embedded tokenVersion against the current DB value on every
     // request, so any token issued before this bump is rejected.
-    await prisma.user.update({
-      where: { id: req.user!.id },
-      data: { tokenVersion: { increment: 1 } },
-    });
-    invalidateAuthCache(req.user!.id);
+    if (!isSharedDemoUser) {
+      await prisma.user.update({
+        where: { id: req.user!.id },
+        data: { tokenVersion: { increment: 1 } },
+      });
+      invalidateAuthCache(req.user!.id);
+    }
   } catch (error) {
     console.error('Logout tokenVersion bump failed:', error);
     // Fall through — clearing the cookie still ends the current session.
@@ -1026,16 +1034,18 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
 // - Designed for the public live URL so visitors can try the app
 //   without needing to receive a magic-link email
 //
-// SECURITY: gated by ENABLE_DEMO_LOGIN. Defaults to ON in development
-// and OFF in production. Operators must explicitly opt in to expose
-// the demo account on a live deploy (the demo user has admin role).
-const DEMO_EMAIL = 'demo@bowin.app';
+// SECURITY: gated by ENABLE_DEMO_LOGIN. Production additionally requires
+// DEMO_ISOLATED_DATA=1 as an operator attestation that this admin account can
+// access only synthetic, isolated data.
 const DEMO_TTL_SECONDS = 4 * 60 * 60; // 4 hours
 // Closes S2 — old gate "on unless NODE_ENV=production" let the
 // demo account activate on any deploy where NODE_ENV was unset
 // or set to "staging". The demo user is admin. Now requires an
-// explicit ENABLE_DEMO_LOGIN=1, no NODE_ENV fallback.
-const demoLoginEnabled = process.env.ENABLE_DEMO_LOGIN === '1';
+// explicit ENABLE_DEMO_LOGIN=1, no NODE_ENV fallback. Production fails closed
+// unless the separate isolated-data attestation is also present.
+const demoLoginEnabled =
+  process.env.ENABLE_DEMO_LOGIN === '1' &&
+  (process.env.NODE_ENV !== 'production' || process.env.DEMO_ISOLATED_DATA === '1');
 
 if (demoLoginEnabled) {
   router.post('/demo', demoLimiter, async (_req: Request, res: Response) => {
@@ -1073,7 +1083,7 @@ if (demoLoginEnabled) {
         ...maybeTokenField(token),
         user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
         expiresIn: DEMO_TTL_SECONDS,
-        message: 'Demo session active. Changes you make are visible to all demo visitors.',
+        message: 'Synthetic demo session active. All data in this environment is fabricated.',
       });
     } catch (err: unknown) {
       console.error('Demo login error:', err);
