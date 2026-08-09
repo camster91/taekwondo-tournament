@@ -65,4 +65,15 @@ test.describe('truthful anonymous status', () => {
     await expect(page.getByRole('alert')).toContainText('No registration found for those exact details');
     await expect(page.getByRole('alert')).not.toContainText('Request failed');
   });
+
+  test('registration management distinguishes an outage from an invalid private link', async ({ page }) => {
+    await page.route('**/api/public/registrations/fabricated-token', (route) => route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Database unavailable' }),
+    }));
+    await page.goto('/manage-registration?token=fabricated-token');
+    await expect(page.getByRole('alert')).toContainText('Registration management is unavailable right now');
+    await expect(page.getByRole('alert')).not.toContainText('invalid or has expired');
+  });
 });

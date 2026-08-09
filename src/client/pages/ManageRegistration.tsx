@@ -30,6 +30,7 @@ import Input from '../components/ui/Input';
 import Label from '../components/ui/Label';
 import Select from '../components/ui/Select';
 import { classifyWithdrawalResponse } from '../utils/registration-withdrawal';
+import { fetchJson, getApiFailure } from '../utils/api-status';
 
 interface ManageRegistration {
   confirmationCode: string;
@@ -94,13 +95,18 @@ export default function ManageRegistration() {
     setLookupLoading(true);
     setLookupError(null);
     try {
-      const res = await fetch(`/api/public/registrations/${encodeURIComponent(managementToken)}`);
-      if (!res.ok) throw new Error('This management link is invalid or has expired. Contact the tournament director for help.');
-      const data = await res.json();
+      const data = await fetchJson<{ registration: ManageRegistration }>(fetch, `/api/public/registrations/${encodeURIComponent(managementToken)}`);
       setRegistration(data.registration);
       setForm(data.registration);
     } catch (err) {
-      setLookupError(err instanceof Error ? err.message : 'Lookup failed. Please try again.');
+      const failure = getApiFailure(err);
+      if (failure?.kind === 'not_found') {
+        setLookupError('This management link is invalid or has expired. Contact the tournament director for help.');
+      } else if (failure?.kind === 'rate_limited') {
+        setLookupError(failure.retryAfterSeconds ? `Too many attempts. Try again in ${failure.retryAfterSeconds} seconds.` : 'Too many attempts. Please try again shortly.');
+      } else {
+        setLookupError('Registration management is unavailable right now. Please try again.');
+      }
     } finally {
       setLookupLoading(false);
     }
@@ -152,11 +158,10 @@ export default function ManageRegistration() {
         const body = await res.json().catch(() => ({ error: 'Save failed.' }));
         throw new Error(body.error || 'Save failed.');
       }
-      // Re-fetch the registration to get the fresh state
-      const refreshed = await fetch(
+      // Re-fetch and validate the authoritative state before claiming save.
+      const fresh = await fetchJson<{ registration: ManageRegistration }>(fetch,
         `/api/public/registrations/${encodeURIComponent(managementToken)}`,
       );
-      const fresh = await refreshed.json();
       setRegistration(fresh.registration);
       setForm(fresh.registration);
       setEditMode(false);
