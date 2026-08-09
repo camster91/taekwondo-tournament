@@ -36,4 +36,16 @@ describe('typed API status', () => {
     const error = await fetchJson(async () => new Response('<html>proxy error</html>', { status: 200 }), '/api/test').catch((value) => value);
     expect(getApiFailure(error)).toMatchObject({ kind: 'unavailable', retryable: true, status: 200 });
   });
+
+  it('preserves structured validation details from failed requests', async () => {
+    const error = await fetchJson(
+      async () => new Response(JSON.stringify({ error: 'Invalid registration', details: ['Weight is required'] }), { status: 422 }),
+      '/api/test',
+    ).catch((value) => value);
+    expect(getApiFailure(error)).toMatchObject({
+      kind: 'validation',
+      message: 'Invalid registration',
+      details: ['Weight is required'],
+    });
+  });
 });

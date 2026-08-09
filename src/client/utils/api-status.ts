@@ -7,6 +7,7 @@ export class ApiFailure extends Error {
     public readonly retryable: boolean,
     public readonly status?: number,
     public readonly retryAfterSeconds?: number,
+    public readonly details?: string[],
   ) {
     super(message);
     this.name = 'ApiFailure';
@@ -41,9 +42,9 @@ export async function fetchJson<T>(request: RequestLike, input: RequestInfo | UR
   } catch {
     throw new ApiFailure('The service could not be reached.', 'unavailable', true);
   }
-  let body: { error?: string } | T | null;
+  let body: { error?: string; details?: unknown } | T | null;
   try {
-    body = await response.json() as { error?: string } | T;
+    body = await response.json() as { error?: string; details?: unknown } | T;
   } catch {
     if (response.ok) {
       throw new ApiFailure('The service returned an invalid response.', 'unavailable', true, response.status);
@@ -55,7 +56,11 @@ export async function fetchJson<T>(request: RequestLike, input: RequestInfo | UR
     const message = body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
       ? body.error
       : `Request failed (${response.status})`;
-    throw new ApiFailure(message, classification.kind, classification.retryable, response.status, retryAfterSeconds(response));
+    const details = body && typeof body === 'object' && 'details' in body && Array.isArray(body.details)
+      && body.details.every((detail) => typeof detail === 'string')
+      ? body.details
+      : undefined;
+    throw new ApiFailure(message, classification.kind, classification.retryable, response.status, retryAfterSeconds(response), details);
   }
   return body as T;
 }
