@@ -37,7 +37,7 @@ export interface CategorizationConfig {
 // Source-internal type. Mirrors `Registration & { competitor: Competitor }` from
 // Prisma, but we declare it explicitly so tests can construct
 // fixtures without depending on the Prisma client.
-interface RegistrationWithCompetitor {
+export interface RegistrationWithCompetitor {
   id: string;
   competitorId: string;
   patterns: boolean;
@@ -50,7 +50,7 @@ interface RegistrationWithCompetitor {
     firstName: string;
     lastName: string;
     belt: string;
-    beltColor?: string;
+    beltColor?: string | null;
     gender: string;
     schoolDojang?: string | null;
     weightLbs?: number | null;
@@ -88,7 +88,7 @@ export interface PreviewDivision {
   ageMax: number;
   weightClass: string | null;
   competitorCount: number;
-  competitors: { name: string; school: string }[];
+  competitors: { registrationId: string; name: string; school: string }[];
 }
 
 export interface PreviewResult {
@@ -215,6 +215,7 @@ export function previewCategorization(
         weightClass: group.weightClass || null,
         competitorCount: group.registrations.length,
         competitors: group.registrations.map((r) => ({
+          registrationId: r.id,
           name: `${r.competitor.firstName} ${r.competitor.lastName}`,
           school: r.competitor.schoolDojang || '',
         })),

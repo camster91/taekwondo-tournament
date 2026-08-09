@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   checkTournamentAccess: vi.fn(), approveRecommendation: vi.fn(), rejectRecommendation: vi.fn(), getValidator: vi.fn(),
+  createDivisionRecommendation: vi.fn(),
 }));
 const routeState = vi.hoisted(() => ({ captured: [] as Array<{ method: string; path: string; handler: any }> }));
 vi.mock('../middleware/auth.js', () => ({
@@ -13,6 +14,9 @@ vi.mock('../services/recommendation-contract.js', () => ({
   rejectRecommendation: (...args: any[]) => mocks.rejectRecommendation(...args),
 }));
 vi.mock('../services/recommendation-validators.js', () => ({ getRecommendationValidator: (...args: any[]) => mocks.getValidator(...args) }));
+vi.mock('../services/division-recommendations.js', () => ({
+  createDivisionRecommendation: (...args: any[]) => mocks.createDivisionRecommendation(...args),
+}));
 vi.mock('express', () => {
   const router: any = {};
   for (const method of ['get', 'post']) router[method] = (path: string, ...handlers: any[]) => {
@@ -41,6 +45,19 @@ describe('recommendation review routes', () => {
     await handler('get', '/tournament/:tournamentId')({ params: { tournamentId: 'foreign' }, app: { locals: { prisma } } }, res);
     expect(res.statusCode).toBe(403);
     expect(prisma.recommendation.findMany).not.toHaveBeenCalled();
+  });
+
+  it('creates a deterministic division proposal only for an authorized director', async () => {
+    const prisma = {};
+    mocks.checkTournamentAccess.mockResolvedValue({ ok: true });
+    mocks.createDivisionRecommendation.mockResolvedValue({ id: 'rec-division', status: 'proposed' });
+    const res = response();
+    await handler('post', '/tournament/:tournamentId/divisions/propose')({
+      params: { tournamentId: 'own' }, user: { id: 'director-1' }, body: {}, app: { locals: { prisma } },
+    }, res);
+    expect(mocks.createDivisionRecommendation).toHaveBeenCalledWith(prisma, 'own', 'director-1');
+    expect(res.statusCode).toBe(201);
+    expect(res.body).toMatchObject({ id: 'rec-division', status: 'proposed' });
   });
 
   it('binds approval to both the authorized tournament and recommendation ID', async () => {

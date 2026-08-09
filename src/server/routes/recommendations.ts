@@ -4,6 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 import { authenticate, checkTournamentAccess, type AuthenticatedRequest } from '../middleware/auth.js';
 import { approveRecommendation, rejectRecommendation } from '../services/recommendation-contract.js';
 import { getRecommendationValidator } from '../services/recommendation-validators.js';
+import { createDivisionRecommendation } from '../services/division-recommendations.js';
 
 const router = Router();
 const param = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value || '';
@@ -32,6 +33,17 @@ router.get('/tournament/:tournamentId', authenticate, async (req: AuthenticatedR
     warnings: JSON.parse(item.warnings), proposedDiff: JSON.parse(item.proposedDiff),
     validationResult: JSON.parse(item.validationResult), appliedResult: item.appliedResult ? JSON.parse(item.appliedResult) : null,
   })));
+});
+
+router.post('/tournament/:tournamentId/divisions/propose', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = param(req.params.tournamentId);
+  if (!await authorize(req, res, prisma, tournamentId)) return;
+  try {
+    res.status(201).json(await createDivisionRecommendation(prisma, tournamentId, req.user!.id));
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : 'Division recommendation could not be created' });
+  }
 });
 
 router.post('/tournament/:tournamentId/:recommendationId/approve', authenticate, async (req: AuthenticatedRequest, res: Response) => {
