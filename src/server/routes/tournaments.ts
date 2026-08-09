@@ -25,7 +25,7 @@ import {
   canOpenPublicRegistration,
   getPlanEntitlements,
 } from '../services/entitlements.js';
-import { mergeRulesSettings, saveTournamentSettingsAtomic } from '../services/tournament-settings.js';
+import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from '../services/tournament-settings.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import {
   applyScheduleCorrection,
@@ -248,7 +248,7 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
       name,
       date: normalizeDate(date),
       location,
-      settings: settings ? JSON.stringify(settings) : null,
+      settings: settings ? JSON.stringify(stripReservedOperationSettings(settings)) : null,
       status: 'draft',
       sportProfileSlug: sportProfileSlug || 'taekwondo',
       organizationId: resolvedOrgId,
@@ -325,7 +325,7 @@ router.post('/:id/clone', authenticate, requireTournamentAccess('director'), asy
       date: new Date(newDate.toISOString().slice(0, 10) + 'T12:00:00.000Z'),
       location: original.location,
       status: 'draft',
-      settings: original.settings,
+      settings: stripReservedOperationSettingsFromRaw(original.settings),
       sportProfileSlug: original.sportProfileSlug,
       sportProfileId: original.sportProfileId,
       organizationId: original.organizationId,
@@ -505,16 +505,22 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
         });
       }
     }
-    const tournament = await prisma.tournament.update({
-      where: { id: getParam(req.params.id) },
-      data: {
-        name,
-        date: date ? new Date(date) : undefined,
-        location,
-        status,
-        settings: settings ? JSON.stringify(settings) : undefined,
-      },
-    });
+    const tournamentId = getParam(req.params.id);
+    const tournament = await prisma.$transaction(async (tx) => {
+      const current = settings
+        ? await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { settings: true } })
+        : null;
+      return tx.tournament.update({
+        where: { id: tournamentId },
+        data: {
+          name,
+          date: date ? new Date(date) : undefined,
+          location,
+          status,
+          settings: settings ? JSON.stringify(mergeGeneralSettings(current!.settings, settings)) : undefined,
+        },
+      });
+    }, { isolationLevel: 'Serializable' });
 
     res.json(tournament);
   } catch (error: unknown) {

@@ -95,12 +95,27 @@ describe('recommendation contract', () => {
       id: 'rec-1', tournamentId: 'tournament-1', recommendationType: 'division_merge', status: 'applied',
       appliedResult: JSON.stringify({ moved: 1 }), undoReference: 'backup-1', operationAuditId: 'audit-1',
     })), update: vi.fn() };
-    prisma.$transaction.mockImplementation(async (fn) => fn({ recommendation: txRecommendation, tournamentOperationAudit: { create: vi.fn() }, $queryRawUnsafe: vi.fn() }));
+    prisma.$transaction.mockImplementation(async (fn) => fn({ recommendation: txRecommendation, tournamentOperationAudit: { create: vi.fn(), findUnique: vi.fn().mockResolvedValue({ id: 'audit-1', undoneAt: null }) }, $queryRawUnsafe: vi.fn() }));
     const apply = vi.fn();
     await expect(applyApprovedRecommendation(prisma as never, 'rec-1', 'director-2', apply, validator)).resolves.toEqual({
       appliedResult: { moved: 1 }, undoReference: 'backup-1', auditId: 'audit-1', alreadyApplied: true,
     });
     expect(apply).not.toHaveBeenCalled();
+  });
+
+  it('never reports an undone recommendation as currently applied', async () => {
+    const prisma = db();
+    const txRecommendation = { findUnique: vi.fn(async () => ({
+      id: 'rec-1', tournamentId: 'tournament-1', recommendationType: 'schedule_optimization_v1', status: 'applied',
+      appliedResult: JSON.stringify({ moved: 1 }), undoReference: 'schedule-recommendation:rec-1', operationAuditId: 'audit-1',
+    })), update: vi.fn() };
+    prisma.$transaction.mockImplementation(async (fn) => fn({
+      recommendation: txRecommendation,
+      tournamentOperationAudit: { create: vi.fn(), findUnique: vi.fn().mockResolvedValue({ id: 'audit-1', undoneAt: new Date() }) },
+      $queryRawUnsafe: vi.fn(),
+    }));
+    await expect(applyApprovedRecommendation(prisma as never, 'rec-1', 'director-2', vi.fn(), validator))
+      .rejects.toThrow('has been undone');
   });
 
   it('refuses application when current deterministic input no longer matches approval', async () => {

@@ -1,15 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mergeRulesSettings, mergeSetupSettings, saveTournamentSettingsAtomic } from './tournament-settings.js';
+import { mergeGeneralSettings, mergeRulesSettings, mergeSetupSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from './tournament-settings.js';
 
 describe('saveTournamentSettingsAtomic', () => {
   it('keeps rule and setup namespaces from overwriting one another', () => {
-    const current = JSON.stringify({ rings: { count: 2 }, version: 1, events: { patterns: { format: 'single_elim' } } });
-    expect(mergeSetupSettings(current, { rings: { count: 4 }, version: 99, events: { patterns: { format: 'stale' } } })).toEqual({
-      rings: { count: 4 }, version: 1, events: { patterns: { format: 'single_elim' } },
+    const current = JSON.stringify({ rings: { count: 2 }, version: 1, events: { patterns: { format: 'single_elim' } }, canonicalSchedule: { version: 1 }, scheduleOperations: { restWindowMinutes: 10 } });
+    expect(mergeSetupSettings(current, { rings: { count: 4 }, version: 99, events: { patterns: { format: 'stale' } }, canonicalSchedule: { injected: true }, scheduleOperations: { injected: true } })).toEqual({
+      rings: { count: 4 }, version: 1, events: { patterns: { format: 'single_elim' } }, canonicalSchedule: { version: 1 }, scheduleOperations: { restWindowMinutes: 10 },
     });
-    expect(mergeRulesSettings(current, { rings: { count: 99 }, version: 2, events: { patterns: { format: 'double_elim' } } })).toEqual({
-      rings: { count: 2 }, version: 2, events: { patterns: { format: 'double_elim' } },
+    expect(mergeRulesSettings(current, { rings: { count: 99 }, version: 2, events: { patterns: { format: 'double_elim' } }, canonicalSchedule: { injected: true } })).toEqual({
+      rings: { count: 2 }, version: 2, events: { patterns: { format: 'double_elim' } }, canonicalSchedule: { version: 1 }, scheduleOperations: { restWindowMinutes: 10 },
     });
+    expect(mergeGeneralSettings(current, { display: { mode: 'ring' }, canonicalSchedule: { injected: true }, scheduleOperations: { injected: true } })).toEqual({
+      rings: { count: 2 }, version: 1, events: { patterns: { format: 'single_elim' } }, display: { mode: 'ring' }, canonicalSchedule: { version: 1 }, scheduleOperations: { restWindowMinutes: 10 },
+    });
+    expect(stripReservedOperationSettings({ display: {}, canonicalSchedule: { injected: true }, scheduleOperations: { injected: true } })).toEqual({ display: {} });
+    expect(stripReservedOperationSettingsFromRaw(JSON.stringify({ display: {}, canonicalSchedule: { oldDivisionIds: true }, scheduleOperations: { stale: true } }))).toBe(JSON.stringify({ display: {} }));
+    expect(stripReservedOperationSettingsFromRaw(JSON.stringify({ canonicalSchedule: {}, scheduleOperations: {} }))).toBeNull();
   });
   it('commits settings and replacement classes through one transaction', async () => {
     const tx = {

@@ -120,6 +120,10 @@ export async function applyApprovedRecommendation(
     await lockRecommendation(tx, recommendationId);
     const recommendation = await tx.recommendation.findUnique({ where: { id: recommendationId } });
     if (recommendation?.status === 'applied') {
+      if (!recommendation.operationAuditId) throw new Error('Applied recommendation audit is missing');
+      const audit = await tx.tournamentOperationAudit.findUnique({ where: { id: recommendation.operationAuditId } });
+      if (!audit) throw new Error('Applied recommendation audit is missing');
+      if (audit.undoneAt) throw new Error('Recommendation has been undone and is no longer applied');
       return {
         appliedResult: JSON.parse(recommendation.appliedResult || 'null'),
         undoReference: recommendation.undoReference || null,

@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import type { Response } from 'express-serve-static-core';
 import type { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
 import { authenticate, checkTournamentAccess, type AuthenticatedRequest } from '../middleware/auth.js';
+import { validateRequest } from '../middleware/validate.js';
 import { approveRecommendation, rejectRecommendation } from '../services/recommendation-contract.js';
 import { getRecommendationValidator } from '../services/recommendation-validators.js';
 import {
@@ -9,9 +11,26 @@ import {
   createDivisionRecommendation,
   DIVISION_RECOMMENDATION_TYPE,
 } from '../services/division-recommendations.js';
+import {
+  applyScheduleOptimizationRecommendation,
+  createScheduleOptimizationRecommendation,
+  SCHEDULE_OPTIMIZATION_TYPE,
+  saveScheduleOperationalConditions,
+  undoScheduleOptimizationRecommendation,
+} from '../services/schedule-optimization-recommendations.js';
 
 const router = Router();
 const param = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value || '';
+export const scheduleConditionsSchema = z.object({
+  restWindowMinutes: z.number().int().min(0).max(240),
+  ringDelays: z.array(z.object({
+    ring: z.number().int().min(1).max(100),
+    delayMinutes: z.number().int().min(0).max(240),
+  }).strict()).max(100),
+  incidentBlocks: z.array(z.object({
+    incidentId: z.string().uuid(), ring: z.number().int().min(1).max(100),
+  })).max(100),
+});
 
 async function authorize(req: AuthenticatedRequest, res: Response, prisma: PrismaClient, tournamentId: string) {
   const access = await checkTournamentAccess(req, prisma, tournamentId, 'director');
@@ -47,6 +66,31 @@ router.post('/tournament/:tournamentId/divisions/propose', authenticate, async (
     res.status(201).json(await createDivisionRecommendation(prisma, tournamentId, req.user!.id));
   } catch (error) {
     res.status(409).json({ error: error instanceof Error ? error.message : 'Division recommendation could not be created' });
+  }
+});
+
+router.put('/tournament/:tournamentId/schedule/conditions', authenticate, validateRequest(scheduleConditionsSchema), async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = param(req.params.tournamentId);
+  if (!await authorize(req, res, prisma, tournamentId)) return;
+  try {
+    await saveScheduleOperationalConditions(prisma, tournamentId, req.body);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : 'Schedule live conditions could not be saved' });
+  }
+});
+
+router.post('/tournament/:tournamentId/schedule/propose', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = param(req.params.tournamentId);
+  if (!await authorize(req, res, prisma, tournamentId)) return;
+  try {
+    // All authoritative schedule inputs are reloaded server-side. Request body
+    // arrays are deliberately ignored.
+    res.status(201).json(await createScheduleOptimizationRecommendation(prisma, tournamentId, req.user!.id));
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : 'Schedule recommendation could not be created' });
   }
 });
 
@@ -88,13 +132,34 @@ router.post('/tournament/:tournamentId/:recommendationId/apply', authenticate, a
   if (!await authorize(req, res, prisma, tournamentId)) return;
   const recommendation = await findScoped(prisma, tournamentId, recommendationId);
   if (!recommendation) return res.status(404).json({ error: 'Recommendation not found' });
-  if (recommendation.recommendationType !== DIVISION_RECOMMENDATION_TYPE) {
-    return res.status(409).json({ error: 'Recommendation cannot be applied by the division workflow' });
+  try {
+    if (recommendation.recommendationType === DIVISION_RECOMMENDATION_TYPE) {
+      return res.json(await applyDivisionRecommendation(prisma, recommendationId, req.user!.id));
+    }
+    if (recommendation.recommendationType === SCHEDULE_OPTIMIZATION_TYPE) {
+      return res.json(await applyScheduleOptimizationRecommendation(prisma, recommendationId, req.user!.id));
+    }
+    return res.status(409).json({ error: 'Recommendation type has no supported application workflow' });
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : 'Recommendation could not be applied' });
+  }
+});
+
+router.post('/tournament/:tournamentId/:recommendationId/undo', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = param(req.params.tournamentId);
+  const recommendationId = param(req.params.recommendationId);
+  if (!await authorize(req, res, prisma, tournamentId)) return;
+  const recommendation = await findScoped(prisma, tournamentId, recommendationId);
+  if (!recommendation) return res.status(404).json({ error: 'Recommendation not found' });
+  if (recommendation.recommendationType !== SCHEDULE_OPTIMIZATION_TYPE) {
+    return res.status(409).json({ error: 'Recommendation does not support schedule undo' });
   }
   try {
-    res.json(await applyDivisionRecommendation(prisma, recommendationId, req.user!.id));
+    await undoScheduleOptimizationRecommendation(prisma, tournamentId, recommendationId, req.user!.id);
+    res.json({ ok: true });
   } catch (error) {
-    res.status(409).json({ error: error instanceof Error ? error.message : 'Division recommendation could not be applied' });
+    res.status(409).json({ error: error instanceof Error ? error.message : 'Schedule optimization cannot be undone' });
   }
 });
 
