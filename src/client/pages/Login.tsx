@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { markDemoEntryPending } from '../utils/demo-progress';
+import { fetchJson, getApiFailure } from '../utils/api-status';
+import { parseSetupStatus, type SetupStatus } from '../utils/setup-status';
 import Spinner from '../components/ui/Spinner';
 import { Card, CardBody } from '../components/ui';
 import { Button } from '../components/ui';
@@ -49,17 +51,28 @@ export default function Login() {
   const [setupFirstName, setSetupFirstName] = useState('');
   const [setupLastName, setSetupLastName] = useState('');
 
-  const { data: setupStatus } = useQuery<{ needsSetup: boolean }>({
+  const {
+    data: setupStatus,
+    isLoading: setupStatusLoading,
+    isError: setupStatusError,
+    error: setupStatusFailure,
+    refetch: retrySetupStatus,
+    isFetching: setupStatusFetching,
+  } = useQuery<SetupStatus>({
     queryKey: ['setup-status'],
     queryFn: async () => {
-      const res = await fetch('/api/auth/setup-status');
-      if (!res.ok) throw new Error('Failed to fetch setup status');
-      return res.json();
+      const payload = await fetchJson<unknown>(fetch, '/api/auth/setup-status');
+      return parseSetupStatus(payload);
     },
     staleTime: 60000,
+    retry: false,
   });
 
   const needsSetup = setupStatus?.needsSetup === true;
+  const setupApiFailure = getApiFailure(setupStatusFailure);
+  const setupFailureMessage = setupApiFailure?.kind === 'rate_limited'
+    ? `System readiness is busy. Try again${setupApiFailure.retryAfterSeconds ? ` in ${setupApiFailure.retryAfterSeconds} seconds` : ' shortly'}.`
+    : 'We could not confirm whether this system is ready for sign-in. Try again before continuing.';
 
   // Redirect if already logged in
   useEffect(() => {
@@ -180,14 +193,14 @@ export default function Login() {
           </Link>
           <div className="flex items-center gap-4 text-sm">
             <span className="text-slate-600 hidden sm:inline">Real tournament management, end-to-end.</span>
-            {needsSetup ? null : (
+            {setupStatus?.needsSetup === false ? (
               <Link
                 to="/register"
                 className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
               >
                 Public registration →
               </Link>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
@@ -257,7 +270,27 @@ export default function Login() {
         {/* ─── Right: Auth card ─── */}
         <section className="flex items-center justify-center px-6 py-12 lg:py-24 bg-[#fafbfc] dark:bg-[#0a0e1a]">
           <div className="w-full max-w-md">
-            {needsSetup ? (
+            {setupStatusLoading ? (
+              <div role="status" aria-live="polite" className="text-center py-10">
+                <Spinner size="lg" />
+                <h1 className="mt-4 text-xl font-semibold">Checking system readiness</h1>
+                <p className="mt-2 text-sm text-slate-600">Sign-in will appear after this check completes.</p>
+              </div>
+            ) : setupStatusError ? (
+              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 dark:border-red-800 dark:bg-red-900/20">
+                <h1 className="text-xl font-semibold text-red-900 dark:text-red-100">Sign-in temporarily unavailable</h1>
+                <p className="mt-2 text-sm text-red-700 dark:text-red-300">{setupFailureMessage}</p>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="mt-4"
+                  loading={setupStatusFetching}
+                  onClick={() => { void retrySetupStatus(); }}
+                >
+                  Retry readiness check
+                </Button>
+              </div>
+            ) : needsSetup ? (
               <SetupForm
                 email={email} setEmail={setEmail}
                 firstName={setupFirstName} setFirstName={setSetupFirstName}
