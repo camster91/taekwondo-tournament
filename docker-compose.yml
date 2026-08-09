@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64: ${VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64:?offline capability public key must be set}
     container_name: martial-arts-tournament
     ports:
       - "3001:3001"
@@ -24,6 +26,7 @@ services:
       - ENABLE_DEMO_LOGIN=${ENABLE_DEMO_LOGIN:-}
       - DEMO_ISOLATED_DATA=${DEMO_ISOLATED_DATA:-}
       - DEMO_RATE_LIMIT_MAX=${DEMO_RATE_LIMIT_MAX:-30}
+      - OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=${OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64:?offline capability private key must be set}
       # Destructive retention stays opt-in until the operator's policy is approved.
       - RETENTION_PURGE_ENABLED=${RETENTION_PURGE_ENABLED:-false}
       - SOFT_DELETE_RETENTION_DAYS=${SOFT_DELETE_RETENTION_DAYS:-7}

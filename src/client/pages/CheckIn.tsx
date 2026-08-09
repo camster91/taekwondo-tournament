@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -26,6 +26,9 @@ import { CHECK_IN_ACCESSIBLE_LABELS, formatCheckInWeight } from '../utils/check-
 import OperationStatus from '../components/ui/OperationStatus';
 import { buildDeliveryUncertainMessage, buildOfflineOperationStatuses, buildOfflineReviewMessage } from '../utils/offline-operation-status';
 import { reconcileBulkCheckInResult, runBulkCheckInRequests } from '../utils/bulk-check-in';
+import { browserVenueDataSnapshotStore, loadVenueData } from '../utils/venue-data-snapshot';
+import { isCheckInRegistrationData } from '../utils/venue-data-contracts';
+import { buildCheckInRequestPayload, shouldQueueOfflineMutation } from '../utils/offline-delivery';
 
 interface Registration {
   id: string;
@@ -57,7 +60,9 @@ export default function CheckIn() {
   const { tournamentId } = useParams();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const { user } = useAuth();
+  const { user, isOfflineSession } = useAuth();
+  const venueSnapshots = useMemo(browserVenueDataSnapshotStore, []);
+  const [cachedSnapshotAt, setCachedSnapshotAt] = useState<string | null>(null);
   const offlineOperations = useOfflineOperations(tournamentId, 'check_in');
   const [discardOfflineId, setDiscardOfflineId] = useState<string | null>(null);
   const [discardOfflineError, setDiscardOfflineError] = useState('');
@@ -100,16 +105,17 @@ export default function CheckIn() {
   const { data: registrations, isLoading, isError: registrationsError, refetch: retryRegistrations } = useQuery<Registration[]>({
     queryKey: ['checkin-registrations', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/tournaments/${tournamentId}/registrations`, { headers: getAuthHeaders() });
-      if (!res.ok) throw new Error('Failed to fetch registrations');
-      const data = await res.json();
-      return data.map((r: { checkedIn?: boolean; [key: string]: unknown }) => ({
-        ...r,
-        checkedIn: r.checkedIn || false,
-        checkInTime: r.checkInTime || null,
-        checkInWeight: r.checkInWeight || null,
-      }));
+      if (!user || !tournamentId) throw new Error('Authenticated tournament context is required');
+      const result = await loadVenueData<Registration[]>({
+        scope: { ownerId: user.id, tournamentId, kind: 'checkin' },
+        store: venueSnapshots,
+        validate: (value): value is Registration[] => isCheckInRegistrationData(value),
+        request: () => fetch(`/api/tournaments/${tournamentId}/registrations`, { headers: getAuthHeaders() }),
+      });
+      setCachedSnapshotAt(result.source === 'snapshot' ? result.savedAt : null);
+      return result.data;
     },
+    enabled: Boolean(user && tournamentId),
     refetchInterval: 5000,
   refetchIntervalInBackground: false,
   });
@@ -118,11 +124,13 @@ export default function CheckIn() {
   const stageCheckIn = (data: CheckInSubmission, deliveryUncertain = false) => {
     if (!tournamentId || !user) return;
     try {
-      offlineOperations.enqueue(makeCheckInOperation(user.id, tournamentId, data.registrationId, {
-        checkedIn: true,
-        checkInTime: new Date().toISOString(),
-        checkInWeight: data.weight || null,
-      }, deliveryUncertain ? 'delivery_uncertain' : 'pending'));
+      offlineOperations.enqueue(makeCheckInOperation(
+        user.id,
+        tournamentId,
+        data.registrationId,
+        buildCheckInRequestPayload(data.weight),
+        deliveryUncertain ? 'delivery_uncertain' : 'pending',
+      ));
     } catch {
       if (deliveryUncertain) {
         const registration = selectedRegistration?.id === data.registrationId ? selectedRegistration : undefined;
@@ -154,11 +162,7 @@ export default function CheckIn() {
       const res = await fetch(`/api/tournaments/${tournamentId}/registrations/${data.registrationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({
-          checkedIn: true,
-          checkInTime: new Date().toISOString(),
-          checkInWeight: data.weight || null,
-        }),
+        body: JSON.stringify(buildCheckInRequestPayload(data.weight)),
       });
       if (!res.ok) throw new Error('Failed to check in');
       return res.json();
@@ -175,7 +179,7 @@ export default function CheckIn() {
   });
 
   const submitCheckIn = (data: CheckInSubmission) => {
-    if (!navigator.onLine) stageCheckIn(data);
+    if (shouldQueueOfflineMutation({ isOfflineSession, navigatorOnline: navigator.onLine })) stageCheckIn(data);
     else checkInMutation.mutate(data);
   };
 
@@ -393,6 +397,11 @@ export default function CheckIn() {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+      {cachedSnapshotAt && (
+        <div role="status" className="border-b border-amber-300 bg-amber-50 px-4 py-3 text-center text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+          Cached check-in list from {new Date(cachedSnapshotAt).toLocaleTimeString()}. Server changes may be newer; offline actions remain queued until reconnection.
+        </div>
+      )}
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 shadow">
         <div className="px-4 py-4">

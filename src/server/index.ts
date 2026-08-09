@@ -241,8 +241,12 @@ app.get('/api/health/ready', async (_req: Request, res: Response) => {
   }
 });
 
-// Serve static files in production
-if (isProduction) {
+// Serve the built client in production. The explicit test-only branch lets
+// Playwright exercise the real service worker over localhost without weakening
+// production's HTTPS and Secure-cookie requirements.
+const serveBuiltClient = isProduction
+  || (process.env.NODE_ENV === 'test' && process.env.ENABLE_E2E_STATIC_SERVER === '1');
+if (serveBuiltClient) {
   const distPath = path.join(__dirname, '../../dist');
   app.use(express.static(distPath, {
     setHeaders: (res: Response, filePath: string) => {

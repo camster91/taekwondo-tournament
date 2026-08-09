@@ -86,12 +86,18 @@ echo "==> Reading JWT secret"
 JWT_SECRET=$(cat /etc/taekwondo.d/jwt-secret)
 echo "JWT secret length: ${#JWT_SECRET}"
 
+OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=$(cat /etc/taekwondo.d/offline-capability-private-key)
+OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=$(cat /etc/taekwondo.d/offline-capability-public-key)
+test -n "$OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64"
+test -n "$OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64"
+
 echo "==> Writing .env (prisma.config.ts loads this via dotenv/config at config-load time)"
 cat > /opt/taekwondo-tournament/.env <<ENVEOF
 NODE_ENV=production
 PORT=3001
 DATABASE_URL=postgresql://markup:${DB_PW}@markup-postgres:5432/taekwondo?schema=public
 JWT_SECRET=${JWT_SECRET}
+OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=${OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64}
 ENABLE_DEMO_LOGIN=1
 DEMO_ISOLATED_DATA=1
 DEMO_RATE_LIMIT_MAX=30
@@ -115,7 +121,7 @@ chmod 600 /opt/taekwondo-tournament/.env
 RELEASE_TAG="release-$(date -u +%Y%m%d%H%M%S)-$(openssl rand -hex 4)"
 IMAGE="camster91/taekwondo-tournament:${RELEASE_TAG}"
 echo "==> Building immutable image ${IMAGE}"
-docker build -t "$IMAGE" . 2>&1 | tail -3
+docker build --build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64}" -t "$IMAGE" . 2>&1 | tail -3
 
 echo "==> Exporting JWT_SECRET into the docker run environment"
 # Write env to a temp file so the secret never appears on the docker run cmdline
@@ -124,6 +130,7 @@ chmod 600 "$ENV_FILE"
 echo "NODE_ENV=production" > "$ENV_FILE"
 echo "PORT=3001" >> "$ENV_FILE"
 printf "JWT_SECRET=%s\n" "$JWT_SECRET" >> "$ENV_FILE"
+printf "OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=%s\n" "$OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64" >> "$ENV_FILE"
 echo "DATABASE_URL=postgresql://markup:${DB_PW}@markup-postgres:5432/taekwondo?schema=public" >> "$ENV_FILE"
 # ALLOWED_ORIGINS must also reach the runtime container (the
 # CORS middleware reads it from process.env at request time, NOT

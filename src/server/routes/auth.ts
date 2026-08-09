@@ -10,6 +10,7 @@ import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
 import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
+import { maybeIssueOfflineCapability } from '../services/offline-capability.js';
 
 const router = Router();
 
@@ -583,10 +584,21 @@ router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response)
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({
+    const responseUser = {
       ...user,
       isDemo: user.demoExpiresAt !== null,
+    };
+    const offlineCapability = maybeIssueOfflineCapability({
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      createdAt: user.createdAt.toISOString(),
+      isDemo: responseUser.isDemo,
+      demoExpiresAt: user.demoExpiresAt?.toISOString() ?? null,
     });
+    res.json(offlineCapability ? { ...responseUser, offlineCapability } : responseUser);
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });

@@ -1,11 +1,16 @@
-import { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback, ReactNode } from 'react';
 import { browserSessionEvidence } from '../utils/session-evidence';
-import { hydrateVerifiedSession, SessionHydrationError, type AuthUser as User } from '../utils/auth-session';
+import { hydrateVerifiedSession, isAuthUser, SessionHydrationError, type AuthUser as User } from '../utils/auth-session';
+import { bootstrapAuthenticatedIdentity, browserOfflineAuthSnapshotStore } from '../utils/offline-auth-snapshot';
+import { browserVenueDataSnapshotStore } from '../utils/venue-data-snapshot';
+import { browserOfflineOperationQueue } from '../utils/offline-operation-queue';
+import { purgeOfflineOwnerData } from '../utils/offline-owner-data';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isOfflineSession: boolean;
   requestMagicLink: (email: string) => Promise<{ success: boolean; error?: string; devMode?: boolean; magicUrl?: string; code?: string }>;
   verifyCode: (email: string, code: string) => Promise<VerificationResult>;
   verifyToken: (token: string) => Promise<VerificationResult>;
@@ -34,8 +39,25 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOfflineSession, setIsOfflineSession] = useState(false);
   const sessionEvidence = useMemo(browserSessionEvidence, []);
+  const offlineAuth = useMemo(browserOfflineAuthSnapshotStore, []);
+  const venueSnapshots = useMemo(browserVenueDataSnapshotStore, []);
+  const offlineOperations = useMemo(browserOfflineOperationQueue, []);
+  const previousOwnerId = useRef<string | null>(null);
   const authGeneration = useRef(0);
+  const saveOfflineCapability = useCallback((value: User) => {
+    const capability = (value as User & { offlineCapability?: unknown }).offlineCapability;
+    if (typeof capability === 'string') offlineAuth.save(capability);
+  }, [offlineAuth]);
+
+  useEffect(() => {
+    const nextOwnerId = user?.id ?? null;
+    if (previousOwnerId.current && previousOwnerId.current !== nextOwnerId) {
+      purgeOfflineOwnerData(previousOwnerId.current, venueSnapshots, offlineOperations);
+    }
+    previousOwnerId.current = nextOwnerId;
+  }, [offlineOperations, user?.id, venueSnapshots]);
 
   // Hydrate from the cookie session on mount.
   useEffect(() => {
@@ -43,16 +65,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const bootstrapGeneration = authGeneration.current;
     (async () => {
       try {
-        const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+        let confirmedUnauthenticated = false;
+        const result = await bootstrapAuthenticatedIdentity(async () => {
+          const response = await fetch('/api/auth/me', { credentials: 'same-origin' });
+          confirmedUnauthenticated = response.status === 401;
+          return response;
+        }, offlineAuth);
         if (!cancelled && bootstrapGeneration === authGeneration.current) {
-          if (res.ok) {
-            const userData = (await res.json()) as User;
-            setUser(userData);
-            sessionEvidence.markAuthenticated();
-          } else if (res.status === 401) {
+          if (result.clearedOwnerId) {
+            purgeOfflineOwnerData(result.clearedOwnerId, venueSnapshots, offlineOperations);
+          }
+          setUser(result.user);
+          setIsOfflineSession(result.source === 'offline_snapshot');
+          if (result.source === 'network') sessionEvidence.markAuthenticated();
+          if (confirmedUnauthenticated) {
             // Stale / invalid cookie — clear any lingering local state and
             // notify the rest of the app (ToastContext listens for this).
-            setUser(null);
             if (typeof window !== 'undefined' && sessionEvidence.consumeExpiredSessionEvidence()) {
               window.dispatchEvent(new CustomEvent('session-expired'));
             }
@@ -67,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [offlineAuth, offlineOperations, sessionEvidence, venueSnapshots]);
 
   // Global 401 → "session expired" event. Patches fetch so any API call
   // that returns 401 fires the same CustomEvent (consumed by
@@ -98,6 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser((current) => {
             if (current) {
               sessionEvidence.clear();
+              offlineAuth.clear();
+              setIsOfflineSession(false);
               window.dispatchEvent(new CustomEvent('session-expired'));
             }
             return null;
@@ -109,11 +139,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       window.fetch = originalFetch;
     };
-  }, []);
+  }, [offlineAuth, sessionEvidence]);
 
   const login = (data: { user: User }) => {
     authGeneration.current += 1;
     setUser(data.user);
+    setIsOfflineSession(false);
     sessionEvidence.markAuthenticated();
   };
 
@@ -151,6 +182,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const userData = await hydrateVerifiedSession();
       setUser(userData);
+      setIsOfflineSession(false);
+      saveOfflineCapability(userData);
       sessionEvidence.markAuthenticated();
       return { success: true };
     } catch (error) {
@@ -229,6 +262,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     authGeneration.current += 1;
     setUser(null);
+    setIsOfflineSession(false);
+    offlineAuth.clear();
     sessionEvidence.clear();
   };
 
@@ -237,18 +272,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return roles.includes(user.role);
   };
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
       const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
       if (res.ok) {
-        const userData = (await res.json()) as User;
+        const userData: unknown = await res.json();
+        if (!isAuthUser(userData)) return;
         setUser(userData);
+        setIsOfflineSession(false);
+          saveOfflineCapability(userData);
         sessionEvidence.markAuthenticated();
+      } else if (res.status === 401) {
+        setUser(null);
+        setIsOfflineSession(false);
+        offlineAuth.clear();
       }
     } catch {
       // Network error — leave state alone.
     }
-  };
+  }, [offlineAuth, saveOfflineCapability, sessionEvidence]);
+
+  useEffect(() => {
+    const handleOnline = () => { void refreshUser(); };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [refreshUser]);
 
   return (
     <AuthContext.Provider
@@ -256,6 +304,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         isAuthenticated: !!user,
+        isOfflineSession,
         requestMagicLink,
         verifyCode,
         verifyToken,

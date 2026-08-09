@@ -24,6 +24,14 @@ Keep `ENABLE_DEV_AUTH`, `ENABLE_DEMO_LOGIN`, `ENABLE_E2E_AUTH_BYPASS`, and `RATE
 
 The public showcase is a separate deployment profile, never a customer or mixed-use production database. It requires both `ENABLE_DEMO_LOGIN=1` and `DEMO_ISOLATED_DATA=1`; `DEMO_RATE_LIMIT_MAX` defaults to 30 sign-ins per IP per 15 minutes. Production fails closed by leaving the demo route unmounted when the isolation attestation is absent.
 
+Offline Check-In and Scorekeeper reopening requires an environment-specific
+Ed25519 key pair. Provide the PKCS8 DER private key as
+`OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64` at runtime and the matching SPKI DER
+public key as the Docker build argument
+`VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64`. Never reuse the example E2E keys
+or expose the private key. If either half is absent or mismatched, ordinary
+online authentication continues but offline identity restoration fails closed.
+
 After migrations and readiness succeed, reset only the marker-protected fabricated tenant with:
 
 ```sh

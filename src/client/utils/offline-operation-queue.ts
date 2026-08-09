@@ -17,6 +17,7 @@ export interface OfflineOperation {
 export interface QueueStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  removeItem?(key: string): void;
 }
 
 export class OfflineQueuePersistenceError extends Error {
@@ -107,6 +108,12 @@ export function createOfflineOperationQueue(storage: QueueStorage) {
     remove(id: string) {
       const items = read().filter((item) => item.id !== id);
       write(items);
+      return items;
+    },
+    removeOwner(ownerId: string) {
+      const items = read().filter((item) => item.ownerId !== ownerId);
+      if (items.length === 0 && storage.removeItem) storage.removeItem(STORAGE_KEY);
+      else write(items);
       return items;
     },
     async retryOne(id: string, send: (item: OfflineOperation) => Promise<void>) {

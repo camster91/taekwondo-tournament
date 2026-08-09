@@ -83,8 +83,12 @@ describe('offline application shell contract', () => {
       location: { origin: 'https://bowin.test', href: 'https://bowin.test/sw.js?v=test-build' },
       addEventListener(type: string, handler: typeof fetchHandler) { if (type === 'fetch') fetchHandler = handler; },
     };
+    let matchOptions: CacheQueryOptions | undefined;
     const caches = {
-      open: async (name: string) => ({ match: async () => name.startsWith('bowin-static-') ? cachedAsset.clone() : undefined }),
+      open: async (name: string) => ({ match: async (_request: Request, options?: CacheQueryOptions) => {
+        matchOptions = options;
+        return name.startsWith('bowin-static-') && options?.ignoreVary ? cachedAsset.clone() : undefined;
+      } }),
       keys: async () => [],
       delete: async () => true,
     };
@@ -96,5 +100,6 @@ describe('offline application shell contract', () => {
     });
     if (!responsePromise) throw new Error('Service worker did not handle static asset');
     expect(await (await responsePromise).text()).toBe('cached application javascript');
+    expect(matchOptions).toEqual({ ignoreVary: true });
   });
 });

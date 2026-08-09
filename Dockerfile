@@ -2,6 +2,9 @@
 # runtime use the same pinned, supported baseline.
 FROM node:22.18-alpine3.22 AS builder
 
+ARG VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64
+ENV VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64}
+
 WORKDIR /app
 
 # Install all dependencies (prisma needed for postinstall)

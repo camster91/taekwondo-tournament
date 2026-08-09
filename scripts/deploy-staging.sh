@@ -7,6 +7,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VPS_HOST=${BOWIN_STAGING_VPS:-root@187.77.26.99}
 SSH_KEY=${BOWIN_STAGING_SSH_KEY:-/c/Users/camst/.ssh/id_ed25519_hostinger}
 STAGING_URL=https://staging-tkd.ashbi.ca
+: "${BOWIN_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64:?Set the staging offline capability SPKI public key}"
 
 cd "$ROOT"
 if [ -n "$(git status --porcelain)" ]; then
@@ -22,6 +23,7 @@ trap 'rm -rf "$CONTEXT"; rm -f "$ARCHIVE"' EXIT
 echo "==> Building immutable image from tracked commit ${RELEASE_SHA}"
 git archive HEAD | tar -x -C "$CONTEXT"
 docker build \
+  --build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${BOWIN_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64}" \
   --label "org.opencontainers.image.revision=${RELEASE_SHA}" \
   -t "$IMAGE" "$CONTEXT"
 test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"
@@ -107,7 +109,7 @@ test "$(docker inspect bowin-staging-db --format '{{.HostConfig.NetworkMode}}')"
 test "$(docker inspect bowin-staging-app --format '{{.HostConfig.NetworkMode}}')" = bowin-staging-net
 test "$(docker inspect bowin-staging-db --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}')" = bowin-staging-pgdata
 
-ALLOWED_ENV='^(DATABASE_URL|JWT_SECRET|METRICS_TOKEN|ADMIN_SETUP_KEY|MAILGUN_API_KEY|MAILGUN_DOMAIN|MAILGUN_BASE_URL|EMAIL_FROM_NAME|EMAIL_FROM_ADDRESS|RETENTION_PURGE_ENABLED|SOFT_DELETE_RETENTION_DAYS|REGISTRATION_CONSENT_VERSION|PRIVACY_NOTICE_URL|TOURNAMENT_TERMS_URL|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_STARTER_PRICE_ID|STRIPE_PRO_PRICE_ID|DEBUG)='
+ALLOWED_ENV='^(DATABASE_URL|JWT_SECRET|METRICS_TOKEN|ADMIN_SETUP_KEY|MAILGUN_API_KEY|MAILGUN_DOMAIN|MAILGUN_BASE_URL|EMAIL_FROM_NAME|EMAIL_FROM_ADDRESS|OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64|RETENTION_PURGE_ENABLED|SOFT_DELETE_RETENTION_DAYS|REGISTRATION_CONSENT_VERSION|PRIVACY_NOTICE_URL|TOURNAMENT_TERMS_URL|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_STARTER_PRICE_ID|STRIPE_PRO_PRICE_ID|DEBUG)='
 docker inspect bowin-staging-app --format '{{range .Config.Env}}{{println .}}{{end}}' \
   | grep -E "$ALLOWED_ENV" > "$ENV_FILE"
 DATABASE_URL=$(grep '^DATABASE_URL=' "$ENV_FILE" | cut -d= -f2-)
@@ -123,6 +125,7 @@ test "$DATABASE_URL" != "$LIVE_DATABASE_URL"
 
 grep -q '^JWT_SECRET=' "$ENV_FILE"
 grep -q '^METRICS_TOKEN=' "$ENV_FILE"
+grep -q '^OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=' "$ENV_FILE"
 printf '%s\n' \
   'NODE_ENV=production' \
   'PORT=3001' \

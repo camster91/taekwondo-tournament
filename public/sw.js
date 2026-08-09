@@ -75,7 +75,10 @@ self.addEventListener('fetch', (event) => {
   if (!['script', 'style', 'font', 'image'].includes(request.destination)) return;
   event.respondWith(
     caches.open(STATIC_CACHE).then(async (cache) => {
-      const cached = await cache.match(request);
+      // The immutable hashed URL is the cache identity. Ignore response Vary
+      // metadata because install-time fetch headers differ from module/style
+      // requests during an offline reload.
+      const cached = await cache.match(request, { ignoreVary: true });
       if (cached) return cached;
       const response = await fetch(request);
       if (response.ok) await cache.put(request, response.clone());

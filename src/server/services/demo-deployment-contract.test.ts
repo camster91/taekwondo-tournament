@@ -71,4 +71,18 @@ describe('demo showcase deployment contract', () => {
     expect(deploy).toContain('trap cleanup_on_exit EXIT');
     expect(deploy).toMatch(/release-.*openssl rand -hex 4/);
   });
+
+  it('provisions matching offline capability keys through every supported image path', () => {
+    const dockerfile = read('Dockerfile');
+    const staging = read('scripts/deploy-staging.sh');
+    const vps = read('scripts/deploy-to-vps.sh');
+    const workflow = read('.github/workflows/build-and-push.yml');
+
+    expect(dockerfile).toContain('ARG VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64');
+    expect(staging).toContain('--build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${BOWIN_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64}"');
+    expect(staging).toContain('OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64');
+    expect(vps).toContain('--build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64}"');
+    expect(vps).toContain('OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64');
+    expect(workflow).toContain('VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${{ vars.OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64 }}');
+  });
 });

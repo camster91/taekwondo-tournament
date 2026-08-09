@@ -13,6 +13,7 @@ function memoryStorage(): QueueStorage & { value: string | null } {
     value: null,
     getItem() { return this.value; },
     setItem(_key, value) { this.value = value; },
+    removeItem() { this.value = null; },
   };
 }
 
@@ -30,6 +31,16 @@ function operation(targetId: string): OfflineOperation {
 }
 
 describe('offline operation queue', () => {
+  it('purges one signed-out owner without removing another owner operations', () => {
+    const storage = memoryStorage();
+    const queue = createOfflineOperationQueue(storage);
+    queue.enqueue(makeCheckInOperation('owner-a', 'tournament-1', 'registration-1', { checkedIn: true }));
+    queue.enqueue(makeCheckInOperation('owner-b', 'tournament-1', 'registration-2', { checkedIn: true }));
+    expect(queue.removeOwner('owner-a')).toHaveLength(1);
+    expect(queue.list()).toEqual([expect.objectContaining({ ownerId: 'owner-b' })]);
+    expect(queue.removeOwner('owner-b')).toEqual([]);
+    expect(storage.value).toBeNull();
+  });
   it('marks an attempted online request as delivery uncertain instead of auto-retryable pending', () => {
     const operation = makeCheckInOperation('owner-1', 'tournament-1', 'registration-1', { checkedIn: true }, 'delivery_uncertain');
     expect(operation.status).toBe('delivery_uncertain');

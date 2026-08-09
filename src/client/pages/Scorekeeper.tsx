@@ -32,6 +32,9 @@ import OperationStatus from '../components/ui/OperationStatus';
 import { buildDeliveryUncertainMessage, buildOfflineOperationStatuses, buildOfflineReviewMessage, pendingOfflineTargetIds } from '../utils/offline-operation-status';
 import { readAdminOperationError } from '../utils/admin-operation-error';
 import { latestCompletedMatchId } from '../utils/scorekeeper-undo';
+import { browserVenueDataSnapshotStore, loadVenueData } from '../utils/venue-data-snapshot';
+import { isScorekeeperDivisionData } from '../utils/venue-data-contracts';
+import { shouldQueueOfflineMutation } from '../utils/offline-delivery';
 
 interface Match {
   id: string;
@@ -96,7 +99,9 @@ export default function Scorekeeper() {
   const { tournamentId } = useParams();
   const queryClient = useQueryClient();
   const { addToast } = useToast();
-  const { user } = useAuth();
+  const { user, isOfflineSession } = useAuth();
+  const venueSnapshots = useMemo(browserVenueDataSnapshotStore, []);
+  const [cachedSnapshotAt, setCachedSnapshotAt] = useState<string | null>(null);
   const offlineOperations = useOfflineOperations(tournamentId, 'score_result');
   const [discardOfflineId, setDiscardOfflineId] = useState<string | null>(null);
   const [discardOfflineError, setDiscardOfflineError] = useState('');
@@ -158,10 +163,17 @@ export default function Scorekeeper() {
   const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions } = useQuery<Division[]>({
     queryKey: ['scorekeeper-divisions', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`, { headers: getAuthHeaders() });
-      if (!res.ok) throw new Error('Failed to fetch divisions');
-      return res.json();
+      if (!user || !tournamentId) throw new Error('Authenticated tournament context is required');
+      const result = await loadVenueData<Division[]>({
+        scope: { ownerId: user.id, tournamentId, kind: 'scorekeeper' },
+        store: venueSnapshots,
+        validate: (value): value is Division[] => isScorekeeperDivisionData(value),
+        request: () => fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`, { headers: getAuthHeaders() }),
+      });
+      setCachedSnapshotAt(result.source === 'snapshot' ? result.savedAt : null);
+      return result.data;
     },
+    enabled: Boolean(user && tournamentId),
     refetchInterval: 10000,
   refetchIntervalInBackground: false,
   });
@@ -427,7 +439,7 @@ export default function Scorekeeper() {
       score2,
       notes: noteText,
     };
-    if (!navigator.onLine) stageScoreResult(submission);
+    if (shouldQueueOfflineMutation({ isOfflineSession, navigatorOnline: navigator.onLine })) stageScoreResult(submission);
     else recordResult.mutate(submission);
   };
 
@@ -683,6 +695,12 @@ export default function Scorekeeper() {
     </>
   );
 
+  const cachedDataStatus = cachedSnapshotAt && (
+    <div role="status" className="mx-auto mb-4 max-w-4xl rounded border border-amber-600 bg-amber-950 px-4 py-3 text-sm text-amber-100">
+      Cached scorekeeper data from {new Date(cachedSnapshotAt).toLocaleTimeString()}. Server results may be newer; offline results remain queued until reconnection.
+    </div>
+  );
+
   // Division selector view
   if (!selectedDivision) {
     return (
@@ -698,6 +716,7 @@ export default function Scorekeeper() {
         >
           {announce}
         </div>
+        {cachedDataStatus}
         {offlineStatus}
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-6">
@@ -857,6 +876,7 @@ export default function Scorekeeper() {
       >
         {announce}
       </div>
+      {cachedDataStatus}
       {offlineStatus}
       {/* Header */}
       <div className="bg-gray-800 p-4">
