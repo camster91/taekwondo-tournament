@@ -30,6 +30,8 @@ import { useOfflineOperations } from '../hooks/useOfflineOperations';
 import AccessibleDialog from '../components/ui/AccessibleDialog';
 import OperationStatus from '../components/ui/OperationStatus';
 import { buildDeliveryUncertainMessage, buildOfflineOperationStatuses, buildOfflineReviewMessage, pendingOfflineTargetIds } from '../utils/offline-operation-status';
+import { readAdminOperationError } from '../utils/admin-operation-error';
+import { latestCompletedMatchId } from '../utils/scorekeeper-undo';
 
 interface Match {
   id: string;
@@ -126,6 +128,9 @@ export default function Scorekeeper() {
   const [incidentSeverity, setIncidentSeverity] = useState<string>('minor');
   const [incidentDescription, setIncidentDescription] = useState('');
   const [pendingUndoId, setPendingUndoId] = useState<string | null>(null);
+  const [undoError, setUndoError] = useState('');
+  const [undoAcknowledged, setUndoAcknowledged] = useState(false);
+  const [undoChecking, setUndoChecking] = useState(false);
   const [incidentAction, setIncidentAction] = useState<string>('');
   const incidentDialogRef = useRef<HTMLDivElement>(null);
   const incidentOpenerRef = useRef<HTMLButtonElement>(null);
@@ -195,6 +200,9 @@ export default function Scorekeeper() {
   }, [divisions, selectedDivision]);
 
   const currentMatch = readyMatches[currentMatchIndex];
+  const selectedDivisionMatches = useMemo(() => (
+    divisions?.find((division) => division.id === selectedDivision)?.bracket?.matches || []
+  ), [divisions, selectedDivision]);
 
   const finishResultEntry = (queued: boolean) => {
     const wasLast = currentMatchIndex >= readyMatches.length - 1;
@@ -279,24 +287,65 @@ export default function Scorekeeper() {
   const undoMatchResult = useMutation({
     mutationFn: async (matchId: string) => {
       const res = await fetch(`/api/brackets/match/${matchId}/undo`, {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       });
-      if (!res.ok) throw new Error('Failed to undo match result');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to undo match result'));
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
-      queryClient.invalidateQueries({ queryKey: ['director-dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['divisions'] });
-      addToast('Match result undone', 'success');
-      setAnnounce('Last result undone.');
+    onMutate: () => {
+      setUndoError('');
+      setUndoAcknowledged(false);
+      setAnnounce('Undoing match result.');
+    },
+    onSuccess: async () => {
+      try {
+        await queryClient.refetchQueries({ queryKey: ['scorekeeper-divisions'] }, { throwOnError: true });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['director-dashboard'] }),
+          queryClient.invalidateQueries({ queryKey: ['divisions'] }),
+        ]);
+        setPendingUndoId(null);
+        addToast('Match result undone', 'success');
+        setAnnounce('Last result undone.');
+      } catch {
+        setUndoAcknowledged(true);
+        setUndoError('Undo may have succeeded, but server state could not be refreshed. Check status before taking another action.');
+        setAnnounce('Undo acknowledgement received, but updated match status could not be loaded.');
+      }
     },
     onError: (error: Error) => {
+      setUndoError(error.message || 'Operation failed');
       addToast(error.message || 'Operation failed', 'error');
       setAnnounce(`Undo failed: ${error.message || 'Operation failed'}`);
     },
   });
+
+  const closeUndoDialog = useCallback(() => {
+    if (undoMatchResult.isPending || undoChecking || undoAcknowledged) return;
+    setPendingUndoId(null);
+    setUndoError('');
+  }, [undoMatchResult.isPending, undoChecking, undoAcknowledged]);
+
+  const checkUndoStatus = useCallback(async () => {
+    setUndoChecking(true);
+    setUndoError('');
+    try {
+      await queryClient.refetchQueries({ queryKey: ['scorekeeper-divisions'] }, { throwOnError: true });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['director-dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['divisions'] }),
+      ]);
+      setUndoAcknowledged(false);
+      setPendingUndoId(null);
+      addToast('Match result undone', 'success');
+      setAnnounce('Last result undone.');
+    } catch {
+      setUndoError('Updated match status is still unavailable. Check status again before taking another action.');
+    } finally {
+      setUndoChecking(false);
+    }
+  }, [addToast, queryClient]);
 
   // Report incident mutation
   const reportIncident = useMutation({
@@ -395,11 +444,21 @@ export default function Scorekeeper() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
 
-    if (showIncidentModal || showKeyboardHelp) return;
+    if (showIncidentModal || showKeyboardHelp || pendingUndoId) return;
 
     if (showConfirm) {
       if (e.key === 'Enter') { e.preventDefault(); handleSubmit(); }
       else if (e.key === 'Escape') { e.preventDefault(); setShowConfirm(false); }
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && selectedDivision) {
+      e.preventDefault();
+      const lastCompletedId = latestCompletedMatchId(selectedDivisionMatches);
+      if (lastCompletedId && !undoMatchResult.isPending) {
+        setUndoError('');
+        setPendingUndoId(lastCompletedId);
+      }
       return;
     }
 
@@ -476,22 +535,9 @@ export default function Scorekeeper() {
         // shouldn't have to scroll to find the per-match Undo button
         // after confirming the wrong winner. Skipped when typing in an
         // input field (already handled above).
-        case 'z':
-        case 'Z':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            const lastCompleted = readyMatches
-              .filter((m) => m.status === 'completed')
-              .slice(-1)[0];
-            if (lastCompleted && !undoMatchResult.isPending) {
-              undoMatchResult.mutate(lastCompleted.id);
-              setAnnounce('Undid last match result.');
-            }
-          }
-          break;
       }
     }
-  }, [showConfirm, showIncidentModal, showKeyboardHelp, selectedDivision, currentMatch, selectedWinner, readyMatches]);
+  }, [showConfirm, showIncidentModal, showKeyboardHelp, pendingUndoId, selectedDivision, currentMatch, selectedWinner, readyMatches, selectedDivisionMatches, undoMatchResult.isPending]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -1519,40 +1565,25 @@ export default function Scorekeeper() {
       )}
 
       {/* Undo result confirmation */}
-      {pendingUndoId && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="undo-confirm-title"
-        >
-          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full">
-            <h3 id="undo-confirm-title" className="text-xl font-bold mb-4 text-red-400">Undo this result?</h3>
-            <p className="text-gray-300 mb-2">This reverses the recorded winner for this match.</p>
-            <p className="text-sm text-amber-300 mb-4">
-              Downstream matches may now reference a competitor who no longer won. The next match in the bracket may need to be re-played.
-            </p>
-            <div className="flex gap-3">
-              <Button variant="secondary" className="flex-1" onClick={() => setPendingUndoId(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                className="flex-1"
-                loading={undoMatchResult.isPending}
-                onClick={() => {
-                  if (pendingUndoId) {
-                    undoMatchResult.mutate(pendingUndoId);
-                    setPendingUndoId(null);
-                  }
-                }}
-              >
-                Undo result
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={Boolean(pendingUndoId)}
+        onClose={closeUndoDialog}
+        onConfirm={() => {
+          if (undoAcknowledged) void checkUndoStatus();
+          else if (pendingUndoId && !undoMatchResult.isPending) undoMatchResult.mutate(pendingUndoId);
+        }}
+        title="Undo this result?"
+        message={(
+          <>
+            <span className="block">This reverses the recorded winner. Downstream matches may need review or replay.</span>
+            {undoError && <span role="alert" className="block mt-2 text-red-600 dark:text-red-300">{undoError}</span>}
+          </>
+        )}
+        confirmText={undoAcknowledged ? 'Check status' : 'Undo result'}
+        variant="danger"
+        isLoading={undoMatchResult.isPending || undoChecking}
+        closeDisabled={undoAcknowledged}
+      />
     </div>
   );
 }

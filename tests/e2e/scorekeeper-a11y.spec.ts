@@ -353,6 +353,116 @@ test.describe('scorekeeper (a11y)', () => {
     await expect(persistedReview).toBeHidden();
   });
 
+  test('keyboard undo waits for acknowledgement and keeps rejection recoverable', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+    const division = await prisma.division.findFirst({
+      where: { tournamentId, bracket: { is: { matches: { some: { status: 'completed' } } } } },
+      include: { bracket: { include: { matches: true } } },
+    });
+    expect(division?.bracket).toBeTruthy();
+    const matchSnapshots = division!.bracket!.matches;
+    const target = matchSnapshots.filter((match) => match.status === 'completed')
+      .sort((a, b) => b.matchNumber - a.matchNumber)[0];
+    expect(target).toBeTruthy();
+    const originalAuditIds = (await prisma.matchAuditLog.findMany({ where: { matchId: target.id }, select: { id: true } }))
+      .map(({ id }) => id);
+    let undoAttempts = 0;
+    let releaseUndo!: () => void;
+    let releaseRefetch!: () => void;
+    let refetchMode: 'normal' | 'fail' | 'delay' = 'normal';
+    try {
+      await prisma.matchAuditLog.create({
+        data: {
+          matchId: target.id,
+          action: 'update',
+          previousState: JSON.stringify({ winnerId: null, score1: null, score2: null, status: 'ready', notes: null }),
+          newState: JSON.stringify({ winnerId: target.winnerId, score1: target.score1, score2: target.score2, status: target.status, notes: target.notes }),
+        },
+      });
+      await page.route('**/api/brackets/match/*/undo', async (route) => {
+      undoAttempts += 1;
+      if (undoAttempts === 1) {
+        await new Promise<void>((resolve) => { releaseUndo = resolve; });
+        await route.fulfill({ status: 409, contentType: 'application/json', body: '{"error":"Downstream match already started"}' });
+        return;
+      }
+      await route.continue();
+      });
+      await page.route('**/api/divisions/tournament/*?withMatches=true', async (route) => {
+      if (refetchMode === 'fail' && undoAttempts >= 2) {
+        await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"refresh unavailable"}' });
+        return;
+      }
+      if (refetchMode === 'delay' && undoAttempts >= 2) {
+        refetchMode = 'normal';
+        await new Promise<void>((resolve) => { releaseRefetch = resolve; });
+      }
+      await route.continue();
+      });
+
+      await page.goto(`/scorekeeper/${tournamentId}`);
+      const divisionWithResults = page.getByRole('button', { name: new RegExp(division!.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+    await expect(divisionWithResults).toBeVisible();
+    const divisionLabel = await divisionWithResults.getAttribute('aria-label');
+    const readyBefore = Number(divisionLabel?.match(/(\d+) ready/i)?.[1] || 0);
+    await divisionWithResults.click();
+    await page.keyboard.press('Control+z');
+
+    const dialog = page.getByRole('dialog', { name: 'Undo this result?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Undo result' }).click();
+    await expect(page.getByRole('status')).toContainText('Undoing match result');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole('status')).not.toContainText('Last result undone');
+    await expect.poll(() => undoAttempts).toBe(1);
+    releaseUndo();
+
+    const error = dialog.getByRole('alert');
+    await expect(error).toHaveText('Downstream match already started');
+    expect(undoAttempts).toBe(1);
+
+    refetchMode = 'fail';
+    await dialog.getByRole('button', { name: 'Undo result' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('Undoing match result');
+    await expect(dialog.getByRole('alert')).toContainText('may have succeeded');
+    await expect(dialog.getByRole('button', { name: 'Check status' })).toBeVisible();
+    expect(undoAttempts).toBe(2);
+
+    refetchMode = 'delay';
+    await dialog.getByRole('button', { name: 'Check status' }).click();
+    await expect(dialog).toBeVisible();
+    await expect.poll(() => typeof releaseRefetch).toBe('function');
+    releaseRefetch();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole('status')).toContainText('Last result undone');
+    expect(undoAttempts).toBe(2);
+      await expect(page.getByText(new RegExp(`Match 1 of ${readyBefore + 1}`, 'i'))).toBeVisible();
+      await expect.poll(async () => (await prisma.match.findUnique({ where: { id: target.id }, select: { status: true } }))?.status).toBe('ready');
+    } finally {
+      await prisma.$transaction([
+        ...matchSnapshots.map((match) => prisma.match.update({
+          where: { id: match.id },
+          data: {
+            competitor1Id: match.competitor1Id,
+            competitor2Id: match.competitor2Id,
+            winnerId: match.winnerId,
+            score1: match.score1,
+            score2: match.score2,
+            status: match.status,
+            notes: match.notes,
+          },
+        })),
+        prisma.matchAuditLog.deleteMany({
+          where: { matchId: target.id, ...(originalAuditIds.length > 0 ? { id: { notIn: originalAuditIds } } : {}) },
+        }),
+      ]);
+      await prisma.$disconnect();
+    }
+  });
+
   test('a committed result with a lost response is quarantined and never auto-resent', async ({ page }) => {
     const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);
