@@ -25,6 +25,7 @@
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium firefox webkit",
     "seed": "tsx prisma/seed.ts",
+    "demo:reset": "tsx prisma/demo-seed.ts",
     "build:full": "prisma generate && prisma db push && vite build && tsc -p tsconfig.server.json"
   },
   "keywords": [
