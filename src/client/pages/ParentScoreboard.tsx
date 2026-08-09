@@ -69,7 +69,7 @@ export default function ParentScoreboard() {
     retry: false,
   });
 
-  const { data: scoreboardData, isLoading: scoreboardLoading, error: scoreboardError, refetch: retryScoreboard } = useQuery<{
+  const { data: scoreboardData, isLoading: scoreboardLoading, error: scoreboardError, refetch: retryScoreboard, dataUpdatedAt: scoreboardUpdatedAt } = useQuery<{
     divisions: Division[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
@@ -91,10 +91,11 @@ export default function ParentScoreboard() {
   const scoreboardUnavailableMessage = getScoreboardUnavailableMessage(scoreboardError);
   const pageState = resolveParentScoreboardState({
     tournamentLoading,
-    tournamentError: Boolean(tournamentError),
+    tournamentError,
     tournamentReady: Boolean(tournament),
     scoreboardLoading,
-    scoreboardError: Boolean(scoreboardError),
+    scoreboardError,
+    scoreboardReady: Boolean(scoreboardData),
   });
 
   // Pick "now competing" + "up next" matches. Status values from the
@@ -195,6 +196,21 @@ export default function ParentScoreboard() {
           <p className="text-sm text-gray-600 dark:text-gray-300" role="status">Loading live matches…</p>
         ) : (
         <>
+        {pageState === 'stale-scoreboard' && (
+          <Card>
+            <CardBody className="p-4">
+              <div role="alert" className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 shrink-0 text-amber-500" aria-hidden="true" />
+                <div>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">Showing the last confirmed scoreboard</h2>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Live updates are temporarily unavailable. Match information below may be out of date.</p>
+                  {scoreboardUpdatedAt > 0 && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Last confirmed at {new Date(scoreboardUpdatedAt).toLocaleTimeString()}.</p>}
+                  <button type="button" onClick={() => { if (tournamentError) void retryTournament(); if (scoreboardError) void retryScoreboard(); }} className="mt-3 min-h-11 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold">Try again</button>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        )}
         {/* NOW COMPETING - most attention-grabbing block */}
         <section>
           <h2 className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-1">
