@@ -10,14 +10,15 @@
 #   4. DNS: A record tkd.ashbi.ca -> 187.77.26.99 (already set)
 #
 # Strategy (mirrors the jw-habits pattern from memory):
-#   1. Build dist/ + dist-server/ locally
+#   1. Build dist/ + dist-server/ + dist-demo/ locally
 #   2. Tar them
 #   3. Pipe to the VPS via ssh + cat (scp tends to fail on this box)
 #   4. Extract into /opt/taekwondo-tournament/, install prod deps, build
 #   5. Run the container with --network markup-net so it can reach the
 #      existing markup-postgres instance
 #
-# Rollback: ssh coolify "docker rm -f taekwondo-tournament && rm -rf /opt/taekwondo-tournament"
+# The deploy keeps the previous container as taekwondo-tournament-rollback
+# and restores it automatically if any cutover command or health gate fails.
 
 set -e
 PROJECT="$HOME/taekwondo-tournament"
@@ -111,11 +112,10 @@ for var in MAILGUN_API_KEY MAILGUN_DOMAIN MAILGUN_BASE_URL EMAIL_FROM_NAME EMAIL
 done
 chmod 600 /opt/taekwondo-tournament/.env
 
-echo "==> Building image"
-docker build -t camster91/taekwondo-tournament:build-latest . 2>&1 | tail -3
-
-echo "==> Stopping old container"
-docker rm -f taekwondo-tournament 2>/dev/null || true
+RELEASE_TAG="release-$(date -u +%Y%m%d%H%M%S)-$(openssl rand -hex 4)"
+IMAGE="camster91/taekwondo-tournament:${RELEASE_TAG}"
+echo "==> Building immutable image ${IMAGE}"
+docker build -t "$IMAGE" . 2>&1 | tail -3
 
 echo "==> Exporting JWT_SECRET into the docker run environment"
 # Write env to a temp file so the secret never appears on the docker run cmdline
@@ -155,28 +155,50 @@ for var in MAILGUN_API_KEY MAILGUN_DOMAIN MAILGUN_BASE_URL EMAIL_FROM_NAME EMAIL
         printf "%s=%s\n" "$var" "$val" >> "$ENV_FILE"
     fi
 done
-trap "rm -f $ENV_FILE" EXIT
+CUTOVER_STARTED=0
 
-echo "==> Starting container"
+restore_previous_release() {
+    if docker inspect taekwondo-tournament-rollback >/dev/null 2>&1; then
+        docker rm -f taekwondo-tournament >/dev/null 2>&1 || true
+        docker rename taekwondo-tournament-rollback taekwondo-tournament
+        docker start taekwondo-tournament >/dev/null
+        echo "Previous release restored"
+    elif docker inspect taekwondo-tournament >/dev/null 2>&1; then
+        docker start taekwondo-tournament >/dev/null 2>&1 || true
+    fi
+}
+
+cleanup_on_exit() {
+    STATUS=$?
+    set +e
+    rm -f "$ENV_FILE"
+    if [ "$STATUS" -ne 0 ]; then
+        docker rm -f taekwondo-tournament-candidate >/dev/null 2>&1 || true
+        if [ "$CUTOVER_STARTED" -eq 1 ]; then restore_previous_release; fi
+    fi
+    exit "$STATUS"
+}
+trap cleanup_on_exit EXIT
+
+echo "==> Starting private candidate; current public container remains live"
+docker rm -f taekwondo-tournament-candidate 2>/dev/null || true
 docker run -d \
-    --name taekwondo-tournament \
-    --restart unless-stopped \
+    --name taekwondo-tournament-candidate \
     --network markup-net \
-    -p 127.0.0.1:18301:3001 \
     --env-file "$ENV_FILE" \
-    camster91/taekwondo-tournament:build-latest
+    "$IMAGE"
 
 echo "==> Container status:"
 sleep 8
-docker ps --filter name=taekwondo-tournament --format "{{.Names}} {{.Status}} {{.Ports}}"
+docker ps --filter name=taekwondo-tournament-candidate --format "{{.Names}} {{.Status}}"
 
 echo "==> Recent logs:"
-docker logs --tail 20 taekwondo-tournament 2>&1
+docker logs --tail 20 taekwondo-tournament-candidate 2>&1
 
 echo "==> Healthcheck gate (closes D17)"
 HEALTHY=0
 for i in $(seq 1 30); do
-    if curl -fsS "http://127.0.0.1:18301/api/health/ready" >/dev/null 2>&1; then
+    if docker exec taekwondo-tournament-candidate wget -q -O /dev/null http://127.0.0.1:3001/api/health/ready; then
         echo "    ready after ${i}s"
         HEALTHY=1
         break
@@ -186,14 +208,48 @@ done
 if [ "$HEALTHY" -ne 1 ]; then
     echo "DEPLOY FAILED — /api/health/ready never returned 200"
     echo "Recent logs:"
-    docker logs --tail 50 taekwondo-tournament 2>&1
+    docker logs --tail 50 taekwondo-tournament-candidate 2>&1
+    docker rm -f taekwondo-tournament-candidate >/dev/null 2>&1 || true
     exit 1
 fi
 
 echo "==> Resetting the marker-protected synthetic showcase"
 docker exec \
     -e DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 \
-    taekwondo-tournament npm run demo:reset:production
+    taekwondo-tournament-candidate npm run demo:reset:production
+
+echo "==> Cutting over; prior container is retained for rollback"
+docker rm -f taekwondo-tournament-rollback 2>/dev/null || true
+if docker inspect taekwondo-tournament >/dev/null 2>&1; then
+    CUTOVER_STARTED=1
+    docker stop taekwondo-tournament >/dev/null
+    docker rename taekwondo-tournament taekwondo-tournament-rollback
+fi
+docker rm -f taekwondo-tournament-candidate >/dev/null
+if ! docker run -d \
+    --name taekwondo-tournament \
+    --restart unless-stopped \
+    --network markup-net \
+    -p 127.0.0.1:18301:3001 \
+    --env-file "$ENV_FILE" \
+    "$IMAGE"; then
+    exit 1
+fi
+
+LIVE_HEALTHY=0
+for i in $(seq 1 30); do
+    if curl -fsS "http://127.0.0.1:18301/api/health/ready" >/dev/null 2>&1; then
+        LIVE_HEALTHY=1
+        break
+    fi
+    sleep 1
+done
+if [ "$LIVE_HEALTHY" -ne 1 ]; then
+    docker logs --tail 50 taekwondo-tournament 2>&1
+    exit 1
+fi
+echo "==> Release ${RELEASE_TAG} is healthy; rollback container retained"
+CUTOVER_STARTED=0
 DEPLOY_SCRIPT
 
 echo "==> Done. Live at https://tkd.ashbi.ca"

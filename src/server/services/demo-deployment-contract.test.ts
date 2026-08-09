@@ -30,5 +30,14 @@ describe('demo showcase deployment contract', () => {
     expect(deploy).toMatch(/dist dist-server dist-demo prisma/);
     expect(deploy).toContain('COPY --chown=node:node dist-demo ./dist-demo');
     expect(deploy).not.toContain('COPY --chown=node:node .env ./.env');
+    expect(deploy).toContain('--name taekwondo-tournament-candidate');
+    expect(deploy).toContain('taekwondo-tournament-rollback');
+    expect(deploy.indexOf('npm run demo:reset:production')).toBeLessThan(
+      deploy.indexOf('-p 127.0.0.1:18301:3001'),
+    );
+    expect(deploy).toContain('restore_previous_release');
+    expect(deploy).toContain('CUTOVER_STARTED=1');
+    expect(deploy).toContain('trap cleanup_on_exit EXIT');
+    expect(deploy).toMatch(/release-.*openssl rand -hex 4/);
   });
 });
