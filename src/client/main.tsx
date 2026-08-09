@@ -3,7 +3,13 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
+import { registerOfflineShell } from './utils/offline-shell';
 import './index.css';
+
+if (import.meta.env.PROD) {
+  const buildAsset = new URL(import.meta.url).pathname;
+  registerOfflineShell(`/sw.js?v=${encodeURIComponent(buildAsset)}`);
+}
 
 // Error boundary that renders the actual exception so we don't get a
 // silent empty root. The error gets displayed in a developer-friendly
