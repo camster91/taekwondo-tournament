@@ -60,6 +60,7 @@ export default function CheckIn() {
   const offlineOperations = useOfflineOperations(tournamentId, 'check_in');
   const [discardOfflineId, setDiscardOfflineId] = useState<string | null>(null);
   const [discardOfflineError, setDiscardOfflineError] = useState('');
+  const [unpersistedDeliveryWarning, setUnpersistedDeliveryWarning] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -110,21 +111,38 @@ export default function CheckIn() {
   });
 
   type CheckInSubmission = { registrationId: string; weight?: number };
-  const stageCheckIn = (data: CheckInSubmission) => {
+  const stageCheckIn = (data: CheckInSubmission, deliveryUncertain = false) => {
     if (!tournamentId || !user) return;
     try {
       offlineOperations.enqueue(makeCheckInOperation(user.id, tournamentId, data.registrationId, {
         checkedIn: true,
         checkInTime: new Date().toISOString(),
         checkInWeight: data.weight || null,
-      }));
+      }, deliveryUncertain ? 'delivery_uncertain' : 'pending'));
     } catch {
+      if (deliveryUncertain) {
+        const registration = selectedRegistration?.id === data.registrationId ? selectedRegistration : undefined;
+        const name = registration
+          ? `${registration.competitor.firstName} ${registration.competitor.lastName}`
+          : `Registration #${data.registrationId.slice(0, 8)}`;
+        const attempted = data.weight ? `checked in at ${formatCheckInWeight(data.weight)}` : 'checked in without a weigh-in value';
+        setSelectedRegistration(null);
+        setCheckInWeight('');
+        setUnpersistedDeliveryWarning(`${name} may already be checked in on the server (${attempted}, sent ${new Date().toLocaleTimeString()}). This device could not retain the safety record. Do not resubmit it. Review the refreshed registration first.`);
+        void queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
+        return;
+      }
       toast.error('Check-in was not saved on this device. Keep this form open, free device storage, and try again.');
       return;
     }
     setSelectedRegistration(null);
     setCheckInWeight('');
-    toast.warning('Check-in saved on this device and will sync when the connection returns.');
+    if (deliveryUncertain) {
+      void queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
+      toast.error('Check-in delivery is uncertain. The request may have reached the server; review the refreshed registration before taking action.');
+    } else {
+      toast.warning('Check-in saved on this device and will sync when the connection returns.');
+    }
   };
 
   const checkInMutation = useMutation({
@@ -147,7 +165,7 @@ export default function CheckIn() {
       setCheckInWeight('');
     },
     onError: (error, data) => {
-      if (error instanceof TypeError) stageCheckIn(data);
+      if (error instanceof TypeError) stageCheckIn(data, true);
       else toast.addToast('Check-in failed. Check the venue connection and try again.', 'error');
     },
   });
@@ -386,8 +404,9 @@ export default function CheckIn() {
         </div>
       </div>
 
-      {offlineOperations.operations.length > 0 && (
+      {(offlineOperations.operations.length > 0 || unpersistedDeliveryWarning) && (
         <div className="m-4 space-y-2">
+          {unpersistedDeliveryWarning && <OperationStatus state="rejected" message={unpersistedDeliveryWarning} actionLabel="I verified server state" onAction={() => setUnpersistedDeliveryWarning('')} />}
           {buildOfflineOperationStatuses('check-in', offlineOperations.pending.length, offlineOperations.needsReview.length, offlineOperations.syncing)
             .map((status) => <OperationStatus key={status.state} {...status} />)}
           {offlineOperations.pending.length > 0 && (

@@ -352,4 +352,71 @@ test.describe('scorekeeper (a11y)', () => {
     await expect.poll(() => page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1')), { timeout: 10_000 }).toBe('[]');
     await expect(persistedReview).toBeHidden();
   });
+
+  test('a committed result with a lost response is quarantined and never auto-resent', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: /\d+ ready/i }).first().click();
+    await page.locator('button[aria-label*="select as winner"]').first().click();
+    await page.locator('#scorekeeper-score1').fill('6');
+    await page.locator('#scorekeeper-score2').fill('3');
+
+    let putCount = 0;
+    await page.route('**/api/brackets/match/*', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      putCount += 1;
+      const committed = await route.fetch();
+      expect(committed.ok()).toBeTruthy();
+      await route.abort('failed');
+    });
+    await page.getByRole('button', { name: /^Record Result$/i }).click();
+    await page.getByRole('dialog', { name: /Confirm Result/i }).getByRole('button', { name: /^Confirm/i }).click();
+
+    await expect(page.getByText(/result delivery is uncertain/i).first()).toBeVisible();
+    const review = page.getByRole('alert').filter({ hasText: /may already be saved on the server/i });
+    await expect(review).toBeVisible();
+    await expect(review.getByRole('button', { name: /^Retry$/i })).toHaveCount(0);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await page.waitForTimeout(750);
+    expect(putCount).toBe(1);
+    const stored = await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'));
+    expect(stored).toContain('delivery_uncertain');
+    expect(stored).toContain('acknowledgement was not received');
+  });
+
+  test('response loss plus device-storage failure blocks immediate score resubmission', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
+    await page.getByRole('button', { name: /\d+ ready/i }).first().click();
+    await page.locator('button[aria-label*="select as winner"]').first().click();
+    await page.locator('#scorekeeper-score1').fill('6');
+    await page.locator('#scorekeeper-score2').fill('3');
+    await page.evaluate(() => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function setItem(key: string, value: string) {
+        if (key === 'bowin_offline_operations_v1') throw new DOMException('quota', 'QuotaExceededError');
+        return original.call(this, key, value);
+      };
+    });
+    let putCount = 0;
+    await page.route('**/api/brackets/match/*', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      putCount += 1;
+      await route.fetch();
+      await route.abort('failed');
+    });
+    await page.getByRole('button', { name: /^Record Result$/i }).click();
+    await page.getByRole('dialog', { name: /Confirm Result/i }).getByRole('button', { name: /^Confirm/i }).click();
+    const warning = page.getByRole('alert').filter({ hasText: /could not retain the safety record/i });
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText(/match #\d+/i);
+    await expect(warning).toContainText(/score 6–3/i);
+    await expect(warning).toContainText(/Do not resubmit it/i);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await page.waitForTimeout(750);
+    expect(putCount).toBe(1);
+    await warning.getByRole('button', { name: /I verified server state/i }).click();
+    await expect(warning).toHaveCount(0);
+  });
 });

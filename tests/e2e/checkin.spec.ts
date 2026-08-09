@@ -119,4 +119,68 @@ test.describe('check-in (weigh-in flow)', () => {
     await expect(page.getByText(/Registration changed during the venue outage/i)).toBeHidden();
 
   });
+
+  test('a lost online acknowledgement is quarantined and never auto-resent', async ({ page }) => {
+    await loginAsDemo(page);
+    await page.goto('/tournaments');
+    const href = await page.locator('a', { hasText: 'Spring Championship 2026' }).first().getAttribute('href');
+    const tournamentId = href!.replace('/tournaments/', '');
+    await page.goto(`/checkin/${tournamentId}`);
+    await page.locator('input[placeholder*="Search"]').first().fill('Minho');
+
+    let putCount = 0;
+    await page.route('**/api/tournaments/*/registrations/*', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      putCount += 1;
+      const committed = await route.fetch();
+      expect(committed.ok()).toBeTruthy();
+      await route.abort('failed');
+    });
+    await page.getByRole('button', { name: /^Check In$/i }).first().click();
+    await page.getByRole('button', { name: /Confirm Check-In/i }).click();
+
+    await expect(page.getByText(/check-in delivery is uncertain/i).first()).toBeVisible();
+    const review = page.getByRole('alert').filter({ hasText: /may already be saved on the server/i });
+    await expect(review).toBeVisible();
+    await expect(review.getByRole('button', { name: /^Retry$/i })).toHaveCount(0);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await page.waitForTimeout(750);
+    expect(putCount).toBe(1);
+    const stored = await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'));
+    expect(stored).toContain('delivery_uncertain');
+    expect(stored).toContain('acknowledgement was not received');
+  });
+
+  test('response loss plus device-storage failure warns against resubmission', async ({ page }) => {
+    await loginAsDemo(page);
+    await page.goto('/tournaments');
+    const href = await page.locator('a', { hasText: 'Spring Championship 2026' }).first().getAttribute('href');
+    await page.goto(`/checkin/${href!.replace('/tournaments/', '')}`);
+    await page.locator('input[placeholder*="Search"]').first().fill('Minho');
+    await page.evaluate(() => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function setItem(key: string, value: string) {
+        if (key === 'bowin_offline_operations_v1') throw new DOMException('quota', 'QuotaExceededError');
+        return original.call(this, key, value);
+      };
+    });
+    let putCount = 0;
+    await page.route('**/api/tournaments/*/registrations/*', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      putCount += 1;
+      await route.fetch();
+      await route.abort('failed');
+    });
+    await page.getByRole('button', { name: /^Check In$/i }).first().click();
+    await page.getByRole('button', { name: /Confirm Check-In/i }).click();
+    const warning = page.getByRole('alert').filter({ hasText: /could not retain the safety record/i });
+    await expect(warning).toContainText(/Minho Kim/i);
+    await expect(warning).toContainText(/checked in at/i);
+    await expect(warning).toContainText(/Do not resubmit it/i);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await page.waitForTimeout(750);
+    expect(putCount).toBe(1);
+    await warning.getByRole('button', { name: /I verified server state/i }).click();
+    await expect(warning).toHaveCount(0);
+  });
 });

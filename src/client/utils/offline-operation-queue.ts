@@ -44,6 +44,7 @@ function makeOperation(
   tournamentId: string,
   targetId: string,
   payload: Record<string, unknown>,
+  status: OfflineOperationStatus = 'pending',
 ): OfflineOperation {
   return {
     id: `${ownerId}:${kind}:${targetId}`,
@@ -54,16 +55,17 @@ function makeOperation(
     revision: globalThis.crypto.randomUUID(),
     payload,
     createdAt: new Date().toISOString(),
-    status: 'pending',
+    status,
+    lastError: status === 'delivery_uncertain' ? 'The request was sent, but its server acknowledgement was not received.' : undefined,
   };
 }
 
-export function makeScoreOperation(ownerId: string, tournamentId: string, matchId: string, payload: Record<string, unknown>) {
-  return makeOperation('score_result', ownerId, tournamentId, matchId, payload);
+export function makeScoreOperation(ownerId: string, tournamentId: string, matchId: string, payload: Record<string, unknown>, status?: OfflineOperationStatus) {
+  return makeOperation('score_result', ownerId, tournamentId, matchId, payload, status);
 }
 
-export function makeCheckInOperation(ownerId: string, tournamentId: string, registrationId: string, payload: Record<string, unknown>) {
-  return makeOperation('check_in', ownerId, tournamentId, registrationId, payload);
+export function makeCheckInOperation(ownerId: string, tournamentId: string, registrationId: string, payload: Record<string, unknown>, status?: OfflineOperationStatus) {
+  return makeOperation('check_in', ownerId, tournamentId, registrationId, payload, status);
 }
 
 function isNetworkError(error: unknown): boolean {

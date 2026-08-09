@@ -98,6 +98,7 @@ export default function Scorekeeper() {
   const offlineOperations = useOfflineOperations(tournamentId, 'score_result');
   const [discardOfflineId, setDiscardOfflineId] = useState<string | null>(null);
   const [discardOfflineError, setDiscardOfflineError] = useState('');
+  const [unpersistedDeliveryWarning, setUnpersistedDeliveryWarning] = useState('');
 
   const [selectedRing, setSelectedRing] = useState<number | null>(null);
   const [selectedDivision, setSelectedDivision] = useState<string | null>(null);
@@ -206,7 +207,7 @@ export default function Scorekeeper() {
       : `Result ${state}. Advanced to next match.`);
   };
 
-  const stageScoreResult = (data: ScoreSubmission) => {
+  const stageScoreResult = (data: ScoreSubmission, deliveryUncertain = false) => {
     if (!tournamentId || !user) return;
     try {
       offlineOperations.enqueue(makeScoreOperation(user.id, tournamentId, data.matchId, {
@@ -215,14 +216,32 @@ export default function Scorekeeper() {
         score2: data.score2,
         status: 'completed',
         notes: data.notes,
-      }));
+      }, deliveryUncertain ? 'delivery_uncertain' : 'pending'));
     } catch {
+      if (deliveryUncertain) {
+        const division = divisions?.find((candidate) => candidate.id === selectedDivision);
+        const match = currentMatch?.id === data.matchId ? currentMatch : undefined;
+        const name = (entry: Match['competitor1']) => entry ? `${entry.competitor.firstName} ${entry.competitor.lastName}` : 'TBD';
+        const winner = match?.competitor1?.id === data.winnerId ? name(match.competitor1) : match?.competitor2?.id === data.winnerId ? name(match.competitor2) : `Registration #${data.winnerId.slice(0, 8)}`;
+        const target = match ? `${division?.name || 'Division'}, match #${match.matchNumber} (${name(match.competitor1)} vs ${name(match.competitor2)})` : `Match #${data.matchId.slice(0, 8)}`;
+        setUnpersistedDeliveryWarning(`${target} may already be saved on the server. Attempted winner: ${winner}, score ${data.score1 || '0'}–${data.score2 || '0'}, sent ${new Date().toLocaleTimeString()}. This device could not retain the safety record. Do not resubmit it. Review the refreshed match first.`);
+        void queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
+        finishResultEntry(true);
+        setAnnounce('Result delivery is uncertain. Do not resubmit it; review the refreshed match first.');
+        return;
+      }
       addToast('Result was not saved on this device. Keep this match open, free device storage, and try again.', 'error');
       setAnnounce('Result was not saved on this device. The current match remains open.');
       return;
     }
-    addToast('Result saved on this device and will sync when the connection returns.', 'warning');
+    if (deliveryUncertain) {
+      void queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
+      addToast('Result delivery is uncertain. The request may have reached the server; review the refreshed match before taking action.', 'error');
+    } else {
+      addToast('Result saved on this device and will sync when the connection returns.', 'warning');
+    }
     finishResultEntry(true);
+    if (deliveryUncertain) setAnnounce('Result delivery is uncertain. Review the refreshed match before taking action.');
   };
 
   const recordResult = useMutation({
@@ -249,7 +268,7 @@ export default function Scorekeeper() {
     },
     onError: (error: Error, data) => {
       if (error instanceof TypeError) {
-        stageScoreResult(data);
+        stageScoreResult(data, true);
         return;
       }
       addToast(error.message || 'Operation failed', 'error');
@@ -547,9 +566,10 @@ export default function Scorekeeper() {
     }
   };
 
-  const offlineStatus = offlineOperations.operations.length > 0 && (
+  const offlineStatus = (offlineOperations.operations.length > 0 || unpersistedDeliveryWarning) && (
     <>
     <div className="mx-auto mb-4 max-w-4xl space-y-2">
+      {unpersistedDeliveryWarning && <OperationStatus state="rejected" message={unpersistedDeliveryWarning} actionLabel="I verified server state" onAction={() => setUnpersistedDeliveryWarning('')} />}
       {buildOfflineOperationStatuses('result', offlineOperations.pending.length, offlineOperations.needsReview.length, offlineOperations.syncing)
         .map((status) => <OperationStatus key={status.state} {...status} />)}
       {offlineOperations.pending.length > 0 && (

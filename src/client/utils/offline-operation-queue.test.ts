@@ -30,6 +30,11 @@ function operation(targetId: string): OfflineOperation {
 }
 
 describe('offline operation queue', () => {
+  it('marks an attempted online request as delivery uncertain instead of auto-retryable pending', () => {
+    const operation = makeCheckInOperation('owner-1', 'tournament-1', 'registration-1', { checkedIn: true }, 'delivery_uncertain');
+    expect(operation.status).toBe('delivery_uncertain');
+    expect(operation.lastError).toMatch(/acknowledgement was not received/i);
+  });
   it('builds stable deduplication keys without storing authentication secrets', () => {
     const score = makeScoreOperation('user-1', 'tournament-1', 'match-1', { winnerId: 'registration-1' });
     const checkIn = makeCheckInOperation('user-1', 'tournament-1', 'registration-1', { checkedIn: true });
