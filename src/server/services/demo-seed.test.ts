@@ -3,13 +3,15 @@ import { getBracketPlacementsFromLoaded } from './match-advancement.js';
 import {
   DEMO_MARKER,
   DEMO_ORGANIZATION_SLUG,
+  assertSafeDemoDatabaseUrl,
   buildShowcaseFixture,
   resetDemoShowcase,
 } from '../../../prisma/demo-seed.js';
 
 describe('demo showcase fixture', () => {
   it('contains deterministic public open and live tournament experiences', () => {
-    const fixture = buildShowcaseFixture();
+    const now = new Date('2031-06-10T19:43:00.000Z');
+    const fixture = buildShowcaseFixture(now);
     expect(fixture.organization.slug).toBe(DEMO_ORGANIZATION_SLUG);
     expect({
       tournaments: fixture.tournaments.length,
@@ -25,6 +27,9 @@ describe('demo showcase fixture', () => {
       ['registration', 'bowin-demo-open-registration'],
       ['in_progress', 'bowin-demo-live-championship'],
     ]);
+    expect(fixture.tournaments[1].date).toEqual(new Date('2031-06-10T09:00:00.000Z'));
+    expect(fixture.tournaments[0].date).toEqual(new Date('2031-07-10T09:00:00.000Z'));
+    expect(JSON.parse(fixture.tournaments[0].settings).registrationCloses).toBe('2031-07-03');
     expect(new Set(fixture.competitors.map((c) => c.schoolDojang)).size).toBeGreaterThanOrEqual(4);
     expect(fixture.competitors.some((c) => /[^\u0000-\u007f]/.test(`${c.firstName}${c.lastName}`))).toBe(true);
     expect(new Set(fixture.registrations.map((r) => r.checkedIn))).toEqual(new Set([true, false]));
@@ -33,11 +38,44 @@ describe('demo showcase fixture', () => {
       new Set(['pending', 'ready', 'in_progress', 'completed']),
     );
     expect(new Set(fixture.matches.map((m) => m.ringNumber).filter(Boolean))).toEqual(new Set([1, 2, 3, 4]));
-    expect(fixture.matches.every((match) => match.scheduledTime instanceof Date && !Number.isNaN(match.scheduledTime.getTime()))).toBe(true);
-    expect(fixture.matches.map((match) => match.scheduledTime.getTime())).toEqual(
-      fixture.matches.map((_, index) => Date.parse('2027-04-18T14:00:00.000Z') + index * 10 * 60_000),
-    );
+    expect(fixture.matches.filter((match) => match.scheduledTime !== null).every((match) => match.scheduledTime instanceof Date && !Number.isNaN(match.scheduledTime.getTime()))).toBe(true);
+    fixture.matches.forEach((match, index) => {
+      if (match.scheduledTime !== null) expect(match.scheduledTime.getTime()).toBe(Date.parse('2031-06-10T14:00:00.000Z') + index * 10 * 60_000);
+    });
     expect(fixture.brackets.every((b) => JSON.parse(b.structure).positions)).toBe(true);
+  });
+
+  it('stores only internally valid match states and an honest mixed bracket progression', () => {
+    const fixture = buildShowcaseFixture(new Date('2031-06-10T19:43:00.000Z'));
+    for (const match of fixture.matches) {
+      if (match.status === 'completed') {
+        expect([match.competitor1Id, match.competitor2Id, match.winnerId, match.score1, match.score2]).not.toContain(null);
+        expect([match.competitor1Id, match.competitor2Id]).toContain(match.winnerId);
+      }
+      if (match.status === 'in_progress' || match.status === 'ready') {
+        expect(match.competitor1Id).not.toBeNull();
+        expect(match.competitor2Id).not.toBeNull();
+        expect(match.winnerId).toBeNull();
+      }
+    }
+    const mixed = fixture.matches.filter((match) => match.bracketId === fixture.brackets[1].id);
+    expect(mixed.map((match) => [match.matchNumber, match.status])).toEqual([
+      [1, 'completed'], [2, 'completed'], [3, 'in_progress'], [4, 'ready'],
+      [5, 'pending'], [6, 'pending'], [7, 'pending'],
+    ]);
+    expect(mixed.slice(0, 4).every((match) => match.competitor1Id && match.competitor2Id)).toBe(true);
+    expect(mixed.slice(4).every((match) => match.competitor1Id === null && match.competitor2Id === null)).toBe(true);
+    const reset = fixture.matches.find((match) => match.bracketId === fixture.brackets[0].id && match.matchNumber === 7)!;
+    expect(reset).toMatchObject({ status: 'pending', competitor1Id: null, competitor2Id: null, ringNumber: null, scheduledTime: null });
+    expect(fixture.competitorHistories[0].matchesWon).toBe(3);
+  });
+
+  it('rejects destructive integration URLs outside an explicitly named local test database', () => {
+    expect(() => assertSafeDemoDatabaseUrl('postgresql://user:secret@localhost:5432/bowin_test')).not.toThrow();
+    expect(() => assertSafeDemoDatabaseUrl('postgresql://user:secret@127.0.0.1:5432/bowin_e2e')).not.toThrow();
+    expect(() => assertSafeDemoDatabaseUrl('postgresql://user:secret@db.example.com/bowin_test')).toThrow(/local/i);
+    expect(() => assertSafeDemoDatabaseUrl('postgresql://user:secret@localhost:5432/bowin')).toThrow(/_test.*_e2e/i);
+    expect(() => assertSafeDemoDatabaseUrl('not-a-url')).toThrow(/valid/i);
   });
 
   it('completes a production four-person double-elimination bracket with derived podium places', () => {
@@ -100,6 +138,9 @@ describe('resetDemoShowcase', () => {
     expect(tournamentDeletes).toHaveLength(2);
     expect(tournamentDeletes[0].args).toEqual({ where: { organizationId: 'existing-demo' } });
     expect(calls.some((c) => !['competitor', 'match', 'tournament'].includes(c.model) && c.operation === 'deleteMany')).toBe(false);
+    expect(calls.filter((c) => c.model === 'organization' && c.operation === 'delete')[0].args).toEqual({
+      where: { id: 'existing-demo', settings: JSON.stringify({ marker: DEMO_MARKER }) },
+    });
     expect(calls.filter((c) => c.model === 'organization' && c.operation === 'create')).toHaveLength(2);
     expect(second).toEqual(first);
   });

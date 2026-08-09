@@ -12,6 +12,18 @@ const organizationId = id(1);
 const openTournamentId = id(2);
 const liveTournamentId = id(3);
 
+export function assertSafeDemoDatabaseUrl(value: string): void {
+  let parsed: URL;
+  try { parsed = new URL(value); } catch { throw new Error('DEMO_DATABASE_URL must be a valid PostgreSQL URL'); }
+  if (!['localhost', '127.0.0.1'].includes(parsed.hostname)) {
+    throw new Error('DEMO_DATABASE_URL must use a local localhost or 127.0.0.1 database');
+  }
+  const databaseName = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
+  if (!databaseName.endsWith('_test') && !databaseName.endsWith('_e2e')) {
+    throw new Error('DEMO_DATABASE_URL database name must end in _test or _e2e');
+  }
+}
+
 const people = [
   ['Ji-eun', '김', 'F', 'Black', 126, 'Hwarang Academy'],
   ['Mateo', 'García', 'M', 'Black', 154, 'North Star Taekwondo'],
@@ -25,8 +37,11 @@ const people = [
 
 type Fixture = ReturnType<typeof buildShowcaseFixture>;
 type DemoClient = Pick<PrismaClient, '$transaction' | 'organization'>;
+type ShowcaseMatchStatus = 'completed' | 'in_progress' | 'ready' | 'pending';
 
-export function buildShowcaseFixture() {
+export function buildShowcaseFixture(now: Date = new Date()) {
+  const dayAnchor = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const at = (dayOffset: number, hour: number) => new Date(dayAnchor + dayOffset * 86_400_000 + hour * 3_600_000);
   const organization = {
     id: organizationId,
     name: 'Bowin Showcase Dojangs (Fabricated)',
@@ -37,13 +52,13 @@ export function buildShowcaseFixture() {
   const tournaments = [
     {
       id: openTournamentId, organizationId, name: 'Future Stars Open Registration (Demo)',
-      date: new Date('2027-05-15T13:00:00.000Z'), location: 'Demo Community Centre',
+      date: at(30, 9), location: 'Demo Community Centre',
       status: 'registration', publicSlug: 'bowin-demo-open-registration',
-      settings: JSON.stringify({ fabricated: true, registrationCloses: '2027-05-01' }),
+      settings: JSON.stringify({ fabricated: true, registrationCloses: at(23, 0).toISOString().slice(0, 10) }),
     },
     {
       id: liveTournamentId, organizationId, name: 'Bowin Live Championship (Demo)',
-      date: new Date('2027-04-18T13:00:00.000Z'), location: 'Demo Performance Hall',
+      date: at(0, 9), location: 'Demo Performance Hall',
       status: 'in_progress', publicSlug: 'bowin-demo-live-championship',
       settings: JSON.stringify({ fabricated: true, rings: 4, parentScoreboard: true }),
     },
@@ -58,7 +73,7 @@ export function buildShowcaseFixture() {
     {
       id: id(200 + index), tournamentId: liveTournamentId, competitorId: competitor.id,
       patterns: index >= 4, sparring: index < 4, checkedIn: index % 3 !== 0,
-      checkInTime: index % 3 !== 0 ? new Date('2027-04-18T12:00:00.000Z') : null,
+      checkInTime: index % 3 !== 0 ? at(0, 8) : null,
       ageAtTournament: 18 + index, parentName: `Demo Guardian ${index + 1}`,
       privacyAccepted: true, rulesAccepted: true, guardianAttested: true,
     },
@@ -77,18 +92,19 @@ export function buildShowcaseFixture() {
   const assignments = groups.flatMap((group, groupIndex) => group.map((registration, index) => ({ id: id(320 + groupIndex * 4 + index), divisionId: divisions[groupIndex].id, registrationId: registration.id, seedPosition: index + 1 })));
   const brackets: Array<{ id: string; divisionId: string; structure: string; format: string }> = [];
   const matches: Array<Record<string, unknown>> = [];
-  const scheduleBase = new Date('2027-04-18T14:00:00.000Z');
+  const scheduleBase = at(0, 14);
   groups.forEach((group, groupIndex) => {
     const seeds: CompetitorSeed[] = group.map((registration, index) => ({ registrationId: registration.id, name: `${competitors[groupIndex * 4 + index].firstName} ${competitors[groupIndex * 4 + index].lastName}`, school: competitors[groupIndex * 4 + index].schoolDojang ?? '', seedPosition: index + 1 }));
     const structure = generateBracket(seeds, 'manual');
     const bracketId = id(350 + groupIndex);
     brackets.push({ id: bracketId, divisionId: divisions[groupIndex].id, structure: JSON.stringify(structure), format: 'double_elim' });
     [...structure.winners.map((m) => ({ ...m, bracketType: 'winners' })), ...structure.losers.map((m) => ({ ...m, bracketType: 'losers' })), ...structure.finals.map((m) => ({ ...m, bracketType: 'finals' }))].forEach((match, index) => {
-      const statuses = ['completed', 'in_progress', 'ready', 'pending'] as const;
-      let status: typeof statuses[number] = statuses[(groupIndex * 2 + index) % statuses.length];
+      let status: ShowcaseMatchStatus = 'pending';
       let competitor1Id = match.competitor1Id;
       let competitor2Id = match.competitor2Id;
       let winnerId: string | null = null;
+      let score1: string | null = null;
+      let score2: string | null = null;
       if (groupIndex === 0) {
         const [r1, r2, r3, r4] = group.map((registration) => registration.id);
         const completedProgression: Record<number, [string, string, string]> = {
@@ -99,20 +115,40 @@ export function buildShowcaseFixture() {
         if (result) {
           [competitor1Id, competitor2Id, winnerId] = result;
           status = 'completed';
+          score1 = '8';
+          score2 = '5';
         } else {
-          competitor1Id = r1;
-          competitor2Id = r2;
+          competitor1Id = null;
+          competitor2Id = null;
           status = 'pending';
         }
+      } else {
+        const [r1, r2, r3, r4] = group.map((registration) => registration.id);
+        const states: Record<number, { status: ShowcaseMatchStatus; slots: [string | null, string | null]; winner?: string }> = {
+          1: { status: 'completed', slots: [r1, r4], winner: r1 },
+          2: { status: 'completed', slots: [r2, r3], winner: r2 },
+          3: { status: 'in_progress', slots: [r1, r2] },
+          4: { status: 'ready', slots: [r4, r3] },
+          5: { status: 'pending', slots: [null, null] },
+          6: { status: 'pending', slots: [null, null] },
+          7: { status: 'pending', slots: [null, null] },
+        };
+        const state = states[match.matchNumber];
+        status = state.status;
+        [competitor1Id, competitor2Id] = state.slots;
+        winnerId = state.winner ?? null;
+        if (status === 'completed') {
+          score1 = '8';
+          score2 = '5';
+        }
       }
-      const hasResult = status === 'completed' && Boolean(winnerId ?? (competitor1Id && competitor2Id));
+      const isScheduled = status !== 'pending';
       matches.push({
         id: id(400 + matches.length), bracketId, roundNumber: match.round, matchNumber: match.matchNumber,
         bracketType: match.bracketType, competitor1Id, competitor2Id,
-        winnerId: winnerId ?? (hasResult ? competitor1Id : null),
-        score1: hasResult ? '8' : null, score2: hasResult ? '5' : null,
-        status, ringNumber: (matches.length % 4) + 1,
-        scheduledTime: new Date(scheduleBase.getTime() + matches.length * 10 * 60_000),
+        winnerId, score1, score2, status,
+        ringNumber: isScheduled ? (matches.length % 4) + 1 : null,
+        scheduledTime: isScheduled ? new Date(scheduleBase.getTime() + matches.length * 10 * 60_000) : null,
       });
     });
   });
@@ -120,7 +156,7 @@ export function buildShowcaseFixture() {
   const competitorHistories = completed ? [{
     id: id(500), competitorId: registrations.find((r) => r.id === completed.winnerId)?.competitorId ?? competitors[0].id,
     tournamentId: liveTournamentId, divisionId: divisions[0].id, divisionName: divisions[0].name,
-    eventType: 'sparring', placement: 1, matchesWon: 1, matchesLost: 0, points: 10,
+    eventType: 'sparring', placement: 1, matchesWon: 3, matchesLost: 0, points: 10,
   }] : [];
   return { organization, tournaments, competitors, registrations, divisions, assignments, brackets, matches, competitorHistories };
 }
@@ -144,7 +180,7 @@ async function writeFixture(tx: Prisma.TransactionClient, fixture: Fixture) {
 export async function resetDemoShowcase(client: DemoClient): Promise<Fixture> {
   const existing = await client.organization.findUnique({ where: { slug: DEMO_ORGANIZATION_SLUG }, select: { id: true, settings: true } });
   if (existing && !hasDemoMarker(existing.settings)) throw new Error(`Refusing to reset organization '${DEMO_ORGANIZATION_SLUG}': demo marker is missing`);
-  const fixture = buildShowcaseFixture();
+  const fixture = buildShowcaseFixture(new Date());
   await client.$transaction(async (tx) => {
     const current = await tx.organization.findUnique({ where: { slug: DEMO_ORGANIZATION_SLUG }, select: { id: true, settings: true } });
     if (current && !hasDemoMarker(current.settings)) throw new Error(`Refusing to reset organization '${DEMO_ORGANIZATION_SLUG}': demo marker changed`);
@@ -163,7 +199,7 @@ export async function resetDemoShowcase(client: DemoClient): Promise<Fixture> {
       // tournaments before its organization. Tournament-owned records
       // cascade through their own foreign keys.
       await tx.tournament.deleteMany({ where: { organizationId: current.id } });
-      await tx.organization.delete({ where: { id: current.id } });
+      await tx.organization.delete({ where: { id: current.id, settings: current.settings } });
     }
     if (captured.length) await tx.competitor.deleteMany({ where: { id: { in: captured.map((row) => row.competitorId) }, registrations: { none: {} } } });
     await writeFixture(tx, fixture);

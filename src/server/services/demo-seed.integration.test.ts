@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { DEMO_MARKER, DEMO_ORGANIZATION_SLUG, buildShowcaseFixture, resetDemoShowcase } from '../../../prisma/demo-seed.js';
+import { DEMO_MARKER, DEMO_ORGANIZATION_SLUG, assertSafeDemoDatabaseUrl, buildShowcaseFixture, resetDemoShowcase } from '../../../prisma/demo-seed.js';
 
 const demoDatabaseUrl = process.env.DEMO_DATABASE_URL;
 const integration = demoDatabaseUrl ? describe : describe.skip;
@@ -17,6 +17,7 @@ let prisma: PrismaClient | undefined;
 
 integration('demo showcase reset against disposable Postgres', () => {
   beforeAll(async () => {
+    assertSafeDemoDatabaseUrl(demoDatabaseUrl!);
     prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: demoDatabaseUrl! }) });
     await prisma.organization.create({ data: { id: sentinelOrgId, name: 'Non-demo sentinel', slug: sentinelOrgSlug, settings: JSON.stringify({ marker: 'not-demo' }) } });
     await prisma.tournament.create({ data: { id: sentinelTournamentId, organizationId: sentinelOrgId, name: 'Sentinel tournament', date: new Date('2030-01-01'), publicSlug: sentinelPublicSlug } });
@@ -67,5 +68,18 @@ integration('demo showcase reset against disposable Postgres', () => {
     expect(await prisma!.tournament.count({ where: { organizationId: fixture.organization.id } })).toBe(fixture.tournaments.length);
     expect(await prisma!.registration.count({ where: { tournament: { organizationId: fixture.organization.id } } })).toBe(fixture.registrations.length);
     expect((await prisma!.tournament.findUnique({ where: { id: live.id } }))?.publicSlug).toBe(`${live.publicSlug}-before-rollback`);
+  });
+
+  it('refuses a canonical organization whose marker changed and preserves its records', async () => {
+    await resetDemoShowcase(prisma!);
+    await prisma!.organization.update({ where: { id: fixture.organization.id }, data: { settings: JSON.stringify({ marker: 'not-demo' }) } });
+    try {
+      await expect(resetDemoShowcase(prisma!)).rejects.toThrow(/refusing/i);
+      expect(await prisma!.organization.count({ where: { id: fixture.organization.id } })).toBe(1);
+      expect(await prisma!.tournament.count({ where: { organizationId: fixture.organization.id } })).toBe(fixture.tournaments.length);
+      expect(await prisma!.registration.count({ where: { tournament: { organizationId: fixture.organization.id } } })).toBe(fixture.registrations.length);
+    } finally {
+      await prisma!.organization.update({ where: { id: fixture.organization.id }, data: { settings: fixture.organization.settings } });
+    }
   });
 });
