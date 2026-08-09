@@ -25,6 +25,7 @@ import { makeCheckInOperation } from '../utils/offline-operation-queue';
 import { CHECK_IN_ACCESSIBLE_LABELS, formatCheckInWeight } from '../utils/check-in-display';
 import OperationStatus from '../components/ui/OperationStatus';
 import { buildDeliveryUncertainMessage, buildOfflineOperationStatuses, buildOfflineReviewMessage } from '../utils/offline-operation-status';
+import { reconcileBulkCheckInResult, runBulkCheckInRequests } from '../utils/bulk-check-in';
 
 interface Registration {
   id: string;
@@ -71,6 +72,9 @@ export default function CheckIn() {
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
   const [checkInWeight, setCheckInWeight] = useState('');
   const [isBulkCheckingIn, setIsBulkCheckingIn] = useState(false);
+  const [failedBulkIds, setFailedBulkIds] = useState<string[]>([]);
+  const [failedBulkErrors, setFailedBulkErrors] = useState<Record<string, string>>({});
+  const [uncertainBulkIds, setUncertainBulkIds] = useState<string[]>([]);
 
   // Keyboard shortcut: "/" to focus search
   useEffect(() => {
@@ -263,9 +267,17 @@ export default function CheckIn() {
     }
   };
 
-  const handleBulkCheckIn = async () => {
-    const eligibleForBulk = uncheckedFiltered.filter((r) => !r.sparring);
+  const handleBulkCheckIn = async (retryIds?: string[]) => {
+    const eligibleForBulk = retryIds
+      ? (registrations || []).filter((r) => retryIds.includes(r.id) && !isCheckedIn(r) && !r.sparring)
+      : uncheckedFiltered.filter((r) => !r.sparring);
     if (eligibleForBulk.length === 0) {
+      if (retryIds) {
+        setFailedBulkIds([]);
+        setFailedBulkErrors({});
+        toast.success('Server status now shows those competitors checked in. No retry was sent.');
+        return;
+      }
       toast.warning('All filtered unchecked competitors require weigh-in (sparring). Check them in individually.');
       return;
     }
@@ -289,10 +301,12 @@ export default function CheckIn() {
       return;
     }
     setIsBulkCheckingIn(true);
+    setFailedBulkIds([]);
+    setFailedBulkErrors({});
     try {
-      const results = await Promise.all(
-        eligibleForBulk.map(async (r) => {
-          const res = await fetch(`/api/tournaments/${tournamentId}/registrations/${r.id}`, {
+      const result = await runBulkCheckInRequests(
+        eligibleForBulk.map((registration) => registration.id),
+        async (registrationId) => fetch(`/api/tournaments/${tournamentId}/registrations/${registrationId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({
@@ -300,22 +314,29 @@ export default function CheckIn() {
               checkInTime: new Date().toISOString(),
               checkInWeight: null,
             }),
-          });
-          return res.ok;
-        })
+          }),
       );
-      const okCount = results.filter(Boolean).length;
-      const failCount = results.length - okCount;
-      queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
-      if (failCount === 0) {
+      await queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
+      const refreshed = queryClient.getQueryData<Registration[]>(['checkin-registrations', tournamentId]) || [];
+      const okCount = result.succeededIds.length;
+      const resultWithPriorUncertainty = {
+        ...result,
+        deliveryUncertainIds: [...new Set([...uncertainBulkIds, ...result.deliveryUncertainIds])],
+      };
+      const { rejected, deliveryUncertainIds: unresolvedUncertain } = reconcileBulkCheckInResult(resultWithPriorUncertainty, refreshed);
+      const failCount = rejected.length;
+      setFailedBulkIds(rejected.map(({ id }) => id));
+      setFailedBulkErrors(Object.fromEntries(rejected.map(({ id, error }) => [id, error])));
+      setUncertainBulkIds(unresolvedUncertain);
+      if (unresolvedUncertain.length > 0) {
+        toast.warning(`${okCount} confirmed; ${failCount} rejected; ${unresolvedUncertain.length} need server-state verification.`);
+      } else if (failCount === 0) {
         toast.success(`Checked in ${okCount} competitor${okCount === 1 ? '' : 's'}`);
       } else if (okCount === 0) {
         toast.error('Bulk check-in failed. Please try again.');
       } else {
         toast.warning(`Checked in ${okCount}; ${failCount} failed.`);
       }
-    } catch {
-      toast.error('Some check-ins failed. Please try again.');
     } finally {
       setIsBulkCheckingIn(false);
     }
@@ -339,6 +360,15 @@ export default function CheckIn() {
       toast.error('A check-in was rejected, but this device could not save the rejection details. It has been quarantined from retry; refresh and review it.');
     }
   };
+  const failedBulkNames = failedBulkIds.map((id) => {
+    const failed = registrations?.find((registration) => registration.id === id);
+    const label = failed ? `${failed.competitor.firstName} ${failed.competitor.lastName}` : `Registration ${id.slice(0, 8)}`;
+    return `${label} (${failedBulkErrors[id] || 'rejected by server'})`;
+  });
+  const uncertainBulkNames = uncertainBulkIds.map((id) => {
+    const uncertain = registrations?.find((registration) => registration.id === id);
+    return uncertain ? `${uncertain.competitor.firstName} ${uncertain.competitor.lastName}` : `Registration ${id.slice(0, 8)}`;
+  });
 
   const retryStagedCheckIn = async (id: string) => {
     const result = await offlineOperations.retry(id);
@@ -507,7 +537,7 @@ export default function CheckIn() {
 
         {/* Bulk Check-In Button */}
         {hasActiveFilter && uncheckedFiltered.length > 0 && (
-          <Button variant="success" className="w-full" loading={isBulkCheckingIn} onClick={handleBulkCheckIn}>
+          <Button variant="success" className="w-full" loading={isBulkCheckingIn} onClick={() => void handleBulkCheckIn()}>
             <Users className="h-4 w-4 mr-2" />
             Check In All Filtered ({uncheckedFiltered.length})
           </Button>
@@ -516,6 +546,22 @@ export default function CheckIn() {
 
       {/* Registration List */}
       <div className="p-4">
+        {failedBulkIds.length > 0 && (
+          <OperationStatus
+            state="rejected"
+            message={`${failedBulkIds.length} bulk check-in${failedBulkIds.length === 1 ? '' : 's'} failed after all requests finished: ${failedBulkNames.join(', ')}.`}
+            actionLabel="Retry failed"
+            onAction={() => void handleBulkCheckIn(failedBulkIds)}
+          />
+        )}
+        {uncertainBulkIds.length > 0 && (
+          <OperationStatus
+            state="rejected"
+            message={`${uncertainBulkIds.length} check-in acknowledgement${uncertainBulkIds.length === 1 ? ' was' : 's were'} lost for ${uncertainBulkNames.join(', ')}. The server may have accepted these check-ins. Refresh and verify server state; do not retry them from this notice.`}
+            actionLabel={isBulkCheckingIn ? undefined : 'I verified server state'}
+            onAction={isBulkCheckingIn ? undefined : () => setUncertainBulkIds([])}
+          />
+        )}
         {isLoading ? (
           <div className="space-y-3">
             <CardSkeleton />

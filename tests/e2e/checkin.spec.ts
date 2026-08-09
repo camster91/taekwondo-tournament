@@ -183,4 +183,82 @@ test.describe('check-in (weigh-in flow)', () => {
     await warning.getByRole('button', { name: /I verified server state/i }).click();
     await expect(warning).toHaveCount(0);
   });
+
+  test('bulk check-in retries only confirmed rejections and retains uncertain delivery review', async ({ page }) => {
+    await loginAsDemo(page);
+    await page.goto('/tournaments');
+    const href = await page.locator('a', { hasText: 'Spring Championship 2026' }).first().getAttribute('href');
+    const tournamentId = href!.replace('/tournaments/', '');
+    const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+    const candidates = await prisma.registration.findMany({
+      where: { tournamentId, patterns: true, sparring: false },
+      take: 3,
+      select: { id: true, checkedIn: true, checkInTime: true, checkInWeight: true },
+    });
+    expect(candidates).toHaveLength(3);
+    const ids = candidates.map(({ id }) => id);
+    try {
+      await prisma.registration.updateMany({
+      where: { id: { in: ids } },
+      data: { checkedIn: false, checkInTime: null, checkInWeight: null },
+    });
+
+      let retryConfirmed = false;
+      const attempts = new Map<string, number>();
+      await page.route(`**/api/tournaments/${tournamentId}/registrations`, async (route) => {
+      const response = await route.fetch();
+      const body = await response.json() as Array<{ id: string; competitor: { schoolDojang: string | null } }>;
+      body.forEach((registration) => {
+        if (ids.includes(registration.id)) registration.competitor.schoolDojang = '[E2E] Bulk School';
+      });
+      await route.fulfill({ response, body: JSON.stringify(body) });
+    });
+      await page.route(`**/api/tournaments/${tournamentId}/registrations/*`, async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      const id = route.request().url().split('/').pop()!;
+      attempts.set(id, (attempts.get(id) || 0) + 1);
+      if (id === ids[0] && !retryConfirmed) {
+        await route.fulfill({ status: 409, contentType: 'application/json', body: '{"error":"Already changed by another desk"}' });
+      } else if (id === ids[1]) {
+        await route.abort('failed');
+      } else {
+        await route.continue();
+      }
+      });
+
+      await page.goto(`/checkin/${tournamentId}`);
+      await page.getByLabel('Filter by school').selectOption({ label: '[E2E] Bulk School' });
+      await page.getByRole('button', { name: /Check In All Filtered \(3\)/i }).click();
+
+      const rejected = page.getByRole('alert').filter({ hasText: /Already changed by another desk/i });
+      const uncertain = page.getByRole('alert').filter({ hasText: /acknowledgement was lost/i });
+      await expect(rejected).toBeVisible();
+      await expect(uncertain).toBeVisible();
+      expect(attempts.get(ids[0])).toBe(1);
+      expect(attempts.get(ids[1])).toBe(1);
+
+      retryConfirmed = true;
+      await rejected.getByRole('button', { name: /Retry failed/i }).click();
+      await expect(rejected).toHaveCount(0);
+      await expect(uncertain).toBeVisible();
+      expect(attempts.get(ids[0])).toBe(2);
+      expect(attempts.get(ids[1])).toBe(1);
+
+      await page.evaluate(() => window.dispatchEvent(new Event('online')));
+      await page.waitForTimeout(300);
+      expect(attempts.get(ids[1])).toBe(1);
+      await uncertain.getByRole('button', { name: /I verified server state/i }).click();
+      await expect(uncertain).toHaveCount(0);
+    } finally {
+      await prisma.$transaction(candidates.map((registration) => prisma.registration.update({
+        where: { id: registration.id },
+        data: {
+          checkedIn: registration.checkedIn,
+          checkInTime: registration.checkInTime,
+          checkInWeight: registration.checkInWeight,
+        },
+      })));
+      await prisma.$disconnect();
+    }
+  });
 });
