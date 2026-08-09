@@ -25,6 +25,7 @@ import {
   canOpenPublicRegistration,
   getPlanEntitlements,
 } from '../services/entitlements.js';
+import { mergeRulesSettings, saveTournamentSettingsAtomic } from '../services/tournament-settings.js';
 
 const router = Router();
 
@@ -78,6 +79,11 @@ const weightClassesSchema = z.object({
     weightMaxLbs: z.number().optional(),
     displayOrder: z.number().int().optional(),
   })),
+});
+
+const atomicTournamentSettingsSchema = z.object({
+  settings: z.record(z.string(), z.unknown()),
+  weightClasses: weightClassesSchema.shape.weightClasses,
 });
 
 // Ring reassignment body — moves a division's matches to a different
@@ -440,6 +446,17 @@ router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'),
   });
 });
 
+router.put('/:id/settings', authenticate, requireTournamentAccess('director'), validateRequest(atomicTournamentSettingsSchema), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournament = await saveTournamentSettingsAtomic(
+    prisma,
+    getParam(req.params.id),
+    req.body.settings,
+    req.body.weightClasses,
+  );
+  res.json(tournament);
+});
+
 router.put('/:id', authenticate, requireTournamentAccess('director'), validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, status, settings } = req.body;
@@ -514,22 +531,30 @@ router.put('/:id/rules', authenticate, requireTournamentAccess('director'), asyn
   // with defaults). Anything the schema doesn't know about is
   // dropped silently.
   const normalized = parseTournamentRules(JSON.stringify(rules));
-  const tournament = await prisma.tournament.update({
-    where: { id: getParam(req.params.id) },
-    data: { settings: serializeTournamentRules(normalized) },
-    select: { id: true, settings: true },
-  });
+  const tournamentId = getParam(req.params.id);
+  const tournament = await prisma.$transaction(async (tx) => {
+    const existing = await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { settings: true } });
+    return tx.tournament.update({
+      where: { id: tournamentId },
+      data: { settings: JSON.stringify(mergeRulesSettings(existing.settings, JSON.parse(serializeTournamentRules(normalized)))) },
+      select: { id: true, settings: true },
+    });
+  }, { isolationLevel: 'Serializable' });
   res.json({ rules: parseTournamentRules(tournament.settings) });
 });
 
 // POST /api/tournaments/:id/rules/reset — restore defaults
 router.post('/:id/rules/reset', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const tournament = await prisma.tournament.update({
-    where: { id: getParam(req.params.id) },
-    data: { settings: serializeTournamentRules(DEFAULT_TOURNAMENT_RULES) },
-    select: { id: true, settings: true },
-  });
+  const tournamentId = getParam(req.params.id);
+  const tournament = await prisma.$transaction(async (tx) => {
+    const existing = await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { settings: true } });
+    return tx.tournament.update({
+      where: { id: tournamentId },
+      data: { settings: JSON.stringify(mergeRulesSettings(existing.settings, JSON.parse(serializeTournamentRules(DEFAULT_TOURNAMENT_RULES)))) },
+      select: { id: true, settings: true },
+    });
+  }, { isolationLevel: 'Serializable' });
   res.json({ rules: parseTournamentRules(tournament.settings) });
 });
 

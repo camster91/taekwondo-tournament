@@ -14,22 +14,11 @@ export async function saveTournamentSettingsRequest<T extends { weightClasses: u
 ): Promise<unknown> {
   const headers = new Headers(authHeaders);
   headers.set('Content-Type', 'application/json');
-  const settingsResponse = await request(`/api/tournaments/${tournamentId}`, {
+  const settingsResponse = await request(`/api/tournaments/${tournamentId}/settings`, {
     method: 'PUT',
     headers,
-    body: JSON.stringify({ settings }),
+    body: JSON.stringify({ settings, weightClasses: settings.weightClasses }),
   });
   await requireSuccess(settingsResponse, 'Failed to save tournament settings');
-  const savedTournament = await settingsResponse.json();
-
-  // Always send the desired list. An empty list is meaningful: it clears
-  // previously persisted classes instead of leaving stale DB rows behind.
-  const weightsResponse = await request(`/api/tournaments/${tournamentId}/weight-classes`, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify({ weightClasses: settings.weightClasses }),
-  });
-  await requireSuccess(weightsResponse, 'Failed to save weight classes');
-
-  return savedTournament;
+  return settingsResponse.json();
 }

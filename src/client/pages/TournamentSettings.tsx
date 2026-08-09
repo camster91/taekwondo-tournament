@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import {
@@ -95,6 +95,7 @@ export default function TournamentSettings() {
   const queryClient = useQueryClient();
   const [settings, setSettings] = useState<TournamentSettings>(DEFAULT_SETTINGS);
   const [hasChanges, setHasChanges] = useState(false);
+  const setupDirtyRef = useRef(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
@@ -123,6 +124,7 @@ export default function TournamentSettings() {
 
   // Load settings from tournament
   useEffect(() => {
+    if (setupDirtyRef.current) return;
     if (tournament?.settings) {
       try {
         const parsed = JSON.parse(tournament.settings);
@@ -193,8 +195,9 @@ export default function TournamentSettings() {
     mutationFn: async (newSettings: TournamentSettings) => {
       return saveTournamentSettingsRequest(fetch, id!, newSettings, getAuthHeaders());
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+      setupDirtyRef.current = false;
       setHasChanges(false);
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 3000);
@@ -204,6 +207,7 @@ export default function TournamentSettings() {
 
   const updateSettings = (updates: Partial<TournamentSettings>) => {
     setSettings((prev) => ({ ...prev, ...updates }));
+    setupDirtyRef.current = true;
     setHasChanges(true);
   };
 
@@ -236,6 +240,7 @@ export default function TournamentSettings() {
 
   const resetToDefaults = () => {
     setSettings(DEFAULT_SETTINGS);
+    setupDirtyRef.current = true;
     setHasChanges(true);
     setShowResetConfirm(false);
   };
@@ -360,8 +365,9 @@ export default function TournamentSettings() {
         </nav>
       </div>
 
-      {tab === 'setup' && (
-        <div id="settings-panel-setup" role="tabpanel" aria-labelledby="settings-tab-setup">
+      {(
+        <div id="settings-panel-setup" role="tabpanel" aria-labelledby="settings-tab-setup" hidden={tab !== 'setup'}>
+      <fieldset disabled={saveMutation.isPending} className="contents" aria-busy={saveMutation.isPending}>
       {/* General Settings */}
       <Card className="mb-6">
         <CardHeader
@@ -739,12 +745,13 @@ export default function TournamentSettings() {
           </CardBody>
         )}
       </Card>
+        </fieldset>
         </div>
       )}
 
       {/* Tournament Rules (v2) */}
-      {tab === 'rules' && (
-        <div id="settings-panel-rules" role="tabpanel" aria-labelledby="settings-tab-rules">
+      {(
+        <div id="settings-panel-rules" role="tabpanel" aria-labelledby="settings-tab-rules" hidden={tab !== 'rules'}>
           <Card className="mt-6">
             <CardHeader
               title="Tournament Rules"
@@ -754,7 +761,6 @@ export default function TournamentSettings() {
               <RulesManager
                 tournamentId={id!}
                 tournamentSettings={tournament?.settings}
-                onRulesChange={setHasChanges}
               />
             </CardBody>
           </Card>
@@ -769,6 +775,8 @@ export default function TournamentSettings() {
             variant="primary"
             size="sm"
             onClick={() => saveMutation.mutate(settings)}
+            disabled={saveMutation.isPending}
+            loading={saveMutation.isPending}
           >
             Save
           </Button>
@@ -793,21 +801,22 @@ export default function TournamentSettings() {
 function RulesManager({
   tournamentId,
   tournamentSettings,
-  onRulesChange,
 }: {
   tournamentId: string;
   tournamentSettings: string | null | undefined;
-  onRulesChange: (dirty: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [rules, setRules] = useState<TournamentRules>(() => parseTournamentRules(tournamentSettings));
-  const [saving, setSaving] = useState(false);
+  const [hasRuleChanges, setHasRuleChanges] = useState(false);
+  const rulesDirtyRef = useRef(false);
   const [showResetRulesConfirm, setShowResetRulesConfirm] = useState(false);
 
   // Re-init when tournamentSettings changes (e.g. after save)
   useEffect(() => {
+    if (rulesDirtyRef.current) return;
     setRules(parseTournamentRules(tournamentSettings));
+    setHasRuleChanges(false);
   }, [tournamentSettings]);
 
   const saveMutation = useMutation({
@@ -820,9 +829,10 @@ function RulesManager({
       if (!res.ok) throw new Error('Failed to save rules');
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
-      onRulesChange(false);
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
+      rulesDirtyRef.current = false;
+      setHasRuleChanges(false);
       addToast('Tournament rules saved', 'success');
     },
     onError: () => addToast('Failed to save rules', 'error'),
@@ -837,20 +847,22 @@ function RulesManager({
       if (!res.ok) throw new Error('Failed to reset rules');
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
-      onRulesChange(false);
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['tournament', tournamentId] });
+      rulesDirtyRef.current = false;
+      setHasRuleChanges(false);
       addToast('Rules reset to defaults', 'success');
     },
   });
 
   const handleChange = (next: TournamentRules) => {
     setRules(next);
-    onRulesChange(true);
+    rulesDirtyRef.current = true;
+    setHasRuleChanges(true);
   };
 
   return (
-    <div>
+    <fieldset disabled={saveMutation.isPending || resetRulesMutation.isPending} className="contents" aria-busy={saveMutation.isPending || resetRulesMutation.isPending}>
       <TournamentRulesEditor
         rules={rules}
         onChange={handleChange}
@@ -860,7 +872,7 @@ function RulesManager({
         <Button
           variant="primary"
           onClick={() => saveMutation.mutate(rules)}
-          disabled={saving || saveMutation.isPending}
+          disabled={!hasRuleChanges || saveMutation.isPending}
           loading={saveMutation.isPending}
         >
           {saveMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <Save className="h-4 w-4 mr-2" />}
@@ -879,6 +891,6 @@ function RulesManager({
         confirmText="Reset Rules"
         variant="warning"
       />
-    </div>
+    </fieldset>
   );
 }
