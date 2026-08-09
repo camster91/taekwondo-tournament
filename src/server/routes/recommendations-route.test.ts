@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   checkTournamentAccess: vi.fn(), approveRecommendation: vi.fn(), rejectRecommendation: vi.fn(), getValidator: vi.fn(),
   createDivisionRecommendation: vi.fn(),
+  applyDivisionRecommendation: vi.fn(),
 }));
 const routeState = vi.hoisted(() => ({ captured: [] as Array<{ method: string; path: string; handler: any }> }));
 vi.mock('../middleware/auth.js', () => ({
@@ -15,7 +16,9 @@ vi.mock('../services/recommendation-contract.js', () => ({
 }));
 vi.mock('../services/recommendation-validators.js', () => ({ getRecommendationValidator: (...args: any[]) => mocks.getValidator(...args) }));
 vi.mock('../services/division-recommendations.js', () => ({
+  DIVISION_RECOMMENDATION_TYPE: 'division_categorization_v1',
   createDivisionRecommendation: (...args: any[]) => mocks.createDivisionRecommendation(...args),
+  applyDivisionRecommendation: (...args: any[]) => mocks.applyDivisionRecommendation(...args),
 }));
 vi.mock('express', () => {
   const router: any = {};
@@ -92,5 +95,17 @@ describe('recommendation review routes', () => {
     }, res);
     expect(mocks.rejectRecommendation).toHaveBeenCalledWith(prisma, 'rec-1', 'director-1', 'Unsafe');
     expect(res.body).toMatchObject({ status: 'rejected' });
+  });
+
+  it('applies a tournament-bound division recommendation with the authenticated director identity', async () => {
+    const prisma = { recommendation: { findFirst: vi.fn().mockResolvedValue({ id: 'rec-1', recommendationType: 'division_categorization_v1' }) } };
+    mocks.checkTournamentAccess.mockResolvedValue({ ok: true });
+    mocks.applyDivisionRecommendation.mockResolvedValue({ appliedResult: { divisions: 2 }, alreadyApplied: false });
+    const res = response();
+    await handler('post', '/tournament/:tournamentId/:recommendationId/apply')({
+      params: { tournamentId: 'own', recommendationId: 'rec-1' }, user: { id: 'director-1' }, app: { locals: { prisma } },
+    }, res);
+    expect(mocks.applyDivisionRecommendation).toHaveBeenCalledWith(prisma, 'rec-1', 'director-1');
+    expect(res.body).toMatchObject({ appliedResult: { divisions: 2 }, alreadyApplied: false });
   });
 });

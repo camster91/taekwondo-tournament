@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DIVISION_RECOMMENDATION_TYPE,
   buildDivisionRecommendation,
   loadDivisionRecommendationInput,
+  assertDivisionRecommendationCanApply,
   validateDivisionRecommendationSnapshot,
+  validateDivisionRecommendation,
 } from './division-recommendations.js';
 
 const registration = (overrides: Record<string, unknown> = {}) => ({
@@ -113,6 +115,7 @@ describe('buildDivisionRecommendation', () => {
         id: 'pinned-registration', competitorId: 'pinned-competitor', manualDivisionId: 'pinned-division',
       })],
       config: { divisionThreshold: 8 },
+      existingDivisions: [{ id: 'division-1', name: 'Original division', assignments: [], bracketId: null }],
     };
     const proposal = buildDivisionRecommendation(originalInput);
 
@@ -121,6 +124,10 @@ describe('buildDivisionRecommendation', () => {
       ...originalInput,
       registrations: originalInput.registrations.map((entry) =>
         entry.id === 'pinned-registration' ? { ...entry, manualDivisionId: 'different-division' } : entry),
+    }, proposal)).toMatchObject({ valid: false, errors: expect.arrayContaining(['Tournament inputs changed since this recommendation was created']) });
+    expect(validateDivisionRecommendationSnapshot({
+      ...originalInput,
+      existingDivisions: [{ ...originalInput.existingDivisions[0], name: 'Director renamed division' }],
     }, proposal)).toMatchObject({ valid: false, errors: expect.arrayContaining(['Tournament inputs changed since this recommendation was created']) });
     expect(validateDivisionRecommendationSnapshot(originalInput, {
       ...proposal,
@@ -139,8 +146,102 @@ describe('buildDivisionRecommendation', () => {
         });
         return [];
       } },
+      division: { findMany: async () => [] },
     };
 
     await loadDivisionRecommendationInput(db as never, 'tournament-1');
+  });
+
+  it('derives an immutable pin from a manual assignment even when the registration pin field is empty', async () => {
+    const manuallyAssigned = {
+      ...registration(),
+      manualDivisionId: null,
+      assignments: [{ divisionId: 'director-picked-division', manualOverride: true }],
+    };
+    const db = {
+      tournament: { findUnique: async () => ({ id: 'tournament-1', settings: null, sportProfileSlug: 'taekwondo' }) },
+      registration: { findMany: async () => [
+        manuallyAssigned,
+        { ...registration({ id: 'teammate-registration', competitorId: 'teammate-competitor' }), assignments: [] },
+      ] },
+      weightClass: { findMany: async () => [] },
+      division: { findMany: async () => [{
+        id: 'director-picked-division', name: 'Director picked division', bracket: null,
+        assignments: [
+          { id: 'a1', registrationId: 'registration-1', seedPosition: 1, manualOverride: true },
+          { id: 'a2', registrationId: 'teammate-registration', seedPosition: 2, manualOverride: false },
+        ],
+      }] },
+    };
+
+    const loaded = await loadDivisionRecommendationInput(db as never, 'tournament-1');
+    expect(loaded.registrations[0].manualDivisionId).toBe('director-picked-division');
+    expect(loaded.registrations[1].manualDivisionId).toBe('director-picked-division');
+    expect(buildDivisionRecommendation(loaded).proposedDiff.preservedPinned).toEqual([
+      expect.objectContaining({ registrationId: 'registration-1', divisionId: 'director-picked-division' }),
+      expect.objectContaining({ registrationId: 'teammate-registration', divisionId: 'director-picked-division' }),
+    ]);
+  });
+
+  it('preserves every member of a division referenced by the direct registration pin field', async () => {
+    const directPin = { ...registration(), manualDivisionId: 'direct-pin-division', assignments: [] };
+    const teammate = { ...registration({ id: 'direct-pin-teammate', competitorId: 'direct-pin-teammate-competitor' }), assignments: [] };
+    const division = {
+      id: 'direct-pin-division', name: 'Direct pin division', bracket: null,
+      assignments: [
+        { id: 'direct-a1', registrationId: 'registration-1', seedPosition: 1, manualOverride: false },
+        { id: 'direct-a2', registrationId: 'direct-pin-teammate', seedPosition: 2, manualOverride: false },
+      ],
+    };
+    const db = {
+      $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+      tournament: { findUnique: async () => ({ id: 'tournament-1', settings: null, sportProfileSlug: 'taekwondo' }) },
+      registration: { findMany: async () => [directPin, teammate] },
+      weightClass: { findMany: async () => [] },
+      division: { findMany: async () => [division] },
+    };
+
+    const loaded = await loadDivisionRecommendationInput(db as never, 'tournament-1');
+    expect(loaded.registrations.map((entry) => entry.manualDivisionId)).toEqual([
+      'direct-pin-division', 'direct-pin-division',
+    ]);
+    expect(buildDivisionRecommendation(loaded).proposedDiff.divisions).toEqual([]);
+  });
+
+  it('refuses recategorization when an existing bracket would be destroyed', () => {
+    expect(() => assertDivisionRecommendationCanApply([
+      { name: 'Girls Patterns', bracket: { id: 'bracket-1' } },
+    ])).toThrow('Remove or correct existing brackets before applying a division recommendation');
+    expect(() => assertDivisionRecommendationCanApply([
+      { name: 'Girls Patterns', bracket: null },
+    ])).not.toThrow();
+  });
+
+  it('locks every authoritative tournament input before transactional validation', async () => {
+    const db = {
+      $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+      tournament: { findUnique: async () => ({ id: 'tournament-1', settings: null, sportProfileSlug: 'taekwondo' }) },
+      registration: { findMany: async () => [{ ...registration(), assignments: [] }] },
+      weightClass: { findMany: async () => [] },
+      division: { findMany: async () => [] },
+    };
+    const input = await loadDivisionRecommendationInput(db as never, 'tournament-1');
+    const proposal = buildDivisionRecommendation(input);
+
+    await validateDivisionRecommendation(db as never, {
+      tournamentId: 'tournament-1',
+      recommendationType: proposal.recommendationType,
+      inputSnapshot: proposal.inputSnapshot,
+      proposedDiff: proposal.proposedDiff,
+    });
+
+    expect(db.$queryRawUnsafe.mock.calls.map(([sql]) => sql)).toEqual([
+      'SELECT id FROM "Tournament" WHERE id = $1 FOR UPDATE',
+      'SELECT id FROM "Registration" WHERE "tournamentId" = $1 ORDER BY id FOR UPDATE',
+      'SELECT c.id FROM "Competitor" c JOIN "Registration" r ON r."competitorId" = c.id WHERE r."tournamentId" = $1 ORDER BY c.id FOR UPDATE OF c',
+      'SELECT id FROM "WeightClass" WHERE "tournamentId" = $1 ORDER BY id FOR UPDATE',
+      'SELECT id FROM "Division" WHERE "tournamentId" = $1 ORDER BY id FOR UPDATE',
+      'SELECT a.id FROM "DivisionAssignment" a JOIN "Division" d ON d.id = a."divisionId" WHERE d."tournamentId" = $1 ORDER BY a.id FOR UPDATE OF a',
+    ]);
   });
 });

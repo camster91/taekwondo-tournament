@@ -89,7 +89,7 @@ export async function approveRecommendation(prisma: PrismaClient, recommendation
     };
     const previous = JSON.parse(recommendation.validationResult) as DeterministicValidationEvidence;
     const validation = await runValidation(tx, proposal, validator);
-    if (!validation.valid) throw new Error('Recommendation failed deterministic validation');
+    if (!validation.valid) throw new Error(`Recommendation failed deterministic validation${validation.errors.length ? `: ${validation.errors.join('; ')}` : ''}`);
     if (validation.validator !== previous.validator || validation.inputVersion !== previous.inputVersion) throw new Error('Recommendation inputs changed since validation');
     return tx.recommendation.update({ where: { id: recommendationId }, data: { status: 'approved', approvedBy, approvedAt: new Date(), validationResult: JSON.stringify(validation) } });
   });
@@ -133,7 +133,7 @@ export async function applyApprovedRecommendation(
       tournamentId: recommendation.tournamentId, recommendationType: recommendation.recommendationType,
       inputSnapshot: JSON.parse(recommendation.inputSnapshot), proposedDiff: JSON.parse(recommendation.proposedDiff),
     }, validator);
-    if (!current.valid) throw new Error('Recommendation failed deterministic validation');
+    if (!current.valid) throw new Error(`Recommendation failed deterministic validation${current.errors.length ? `: ${current.errors.join('; ')}` : ''}`);
     if (current.validator !== previous.validator || current.inputVersion !== previous.inputVersion) throw new Error('Recommendation inputs changed since validation');
     const evidence = await apply(tx, recommendation);
     const audit = await tx.tournamentOperationAudit.create({ data: {

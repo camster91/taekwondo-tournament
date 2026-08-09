@@ -96,6 +96,54 @@ interface PreviewResult {
   warnings: string[];
 }
 
+interface DivisionRecommendationRecord {
+  id: string;
+  recommendationType: string;
+  explanation: string;
+  constraintsConsidered: string[];
+  confidence: number;
+  warnings: string[];
+  status: 'proposed' | 'approved' | 'rejected' | 'applied';
+  proposedDiff: {
+    divisions: Array<{
+      name: string;
+      competitorCount: number;
+      eventType: string;
+      ageMin: number;
+      ageMax: number;
+      weightClass: string | null;
+      registrations: Array<{ registrationId: string; competitorName: string; school: string }>;
+    }>;
+    preservedPinned: Array<{ registrationId: string; competitorName: string; divisionId: string }>;
+    excluded: Array<{ registrationId: string; competitorName: string; reasons: string[] }>;
+  };
+  inputSnapshot: {
+    registrations: Array<{
+      id: string;
+      competitor: { firstName: string; lastName: string; schoolDojang?: string | null };
+    }>;
+    existingDivisions: Array<{
+      id: string;
+      name: string;
+      eventType: string;
+      ageMin: number;
+      ageMax: number;
+      weightClass: string | null;
+      assignments: Array<{ registrationId: string; manualOverride: boolean }>;
+    }>;
+    config: {
+      divisionThreshold: number;
+      enableSmartSplitting?: boolean;
+      enableSmartMerging?: boolean;
+      ageBoundaryTolerance?: number;
+      useBlackBeltAgeGroups?: boolean;
+      customWeightClasses?: Array<{ name: string }>;
+    };
+  };
+  approvedBy?: string | null;
+  appliedBy?: string | null;
+}
+
 /**
  * Shapes used only inside the assignment modal. Minimal — the modal
  * doesn't need every field on these entities, just the ones the UI
@@ -164,6 +212,8 @@ export default function Divisions() {
   const [clearConfirm, setClearConfirm] = useState(false);
   const [regenerateConfirm, setRegenerateConfirm] = useState(false);
   const [resultMessage, setResultMessage] = useState<{ title: string; message: string } | null>(null);
+  const [recommendationStatus, setRecommendationStatus] = useState<{ state: OperationState; message: string } | null>(null);
+  const [applyRecommendationConfirm, setApplyRecommendationConfirm] = useState(false);
   const { addToast } = useToast();
 
   const { data: tournament } = useQuery<Tournament>({
@@ -191,6 +241,84 @@ export default function Divisions() {
       const res = await fetch(`/api/divisions/tournament/${id}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to fetch divisions');
       return res.json();
+    },
+  });
+
+  const {
+    data: recommendations,
+    isLoading: recommendationsLoading,
+    isError: recommendationsError,
+    isFetching: recommendationsFetching,
+    refetch: refetchRecommendations,
+  } = useQuery<DivisionRecommendationRecord[]>({
+    queryKey: ['division-recommendations', id],
+    enabled: Boolean(id),
+    queryFn: async () => {
+      const res = await fetch(`/api/recommendations/tournament/${id}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to load division recommendations');
+      return (await res.json() as DivisionRecommendationRecord[])
+        .filter((recommendation) => recommendation.recommendationType === 'division_categorization_v1');
+    },
+  });
+  const latestRecommendation = recommendations?.[0];
+  const recommendationImpact = useMemo(() => {
+    if (!latestRecommendation) return null;
+    const retainedIds = new Set(latestRecommendation.proposedDiff.preservedPinned.map((entry) => entry.divisionId));
+    const existingDivisions = latestRecommendation.inputSnapshot.existingDivisions ?? [];
+    const retainedDivisions = existingDivisions.filter((division) => retainedIds.has(division.id));
+    const replacedDivisions = existingDivisions.filter((division) => !retainedIds.has(division.id));
+    const proposedAssignments = latestRecommendation.proposedDiff.divisions.reduce((sum, division) => sum + division.registrations.length, 0);
+    const retainedAssignments = retainedDivisions.reduce((sum, division) => sum + division.assignments.length, 0);
+    const replacedAssignments = replacedDivisions.reduce((sum, division) => sum + division.assignments.length, 0);
+    const names = new Map(latestRecommendation.inputSnapshot.registrations.map((registration) => [
+      registration.id,
+      `${registration.competitor.firstName} ${registration.competitor.lastName}`.trim(),
+    ]));
+    return {
+      retainedDivisions, replacedDivisions, retainedAssignments, replacedAssignments, proposedAssignments, names,
+      finalDivisionCount: retainedDivisions.length + latestRecommendation.proposedDiff.divisions.length,
+      finalAssignmentCount: retainedAssignments + proposedAssignments,
+    };
+  }, [latestRecommendation]);
+
+  const recommendationMutation = useMutation({
+    mutationFn: async ({ action, recommendationId }: { action: 'propose' | 'approve' | 'apply' | 'reject'; recommendationId?: string }) => {
+      const path = action === 'propose'
+        ? `/api/recommendations/tournament/${id}/divisions/propose`
+        : `/api/recommendations/tournament/${id}/${recommendationId}/${action}`;
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: action === 'reject' ? JSON.stringify({ reason: 'Rejected during director division review' }) : undefined,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : `Could not ${action} recommendation`);
+      return { action, body };
+    },
+    onMutate: ({ action }) => {
+      const label = action === 'propose' ? 'Generating deterministic recommendation' : `${action[0].toUpperCase()}${action.slice(1)}ing recommendation`;
+      setRecommendationStatus({ state: 'pending', message: `${label}…` });
+    },
+    onError: (error) => setRecommendationStatus({ state: 'rejected', message: error instanceof Error ? error.message : 'Recommendation operation failed' }),
+    onSuccess: async ({ action }) => {
+      await queryClient.invalidateQueries({ queryKey: ['division-recommendations', id] });
+      if (action === 'apply') {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['divisions', id] }),
+          queryClient.invalidateQueries({ queryKey: ['tournament-backup', id] }),
+        ]);
+        setApplyRecommendationConfirm(false);
+      }
+      setRecommendationStatus({
+        state: 'resolved',
+        message: action === 'propose'
+          ? 'Recommendation ready for director review. No divisions changed.'
+          : action === 'approve'
+            ? 'Recommendation approved. Divisions have not changed; Apply is still required.'
+            : action === 'apply'
+              ? 'Approved recommendation applied. The latest recovery backup was replaced with the pre-change divisions.'
+              : 'Recommendation rejected without changing divisions.',
+      });
     },
   });
 
@@ -612,6 +740,190 @@ export default function Divisions() {
           onAction={exportStatus.state === 'rejected' ? () => setExportStatus(null) : undefined}
         />
       )}
+
+      <Card className="mb-6">
+        <CardHeader
+          title="Division recommendation assistant"
+          description="Deterministic suggestions only. A director must approve and then apply; nothing changes automatically."
+        />
+        <CardBody className="space-y-4">
+          {recommendationStatus && (
+            <OperationStatus
+              state={recommendationStatus.state}
+              message={recommendationStatus.message}
+              actionLabel={recommendationStatus.state === 'rejected' ? 'Dismiss' : undefined}
+              onAction={recommendationStatus.state === 'rejected' ? () => setRecommendationStatus(null) : undefined}
+            />
+          )}
+          {recommendationsLoading || recommendationsFetching && !recommendations ? (
+            <div role="status" className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+              <Spinner size="sm" /> Loading current recommendation state…
+            </div>
+          ) : recommendationsError ? (
+            <OperationStatus
+              state="rejected"
+              message="Current recommendations could not be loaded. No proposal or approval action is available until the server state is known."
+              actionLabel="Try again"
+              onAction={() => void refetchRecommendations()}
+            />
+          ) : !latestRecommendation ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Review sparse categories, incomplete registrations, and manual placements before changing divisions.
+              </p>
+              <Button
+                variant="secondary"
+                loading={recommendationMutation.isPending}
+                onClick={() => recommendationMutation.mutate({ action: 'propose' })}
+              >
+                <Wand2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                Generate recommendation
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">{latestRecommendation.explanation}</p>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  {latestRecommendation.proposedDiff.divisions.length} proposed divisions · {recommendationImpact?.retainedDivisions.length ?? 0} pinned divisions retained · {recommendationImpact?.retainedAssignments ?? 0} placements retained · {latestRecommendation.proposedDiff.excluded.length} registrations require review
+                </p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Input completeness: {Math.round(latestRecommendation.confidence * 100)}% · Status: {latestRecommendation.status}
+                </p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Deterministic means reproducible, not automatically correct. Review every proposed placement before approval.
+                </p>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Proposed divisions and placements</h3>
+                <div className="mt-2 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                  {latestRecommendation.proposedDiff.divisions.map((division) => (
+                    <div key={`${division.name}-${division.eventType}`} className="border-b border-gray-100 pb-2 last:border-0 dark:border-gray-800">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {division.name} — {division.competitorCount} competitor{division.competitorCount === 1 ? '' : 's'}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {division.eventType}; ages {division.ageMin}–{division.ageMax}{division.weightClass ? `; ${division.weightClass}` : ''}
+                      </p>
+                      <ul className="mt-1 list-disc pl-5 text-xs text-gray-600 dark:text-gray-300">
+                        {division.registrations.map((entry) => (
+                          <li key={entry.registrationId}>{entry.competitorName}{entry.school ? ` — ${entry.school}` : ''}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pinned divisions retained in the final state</h3>
+                  {recommendationImpact?.retainedDivisions.length ? (
+                    <div className="mt-1 space-y-2 text-sm text-gray-600 dark:text-gray-300">
+                      {recommendationImpact.retainedDivisions.map((division) => (
+                        <div key={division.id}>
+                          <p className="font-medium text-gray-800 dark:text-gray-100">{division.name}</p>
+                          <p className="text-xs">{division.eventType}; ages {division.ageMin}–{division.ageMax}{division.weightClass ? `; ${division.weightClass}` : ''}</p>
+                          <ul className="list-disc pl-5 text-xs">
+                            {division.assignments.map((assignment) => (
+                              <li key={assignment.registrationId}>
+                                {recommendationImpact.names.get(assignment.registrationId) ?? `Registration ${assignment.registrationId.slice(0, 8)}`}
+                                {assignment.manualOverride ? ' — manually pinned' : ' — retained with pinned division'}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">No manual placements are present.</p>}
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Requires manual review</h3>
+                  {latestRecommendation.proposedDiff.excluded.length ? (
+                    <ul className="mt-1 list-disc pl-5 text-sm text-amber-700 dark:text-amber-300">
+                      {latestRecommendation.proposedDiff.excluded.map((entry) => (
+                        <li key={entry.registrationId}>{entry.competitorName}: {entry.reasons.join(', ')}</li>
+                      ))}
+                    </ul>
+                  ) : <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Every unpinned registration has the required facts.</p>}
+                </div>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                <p className="font-medium">Concrete configuration</p>
+                <p>
+                  Maximum size {latestRecommendation.inputSnapshot.config.divisionThreshold}; smart split {latestRecommendation.inputSnapshot.config.enableSmartSplitting ? 'on' : 'off'}; smart merge {latestRecommendation.inputSnapshot.config.enableSmartMerging ? 'on' : 'off'}; age flexibility {latestRecommendation.inputSnapshot.config.ageBoundaryTolerance ?? 0} months; age bands {latestRecommendation.inputSnapshot.config.useBlackBeltAgeGroups ? 'black-belt preset' : 'standard/custom rules'}; custom weight classes {latestRecommendation.inputSnapshot.config.customWeightClasses?.map((weightClass) => weightClass.name).join(', ') || 'none'}.
+                </p>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Constraints honored</h3>
+                  <ul className="mt-1 list-disc pl-5 text-sm text-gray-600 dark:text-gray-300">
+                    {latestRecommendation.constraintsConsidered.map((constraint) => <li key={constraint}>{constraint}</li>)}
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Warnings and exceptions</h3>
+                  {latestRecommendation.warnings.length ? (
+                    <ul className="mt-1 list-disc pl-5 text-sm text-amber-700 dark:text-amber-300">
+                      {latestRecommendation.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}
+                    </ul>
+                  ) : <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">No incomplete registration warnings.</p>}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {latestRecommendation.status === 'proposed' && (
+                  <>
+                    <Button
+                      variant="primary"
+                      loading={recommendationMutation.isPending}
+                      onClick={() => recommendationMutation.mutate({ action: 'approve', recommendationId: latestRecommendation.id })}
+                    >Approve recommendation</Button>
+                    <Button
+                      variant="secondary"
+                      disabled={recommendationMutation.isPending}
+                      onClick={() => recommendationMutation.mutate({ action: 'reject', recommendationId: latestRecommendation.id })}
+                    >Reject</Button>
+                  </>
+                )}
+                {latestRecommendation.status === 'approved' && (
+                  <Button
+                    variant="primary"
+                    disabled={recommendationMutation.isPending}
+                    onClick={() => setApplyRecommendationConfirm(true)}
+                  >Apply approved recommendation</Button>
+                )}
+                {(latestRecommendation.status === 'rejected' || latestRecommendation.status === 'applied') && (
+                  <Button
+                    variant="secondary"
+                    loading={recommendationMutation.isPending}
+                    onClick={() => recommendationMutation.mutate({ action: 'propose' })}
+                  >Generate a new recommendation</Button>
+                )}
+              </div>
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      <ConfirmDialog
+        isOpen={applyRecommendationConfirm}
+        onClose={() => { if (!recommendationMutation.isPending) setApplyRecommendationConfirm(false); }}
+        title="Apply approved division recommendation?"
+        confirmText="Apply recommendation"
+        isLoading={recommendationMutation.isPending}
+        closeDisabled={recommendationMutation.isPending}
+        variant="danger"
+        message={latestRecommendation ? (
+          <span className="space-y-2 text-left">
+            <span className="block">
+              This replaces {recommendationImpact?.replacedDivisions.length ?? 0} non-pinned division{recommendationImpact?.replacedDivisions.length === 1 ? '' : 's'} and {recommendationImpact?.replacedAssignments ?? 0} assignments. It retains {recommendationImpact?.retainedDivisions.length ?? 0} pinned division{recommendationImpact?.retainedDivisions.length === 1 ? '' : 's'} with {recommendationImpact?.retainedAssignments ?? 0} existing placements, then adds {latestRecommendation.proposedDiff.divisions.length} proposed divisions with {recommendationImpact?.proposedAssignments ?? 0} assignments.
+            </span>
+            <span className="block">
+              Expected final state: {recommendationImpact?.finalDivisionCount ?? 0} divisions and {recommendationImpact?.finalAssignmentCount ?? 0} assignments. {latestRecommendation.proposedDiff.excluded.length} incomplete registrations remain unassigned. Existing brackets block application. The latest recovery backup will be replaced with the pre-change divisions; this audit does not promise a permanent undo.
+            </span>
+          </span>
+        ) : ''}
+        onConfirm={() => latestRecommendation && recommendationMutation.mutate({ action: 'apply', recommendationId: latestRecommendation.id })}
+      />
 
       {/* Filters */}
       <Card className="mb-6">

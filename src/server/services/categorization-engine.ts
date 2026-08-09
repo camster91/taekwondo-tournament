@@ -1,4 +1,4 @@
-import { PrismaClient, Registration, Competitor } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { getBeltLevel, getSimpleBeltCategory, isBlackBelt } from '../../shared/constants/belts.js';
 import { getAgeGroup, DEFAULT_AGE_GROUPS, BB_AGE_GROUPS, type AgeGroup } from '../../shared/constants/age-groups.js';
 import { getWeightClass, DEFAULT_WEIGHT_CLASSES } from '../../shared/constants/weight-classes.js';
@@ -238,7 +238,7 @@ export function previewCategorization(
 }
 
 export async function autoCategorize(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   tournamentId: string,
   registrations: RegistrationWithCompetitor[],
   config: CategorizationConfig
@@ -293,7 +293,7 @@ export async function autoCategorize(
   let divisionCount = 0;
   let assignmentCount = 0;
 
-  await prisma.$transaction(async (tx) => {
+  const applyChanges = async (tx: Prisma.TransactionClient) => {
     // Clear existing divisions and assignments
     await tx.division.deleteMany({
       where: {
@@ -347,7 +347,13 @@ export async function autoCategorize(
 
       divisionCount++;
     }
-  });
+  };
+
+  if ('$transaction' in prisma) {
+    await prisma.$transaction(applyChanges);
+  } else {
+    await applyChanges(prisma);
+  }
 
   return {
     divisions: divisionCount,

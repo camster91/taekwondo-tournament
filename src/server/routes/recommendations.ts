@@ -4,7 +4,11 @@ import type { PrismaClient } from '@prisma/client';
 import { authenticate, checkTournamentAccess, type AuthenticatedRequest } from '../middleware/auth.js';
 import { approveRecommendation, rejectRecommendation } from '../services/recommendation-contract.js';
 import { getRecommendationValidator } from '../services/recommendation-validators.js';
-import { createDivisionRecommendation } from '../services/division-recommendations.js';
+import {
+  applyDivisionRecommendation,
+  createDivisionRecommendation,
+  DIVISION_RECOMMENDATION_TYPE,
+} from '../services/division-recommendations.js';
 
 const router = Router();
 const param = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value || '';
@@ -74,6 +78,23 @@ router.post('/tournament/:tournamentId/:recommendationId/reject', authenticate, 
     res.json(await rejectRecommendation(prisma, recommendationId, req.user!.id, reason));
   } catch (error) {
     res.status(409).json({ error: error instanceof Error ? error.message : 'Recommendation cannot be rejected' });
+  }
+});
+
+router.post('/tournament/:tournamentId/:recommendationId/apply', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = param(req.params.tournamentId);
+  const recommendationId = param(req.params.recommendationId);
+  if (!await authorize(req, res, prisma, tournamentId)) return;
+  const recommendation = await findScoped(prisma, tournamentId, recommendationId);
+  if (!recommendation) return res.status(404).json({ error: 'Recommendation not found' });
+  if (recommendation.recommendationType !== DIVISION_RECOMMENDATION_TYPE) {
+    return res.status(409).json({ error: 'Recommendation cannot be applied by the division workflow' });
+  }
+  try {
+    res.json(await applyDivisionRecommendation(prisma, recommendationId, req.user!.id));
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : 'Division recommendation could not be applied' });
   }
 });
 

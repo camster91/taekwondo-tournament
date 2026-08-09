@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  autoCategorize,
   previewCategorization,
   type CategorizationConfig,
   type RegistrationWithCompetitor,
@@ -7,7 +8,11 @@ import {
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { getSportProfile } from '../../shared/constants/sport-profiles.js';
 import { parseTournamentRules } from '../../shared/constants/tournament-rules.js';
-import { createRecommendation, type RecommendationValidationInput } from './recommendation-contract.js';
+import {
+  applyApprovedRecommendation,
+  createRecommendation,
+  type RecommendationValidationInput,
+} from './recommendation-contract.js';
 
 export const DIVISION_RECOMMENDATION_TYPE = 'division_categorization_v1';
 
@@ -15,6 +20,13 @@ export interface DivisionRecommendationInput {
   tournamentId: string;
   registrations: RegistrationWithCompetitor[];
   config: CategorizationConfig;
+  existingDivisions?: Array<{
+    id: string;
+    name: string;
+    assignments: Array<{ id?: string; registrationId: string; seedPosition?: number | null; manualOverride?: boolean }>;
+    bracketId: string | null;
+    [key: string]: unknown;
+  }>;
 }
 
 export type DivisionRecommendation = ReturnType<typeof buildDivisionRecommendation>;
@@ -89,6 +101,7 @@ export function buildDivisionRecommendation(input: DivisionRecommendationInput) 
     tournamentId: input.tournamentId,
     config: input.config,
     registrations,
+    existingDivisions: [...(input.existingDivisions ?? [])].sort((left, right) => left.id.localeCompare(right.id)),
   };
   const proposedDiff = { divisions, preservedPinned, excluded };
   const warnings = [
@@ -138,7 +151,19 @@ export function validateDivisionRecommendationSnapshot(
   };
 }
 
-type RecommendationDatabase = Pick<PrismaClient, 'tournament' | 'registration' | 'weightClass'>;
+type RecommendationDatabase = Pick<PrismaClient, 'tournament' | 'registration' | 'weightClass' | 'division' | '$queryRawUnsafe'>;
+
+async function lockDivisionRecommendationInputs(db: RecommendationDatabase, tournamentId: string): Promise<void> {
+  // These row locks live for the surrounding transaction. They coordinate
+  // with FK key-share locks and ordinary row updates from bracket, pin,
+  // registration, and tournament-settings writers.
+  await db.$queryRawUnsafe('SELECT id FROM "Tournament" WHERE id = $1 FOR UPDATE', tournamentId);
+  await db.$queryRawUnsafe('SELECT id FROM "Registration" WHERE "tournamentId" = $1 ORDER BY id FOR UPDATE', tournamentId);
+  await db.$queryRawUnsafe('SELECT c.id FROM "Competitor" c JOIN "Registration" r ON r."competitorId" = c.id WHERE r."tournamentId" = $1 ORDER BY c.id FOR UPDATE OF c', tournamentId);
+  await db.$queryRawUnsafe('SELECT id FROM "WeightClass" WHERE "tournamentId" = $1 ORDER BY id FOR UPDATE', tournamentId);
+  await db.$queryRawUnsafe('SELECT id FROM "Division" WHERE "tournamentId" = $1 ORDER BY id FOR UPDATE', tournamentId);
+  await db.$queryRawUnsafe('SELECT a.id FROM "DivisionAssignment" a JOIN "Division" d ON d.id = a."divisionId" WHERE d."tournamentId" = $1 ORDER BY a.id FOR UPDATE OF a', tournamentId);
+}
 
 export async function loadDivisionRecommendationInput(
   db: RecommendationDatabase,
@@ -155,6 +180,11 @@ export async function loadDivisionRecommendationInput(
       id: true, competitorId: true, patterns: true, sparring: true,
       ageAtTournament: true, weightAtRegistration: true, manualDivisionId: true,
       competeWithOlder: true,
+      assignments: {
+        where: { manualOverride: true },
+        select: { divisionId: true, manualOverride: true },
+        orderBy: { divisionId: 'asc' },
+      },
       competitor: { select: {
         firstName: true, lastName: true, belt: true, gender: true,
         schoolDojang: true, weightLbs: true, danRank: true,
@@ -168,11 +198,71 @@ export async function loadDivisionRecommendationInput(
     where: { tournamentId },
     orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
   });
+  const existingDivisions = await db.division.findMany({
+    where: { tournamentId },
+    select: {
+      id: true, name: true, beltLevel: true, gender: true, eventType: true,
+      ageMin: true, ageMax: true, beltColors: true, danMin: true, danMax: true,
+      weightClass: true, divisionNumber: true, isSpecialNeeds: true,
+      displayOrder: true, deletedAt: true,
+      assignments: {
+        select: { id: true, registrationId: true, seedPosition: true, manualOverride: true },
+        orderBy: { id: 'asc' },
+      },
+      bracket: { select: { id: true } },
+    },
+    orderBy: { id: 'asc' },
+  });
+  const existingDivisionById = new Map(existingDivisions.map((division) => [division.id, division]));
+  const preservedDivisionIds = new Set<string>();
+  for (const registration of registrations) {
+    if (!registration.manualDivisionId) continue;
+    const division = existingDivisionById.get(registration.manualDivisionId);
+    if (!division) {
+      throw new Error(`Registration ${registration.id} references a manual division outside this tournament`);
+    }
+    if (!division.assignments.some((assignment) => assignment.registrationId === registration.id)) {
+      throw new Error(`Registration ${registration.id} has no assignment in its manual division`);
+    }
+    preservedDivisionIds.add(division.id);
+  }
+  for (const division of existingDivisions) {
+    if (division.assignments.some((assignment) => assignment.manualOverride)) preservedDivisionIds.add(division.id);
+  }
+  const preservedDivisionByRegistration = new Map<string, string>();
+  for (const division of existingDivisions) {
+    if (!preservedDivisionIds.has(division.id)) continue;
+    for (const assignment of division.assignments) {
+      const prior = preservedDivisionByRegistration.get(assignment.registrationId);
+      if (prior && prior !== division.id) {
+        throw new Error(`Registration ${assignment.registrationId} belongs to conflicting preserved divisions`);
+      }
+      preservedDivisionByRegistration.set(assignment.registrationId, division.id);
+    }
+  }
   const rules = parseTournamentRules(tournament.settings);
   const sportProfile = getSportProfile(tournament.sportProfileSlug || 'taekwondo');
   return {
     tournamentId,
-    registrations,
+    registrations: registrations.map(({ assignments, ...registration }) => {
+      const pinCandidates = new Set([
+        registration.manualDivisionId,
+        ...assignments.map((assignment) => assignment.divisionId),
+        preservedDivisionByRegistration.get(registration.id),
+      ].filter((divisionId): divisionId is string => Boolean(divisionId)));
+      if (pinCandidates.size > 1) {
+        throw new Error(`Registration ${registration.id} has conflicting manual division assignments`);
+      }
+      return {
+        ...registration,
+        manualDivisionId: [...pinCandidates][0] ?? null,
+      };
+    }),
+    existingDivisions: existingDivisions.map(({ bracket, ...division }) => ({
+      ...division,
+      deletedAt: division.deletedAt?.toISOString() ?? null,
+      bracketId: bracket?.id ?? null,
+    })),
     config: {
       divisionThreshold: rules.divisions.maxDivisionSize,
       enableSmartSplitting: rules.divisions.splitBy !== 'age',
@@ -198,6 +288,7 @@ export async function validateDivisionRecommendation(
   if (recommendation.recommendationType !== DIVISION_RECOMMENDATION_TYPE) {
     return { valid: false, validator: 'division-categorization-v1', inputVersion: 'invalid-type', errors: ['Unsupported recommendation type'] };
   }
+  await lockDivisionRecommendationInputs(db, recommendation.tournamentId);
   const storedInput = recommendation.inputSnapshot as DivisionRecommendationInput;
   const original = buildDivisionRecommendation(storedInput);
   const currentInput = await loadDivisionRecommendationInput(db, recommendation.tournamentId);
@@ -223,5 +314,80 @@ export async function createDivisionRecommendation(
     warnings: recommendation.warnings,
     proposedDiff: recommendation.proposedDiff,
     createdBy,
+  }, validateDivisionRecommendation);
+}
+
+const divisionAuditSnapshot = (tx: Prisma.TransactionClient, tournamentId: string) =>
+  tx.division.findMany({
+    where: { tournamentId },
+    include: {
+      assignments: { orderBy: { registrationId: 'asc' } },
+      bracket: { include: { matches: { orderBy: { matchNumber: 'asc' } } } },
+    },
+    orderBy: { id: 'asc' },
+  });
+
+export function assertDivisionRecommendationCanApply(
+  divisions: Array<{ name: string; bracket: { id: string } | null }>,
+): void {
+  if (divisions.some((division) => division.bracket)) {
+    throw new Error('Remove or correct existing brackets before applying a division recommendation');
+  }
+}
+
+export async function applyDivisionRecommendation(
+  prisma: PrismaClient,
+  recommendationId: string,
+  appliedBy: string,
+) {
+  return applyApprovedRecommendation(prisma, recommendationId, appliedBy, async (tx, recommendation) => {
+    const input = recommendation.inputSnapshot
+      ? JSON.parse(recommendation.inputSnapshot) as DivisionRecommendationInput
+      : null;
+    if (!input || recommendation.recommendationType !== DIVISION_RECOMMENDATION_TYPE) {
+      throw new Error('Recommendation is not a division categorization proposal');
+    }
+    const beforeState = await divisionAuditSnapshot(tx, recommendation.tournamentId);
+    assertDivisionRecommendationCanApply(beforeState);
+    const backup = {
+      tournamentId: recommendation.tournamentId,
+      timestamp: new Date(),
+      divisions: beforeState.map((division) => ({
+        id: division.id,
+        name: division.name,
+        beltLevel: division.beltLevel,
+        gender: division.gender,
+        eventType: division.eventType,
+        ageMin: division.ageMin,
+        ageMax: division.ageMax,
+        beltColors: division.beltColors,
+        danMin: division.danMin,
+        danMax: division.danMax,
+        weightClass: division.weightClass,
+        divisionNumber: division.divisionNumber,
+        isSpecialNeeds: division.isSpecialNeeds,
+        displayOrder: division.displayOrder,
+        assignments: division.assignments.map((assignment) => ({
+          registrationId: assignment.registrationId,
+          seedPosition: assignment.seedPosition,
+          manualOverride: assignment.manualOverride,
+        })),
+      })),
+    };
+    await tx.backupState.upsert({
+      where: { tournamentId: recommendation.tournamentId },
+      create: { tournamentId: recommendation.tournamentId, payload: JSON.stringify(backup) },
+      update: { payload: JSON.stringify(backup), updatedAt: new Date() },
+    });
+    const appliedResult = await autoCategorize(tx, recommendation.tournamentId, input.registrations, input.config);
+    const afterState = await divisionAuditSnapshot(tx, recommendation.tournamentId);
+    return {
+      appliedResult,
+      beforeState,
+      afterState,
+      // BackupState is a single mutable latest-recovery artifact, not an
+      // immutable audit-linked undo. Do not claim this audit is reversible.
+      undoReference: null,
+    };
   }, validateDivisionRecommendation);
 }
