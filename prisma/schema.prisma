@@ -85,6 +85,7 @@ model Tournament {
   matchupHistories    MatchupHistory[]
   publicDisplayHeartbeat PublicDisplayHeartbeat?
   operationAudits       TournamentOperationAudit[]
+  recommendations       Recommendation[]
   organization        Organization?          @relation(fields: [organizationId], references: [id])
   sportProfile        SportProfile?          @relation(fields: [sportProfileId], references: [id])
 
@@ -318,9 +319,43 @@ model TournamentOperationAudit {
   undoneBy      String?
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  recommendation Recommendation?
 
   @@index([tournamentId, createdAt])
   @@index([operationType])
+}
+
+model Recommendation {
+  id                    String   @id @default(uuid())
+  tournamentId          String
+  recommendationType    String
+  inputSnapshot         String
+  explanation           String
+  constraintsConsidered String
+  confidence            Float
+  warnings              String
+  proposedDiff          String
+  validationResult      String
+  status                String   @default("proposed")
+  createdBy             String?
+  createdAt             DateTime @default(now())
+  approvedBy            String?
+  approvedAt            DateTime?
+  rejectedBy            String?
+  rejectedAt            DateTime?
+  rejectionReason       String?
+  appliedBy             String?
+  appliedAt             DateTime?
+  appliedResult         String?
+  undoReference         String?
+  operationAuditId      String?  @unique
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  operationAudit TournamentOperationAudit? @relation(fields: [operationAuditId], references: [id], onDelete: SetNull)
+
+  @@index([tournamentId, createdAt])
+  @@index([tournamentId, status])
+  @@index([recommendationType])
 }
 
 // Magic link / code authentication
