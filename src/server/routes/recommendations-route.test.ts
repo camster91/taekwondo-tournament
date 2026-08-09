@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   applyScheduleOptimizationRecommendation: vi.fn(),
   undoScheduleOptimizationRecommendation: vi.fn(),
   saveScheduleOperationalConditions: vi.fn(),
+  saveScheduleDivisionLock: vi.fn(),
+  getScheduleOperationalConditions: vi.fn(),
 }));
 const routeState = vi.hoisted(() => ({ captured: [] as Array<{ method: string; path: string; handler: any }> }));
 vi.mock('../middleware/auth.js', () => ({
@@ -30,6 +32,8 @@ vi.mock('../services/schedule-optimization-recommendations.js', () => ({
   applyScheduleOptimizationRecommendation: (...args: any[]) => mocks.applyScheduleOptimizationRecommendation(...args),
   undoScheduleOptimizationRecommendation: (...args: any[]) => mocks.undoScheduleOptimizationRecommendation(...args),
   saveScheduleOperationalConditions: (...args: any[]) => mocks.saveScheduleOperationalConditions(...args),
+  saveScheduleDivisionLock: (...args: any[]) => mocks.saveScheduleDivisionLock(...args),
+  getScheduleOperationalConditions: (...args: any[]) => mocks.getScheduleOperationalConditions(...args),
 }));
 vi.mock('express', () => {
   const router: any = {};
@@ -59,6 +63,18 @@ describe('recommendation review routes', () => {
     await handler('get', '/tournament/:tournamentId')({ params: { tournamentId: 'foreign' }, app: { locals: { prisma } } }, res);
     expect(res.statusCode).toBe(403);
     expect(prisma.recommendation.findMany).not.toHaveBeenCalled();
+  });
+
+  it('returns persisted undo state so applied schedule recommendations are truthful after reload', async () => {
+    const prisma = { tournament: { findUnique: vi.fn().mockResolvedValue({ settings: '{"canonical":"after"}' }) }, recommendation: { findMany: vi.fn().mockResolvedValue([{
+      id: 'schedule-rec', recommendationType: 'schedule_optimization_v1', inputSnapshot: '{}', constraintsConsidered: '[]',
+      warnings: '[]', proposedDiff: '{}', validationResult: '{}', appliedResult: '{}', operationAudit: { id: 'audit-1', undoneAt: null, afterState: JSON.stringify('{"canonical":"after"}') },
+    }]) } };
+    mocks.checkTournamentAccess.mockResolvedValue({ ok: true });
+    const res = response();
+    await handler('get', '/tournament/:tournamentId')({ params: { tournamentId: 'own' }, app: { locals: { prisma } } }, res);
+    expect(prisma.recommendation.findMany).toHaveBeenCalledWith(expect.objectContaining({ include: { operationAudit: { select: { id: true, undoneAt: true, afterState: true } } } }));
+    expect(res.body[0].operationAudit).toEqual({ id: 'audit-1', undoneAt: null, canUndo: true });
   });
 
   it('creates a deterministic division proposal only for an authorized director', async () => {
@@ -98,6 +114,28 @@ describe('recommendation review routes', () => {
     }, res);
     expect(mocks.saveScheduleOperationalConditions).toHaveBeenCalledWith(prisma, 'own', body);
     expect(res.body).toEqual({ ok: true });
+  });
+
+  it('loads current server-validated live conditions for the director editor', async () => {
+    const prisma = {};
+    mocks.checkTournamentAccess.mockResolvedValue({ ok: true });
+    mocks.getScheduleOperationalConditions.mockResolvedValue({ restWindowMinutes: 10, liveDelaySources: [], incidentSources: [] });
+    const res = response();
+    await handler('get', '/tournament/:tournamentId/schedule/conditions')({ params: { tournamentId: 'own' }, app: { locals: { prisma } } }, res);
+    expect(mocks.getScheduleOperationalConditions).toHaveBeenCalledWith(prisma, 'own');
+    expect(res.body).toMatchObject({ restWindowMinutes: 10 });
+  });
+
+  it('stores a server-resolved schedule lock through the scoped director route', async () => {
+    const prisma = {};
+    mocks.checkTournamentAccess.mockResolvedValue({ ok: true });
+    mocks.saveScheduleDivisionLock.mockResolvedValue({ divisionId: 'division-1', locked: true });
+    const res = response();
+    await handler('put', '/tournament/:tournamentId/schedule/divisions/:divisionId/lock')({
+      params: { tournamentId: 'own', divisionId: 'division-1' }, user: { id: 'director-1' }, body: { locked: true }, app: { locals: { prisma } },
+    }, res);
+    expect(mocks.saveScheduleDivisionLock).toHaveBeenCalledWith(prisma, 'own', 'division-1', true);
+    expect(res.body).toEqual({ divisionId: 'division-1', locked: true });
   });
 
   it('does not let a director manufacture system telemetry provenance', async () => {

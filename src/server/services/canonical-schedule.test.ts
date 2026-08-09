@@ -51,11 +51,11 @@ describe('canonical schedule persistence', () => {
 
     expect(result[0]).toEqual(expect.objectContaining({
       divisionId: 'division-a', divisionName: 'A', competitorNames: ['Amina'],
-      ring: 1, startTime: '09:00', endTime: '09:30', estimatedDurationMinutes: 30,
+      ring: 1, startTime: '09:00', endTime: '09:30', estimatedDurationMinutes: 30, locked: true,
     }));
     expect(result[1]).toEqual(expect.objectContaining({
       divisionId: 'division-b', divisionName: 'B', competitorNames: ['Minho'],
-      ring: 2, startTime: '10:00', endTime: '10:20', estimatedDurationMinutes: 20,
+      ring: 2, startTime: '10:00', endTime: '10:20', estimatedDurationMinutes: 20, locked: false,
     }));
   });
 

@@ -18,6 +18,7 @@ import {
   createScheduleOptimizationRecommendation,
   SCHEDULE_OPTIMIZATION_TYPE,
   saveScheduleOperationalConditions,
+  saveScheduleDivisionLock,
   undoScheduleOptimizationRecommendation,
 } from './schedule-optimization-recommendations.js';
 
@@ -89,7 +90,7 @@ describe('schedule optimization recommendation lifecycle', () => {
       recommendation: { findFirst: vi.fn().mockResolvedValue({
         id: 'rec-1', tournamentId: 't1', recommendationType: SCHEDULE_OPTIMIZATION_TYPE,
         status: 'applied', operationAuditId: 'audit-1', undoReference: 'schedule-recommendation:rec-1',
-      }) },
+      }), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       tournamentOperationAudit: { findFirst: vi.fn().mockResolvedValue({
         id: 'audit-1', tournamentId: 't1', reversible: true, undoneAt: null,
         beforeState: JSON.stringify('{"theme":"dark"}'),
@@ -119,6 +120,7 @@ describe('schedule optimization recommendation lifecycle', () => {
     const tx = {
       tournament: { findUniqueOrThrow: vi.fn().mockResolvedValue({ settings: '{"theme":"dark"}' }), update },
       incident: { findMany: vi.fn().mockResolvedValue([{ id: 'incident-1', type: 'medical', severity: 'serious' }]) },
+      recommendation: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     };
     const database = { $transaction: (work: (client: typeof tx) => unknown) => work(tx) };
 
@@ -135,5 +137,28 @@ describe('schedule optimization recommendation lifecycle', () => {
       liveDelaySources: [{ ring: 1, delayMinutes: 12, observedAt: '2026-08-09T14:00:00.000Z', source: 'director-confirmed' }],
       incidentSources: [{ incidentId: 'incident-1', ring: 2, observedAt: '2026-08-09T14:00:00.000Z', label: 'medical (serious)' }],
     });
+  });
+
+  it('persists a server-resolved lock without accepting client timing rows', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const tx = {
+      tournament: { findUnique: vi.fn().mockResolvedValue({ settings: '{"theme":"dark","scheduleOperations":{"restWindowMinutes":10,"liveDelaySources":[{"ring":1,"delayMinutes":12,"source":"director-confirmed","observedAt":"2020-01-01T00:00:00.000Z"}],"incidentSources":[]}}' }), updateMany },
+      division: { findMany: vi.fn().mockResolvedValue([{ id: 'a', assignments: [] }]) },
+      recommendation: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    };
+    const database = { $transaction: (work: (client: typeof tx) => unknown) => work(tx) };
+    const generate = vi.fn().mockResolvedValue({
+      tournamentId: 't1', tournamentName: 'Open', date: '2027-01-01T00:00:00.000Z',
+      config: { startTime: '09:00', endTime: '17:00', ringCount: 2, matchDurationMinutes: { patterns: 3, sparring: 5 }, breakBetweenDivisions: 5 },
+      schedule: [{ divisionId: 'a', divisionName: 'A', ring: 2, startTime: '09:15', endTime: '09:35', estimatedDurationMinutes: 20 }], warnings: [],
+    });
+
+    await saveScheduleDivisionLock(database as never, 't1', 'a', true, generate as never);
+
+    const saved = JSON.parse(updateMany.mock.calls[0][0].data.settings);
+    expect(saved.theme).toBe('dark');
+    expect(saved.scheduleOperations.liveDelaySources[0].observedAt).toBe('2020-01-01T00:00:00.000Z');
+    expect(saved.canonicalSchedule.rows).toEqual([{ divisionId: 'a', ring: 2, startMinutes: 555, durationMinutes: 20, locked: true }]);
+    expect(updateMany.mock.calls[0][0].where.settings).toContain('2020-01-01');
   });
 });

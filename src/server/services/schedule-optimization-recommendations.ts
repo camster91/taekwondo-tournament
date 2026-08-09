@@ -16,6 +16,7 @@ import { generateSchedule, type TournamentSchedule } from './schedule-generator.
 import { readStoredScheduleConfig } from './schedule-correction.js';
 import { materializeCanonicalTournamentSchedule, readCanonicalSchedule } from './canonical-schedule.js';
 import { mergeCanonicalScheduleSettings } from './canonical-schedule.js';
+import { invalidateScheduleRecommendations } from './schedule-recommendation-invalidation.js';
 
 export const SCHEDULE_OPTIMIZATION_TYPE = 'schedule_optimization_v1';
 
@@ -66,6 +67,7 @@ interface ScheduleMove {
   divisionName: string;
   before: { ring: number; startMinutes: number };
   after: { ring: number; startMinutes: number };
+  reason: string;
 }
 
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
@@ -319,11 +321,18 @@ function buildDiff(input: ScheduleOptimizationRecommendationInput): ScheduleOpti
   const moved = result.after.schedule.flatMap((row) => {
     const before = beforeById.get(row.divisionId)!;
     if (before.ring === row.ring && before.startMinutes === row.startMinutes) return [];
+    const priorDelay = input.optimizerInput.ringDelayMinutes[before.ring];
+    const reason = input.optimizerInput.blockedRings.includes(before.ring)
+      ? `Moves off incident-blocked Ring ${before.ring}.`
+      : priorDelay
+        ? `Responds to Ring ${before.ring}'s confirmed ${priorDelay}-minute delay.`
+        : 'Selected by the deterministic optimizer; review the aggregate safety and timing metric deltas.';
     return [{
       divisionId: row.divisionId,
       divisionName: row.divisionName,
       before: { ring: before.ring, startMinutes: before.startMinutes },
       after: { ring: row.ring, startMinutes: row.startMinutes },
+      reason,
     }];
   });
   const inputVersion = scheduleOptimizationInputVersion(input);
@@ -378,7 +387,8 @@ export function validateScheduleOptimizationSnapshot(
   if (current.inputVersion !== storedDiff.inputVersion) errors.push('Schedule optimization inputs changed');
   if (current.resultVersion !== storedDiff.resultVersion
     || JSON.stringify(current.afterCanonical) !== JSON.stringify(storedDiff.afterCanonical)
-    || JSON.stringify(current.beforeCanonical) !== JSON.stringify(storedDiff.beforeCanonical)) {
+    || JSON.stringify(current.beforeCanonical) !== JSON.stringify(storedDiff.beforeCanonical)
+    || JSON.stringify(current.moved) !== JSON.stringify(storedDiff.moved)) {
     errors.push('Proposed schedule output changed');
   }
   return { valid: errors.length === 0, errors };
@@ -507,6 +517,7 @@ export async function undoScheduleOptimizationRecommendation(
       data: { settings: beforeState },
     });
     if (restored.count !== 1) throw new Error('Schedule changed after this optimization; undo is unsafe');
+    await invalidateScheduleRecommendations(tx, tournamentId, now);
     const marked = await tx.tournamentOperationAudit.updateMany({
       where: { id: audit.id, undoneAt: null },
       data: { undoneAt: now, undoneBy },
@@ -574,6 +585,51 @@ export async function saveScheduleOperationalConditions(
       }),
     };
     const updatedSettings = JSON.stringify({ ...settings, scheduleOperations });
-    return tx.tournament.update({ where: { id: tournamentId }, data: { settings: updatedSettings } });
+    const updated = await tx.tournament.update({ where: { id: tournamentId }, data: { settings: updatedSettings } });
+    await invalidateScheduleRecommendations(tx, tournamentId, now);
+    return updated;
+  }, { isolationLevel: 'Serializable' });
+}
+
+export async function getScheduleOperationalConditions(prisma: PrismaClient, tournamentId: string, now = new Date()) {
+  const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { settings: true } });
+  if (!tournament) throw new Error('Tournament not found');
+  return readScheduleOperationalConditions(tournament.settings, readStoredScheduleConfig(tournament.settings).ringCount, now);
+}
+
+export async function saveScheduleDivisionLock(
+  prisma: PrismaClient,
+  tournamentId: string,
+  divisionId: string,
+  locked: boolean,
+  generate: ScheduleGenerator = generateSchedule,
+) {
+  if (!divisionId.trim() || typeof locked !== 'boolean') throw new Error('Schedule lock request is invalid');
+  return prisma.$transaction(async (tx) => {
+    await lockScheduleOptimizationInputs(tx, tournamentId);
+    const tournament = await tx.tournament.findUnique({ where: { id: tournamentId }, select: { settings: true } });
+    if (!tournament) throw new Error('Tournament not found');
+    const generated = await generate(tx as PrismaClient, tournamentId, readStoredScheduleConfig(tournament.settings));
+    const schedule = materializeCanonicalTournamentSchedule(generated, tournament.settings);
+    const currentCanonical = readCanonicalSchedule(tournament.settings);
+    const currentLocks = new Map(currentCanonical?.rows.map((row) => [row.divisionId, row.locked]) ?? []);
+    if (!schedule.schedule.some((division) => division.divisionId === divisionId)) {
+      throw new Error('Division is not in the current schedule');
+    }
+    const snapshot: CanonicalScheduleSnapshot = {
+      version: 1,
+      rows: schedule.schedule.map((division) => ({
+        divisionId: division.divisionId,
+        ring: division.ring,
+        startMinutes: timeToMinutes(division.startTime),
+        durationMinutes: division.estimatedDurationMinutes,
+        locked: division.divisionId === divisionId ? locked : (currentLocks.get(division.divisionId) ?? false),
+      })),
+    };
+    const settings = mergeCanonicalScheduleSettings(tournament.settings, snapshot);
+    const updated = await tx.tournament.updateMany({ where: { id: tournamentId, settings: tournament.settings }, data: { settings } });
+    if (updated.count !== 1) throw new Error('Schedule changed while saving the lock; reload and try again');
+    await invalidateScheduleRecommendations(tx, tournamentId);
+    return { divisionId, locked, canonicalScheduleVersion: canonicalScheduleVersion(snapshot) };
   }, { isolationLevel: 'Serializable' });
 }

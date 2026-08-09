@@ -72,6 +72,7 @@ describe('schedule correction safety', () => {
       $transaction: (work: (tx: unknown) => unknown) => work({
         tournament: { findUnique: vi.fn().mockResolvedValue(tournament), updateMany },
         tournamentOperationAudit: { findUnique: vi.fn().mockResolvedValue(null), create },
+        recommendation: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       }),
     };
     const result = await applyScheduleCorrection(database as never, {
@@ -131,6 +132,7 @@ describe('schedule correction safety', () => {
       $transaction: (work: (tx: unknown) => unknown) => work({
         tournament: { findUnique: vi.fn().mockResolvedValue({ id: 't1', settings: afterState }), updateMany },
         tournamentOperationAudit: { findUnique: vi.fn().mockResolvedValue(audit), updateMany: auditUpdateMany },
+        recommendation: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       }),
     };
     await undoScheduleCorrection(database as never, 'audit-1', 'u1', new Date('2026-08-09T15:00:00Z'));

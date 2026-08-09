@@ -23,6 +23,7 @@ export interface ScheduledDivision {
   startTime: string;
   endTime: string;
   estimatedDurationMinutes: number;
+  locked?: boolean;
 }
 
 export interface TournamentSchedule {

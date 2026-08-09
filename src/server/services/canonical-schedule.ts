@@ -108,6 +108,7 @@ export function applyCanonicalSchedule(
       ring: row.ring,
       startTime: minutesToTime(row.startMinutes),
       endTime: minutesToTime(row.startMinutes + row.durationMinutes),
+      locked: row.locked,
     };
   }).sort((a, b) => a.startTime.localeCompare(b.startTime) || a.ring - b.ring || a.divisionId.localeCompare(b.divisionId));
 }

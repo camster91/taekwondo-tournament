@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { invalidateScheduleRecommendations } from './schedule-recommendation-invalidation.js';
 import { createHash } from 'node:crypto';
 import { DEFAULT_CONFIG, type ScheduleConfig, type TournamentSchedule } from './schedule-generator.js';
 
@@ -174,6 +175,7 @@ export async function applyScheduleCorrection(prisma: PrismaClient, input: Apply
       data: { settings: afterState },
     });
     if (updated.count !== 1) throw new Error('Schedule preview is stale');
+    await invalidateScheduleRecommendations(tx, input.tournamentId);
     const audit = await tx.tournamentOperationAudit.create({
       data: {
         tournamentId: input.tournamentId,
@@ -211,6 +213,7 @@ export async function undoScheduleCorrection(
         where: { id: audit.tournamentId, settings: audit.afterState }, data: { settings: audit.beforeState },
       });
       if (restored.count !== 1) throw new Error('Schedule changed after this operation; undo is unsafe');
+      await invalidateScheduleRecommendations(tx, audit.tournamentId, now);
       const marked = await tx.tournamentOperationAudit.updateMany({
         where: { id: audit.id, undoneAt: null }, data: { undoneAt: now, undoneBy },
       });

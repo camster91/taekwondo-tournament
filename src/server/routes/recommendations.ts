@@ -15,6 +15,8 @@ import {
   applyScheduleOptimizationRecommendation,
   createScheduleOptimizationRecommendation,
   SCHEDULE_OPTIMIZATION_TYPE,
+  saveScheduleDivisionLock,
+  getScheduleOperationalConditions,
   saveScheduleOperationalConditions,
   undoScheduleOptimizationRecommendation,
 } from '../services/schedule-optimization-recommendations.js';
@@ -31,6 +33,7 @@ export const scheduleConditionsSchema = z.object({
     incidentId: z.string().uuid(), ring: z.number().int().min(1).max(100),
   })).max(100),
 });
+const scheduleLockSchema = z.object({ locked: z.boolean() }).strict();
 
 async function authorize(req: AuthenticatedRequest, res: Response, prisma: PrismaClient, tournamentId: string) {
   const access = await checkTournamentAccess(req, prisma, tournamentId, 'director');
@@ -49,9 +52,21 @@ router.get('/tournament/:tournamentId', authenticate, async (req: AuthenticatedR
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = param(req.params.tournamentId);
   if (!await authorize(req, res, prisma, tournamentId)) return;
-  const recommendations = await prisma.recommendation.findMany({ where: { tournamentId }, orderBy: { createdAt: 'desc' } });
+  const recommendations = await prisma.recommendation.findMany({
+    where: { tournamentId },
+    orderBy: { createdAt: 'desc' },
+    include: { operationAudit: { select: { id: true, undoneAt: true, afterState: true } } },
+  });
+  const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { settings: true } });
   res.json(recommendations.map((item) => ({
     ...item,
+    operationAudit: item.operationAudit ? {
+      id: item.operationAudit.id,
+      undoneAt: item.operationAudit.undoneAt,
+      canUndo: !item.operationAudit.undoneAt && (() => {
+        try { return JSON.parse(item.operationAudit!.afterState) === tournament?.settings; } catch { return false; }
+      })(),
+    } : null,
     inputSnapshot: JSON.parse(item.inputSnapshot), constraintsConsidered: JSON.parse(item.constraintsConsidered),
     warnings: JSON.parse(item.warnings), proposedDiff: JSON.parse(item.proposedDiff),
     validationResult: JSON.parse(item.validationResult), appliedResult: item.appliedResult ? JSON.parse(item.appliedResult) : null,
@@ -78,6 +93,28 @@ router.put('/tournament/:tournamentId/schedule/conditions', authenticate, valida
     res.json({ ok: true });
   } catch (error) {
     res.status(409).json({ error: error instanceof Error ? error.message : 'Schedule live conditions could not be saved' });
+  }
+});
+
+router.get('/tournament/:tournamentId/schedule/conditions', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = param(req.params.tournamentId);
+  if (!await authorize(req, res, prisma, tournamentId)) return;
+  try {
+    res.json(await getScheduleOperationalConditions(prisma, tournamentId));
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : 'Schedule live conditions could not be loaded' });
+  }
+});
+
+router.put('/tournament/:tournamentId/schedule/divisions/:divisionId/lock', authenticate, validateRequest(scheduleLockSchema), async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = param(req.params.tournamentId);
+  if (!await authorize(req, res, prisma, tournamentId)) return;
+  try {
+    res.json(await saveScheduleDivisionLock(prisma, tournamentId, param(req.params.divisionId), req.body.locked));
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : 'Schedule lock could not be saved' });
   }
 });
 

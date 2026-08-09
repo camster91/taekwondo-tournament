@@ -49,7 +49,7 @@ describe('schedule optimization recommendations', () => {
       divisionId: 'patterns', ring: 1, startMinutes: 540, durationMinutes: 20, locked: true,
     });
     expect(proposal.proposedDiff.moved).toEqual([
-      expect.objectContaining({ divisionId: 'sparring', before: { ring: 2, startMinutes: 540 }, after: { ring: 1, startMinutes: 570 } }),
+      expect.objectContaining({ divisionId: 'sparring', before: { ring: 2, startMinutes: 540 }, after: { ring: 1, startMinutes: 570 }, reason: expect.stringContaining('deterministic optimizer') }),
     ]);
     expect(proposal.explanation).toContain('known athlete/rest conflict');
     expect(proposal.warnings).toContain('Coach identity is not available; conflict groups currently use known school data only.');

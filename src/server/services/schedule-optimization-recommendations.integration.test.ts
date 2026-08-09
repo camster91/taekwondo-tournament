@@ -7,6 +7,7 @@ import {
   applyScheduleOptimizationRecommendation,
   createScheduleOptimizationRecommendation,
   saveScheduleOperationalConditions,
+  saveScheduleDivisionLock,
   undoScheduleOptimizationRecommendation,
   validateScheduleOptimizationRecommendation,
 } from './schedule-optimization-recommendations.js';
@@ -92,6 +93,22 @@ integration('schedule optimization recommendations against disposable Postgres',
     await expect(saveScheduleOperationalConditions(prisma, tournamentId, {
       restWindowMinutes: 10, ringDelays: [], incidentBlocks: [{ incidentId: resolvedIncidentId, ring: 1 }],
     })).rejects.toThrow('unresolved');
+  });
+
+  it('atomically supersedes proposed and approved recommendations when schedule inputs change', async () => {
+    const proposed = await createScheduleOptimizationRecommendation(prisma, tournamentId, 'assistant-stale-proposed');
+    await saveScheduleOperationalConditions(prisma, tournamentId, { restWindowMinutes: 12, ringDelays: [], incidentBlocks: [] });
+    await expect(prisma.recommendation.findUniqueOrThrow({ where: { id: proposed.id } })).resolves.toMatchObject({
+      status: 'rejected', rejectedBy: 'system:schedule-input-change', approvedBy: null, approvedAt: null,
+    });
+
+    const approved = await createScheduleOptimizationRecommendation(prisma, tournamentId, 'assistant-stale-approved');
+    await approveRecommendation(prisma, approved.id, 'director-stale-approved', validateScheduleOptimizationRecommendation);
+    const division = await prisma.division.findFirstOrThrow({ where: { tournamentId }, orderBy: { id: 'asc' } });
+    await saveScheduleDivisionLock(prisma, tournamentId, division.id, true);
+    await expect(prisma.recommendation.findUniqueOrThrow({ where: { id: approved.id } })).resolves.toMatchObject({
+      status: 'rejected', rejectedBy: 'system:schedule-input-change', approvedBy: null, approvedAt: null,
+    });
   });
 
   it('locks authoritative incidents and rejects an apply after concurrent resolution', async () => {
