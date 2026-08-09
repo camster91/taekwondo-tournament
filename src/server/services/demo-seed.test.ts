@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { getBracketPlacementsFromLoaded } from './match-advancement.js';
 import {
   DEMO_MARKER,
   DEMO_ORGANIZATION_SLUG,
@@ -33,6 +34,22 @@ describe('demo showcase fixture', () => {
     );
     expect(new Set(fixture.matches.map((m) => m.ringNumber).filter(Boolean))).toEqual(new Set([1, 2, 3, 4]));
     expect(fixture.brackets.every((b) => JSON.parse(b.structure).positions)).toBe(true);
+  });
+
+  it('completes a production four-person double-elimination bracket with derived podium places', () => {
+    const fixture = buildShowcaseFixture();
+    const bracket = fixture.brackets[0];
+    const structure = JSON.parse(bracket.structure);
+    const matches = fixture.matches.filter((match) => match.bracketId === bracket.id);
+
+    expect(structure.positions).toEqual({ winnersFinal: 3, losersFinal: 5, grandFinals: 6, reset: 7 });
+    expect(matches.filter((match) => [1, 2, 3, 4, 5, 6].includes(match.matchNumber)).every((match) => match.status === 'completed')).toBe(true);
+    expect(matches.find((match) => match.matchNumber === structure.positions.reset)?.status).toBe('pending');
+    expect(getBracketPlacementsFromLoaded(bracket.structure, matches as never)).toEqual([
+      { place: 1, competitorId: fixture.registrations[0].id },
+      { place: 2, competitorId: fixture.registrations[2].id },
+      { place: 3, competitorId: fixture.registrations[4].id },
+    ]);
   });
 });
 

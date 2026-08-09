@@ -84,13 +84,32 @@ export function buildShowcaseFixture() {
     brackets.push({ id: bracketId, divisionId: divisions[groupIndex].id, structure: JSON.stringify(structure), format: 'double_elim' });
     [...structure.winners.map((m) => ({ ...m, bracketType: 'winners' })), ...structure.losers.map((m) => ({ ...m, bracketType: 'losers' })), ...structure.finals.map((m) => ({ ...m, bracketType: 'finals' }))].forEach((match, index) => {
       const statuses = ['completed', 'in_progress', 'ready', 'pending'] as const;
-      const status = statuses[(groupIndex * 2 + index) % statuses.length];
-      const hasPair = Boolean(match.competitor1Id && match.competitor2Id);
+      let status: typeof statuses[number] = statuses[(groupIndex * 2 + index) % statuses.length];
+      let competitor1Id = match.competitor1Id;
+      let competitor2Id = match.competitor2Id;
+      let winnerId: string | null = null;
+      if (groupIndex === 0) {
+        const [r1, r2, r3, r4] = group.map((registration) => registration.id);
+        const completedProgression: Record<number, [string, string, string]> = {
+          1: [r1, r4, r1], 2: [r2, r3, r2], 3: [r1, r2, r1],
+          4: [r4, r3, r3], 5: [r3, r2, r2], 6: [r1, r2, r1],
+        };
+        const result = completedProgression[match.matchNumber];
+        if (result) {
+          [competitor1Id, competitor2Id, winnerId] = result;
+          status = 'completed';
+        } else {
+          competitor1Id = r1;
+          competitor2Id = r2;
+          status = 'pending';
+        }
+      }
+      const hasResult = status === 'completed' && Boolean(winnerId ?? (competitor1Id && competitor2Id));
       matches.push({
         id: id(400 + matches.length), bracketId, roundNumber: match.round, matchNumber: match.matchNumber,
-        bracketType: match.bracketType, competitor1Id: match.competitor1Id, competitor2Id: match.competitor2Id,
-        winnerId: status === 'completed' && hasPair ? match.competitor1Id : null,
-        score1: status === 'completed' && hasPair ? '8' : null, score2: status === 'completed' && hasPair ? '5' : null,
+        bracketType: match.bracketType, competitor1Id, competitor2Id,
+        winnerId: winnerId ?? (hasResult ? competitor1Id : null),
+        score1: hasResult ? '8' : null, score2: hasResult ? '5' : null,
         status, ringNumber: (matches.length % 4) + 1,
         scheduledTime: new Date(`2027-04-18T${14 + Math.floor(matches.length / 4)}:${(matches.length % 4) * 10}:00.000Z`),
       });
