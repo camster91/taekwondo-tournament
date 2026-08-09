@@ -20,7 +20,7 @@ describe('concurrent demo sessions with real auth middleware', () => {
   const sharedDemoUser = {
     id: 'shared-demo-user', email: 'demo@bowin.app', firstName: 'Demo', lastName: 'Visitor',
     role: 'admin', isActive: true, tokenVersion: 0, createdAt: new Date(), lastLogin: null,
-    tournamentAccess: [],
+    tournamentAccess: [], demoExpiresAt: null,
   };
   users.set(sharedDemoUser.id, sharedDemoUser);
 
@@ -35,6 +35,7 @@ describe('concurrent demo sessions with real auth middleware', () => {
     app.use(express.json());
     app.locals.prisma = {
       user: {
+        count: vi.fn().mockResolvedValue(users.size),
         findMany: vi.fn().mockResolvedValue([]),
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
         findUnique: vi.fn().mockImplementation(({ where }: { where: { id?: string; email?: string } }) => {
@@ -101,6 +102,31 @@ describe('concurrent demo sessions with real auth middleware', () => {
     expect(await meB.json()).toMatchObject({
       id: sessionB.user.id,
       role: 'admin',
+      isDemo: true,
+      demoExpiresAt: expect.any(String),
     });
+
+    const blockedAdminRead = await fetch(`${baseUrl}/users`, {
+      headers: { authorization: `Bearer ${sessionB.token}` },
+    });
+    expect(blockedAdminRead.status).toBe(403);
+    expect(await blockedAdminRead.json()).toMatchObject({ code: 'DEMO_CAPABILITY_DENIED' });
+
+    const blockedMixedCaseRead = await fetch(`${baseUrl}/UsErS`, {
+      headers: { authorization: `Bearer ${sessionB.token}` },
+    });
+    expect(blockedMixedCaseRead.status).toBe(403);
+
+    const { createToken } = await import('../middleware/auth.js');
+    const normalAdminToken = createToken({
+      userId: sharedDemoUser.id,
+      email: sharedDemoUser.email,
+      role: sharedDemoUser.role,
+      tokenVersion: sharedDemoUser.tokenVersion,
+    });
+    const normalAdminRead = await fetch(`${baseUrl}/users`, {
+      headers: { authorization: `Bearer ${normalAdminToken}` },
+    });
+    expect(normalAdminRead.status).toBe(200);
   });
 });

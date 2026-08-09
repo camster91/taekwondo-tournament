@@ -7,6 +7,8 @@ interface User {
   lastName: string;
   role: 'admin' | 'director' | 'scorekeeper' | 'viewer';
   createdAt?: string;
+  isDemo?: boolean;
+  demoExpiresAt?: string | null;
 }
 
 interface AuthContextType {

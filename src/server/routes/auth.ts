@@ -568,6 +568,7 @@ router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response)
         role: true,
         createdAt: true,
         lastLogin: true,
+        demoExpiresAt: true,
         tournamentAccess: {
           include: {
             tournament: {
@@ -582,7 +583,10 @@ router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response)
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(user);
+    res.json({
+      ...user,
+      isDemo: user.demoExpiresAt !== null,
+    });
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });

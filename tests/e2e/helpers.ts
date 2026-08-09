@@ -58,7 +58,7 @@ export async function skipOnboardingTour(page: Page) {
 }
 
 /**
- * Helper: log in via the one-click "Try the demo" button. Faster than the
+ * Helper: log in via the one-click "Explore the live demo" button. Faster than the
  * OTP flow, used for tests that need an authenticated session but aren't
  * specifically about the login UX (e.g. tournament create, check-in).
  */
@@ -72,7 +72,7 @@ export async function loginAsDemo(page: Page) {
     (resp) => resp.url().includes('/api/auth/setup-status') && resp.ok(),
     { timeout: 15_000 },
   ).catch(() => undefined);
-  const demoBtn = page.getByRole('button', { name: /Try the demo/i });
+  const demoBtn = page.getByRole('button', { name: /Explore the live demo/i });
   await demoBtn.waitFor({ state: 'visible', timeout: 15_000 });
   await Promise.all([
     page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 }),

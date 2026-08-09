@@ -20,7 +20,7 @@ for (const [name, browserType] of Object.entries({ chromium, firefox, webkit }))
 
     await page.addInitScript(() => localStorage.setItem('bowin_tour_completed', '1'));
     await page.goto('/login', { waitUntil: 'networkidle' });
-    const demoButton = page.getByRole('button', { name: /Try the demo/i });
+    const demoButton = page.getByRole('button', { name: /Explore the live demo/i });
     await demoButton.waitFor({ state: 'visible' });
     const demoResponsePromise = page.waitForResponse(
       (response) => response.url().endsWith('/api/auth/demo'),

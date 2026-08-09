@@ -70,7 +70,7 @@ test.describe('login (magic link flow)', () => {
   });
 
   test('demo button is a one-click authenticated shortcut', async ({ page }) => {
-    // The "Try the demo" button is a fast path: a 4-hour admin session
+    // The "Explore the live demo" button is a fast path: a 4-hour admin session
     // without email. This guards against that path regressing — the e2e
     // suite uses it as the standard auth for the heavier flows.
     await loginAsDemo(page);

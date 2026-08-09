@@ -46,6 +46,7 @@ export interface AuthenticatedRequest extends Request {
     role: string;
     firstName: string;
     lastName: string;
+    isDemo: boolean;
   };
   /** True when the JWT came from the session cookie (not Bearer). */
   authViaCookie?: boolean;
@@ -170,7 +171,41 @@ type CachedUser = {
   lastName: string;
   isActive: boolean;
   tokenVersion: number;
+  demoExpiresAt: Date | null;
 };
+
+const demoDeniedReadPrefixes = ['/api/auth/users', '/api/invites', '/api/billing', '/api/organizations'];
+
+export function isDemoRequestAllowed(method: string, originalUrl: string): boolean {
+  let path: string;
+  try {
+    path = new URL(originalUrl, 'http://bowin.local').pathname.toLowerCase();
+  } catch {
+    return false;
+  }
+  const normalizedMethod = method.toUpperCase();
+  if (normalizedMethod === 'GET' || normalizedMethod === 'HEAD') {
+    return !demoDeniedReadPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+  }
+  if (normalizedMethod === 'POST' && path === '/api/auth/logout') return true;
+  if (normalizedMethod === 'PUT' && /^\/api\/brackets\/match\/[^/]+$/.test(path)) return true;
+  if (normalizedMethod === 'POST' && /^\/api\/brackets\/match\/[^/]+\/undo$/.test(path)) return true;
+  if (normalizedMethod === 'PUT' && /^\/api\/tournaments\/[^/]+\/registrations\/[^/]+$/.test(path)) return true;
+  if (normalizedMethod === 'POST' && path === '/api/incidents') return true;
+  return false;
+}
+
+function enforceDemoCapability(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+  if (req.user?.isDemo && !isDemoRequestAllowed(req.method, req.originalUrl)) {
+    res.status(403).json({
+      error: 'This action is unavailable in the public demo.',
+      code: 'DEMO_CAPABILITY_DENIED',
+      recoverable: true,
+    });
+    return;
+  }
+  next();
+}
 const AUTH_CACHE_TTL_MS = Number(process.env.AUTH_CACHE_TTL_MS) || 15_000;
 const AUTH_CACHE_MAX = Number(process.env.AUTH_CACHE_MAX) || 5_000;
 const authCache = new Map<string, { user: CachedUser; expires: number }>();
@@ -271,14 +306,15 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
       role: cached.role as 'admin' | 'director' | 'scorekeeper' | 'viewer',
       firstName: cached.firstName,
       lastName: cached.lastName,
+      isDemo: cached.demoExpiresAt !== null,
     };
-    return next();
+    return enforceDemoCapability(req, res, next);
   }
 
   prisma.user
     .findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, role: true, firstName: true, lastName: true, isActive: true, tokenVersion: true },
+      select: { id: true, email: true, role: true, firstName: true, lastName: true, isActive: true, tokenVersion: true, demoExpiresAt: true },
     })
     .then((user) => {
       if (!user || !user.isActive) {
@@ -307,9 +343,10 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
         role: user.role,
         firstName: user.firstName,
         lastName: user.lastName,
+        isDemo: user.demoExpiresAt !== null,
       };
 
-      next();
+      enforceDemoCapability(req, res, next);
     })
     .catch(() => {
       res.status(500).json({ error: 'Authentication error' });
@@ -336,7 +373,7 @@ export function optionalAuthenticate(req: AuthenticatedRequest, res: Response, n
   prisma.user
     .findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, role: true, firstName: true, lastName: true, isActive: true, tokenVersion: true },
+      select: { id: true, email: true, role: true, firstName: true, lastName: true, isActive: true, tokenVersion: true, demoExpiresAt: true },
     })
     .then((user) => {
       if (user && user.isActive) {
@@ -357,6 +394,7 @@ export function optionalAuthenticate(req: AuthenticatedRequest, res: Response, n
           role: user.role,
           firstName: user.firstName,
           lastName: user.lastName,
+          isDemo: user.demoExpiresAt !== null,
         };
       }
       next();

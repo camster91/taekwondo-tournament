@@ -27,6 +27,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { isDemoUser } from './utils/demo-progress';
 import { ToastProvider } from './context/ToastContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -331,7 +332,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                   <>
                     <div className="flex-1 text-left min-w-0">
                       <div className="text-sm font-medium text-white truncate">{userName}</div>
-                      <div className="text-[11px] text-white/40 capitalize truncate">{user.role}{user.email.includes('demo') ? ' • shared demo' : ''}</div>
+                      <div className="text-[11px] text-white/40 capitalize truncate">{user.role}{isDemoUser(user) ? ' • synthetic demo' : ''}</div>
                     </div>
                     <ChevronRight className={classNames('h-3.5 w-3.5 text-white/40 transition-transform', userMenuOpen && 'rotate-90')} />
                   </>
@@ -470,7 +471,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       {/* Onboarding tour — first-time directors only (persists in localStorage).
           Public pages and unauthenticated viewers never see this because
           AdminLayout only wraps admin routes. */}
-      <Tour />
+      {!isDemoUser(user) && <Tour />}
     </div>
   );
 }

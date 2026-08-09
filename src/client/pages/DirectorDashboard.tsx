@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
+import { isDemoUser } from '../utils/demo-progress';
 import {
   LayoutDashboard,
   ArrowLeft,
@@ -85,6 +86,8 @@ const AVERAGE_MATCH_DURATION = 5; // minutes per match
 export default function DirectorDashboard() {
   const { id: tournamentId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const demoReadOnly = isDemoUser(user);
 
   // Display mode state (M8). Three modes:
   // - 'all': auto-cycle through every ring with active matches (default)
@@ -599,6 +602,7 @@ export default function DirectorDashboard() {
               <select
                 id="display-mode"
                 value={displayMode}
+                disabled={demoReadOnly}
                 onChange={(e) => setDisplayMode(e.target.value as 'all' | 'ring' | 'featured')}
                 className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 w-full sm:w-auto"
               >
@@ -613,6 +617,7 @@ export default function DirectorDashboard() {
                 <select
                   id="display-ring"
                   value={displayRing}
+                  disabled={demoReadOnly}
                   onChange={(e) => setDisplayRing(parseInt(e.target.value, 10))}
                   className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 w-full sm:w-auto"
                 >
@@ -637,6 +642,7 @@ export default function DirectorDashboard() {
                   id="display-match"
                   type="text"
                   value={displayMatchId}
+                  disabled={demoReadOnly}
                   onChange={(e) => setDisplayMatchId(e.target.value)}
                   placeholder="e.g. 7f59a9ad-6b08-4867-96e5-d5a8a29a682b"
                   className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 font-mono w-full"
@@ -647,12 +653,13 @@ export default function DirectorDashboard() {
               variant="primary"
               onClick={() => displaySettingsMutation.mutate()}
               loading={displaySettingsMutation.isPending}
+              disabled={demoReadOnly}
             >
               <Monitor className="h-4 w-4 mr-2" /> Apply
             </Button>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            The public scoreboard at <a href={`/display/${tournamentId}`} target="_blank" rel="noopener noreferrer" className="underline">/display/{tournamentId}</a> will read this and filter its view.
+            {demoReadOnly ? 'Public display controls are read-only in the public demo.' : <>The public scoreboard at <a href={`/display/${tournamentId}`} target="_blank" rel="noopener noreferrer" className="underline">/display/{tournamentId}</a> will read this and filter its view.</>}
           </p>
         </CardBody>
       </Card>

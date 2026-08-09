@@ -2,6 +2,7 @@ import { execSync } from 'node:child_process';
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { resetDemoShowcase } from '../../prisma/demo-seed.js';
 
 const PROJECT_ROOT = process.cwd();
 
@@ -64,8 +65,13 @@ export default async function globalSetup() {
   });
 
   try {
+    // Install the same marker-protected fabricated showcase used by staging.
+    // This makes the guided demo lifecycle an actual browser contract rather
+    // than a UI test backed by a different fixture.
+    await resetDemoShowcase(prisma);
+
     // Ensure setup-status renders the normal sign-in card. The demo endpoint
-    // reuses this account when ENABLE_DEMO_LOGIN=1.
+    // is available when ENABLE_DEMO_LOGIN=1.
     await prisma.user.upsert({
       where: { email: 'demo@bowin.app' },
       update: { isActive: true, role: 'admin' },

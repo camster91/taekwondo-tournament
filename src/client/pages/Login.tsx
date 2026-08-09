@@ -20,6 +20,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { markDemoEntryPending } from '../utils/demo-progress';
 import Spinner from '../components/ui/Spinner';
 import { Card, CardBody } from '../components/ui';
 import { Button } from '../components/ui';
@@ -154,6 +155,7 @@ export default function Login() {
       const res = await fetch('/api/auth/demo', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Demo login failed');
+      markDemoEntryPending();
       // Session cookie is set by the server. Hard nav so the
       // AuthProvider re-mounts and hydrates user state from /me.
       window.location.href = '/';
@@ -370,11 +372,11 @@ function EmailForm({
         loading={demoLoading}
         className="w-full text-slate-600 dark:text-slate-300"
       >
-        <Sparkles className="h-4 w-4 mr-2" /> Try the demo
+        <Sparkles className="h-4 w-4 mr-2" /> Explore the live demo
       </Button>
 
       <p className="text-center text-xs text-slate-600">
-        Want to look around first? Use a demo account — full access, no signup.
+        Fabricated tournament data. No signup. Demo activity may be reset.
       </p>
 
       <div className="relative">
