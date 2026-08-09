@@ -10,6 +10,7 @@ import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 import { resolveDisplayRing } from '../utils/scoreboard-display';
 import { BowinLogo } from '../components/brand/BowinLogo';
 import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availability';
+import { fetchJson } from '../utils/api-status';
 
 interface Match {
   id: string;
@@ -75,20 +76,11 @@ export default function PublicScoreboard() {
     data: tournament,
     isLoading: tournamentLoading,
     error: tournamentError,
+    refetch: retryTournament,
   } = useQuery<Tournament>({
     queryKey: ['scoreboard-tournament', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/public/tournaments/${tournamentId}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const msg = res.status === 404
-          ? 'Tournament not found'
-          : res.status === 400
-          ? (body.error || 'Tournament is not open')
-          : `Failed to load tournament (${res.status})`;
-        throw new Error(msg);
-      }
-      return res.json();
+      return fetchJson<Tournament>(fetch, `/api/public/tournaments/${tournamentId}`);
     },
     retry: false,
   });
@@ -97,16 +89,18 @@ export default function PublicScoreboard() {
   // Returns `{ divisions, displaySettings }` — displaySettings carries
   // director overrides (mode: 'all' | 'ring:N' | 'featured:<matchId>').
   // Closes M8 from the UI audit.
-  const { data: scoreboardData, isLoading: divisionsLoading, error: scoreboardError } = useQuery<{
+  const { data: scoreboardData, isLoading: divisionsLoading, error: scoreboardError, refetch: retryScoreboard } = useQuery<{
     divisions: Division[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
     queryKey: ['scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
-      const res = await fetch(buildScoreboardApiUrl(tournamentId || '', publicKey));
-      if (!res.ok) throw new Error('Failed to fetch scoreboard');
+      const data = await fetchJson<{
+        divisions: Division[];
+        displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
+      }>(fetch, buildScoreboardApiUrl(tournamentId || '', publicKey));
       setLastFetchAt(new Date());
-      return res.json();
+      return data;
     },
     refetchInterval: 5000, // TV mode: refresh every 5s (was 3s — cuts poll load)
     refetchIntervalInBackground: false,
@@ -211,6 +205,7 @@ export default function PublicScoreboard() {
               /display/&lt;tournament-id&gt;
             </code>
           </p>
+          <button type="button" onClick={() => void retryTournament()} className="mt-5 min-h-11 rounded-lg border border-slate-500 px-4 py-2 font-semibold">Try again</button>
         </div>
       )}
       {/* Loading state. Spinner only shown while the tournament query is
@@ -230,6 +225,7 @@ export default function PublicScoreboard() {
           <AlertCircle className="h-20 w-20 text-amber-400 mb-6" aria-hidden="true" />
           <h1 className="text-3xl font-bold mb-3">Live scoreboard unavailable</h1>
           <p className="text-slate-300 max-w-md">{scoreboardUnavailableMessage}</p>
+          <button type="button" onClick={() => void retryScoreboard()} className="mt-5 min-h-11 rounded-lg border border-slate-500 px-4 py-2 font-semibold">Try again</button>
         </div>
       )}
       {!tournamentLoading && !divisionsLoading && !tournamentError && !scoreboardUnavailableMessage && (

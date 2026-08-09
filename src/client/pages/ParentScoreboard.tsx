@@ -15,6 +15,7 @@ import { Trophy, Clock, Users, ChevronRight, AlertCircle, RefreshCw, ArrowLeft }
 import { Card, CardBody } from '../components/ui';
 import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availability';
 import { resolveParentScoreboardState } from '../utils/parent-scoreboard-state';
+import { fetchJson } from '../utils/api-status';
 
 interface Match {
   id: string;
@@ -61,9 +62,7 @@ export default function ParentScoreboard() {
   const { data: tournament, isLoading: tournamentLoading, error: tournamentError, refetch: retryTournament } = useQuery<Tournament>({
     queryKey: ['parent-scoreboard-tournament', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/public/tournaments/${tournamentId}`);
-      if (!res.ok) throw new Error('Tournament not found');
-      return res.json();
+      return fetchJson<Tournament>(fetch, `/api/public/tournaments/${tournamentId}`);
     },
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
@@ -76,9 +75,10 @@ export default function ParentScoreboard() {
   }>({
     queryKey: ['parent-scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
-      const res = await fetch(buildScoreboardApiUrl(tournamentId || '', publicKey));
-      if (!res.ok) throw new Error('Scoreboard fetch failed');
-      return res.json();
+      return fetchJson<{
+        divisions: Division[];
+        displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
+      }>(fetch, buildScoreboardApiUrl(tournamentId || '', publicKey));
     },
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
