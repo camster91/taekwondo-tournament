@@ -1,6 +1,78 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('truthful anonymous status', () => {
+  test('parent finds and saves an athlete, then hears a meaningful live transition', async ({ page }) => {
+    const id = '00000000-0000-4000-8000-000000000076';
+    let scoreboardRequests = 0;
+    await page.route(`**/api/public/tournaments/${id}`, (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ id, name: 'Parent Finder Open', date: '2030-01-01', location: 'Test Venue', status: 'in_progress' }),
+    }));
+    await page.route(`**/api/public/tournaments/${id}/scoreboard**`, (route) => {
+      scoreboardRequests += 1;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        divisions: [{ id: 'division-finder', name: 'Junior Sparring', eventType: 'sparring', bracket: { id: 'bracket-finder', matches: [{
+          id: 'match-finder', matchNumber: 7, roundNumber: 1, bracketType: 'winners', ringNumber: 3,
+          scheduledTime: '2030-01-01T15:30:00.000Z', status: scoreboardRequests > 2 ? 'in_progress' : 'ready', score1: null, score2: null, winnerId: null,
+          competitor1: { id: 'registration-amina', competitor: { firstName: 'Amina', lastName: 'Khan', schoolDojang: 'North Star' } },
+          competitor2: { id: 'registration-minho', competitor: { firstName: 'Minho', lastName: 'Lee', schoolDojang: 'East Gate' } },
+        }] } }], displaySettings: {},
+      }) });
+    });
+
+    await page.goto(`/scoreboard/parent/${id}?key=fabricated`);
+    await page.getByLabel('Search athletes, divisions, or schools').fill('Amina');
+    const finder = page.getByRole('region', { name: 'Find an athlete' });
+    await expect(finder).toContainText('Up next · Ring 3');
+    await expect(finder).toContainText('local time');
+    await finder.getByRole('button', { name: /Save Amina Khan.*favorites/ }).click();
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Find an athlete' })).toContainText('Amina Khan');
+    await expect(page.getByText(/Amina Khan and Minho Lee: Competing now, Ring 3/)).toBeAttached({ timeout: 8_000 });
+  });
+
+  test('parent finder rejects malformed polling data and keeps the last confirmed view', async ({ page }) => {
+    const id = '00000000-0000-4000-8000-000000000077';
+    let scoreboardRequests = 0;
+    await page.route(`**/api/public/tournaments/${id}`, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id, name: 'Validated Open', date: '2030-01-01', location: 'Test', status: 'in_progress' }) }));
+    await page.route(`**/api/public/tournaments/${id}/scoreboard**`, (route) => {
+      scoreboardRequests += 1;
+      const scheduledTime = '2030-01-01T15:30:00.000Z';
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ divisions: [{ id: 'd1', name: 'Junior Sparring', eventType: 'sparring', bracket: { id: 'b1', matches: [{
+        id: 'safe-match', matchNumber: 1, roundNumber: 1, bracketType: 'winners', status: 'ready', ringNumber: 2, scheduledTime, score1: null, score2: null, winnerId: null,
+        competitor1: { id: 'r1', competitor: { firstName: 'Safe', lastName: 'Athlete', schoolDojang: 'Test' } }, competitor2: null,
+      }] } }], displaySettings: scoreboardRequests > 1 ? { mode: { malformed: true } } : {} }) });
+    });
+    await page.goto(`/scoreboard/parent/${id}?key=fabricated`);
+    await page.getByLabel('Search athletes, divisions, or schools').fill('Safe Athlete');
+    await expect(page.getByRole('region', { name: 'Find an athlete' })).toContainText('Safe Athlete');
+    await expect(page.getByRole('alert')).toContainText('Showing the last confirmed scoreboard', { timeout: 8_000 });
+    await expect(page.getByRole('region', { name: 'Find an athlete' })).toContainText('Safe Athlete');
+  });
+
+  test('parent favorites switch scope during client-side tournament navigation', async ({ page }) => {
+    const a = '00000000-0000-4000-8000-000000000078';
+    const b = '00000000-0000-4000-8000-000000000079';
+    const payload = (id: string, matchId: string, firstName: string) => ({ divisions: [{ id: `d-${id}`, name: 'Finder Division', eventType: 'sparring', bracket: { id: `b-${id}`, matches: [{
+      id: matchId, matchNumber: 1, roundNumber: 1, bracketType: 'winners', status: 'ready', ringNumber: 1, scheduledTime: null, score1: null, score2: null, winnerId: null,
+      competitor1: { id: `r-${id}`, competitor: { firstName, lastName: 'Favorite', schoolDojang: 'Test' } }, competitor2: null,
+    }] } }], displaySettings: {} });
+    for (const [id, matchId, firstName] of [[a, 'match-a', 'Alpha'], [b, 'match-b', 'Beta']] as const) {
+      await page.route(`**/api/public/tournaments/${id}`, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id, name: `${firstName} Open`, date: '2030-01-01', location: 'Test', status: 'in_progress' }) }));
+      await page.route(`**/api/public/tournaments/${id}/scoreboard**`, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload(id, matchId, firstName)) }));
+    }
+    await page.addInitScript(({ a, b }) => {
+      localStorage.setItem(`bowin.parentFavorites.v1.${a}`, JSON.stringify(['match-a']));
+      localStorage.setItem(`bowin.parentFavorites.v1.${b}`, JSON.stringify(['match-b']));
+    }, { a, b });
+    await page.goto(`/scoreboard/parent/${a}?key=fabricated`);
+    await expect(page.getByRole('region', { name: 'Find an athlete' })).toContainText('Alpha Favorite');
+    await page.evaluate((next) => { history.pushState({}, '', next); dispatchEvent(new PopStateEvent('popstate')); }, `/scoreboard/parent/${b}?key=fabricated`);
+    const finder = page.getByRole('region', { name: 'Find an athlete' });
+    await expect(finder).toContainText('Beta Favorite');
+    await expect(finder).not.toContainText('Alpha Favorite');
+  });
+
   for (const view of [
     { name: 'venue', path: (id: string) => `/display/${id}?key=fabricated` },
     { name: 'parent', path: (id: string) => `/scoreboard/parent/${id}?key=fabricated` },
