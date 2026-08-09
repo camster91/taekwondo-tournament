@@ -91,10 +91,15 @@ describe('resetDemoShowcase', () => {
     expect(competitorDeletes[0].args).toEqual({
       where: { id: { in: ['demo-c1', 'shared-c2'] }, registrations: { none: {} } },
     });
+    const matchDeletes = calls.filter((c) => c.model === 'match' && c.operation === 'deleteMany');
+    expect(matchDeletes).toHaveLength(2);
+    expect(matchDeletes[0].args).toEqual({
+      where: { bracket: { division: { tournament: { organizationId: 'existing-demo' } } } },
+    });
     const tournamentDeletes = calls.filter((c) => c.model === 'tournament' && c.operation === 'deleteMany');
     expect(tournamentDeletes).toHaveLength(2);
     expect(tournamentDeletes[0].args).toEqual({ where: { organizationId: 'existing-demo' } });
-    expect(calls.some((c) => !['competitor', 'tournament'].includes(c.model) && c.operation === 'deleteMany')).toBe(false);
+    expect(calls.some((c) => !['competitor', 'match', 'tournament'].includes(c.model) && c.operation === 'deleteMany')).toBe(false);
     expect(calls.filter((c) => c.model === 'organization' && c.operation === 'create')).toHaveLength(2);
     expect(second).toEqual(first);
   });

@@ -150,6 +150,14 @@ export async function resetDemoShowcase(client: DemoClient): Promise<Fixture> {
     if (current && !hasDemoMarker(current.settings)) throw new Error(`Refusing to reset organization '${DEMO_ORGANIZATION_SLUG}': demo marker changed`);
     const captured = current ? await tx.registration.findMany({ where: { tournament: { organizationId: current.id } }, select: { competitorId: true }, distinct: ['competitorId'] }) : [];
     if (current) {
+      // Delete leaf match rows explicitly. Some deployed PostgreSQL
+      // databases have not applied the expected multi-level cascade
+      // ordering, so relying on Tournament -> Division -> Bracket ->
+      // Match can fail even though the current schema declares the
+      // intermediate cascades.
+      await tx.match.deleteMany({
+        where: { bracket: { division: { tournament: { organizationId: current.id } } } },
+      });
       // Tournament.organization intentionally has no database-level
       // ON DELETE CASCADE, so remove only this verified demo tenant's
       // tournaments before its organization. Tournament-owned records
