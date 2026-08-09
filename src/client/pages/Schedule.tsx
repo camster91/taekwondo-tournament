@@ -14,7 +14,8 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
-import { Card, CardHeader, CardBody } from '../components/ui';
+import { Card, CardHeader, CardBody, Modal } from '../components/ui';
+import OperationStatus from '../components/ui/OperationStatus';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
@@ -60,6 +61,25 @@ interface TournamentSchedule {
   warnings: string[];
 }
 
+interface ScheduleImpact {
+  affectedDivisionIds: string[];
+  affectedLabels: string[];
+  ringChanges: number;
+  timeChanges: number;
+  addedWarnings: string[];
+  removedWarnings: string[];
+}
+
+interface SchedulePreview {
+  before: TournamentSchedule;
+  after: TournamentSchedule;
+  impact: ScheduleImpact;
+  expectedUpdatedAt: string;
+  expectedInputVersion: string;
+  operationKey: string;
+  proposedConfig: ScheduleConfig;
+}
+
 export default function Schedule() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -83,35 +103,106 @@ export default function Schedule() {
     },
   });
 
-  const regenerateMutation = useMutation({
+  const [preview, setPreview] = useState<SchedulePreview | null>(null);
+  const [lastAuditId, setLastAuditId] = useState<string | null>(null);
+  const [lastOperationKey, setLastOperationKey] = useState<string | null>(null);
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [uncertainOperation, setUncertainOperation] = useState<{ phase: 'apply' | 'undo'; operationKey: string; auditId?: string } | null>(null);
+
+  const previewMutation = useMutation({
     mutationFn: async () => {
+      const res = await fetch(`/api/tournaments/${id}/schedule/preview`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ config }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to preview schedule');
+      return res.json() as Promise<SchedulePreview>;
+    },
+    onMutate: () => setOperationError(null),
+    onSuccess: setPreview,
+    onError: (error) => setOperationError(error instanceof Error ? error.message : 'Failed to preview schedule'),
+  });
+
+  const regenerateMutation = useMutation({
+    mutationFn: async (confirmed: SchedulePreview) => {
       const res = await fetch(`/api/tournaments/${id}/schedule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ config }),
+        body: JSON.stringify({
+          config: confirmed.proposedConfig,
+          expectedUpdatedAt: confirmed.expectedUpdatedAt,
+          expectedInputVersion: confirmed.expectedInputVersion,
+          operationKey: confirmed.operationKey,
+        }),
       });
-      if (!res.ok) throw new Error('Failed to regenerate schedule');
-      return res.json();
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to regenerate schedule');
+      return res.json() as Promise<TournamentSchedule & { auditId: string }>;
     },
-    onSuccess: () => {
-      refetch();
+    onMutate: () => setOperationError(null),
+    onSuccess: async (result, confirmed) => {
+      await refetch();
+      setLastAuditId(result.auditId);
+      setLastOperationKey(confirmed.operationKey);
+      setPreview(null);
+    },
+    onError: (error, confirmed) => {
+      if (error instanceof TypeError) {
+        setUncertainOperation({ phase: 'apply', operationKey: confirmed.operationKey });
+        setPreview(null);
+        return;
+      }
+      setOperationError(error instanceof Error ? error.message : 'Failed to regenerate schedule');
     },
   });
 
-  // Live region announcement for schedule regeneration success/failure.
-  const [scheduleAnnounce, setScheduleAnnounce] = useState('');
+  const undoMutation = useMutation({
+    mutationFn: async ({ auditId }: { auditId: string; operationKey: string }) => {
+      const res = await fetch(`/api/tournaments/${id}/schedule/undo/${auditId}`, { method: 'POST', headers: getAuthHeaders() });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to undo schedule change');
+    },
+    onMutate: () => setOperationError(null),
+    onSuccess: async () => { await refetch(); setLastAuditId(null); setLastOperationKey(null); },
+    onError: (error, operation) => {
+      if (error instanceof TypeError) {
+        setUncertainOperation({ phase: 'undo', operationKey: operation.operationKey, auditId: operation.auditId });
+        return;
+      }
+      setOperationError(error instanceof Error ? error.message : 'Failed to undo schedule change');
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async (operation: NonNullable<typeof uncertainOperation>) => {
+      const res = await fetch(`/api/tournaments/${id}/schedule/operations/${operation.operationKey}`, { headers: getAuthHeaders() });
+      if (res.status === 404) return { found: false as const };
+      if (!res.ok) throw new Error('Could not check schedule operation status');
+      return { found: true as const, ...(await res.json() as { auditId: string; applied: boolean; undone: boolean }) };
+    },
+    onSuccess: async (status, operation) => {
+      if (!status.found) {
+        setUncertainOperation(null);
+        setOperationError('The server has no record of that schedule change. Review the latest schedule before trying again.');
+        await refetch();
+        return;
+      }
+      await refetch();
+      if (operation.phase === 'apply' && !status.undone) {
+        setLastAuditId(status.auditId);
+        setLastOperationKey(operation.operationKey);
+      } else if (operation.phase === 'undo' && status.undone) {
+        setLastAuditId(null);
+        setLastOperationKey(null);
+      }
+      setUncertainOperation(null);
+    },
+    onError: (error) => setOperationError(error instanceof Error ? error.message : 'Could not check schedule operation status'),
+  });
+
   useEffect(() => {
-    if (regenerateMutation.isSuccess) {
-      setScheduleAnnounce('Schedule regenerated.');
-    }
-  }, [regenerateMutation.isSuccess]);
-  useEffect(() => {
-    if (regenerateMutation.isError) {
-      setScheduleAnnounce(
-        `Failed to regenerate schedule: ${(regenerateMutation.error as Error)?.message ?? 'Unknown error'}`
-      );
-    }
-  }, [regenerateMutation.isError]);
+    if (schedule?.config && !preview) setConfig(schedule.config);
+  }, [preview, schedule?.config]);
+
+  const scheduleBusy = previewMutation.isPending || regenerateMutation.isPending || undoMutation.isPending || statusMutation.isPending || Boolean(uncertainOperation);
 
   const exportPDF = async () => {
     if (!schedule) return;
@@ -254,12 +345,12 @@ export default function Schedule() {
             </Button>
             <Button
               variant="secondary"
-              onClick={() => regenerateMutation.mutate()}
-              disabled={regenerateMutation.isPending}
+              onClick={() => previewMutation.mutate()}
+              disabled={scheduleBusy}
               aria-label="Regenerate schedule"
             >
-              {regenerateMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" />}
-              <span className="hidden sm:inline">{regenerateMutation.isPending ? 'Generating...' : 'Regenerate'}</span>
+              {previewMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" />}
+              <span className="hidden sm:inline">{previewMutation.isPending ? 'Preparing preview...' : 'Regenerate'}</span>
             </Button>
             <Button
               variant="primary"
@@ -283,10 +374,35 @@ export default function Schedule() {
         </Link>
       </PageHeader>
 
+      {operationError && !preview && <OperationStatus state="rejected" message={operationError} className="mb-6" />}
+      {uncertainOperation && (
+        <OperationStatus
+          state="rejected"
+          message={uncertainOperation.phase === 'apply'
+            ? 'The schedule request was sent, but its acknowledgement was not received. It may have applied. Do not submit again until server status is checked.'
+            : 'The undo request was sent, but its acknowledgement was not received. The previous schedule may already be restored.'}
+          actionLabel={statusMutation.isPending ? undefined : 'Check server status'}
+          onAction={statusMutation.isPending ? undefined : () => statusMutation.mutate(uncertainOperation)}
+          className="mb-6"
+        />
+      )}
+      {regenerateMutation.isPending && <OperationStatus state="pending" message="Applying the confirmed schedule and recording its audit history." className="mb-6" />}
+      {undoMutation.isPending && <OperationStatus state="pending" message="Restoring the previous schedule after verifying no later change conflicts." className="mb-6" />}
+      {lastAuditId && !undoMutation.isPending && !uncertainOperation && (
+        <OperationStatus
+          state="resolved"
+          message="Schedule applied and reconciled. This change can be undone while no later schedule edit has replaced it."
+          actionLabel="Undo schedule change"
+          onAction={lastOperationKey ? () => undoMutation.mutate({ auditId: lastAuditId, operationKey: lastOperationKey }) : undefined}
+          className="mb-6"
+        />
+      )}
+
       {/* Configuration */}
       <Card className="mb-6">
         <CardHeader title="Schedule Configuration" as="h2" />
         <CardBody>
+          <fieldset disabled={scheduleBusy} aria-busy={scheduleBusy} className="contents">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <Label htmlFor="schedule-start-time">Start Time</Label>
@@ -384,6 +500,7 @@ export default function Schedule() {
               />
             </div>
           </div>
+          </fieldset>
         </CardBody>
       </Card>
 
@@ -469,7 +586,7 @@ export default function Schedule() {
               description="Generate divisions first, then create a schedule."
               action={{
                 label: 'Generate Schedule',
-                onClick: () => regenerateMutation.mutate(),
+                onClick: () => previewMutation.mutate(),
               }}
               secondaryAction={{
                 label: 'Manage Divisions',
@@ -550,10 +667,53 @@ export default function Schedule() {
         </Card>
       )}
 
-      {/* Live region for schedule regeneration announcements. */}
-      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-        {scheduleAnnounce}
-      </div>
+      <Modal
+        isOpen={Boolean(preview)}
+        onClose={() => { if (!regenerateMutation.isPending) setPreview(null); }}
+        closeDisabled={regenerateMutation.isPending}
+        title="Review schedule impact"
+        subtitle="Nothing changes until you confirm."
+        size="lg"
+        footer={preview ? (
+          <div className="flex w-full justify-end gap-3">
+            <Button variant="secondary" onClick={() => setPreview(null)} disabled={regenerateMutation.isPending}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={regenerateMutation.isPending}
+              onClick={() => regenerateMutation.mutate(preview)}
+            >
+              Apply schedule
+            </Button>
+          </div>
+        ) : undefined}
+      >
+        {preview && (
+          <div className="space-y-5">
+            {operationError && <OperationStatus state="rejected" message={operationError} />}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">Affected divisions</p><p className="text-xl font-semibold">{preview.impact.affectedDivisionIds.length}</p></div>
+              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">Ring changes</p><p className="text-xl font-semibold">{preview.impact.ringChanges}</p></div>
+              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">Time changes</p><p className="text-xl font-semibold">{preview.impact.timeChanges}</p></div>
+              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">New warnings</p><p className="text-xl font-semibold">{preview.impact.addedWarnings.length}</p></div>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white">Affected divisions</h3>
+              {preview.impact.affectedLabels.length ? (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700 dark:text-gray-300">
+                  {preview.impact.affectedLabels.map((label) => <li key={label}>{label}</li>)}
+                </ul>
+              ) : <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">The proposed configuration produces the same division timing and rings.</p>}
+            </div>
+            {preview.impact.addedWarnings.length > 0 && (
+              <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                <p className="font-semibold">Review new warnings before applying</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">{preview.impact.addedWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+              </div>
+            )}
+            <p className="text-sm text-gray-700 dark:text-gray-300">Applying records who approved the change and preserves the previous schedule for one-click undo. Undo is blocked if another schedule edit occurs first.</p>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

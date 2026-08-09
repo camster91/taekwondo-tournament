@@ -84,6 +84,7 @@ model Tournament {
   competitorHistories CompetitorHistory[]
   matchupHistories    MatchupHistory[]
   publicDisplayHeartbeat PublicDisplayHeartbeat?
+  operationAudits       TournamentOperationAudit[]
   organization        Organization?          @relation(fields: [organizationId], references: [id])
   sportProfile        SportProfile?          @relation(fields: [sportProfileId], references: [id])
 
@@ -300,6 +301,26 @@ model PublicDisplayHeartbeat {
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@index([lastSeenAt])
+}
+
+model TournamentOperationAudit {
+  id            String    @id @default(uuid())
+  tournamentId  String
+  operationType String
+  operationKey  String    @unique
+  beforeState   String?
+  afterState    String
+  impactSummary String
+  reversible    Boolean   @default(false)
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  undoneAt      DateTime?
+  undoneBy      String?
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, createdAt])
+  @@index([operationType])
 }
 
 // Magic link / code authentication
