@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import type { Server } from 'node:http';
 
+const invalidateAuthCache = vi.hoisted(() => vi.fn());
+
 vi.mock('../middleware/auth.js', () => ({
   createToken: vi.fn(() => 'mock-jwt-token'),
   authenticate: (req: any, _res: unknown, next: () => void) => {
@@ -12,7 +14,7 @@ vi.mock('../middleware/auth.js', () => ({
   SESSION_COOKIE: 'bowin_session',
   SESSION_COOKIE_OPTIONS: {},
   setCsrfCookie: vi.fn(),
-  invalidateAuthCache: vi.fn(),
+  invalidateAuthCache,
 }));
 
 vi.mock('../services/email.js', () => ({
@@ -31,11 +33,13 @@ const servers: Server[] = [];
 async function startAuthServer(options: {
   nodeEnv: string;
   isolatedData?: string;
+  enableDemo?: string;
   update?: ReturnType<typeof vi.fn>;
 }) {
   vi.resetModules();
   process.env.NODE_ENV = options.nodeEnv;
-  process.env.ENABLE_DEMO_LOGIN = '1';
+  if (options.enableDemo === undefined) process.env.ENABLE_DEMO_LOGIN = '1';
+  else process.env.ENABLE_DEMO_LOGIN = options.enableDemo;
   if (options.isolatedData === undefined) delete process.env.DEMO_ISOLATED_DATA;
   else process.env.DEMO_ISOLATED_DATA = options.isolatedData;
   process.env.RATE_LIMIT_DISABLED = '1';
@@ -70,6 +74,7 @@ async function startAuthServer(options: {
 
 beforeEach(() => {
   process.env = { ...originalEnv };
+  invalidateAuthCache.mockReset();
 });
 
 afterEach(async () => {
@@ -90,6 +95,9 @@ describe('demo session isolation', () => {
 
     expect(response.status).toBe(200);
     expect(update).not.toHaveBeenCalled();
+    expect(invalidateAuthCache).not.toHaveBeenCalled();
+    expect(response.headers.get('set-cookie')).toContain('bowin_session=');
+    expect(response.headers.get('set-cookie')).toContain('bowin_csrf=');
   });
 
   it('continues to bump tokenVersion for normal-user logout', async () => {
@@ -105,6 +113,9 @@ describe('demo session isolation', () => {
       where: { id: 'normal-user' },
       data: { tokenVersion: { increment: 1 } },
     });
+    expect(invalidateAuthCache).toHaveBeenCalledWith('normal-user');
+    expect(response.headers.get('set-cookie')).toContain('bowin_session=');
+    expect(response.headers.get('set-cookie')).toContain('bowin_csrf=');
   });
 
   it('hides demo login in production without isolated-data attestation', async () => {
@@ -119,5 +130,14 @@ describe('demo session isolation', () => {
     expect(await response.json()).toMatchObject({
       message: expect.stringMatching(/synthetic demo/i),
     });
+  });
+
+  it('hides demo login in production when login opt-in is disabled despite isolated data', async () => {
+    const { baseUrl } = await startAuthServer({
+      nodeEnv: 'production',
+      isolatedData: '1',
+      enableDemo: '0',
+    });
+    expect((await fetch(`${baseUrl}/demo`, { method: 'POST' })).status).toBe(404);
   });
 });
