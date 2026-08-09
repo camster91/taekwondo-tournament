@@ -83,6 +83,7 @@ model Tournament {
   incidents           Incident[]
   competitorHistories CompetitorHistory[]
   matchupHistories    MatchupHistory[]
+  publicDisplayHeartbeat PublicDisplayHeartbeat?
   organization        Organization?          @relation(fields: [organizationId], references: [id])
   sportProfile        SportProfile?          @relation(fields: [sportProfileId], references: [id])
 
@@ -289,6 +290,16 @@ model User {
   organizationMembers OrganizationMember[]
 
   @@index([demoExpiresAt])
+}
+
+model PublicDisplayHeartbeat {
+  tournamentId String   @id
+  lastSeenAt   DateTime
+  updatedAt    DateTime @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([lastSeenAt])
 }
 
 // Magic link / code authentication

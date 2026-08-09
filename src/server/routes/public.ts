@@ -24,6 +24,7 @@ import {
   hashManagementToken,
   isValidManagementToken,
 } from '../utils/registration-management-token.js';
+import { recordPublicDisplayHeartbeat } from '../services/public-display-heartbeat.js';
 
 const router = Router();
 
@@ -472,6 +473,31 @@ router.get('/scoreboard/:publicSlug', scoreboardLimiter, async (req: Request, re
   });
 
   res.json(divisions);
+});
+
+router.post('/tournaments/:id/display-heartbeat', scoreboardLimiter, optionalAuthenticate, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, publicSlug: true, deletedAt: true },
+  });
+  if (!tournament || tournament.deletedAt || !tournament.publicSlug) {
+    return res.status(404).json({ error: 'Scoreboard not found' });
+  }
+
+  const suppliedKey = typeof req.query.key === 'string' ? req.query.key : '';
+  if (suppliedKey !== tournament.publicSlug) {
+    const authenticatedReq = req as AuthenticatedRequest;
+    const access = authenticatedReq.user
+      ? await checkTournamentAccess(authenticatedReq, prisma, tournament.id, 'viewer')
+      : { ok: false };
+    if (!access.ok) {
+      return res.status(404).json({ error: 'Scoreboard not found' });
+    }
+  }
+
+  const heartbeat = await recordPublicDisplayHeartbeat(prisma, tournament.id);
+  res.json(heartbeat);
 });
 
 // Public scoreboard by tournament UUID. Requires an existing publicSlug

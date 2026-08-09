@@ -26,6 +26,7 @@ import {
   getPlanEntitlements,
 } from '../services/entitlements.js';
 import { mergeRulesSettings, saveTournamentSettingsAtomic } from '../services/tournament-settings.js';
+import { loadTournamentAttention } from '../services/tournament-attention.js';
 
 const router = Router();
 
@@ -455,6 +456,13 @@ router.put('/:id/settings', authenticate, requireTournamentAccess('director'), v
     req.body.weightClasses,
   );
   res.json(tournament);
+});
+
+router.get('/:id/attention', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const alerts = await loadTournamentAttention(prisma, getParam(req.params.id));
+  if (!alerts) return res.status(404).json({ error: 'Tournament not found' });
+  res.json({ alerts, generatedAt: new Date().toISOString() });
 });
 
 router.put('/:id', authenticate, requireTournamentAccess('director'), validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {

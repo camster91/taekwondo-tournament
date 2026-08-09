@@ -122,6 +122,23 @@ export default function PublicScoreboard() {
     scoreboardReady: Boolean(scoreboardData),
   });
 
+  useEffect(() => {
+    // A heartbeat means this display has just received current scoreboard data.
+    // Cached stale data must not keep a failing display looking healthy.
+    if (pageState !== 'ready') return;
+    const encodedId = encodeURIComponent(tournamentId || '');
+    const query = publicKey ? `?key=${encodeURIComponent(publicKey)}` : '';
+    const heartbeat = () => {
+      void fetch(`/api/public/tournaments/${encodedId}/display-heartbeat${query}`, {
+        method: 'POST',
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 15_000);
+    return () => window.clearInterval(timer);
+  }, [pageState, publicKey, tournamentId]);
+
   // Stale-data warning. If 15+ seconds have passed since the last successful
   // fetch, the venue Wi-Fi may be flaky or the backend is down. Show an
   // explicit warning in the header so the director notices. Closes the
