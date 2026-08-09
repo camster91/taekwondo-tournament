@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { buildShowcaseFixture } from '../../../prisma/demo-seed.js';
 
 const root = resolve(import.meta.dirname, '../../..');
 const read = (path: string) => readFileSync(resolve(root, path), 'utf8');
@@ -13,6 +14,36 @@ describe('demo showcase deployment contract', () => {
     expect(packageJson.scripts['demo:reset:production']).toBe('node dist-demo/prisma/demo-seed.js');
     expect(dockerfile).toContain('npx tsc -p tsconfig.demo.json');
     expect(dockerfile).toContain('/app/dist-demo ./dist-demo');
+  });
+
+  it('provides an isolated staging release with backup and rollback gates', () => {
+    const staging = read('scripts/deploy-staging.sh');
+
+    expect(staging).toContain('git status --porcelain');
+    expect(staging).toContain('git archive HEAD');
+    expect(staging).toContain('docker save');
+    expect(staging).toContain('ARCHIVE_SHA256');
+    expect(staging).toContain('org.opencontainers.image.revision');
+    expect(staging).toContain('pg_dump');
+    expect(staging).toContain('pg_restore --list');
+    expect(staging).toContain('restore_database');
+    expect(staging).toContain('bowin-staging-pgdata');
+    expect(staging).toContain('bowin-staging-db:5432/bowin_staging\\?*');
+    expect(staging).toContain('PREVIOUS_IMAGE_ID');
+    expect(staging).toContain('--name bowin-staging-candidate');
+    expect(staging).toContain('DEMO_ISOLATED_DATA=1');
+    expect(staging).toContain('npm run demo:reset:production');
+    expect(staging.indexOf('npm run demo:reset:production')).toBeLessThan(
+      staging.indexOf('-p 127.0.0.1:18302:3001'),
+    );
+    expect(staging).toContain('bowin-staging-rollback');
+    expect(staging).toContain('restore_previous_release');
+    expect(staging).toContain('STAGING_URL=https://staging-tkd.ashbi.ca');
+    expect(staging).toContain('$STAGING_URL/api/health/ready');
+    expect(staging).toContain('http://127.0.0.1:18302/api/health/ready');
+    const openTournament = buildShowcaseFixture().tournaments.find((tournament) => tournament.status === 'registration')!;
+    expect(staging).toContain(openTournament.publicSlug!);
+    expect(staging).toContain(openTournament.name);
   });
 
   it('documents and forwards both production demo safety gates', () => {
