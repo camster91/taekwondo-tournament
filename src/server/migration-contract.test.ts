@@ -37,4 +37,18 @@ describe('production migration contract', () => {
     expect(sql).toMatch(/ALTER TABLE "Registration"\s+ADD COLUMN "managementTokenHash" TEXT/);
     expect(sql).toMatch(/CREATE UNIQUE INDEX "Registration_managementTokenHash_key"/);
   });
+
+  it('persists and indexes demo-session expiry for safe bounded cleanup', () => {
+    const schema = readFileSync(join(process.cwd(), 'prisma', 'schema.prisma'), 'utf8');
+    const migrationsRoot = join(process.cwd(), 'prisma', 'migrations');
+    const sql = readdirSync(migrationsRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => readFileSync(join(migrationsRoot, entry.name, 'migration.sql'), 'utf8'))
+      .join('\n');
+
+    expect(schema).toMatch(/demoExpiresAt\s+DateTime\?/);
+    expect(schema).toMatch(/@@index\(\[demoExpiresAt\]\)/);
+    expect(sql).toMatch(/ALTER TABLE "User"\s+ADD COLUMN "demoExpiresAt" TIMESTAMP\(3\)/);
+    expect(sql).toMatch(/CREATE INDEX "User_demoExpiresAt_idx" ON "User"\("demoExpiresAt"\)/);
+  });
 });
