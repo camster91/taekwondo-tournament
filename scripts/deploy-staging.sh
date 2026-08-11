@@ -112,6 +112,13 @@ test "$(docker inspect bowin-staging-db --format '{{range .Mounts}}{{if eq .Dest
 ALLOWED_ENV='^(DATABASE_URL|JWT_SECRET|METRICS_TOKEN|ADMIN_SETUP_KEY|MAILGUN_API_KEY|MAILGUN_DOMAIN|MAILGUN_BASE_URL|EMAIL_FROM_NAME|EMAIL_FROM_ADDRESS|OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64|RETENTION_PURGE_ENABLED|SOFT_DELETE_RETENTION_DAYS|REGISTRATION_CONSENT_VERSION|PRIVACY_NOTICE_URL|TOURNAMENT_TERMS_URL|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_STARTER_PRICE_ID|STRIPE_PRO_PRICE_ID|DEBUG)='
 docker inspect bowin-staging-app --format '{{range .Config.Env}}{{println .}}{{end}}' \
   | grep -E "$ALLOWED_ENV" > "$ENV_FILE"
+if ! grep -q '^OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=' "$ENV_FILE"; then
+  # First rollout of offline-capability support: the existing image predates
+  # this variable, so use the root-owned staging key provisioned for it.
+  test -s /etc/taekwondo.d/offline-capability-private-key
+  printf 'OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=%s\n' \
+    "$(tr -d '\r\n' < /etc/taekwondo.d/offline-capability-private-key)" >> "$ENV_FILE"
+fi
 DATABASE_URL=$(grep '^DATABASE_URL=' "$ENV_FILE" | cut -d= -f2-)
 DATABASE_TARGET=${DATABASE_URL#*://}
 DATABASE_TARGET=${DATABASE_TARGET#*@}
