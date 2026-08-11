@@ -7,32 +7,25 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VPS_HOST=${BOWIN_STAGING_VPS:-root@187.77.26.99}
 SSH_KEY=${BOWIN_STAGING_SSH_KEY:-/c/Users/camst/.ssh/id_ed25519_hostinger}
 STAGING_URL=https://staging-tkd.ashbi.ca
-: "${BOWIN_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64:?Set the staging offline capability SPKI public key}"
-
 cd "$ROOT"
 if [ -n "$(git status --porcelain)" ]; then
   echo "Refusing staging deploy from a dirty worktree" >&2
   exit 1
 fi
 RELEASE_SHA=$(git rev-parse --verify HEAD)
-IMAGE="bowin-release:${RELEASE_SHA}"
-CONTEXT=$(mktemp -d "${TMPDIR:-/tmp}/bowin-staging-context.XXXXXX")
-ARCHIVE=$(mktemp "${TMPDIR:-/tmp}/bowin-staging-image.XXXXXX.tar.gz")
-trap 'rm -rf "$CONTEXT"; rm -f "$ARCHIVE"' EXIT
+ARCHIVE=$(mktemp "${TMPDIR:-/tmp}/bowin-staging-source.XXXXXX.tar.gz")
+trap 'rm -f "$ARCHIVE"' EXIT
 
-echo "==> Building immutable image from tracked commit ${RELEASE_SHA}"
-git archive HEAD | tar -x -C "$CONTEXT"
-docker build \
-  --build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${BOWIN_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64}" \
-  --label "org.opencontainers.image.revision=${RELEASE_SHA}" \
-  -t "$IMAGE" "$CONTEXT"
-test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"
-docker save "$IMAGE" | gzip -1 > "$ARCHIVE"
+echo "==> Archiving exact tracked commit ${RELEASE_SHA}"
+git archive --format=tar.gz --prefix=app/ --output="$ARCHIVE" HEAD
 ARCHIVE_SHA256=$(sha256sum "$ARCHIVE" | awk '{print $1}')
 
-echo "==> Uploading exact image artifact into a root-owned release directory"
+echo "==> Uploading exact source artifact into a root-owned release directory"
+ssh -i "$SSH_KEY" -o BatchMode=yes "$VPS_HOST" "install -d -m 700 /opt/bowin-staging-releases"
+scp -O -i "$SSH_KEY" -o BatchMode=yes "$ARCHIVE" \
+  "${VPS_HOST}:/opt/bowin-staging-releases/$RELEASE_SHA.tar.gz.part"
 ssh -i "$SSH_KEY" -o BatchMode=yes "$VPS_HOST" \
-  "install -d -m 700 /opt/bowin-staging-releases/$RELEASE_SHA && umask 077 && cat > /opt/bowin-staging-releases/$RELEASE_SHA/image.tar.gz.part && mv /opt/bowin-staging-releases/$RELEASE_SHA/image.tar.gz.part /opt/bowin-staging-releases/$RELEASE_SHA/image.tar.gz" < "$ARCHIVE"
+  "mv /opt/bowin-staging-releases/$RELEASE_SHA.tar.gz.part /opt/bowin-staging-releases/$RELEASE_SHA.tar.gz"
 
 ssh -i "$SSH_KEY" -o BatchMode=yes "$VPS_HOST" \
   "RELEASE_SHA='$RELEASE_SHA' ARCHIVE_SHA256='$ARCHIVE_SHA256' STAGING_URL='$STAGING_URL' bash -s" <<'REMOTE'
@@ -40,7 +33,7 @@ set -euo pipefail
 
 IMAGE="bowin-release:${RELEASE_SHA}"
 RELEASE_DIR="/opt/bowin-staging-releases/${RELEASE_SHA}"
-ARCHIVE="${RELEASE_DIR}/image.tar.gz"
+ARCHIVE="/opt/bowin-staging-releases/${RELEASE_SHA}.tar.gz"
 BACKUP_DIR=/opt/bowin-staging-backups
 ENV_FILE=$(mktemp /tmp/bowin-staging-env.XXXXXX)
 chmod 600 "$ENV_FILE"
@@ -142,9 +135,17 @@ printf '%s\n' \
   'DEMO_ISOLATED_DATA=1' \
   'DEMO_RATE_LIMIT_MAX=30' >> "$ENV_FILE"
 
-echo "==> Verifying and loading immutable artifact"
+echo "==> Verifying and building immutable artifact on the staging host"
 test "$(sha256sum "$ARCHIVE" | awk '{print $1}')" = "$ARCHIVE_SHA256"
-gzip -dc "$ARCHIVE" | docker load >/dev/null
+PUBLIC_KEY=$(tr -d '\r\n' < /etc/taekwondo.d/offline-capability-staging-public-key)
+test -n "$PUBLIC_KEY"
+rm -rf "$RELEASE_DIR"
+mkdir -p "$RELEASE_DIR"
+tar xzf "$ARCHIVE" -C "$RELEASE_DIR" --strip-components=1
+docker build \
+  --build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${PUBLIC_KEY}" \
+  --label "org.opencontainers.image.revision=${RELEASE_SHA}" \
+  -t "$IMAGE" "$RELEASE_DIR" >/tmp/bowin-staging-build-${RELEASE_SHA}.log 2>&1
 test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"
 
 echo "==> Stopping staging writes and retaining the current release"
