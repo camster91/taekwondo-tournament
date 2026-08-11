@@ -23,6 +23,7 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
+import { Input } from '../components/ui';
 import { StatTile } from '../components/ui';
 import type { ApiDivision, ApiMatch, ApiTournamentSummary } from '../utils/api-types';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
@@ -82,6 +83,12 @@ interface TournamentProgress {
   warnings: string[];
 }
 
+interface OperationalQueryAnswer {
+  answer: string;
+  generatedAt: string;
+  evidence: Array<{ label: string; href: string; observedAt: string }>;
+}
+
 interface AttentionAlert {
   id: string;
   kind: string;
@@ -114,6 +121,7 @@ export default function DirectorDashboard() {
   const [displayMode, setDisplayMode] = useState<'all' | 'ring' | 'featured'>('all');
   const [displayRing, setDisplayRing] = useState<number>(1);
   const [displayMatchId, setDisplayMatchId] = useState<string>('');
+  const [operationalQuestion, setOperationalQuestion] = useState('');
 
   const displaySettingsMutation = useMutation({
     mutationFn: async () => {
@@ -335,6 +343,19 @@ export default function DirectorDashboard() {
     refetchIntervalInBackground: false,
   });
 
+  const operationalQueryMutation = useMutation({
+    mutationFn: async (question: string): Promise<OperationalQueryAnswer> => {
+      const response = await fetch(`/api/tournaments/${tournamentId}/operational-query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ question }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'The operational question could not be answered.');
+      return body as OperationalQueryAnswer;
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -386,6 +407,42 @@ export default function DirectorDashboard() {
           Back to Tournament
         </Link>
       </PageHeader>
+
+      <section aria-label="Ask about tournament operations">
+        <Card>
+          <CardHeader title="Ask about tournament operations" description="Read-only answers use current server records. Supported: blocked divisions, the next number of minutes, a late ring, and schools needing check-in." />
+          <CardBody className="space-y-3">
+            <form
+              className="flex flex-col gap-2 sm:flex-row"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const question = operationalQuestion.trim();
+                if (question) operationalQueryMutation.mutate(question);
+              }}
+            >
+              <label htmlFor="operational-question" className="sr-only">Operational question</label>
+              <Input
+                id="operational-question"
+                value={operationalQuestion}
+                onChange={(event) => setOperationalQuestion(event.target.value)}
+                placeholder="For example: Why is Ring 3 late?"
+                aria-describedby="operational-query-help"
+                disabled={operationalQueryMutation.isPending}
+              />
+              <Button type="submit" loading={operationalQueryMutation.isPending} disabled={!operationalQuestion.trim()}>Ask</Button>
+            </form>
+            <p id="operational-query-help" className="text-sm text-gray-600 dark:text-gray-400">This never changes tournament data.</p>
+            {operationalQueryMutation.isError && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100">{operationalQueryMutation.error instanceof Error ? operationalQueryMutation.error.message : 'The operational question could not be answered.'}</div>}
+            {operationalQueryMutation.data && (
+              <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+                <p>{operationalQueryMutation.data.answer}</p>
+                <p className="mt-1 text-xs">Current as of {new Date(operationalQueryMutation.data.generatedAt).toLocaleTimeString()}.</p>
+                {operationalQueryMutation.data.evidence.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5">{operationalQueryMutation.data.evidence.map((item) => <li key={`${item.href}:${item.label}`}><Link className="underline" to={item.href}>{item.label}</Link> <span className="text-xs">({new Date(item.observedAt).toLocaleTimeString()})</span></li>)}</ul>}
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      </section>
 
       {/* Server-backed command centre */}
       <section aria-labelledby="attention-heading" className="space-y-3">

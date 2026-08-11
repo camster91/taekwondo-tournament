@@ -83,6 +83,21 @@ test('attention and heartbeat endpoints enforce access and persist only tourname
   const crossTenant = await request.get(`/api/tournaments/${ids.otherTournament}/attention`, { headers });
   expect([403, 404]).toContain(crossTenant.status());
 
+  const queryAnonymous = await request.post(`/api/tournaments/${ids.tournament}/operational-query`, { data: { question: 'Which divisions are blocked?' } });
+  expect([401, 403]).toContain(queryAnonymous.status());
+  const query = await request.post(`/api/tournaments/${ids.tournament}/operational-query`, { headers, data: { question: 'Which divisions are blocked?' } });
+  expect(query.status()).toBe(200);
+  expect(await query.json()).toMatchObject({
+    answer: expect.stringContaining('blocked'),
+    generatedAt: expect.any(String),
+    evidence: [expect.objectContaining({ label: 'E2E Patterns Division', href: `/tournaments/${ids.tournament}/divisions` })],
+  });
+  const mutationLike = await request.post(`/api/tournaments/${ids.tournament}/operational-query`, { headers, data: { question: 'Move matches now' } });
+  expect(mutationLike.status()).toBe(200);
+  expect((await mutationLike.json()).evidence).toEqual([]);
+  const queryCrossTenant = await request.post(`/api/tournaments/${ids.otherTournament}/operational-query`, { headers, data: { question: 'Which divisions are blocked?' } });
+  expect([403, 404]).toContain(queryCrossTenant.status());
+
 });
 
 test('director sees actionable server and device-local alerts with recovery navigation', async ({ page }) => {
@@ -101,6 +116,10 @@ test('director sees actionable server and device-local alerts with recovery navi
   await expect(page.getByRole('heading', { name: 'Divisions need brackets' })).toBeVisible();
   await expect(page.getByText(/Affected: E2E Patterns Division/)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Offline changes need review' })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Operational question' }).fill('Which divisions are blocked?');
+  await page.getByRole('button', { name: 'Ask' }).click();
+  await expect(page.getByText(/currently blocked from starting/)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Ask about tournament operations' }).getByRole('link', { name: 'E2E Patterns Division' })).toHaveAttribute('href', `/tournaments/${ids.tournament}/divisions`);
   await expect(page.getByRole('link', { name: 'Check-in review' })).toHaveAttribute('href', `/checkin/${ids.tournament}`);
   await expect(page.getByRole('link', { name: 'Score review' })).toHaveAttribute('href', `/scorekeeper/${ids.tournament}`);
 });
