@@ -46,6 +46,7 @@ CUTOVER_STARTED=0
 DB_MUTATED=0
 PREVIOUS_RENAMED=0
 PREVIOUS_IMAGE_ID=""
+LIVE_STOPPED=0
 
 wait_for_health() {
   local url=$1
@@ -78,6 +79,8 @@ cleanup() {
     echo "ROLLBACK: restoring stopped-write production release" >&2
     [ "$DB_MUTATED" -eq 1 ] && restore_database || true
     restore_previous_release || { echo "CRITICAL: manual recovery required; backup=${BACKUP}" >&2; status=90; }
+  elif [ "$status" -ne 0 ] && [ "$LIVE_STOPPED" -eq 1 ]; then
+    docker start "$LIVE" >/dev/null 2>&1 || { echo "CRITICAL: stopped live container could not restart" >&2; status=90; }
   fi
   [ -z "$ENV_FILE" ] || rm -f "$ENV_FILE"
   exit "$status"
@@ -130,10 +133,12 @@ docker exec "$CANDIDATE" wget -q -O /dev/null http://127.0.0.1:3001/api/health/r
 docker rm -f "$CANDIDATE" >/dev/null
 
 echo "==> Stopping production writes and validating backup"
-CUTOVER_STARTED=1
+docker rm -f "$ROLLBACK" >/dev/null 2>&1 || true
 docker stop "$LIVE" >/dev/null
+LIVE_STOPPED=1
 docker rename "$LIVE" "$ROLLBACK"
 PREVIOUS_RENAMED=1
+CUTOVER_STARTED=1
 BACKUP="$BACKUP_DIR/pre-${STAMP}.dump"
 docker exec markup-postgres pg_dump -U markup -Fc --create taekwondo > "$BACKUP"
 chmod 600 "$BACKUP" && test -s "$BACKUP"
