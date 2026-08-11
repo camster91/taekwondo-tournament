@@ -115,9 +115,9 @@ docker inspect bowin-staging-app --format '{{range .Config.Env}}{{println .}}{{e
 if ! grep -q '^OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=' "$ENV_FILE"; then
   # First rollout of offline-capability support: the existing image predates
   # this variable, so use the root-owned staging key provisioned for it.
-  test -s /etc/taekwondo.d/offline-capability-private-key
+  test -s /etc/taekwondo.d/offline-capability-staging-private-key
   printf 'OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=%s\n' \
-    "$(tr -d '\r\n' < /etc/taekwondo.d/offline-capability-private-key)" >> "$ENV_FILE"
+    "$(tr -d '\r\n' < /etc/taekwondo.d/offline-capability-staging-private-key)" >> "$ENV_FILE"
 fi
 DATABASE_URL=$(grep '^DATABASE_URL=' "$ENV_FILE" | cut -d= -f2-)
 DATABASE_TARGET=${DATABASE_URL#*://}
