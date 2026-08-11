@@ -10,6 +10,7 @@ VPS_HOST=${BOWIN_PRODUCTION_VPS:-root@187.77.26.99}
 SSH_KEY=${BOWIN_PRODUCTION_SSH_KEY:-/c/Users/camst/.ssh/id_ed25519_hostinger}
 PUBLIC_URL=${BOWIN_PRODUCTION_URL:-https://tkd.ashbi.ca}
 : "${BOWIN_PRODUCTION_PROVISION_OFFLINE_KEYS:=0}"
+: "${BOWIN_PRODUCTION_RESET_DEMO:=0}"
 
 cd "$ROOT"
 test -z "$(git status --porcelain)" || { echo "Refusing production deploy from a dirty worktree" >&2; exit 1; }
@@ -28,7 +29,7 @@ ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes "$VPS_HOST" \
   "mv /opt/bowin-production-releases/${RELEASE_SHA}.tar.gz.part /opt/bowin-production-releases/${RELEASE_SHA}.tar.gz"
 
 ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes "$VPS_HOST" \
-  "RELEASE_SHA='$RELEASE_SHA' ARCHIVE_SHA256='$ARCHIVE_SHA256' PUBLIC_URL='$PUBLIC_URL' PROVISION_OFFLINE_KEYS='$BOWIN_PRODUCTION_PROVISION_OFFLINE_KEYS' bash -s" <<'REMOTE'
+  "RELEASE_SHA='$RELEASE_SHA' ARCHIVE_SHA256='$ARCHIVE_SHA256' PUBLIC_URL='$PUBLIC_URL' PROVISION_OFFLINE_KEYS='$BOWIN_PRODUCTION_PROVISION_OFFLINE_KEYS' RESET_DEMO='$BOWIN_PRODUCTION_RESET_DEMO' bash -s" <<'REMOTE'
 set -Eeuo pipefail
 LIVE=taekwondo-tournament
 CANDIDATE=taekwondo-tournament-candidate
@@ -56,7 +57,7 @@ restore_database() {
   docker exec "$LIVE" true >/dev/null 2>&1 && docker stop "$LIVE" >/dev/null 2>&1 || true
   docker exec markup-postgres psql -U markup -d postgres -v ON_ERROR_STOP=1 \
     -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='taekwondo' AND pid <> pg_backend_pid();" >/dev/null
-  docker exec -i markup-postgres pg_restore -U markup -d taekwondo --clean --if-exists --no-owner --exit-on-error < "$BACKUP"
+  docker exec -i markup-postgres pg_restore -U markup -d postgres --clean --if-exists --create --no-owner --exit-on-error < "$BACKUP"
 }
 restore_previous_release() {
   docker rm -f "$LIVE" >/dev/null 2>&1 || true
@@ -134,14 +135,20 @@ docker stop "$LIVE" >/dev/null
 docker rename "$LIVE" "$ROLLBACK"
 PREVIOUS_RENAMED=1
 BACKUP="$BACKUP_DIR/pre-${STAMP}.dump"
-docker exec markup-postgres pg_dump -U markup -Fc taekwondo > "$BACKUP"
+docker exec markup-postgres pg_dump -U markup -Fc --create taekwondo > "$BACKUP"
 chmod 600 "$BACKUP" && test -s "$BACKUP"
 docker exec -i markup-postgres pg_restore -U markup --list < "$BACKUP" >/dev/null
 
 DB_MUTATED=1
-echo "==> Migrating and restoring the marker-protected showcase"
+echo "==> Migrating database"
 docker run --rm --network markup-net --env-file "$ENV_FILE" "$IMAGE" sh -c './node_modules/.bin/prisma migrate deploy'
-docker run --rm --network markup-net --env-file "$ENV_FILE" -e DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 "$IMAGE" npm run demo:reset:production
+if [ "$RESET_DEMO" = 1 ]; then
+  grep -q '^DEMO_ISOLATED_DATA=1$' "$ENV_FILE" || { echo "Refusing demo reset outside an isolated synthetic environment" >&2; exit 1; }
+  echo "==> Resetting marker-protected synthetic showcase"
+  docker run --rm --network markup-net --env-file "$ENV_FILE" -e DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 "$IMAGE" npm run demo:reset:production
+else
+  echo "==> Demo reset skipped (not an isolated synthetic environment)"
+fi
 
 echo "==> Publishing candidate on existing port ${LIVE_PORT}"
 docker run -d --name "$LIVE" --restart unless-stopped --network markup-net -p "127.0.0.1:${LIVE_PORT}:3001" --env-file "$ENV_FILE" "$IMAGE" >/dev/null
