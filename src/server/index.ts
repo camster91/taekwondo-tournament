@@ -208,6 +208,12 @@ app.get('/api/internal/metrics', (req: Request, res: Response) => {
 
 // API Routes
 app.use('/api/auth', authRouter);
+// Older cached clients used this pre-auth-router endpoint. Keep the API
+// response compatible during service-worker/client asset transitions rather
+// than letting the SPA fallback return HTML to a JSON consumer.
+app.get('/api/setup-status', (_req: Request, res: Response) => {
+  res.redirect(307, '/api/auth/setup-status');
+});
 app.use('/api/public', publicRouter);
 app.use('/api/competitors', competitorsRouter);
 app.use('/api/tournaments', tournamentsRouter);
