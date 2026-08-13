@@ -7,6 +7,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VPS_HOST=${BOWIN_STAGING_VPS:-root@187.77.26.99}
 SSH_KEY=${BOWIN_STAGING_SSH_KEY:-/c/Users/camst/.ssh/id_ed25519_hostinger}
 STAGING_URL=https://staging-tkd.ashbi.ca
+: "${BOWIN_STAGING_INJECT_FAILURE:=}"
 cd "$ROOT"
 if [ -n "$(git status --porcelain)" ]; then
   echo "Refusing staging deploy from a dirty worktree" >&2
@@ -28,7 +29,7 @@ ssh -i "$SSH_KEY" -o BatchMode=yes "$VPS_HOST" \
   "mv /opt/bowin-staging-releases/$RELEASE_SHA.tar.gz.part /opt/bowin-staging-releases/$RELEASE_SHA.tar.gz"
 
 ssh -i "$SSH_KEY" -o BatchMode=yes "$VPS_HOST" \
-  "RELEASE_SHA='$RELEASE_SHA' ARCHIVE_SHA256='$ARCHIVE_SHA256' STAGING_URL='$STAGING_URL' bash -s" <<'REMOTE'
+  "RELEASE_SHA='$RELEASE_SHA' ARCHIVE_SHA256='$ARCHIVE_SHA256' STAGING_URL='$STAGING_URL' INJECT_FAILURE='$BOWIN_STAGING_INJECT_FAILURE' bash -s" <<'REMOTE'
 set -euo pipefail
 
 IMAGE="bowin-release:${RELEASE_SHA}"
@@ -42,6 +43,13 @@ DB_MUTATION_STARTED=0
 PREVIOUS_RENAMED=0
 PREVIOUS_IMAGE_ID=''
 BACKUP=''
+LOCK_DIR=/var/lock/bowin-staging-deploy.lock
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "Another staging deployment is already running" >&2
+  exit 1
+fi
+trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 
 wait_for_health() {
   URL=$1
@@ -92,6 +100,7 @@ cleanup_on_exit() {
     fi
   fi
   rm -f "$ENV_FILE"
+  rmdir "$LOCK_DIR" 2>/dev/null || true
   exit "$STATUS"
 }
 trap cleanup_on_exit EXIT
@@ -151,10 +160,14 @@ test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.open
 echo "==> Stopping staging writes and retaining the current release"
 docker rm -f bowin-staging-rollback >/dev/null 2>&1 || true
 PREVIOUS_IMAGE_ID=$(docker inspect bowin-staging-app --format '{{.Image}}')
-CUTOVER_STARTED=1
 docker stop bowin-staging-app >/dev/null
 docker rename bowin-staging-app bowin-staging-rollback
 PREVIOUS_RENAMED=1
+CUTOVER_STARTED=1
+if [ "$INJECT_FAILURE" = after-rename ]; then
+  echo "Injected staging failure after rollback retention" >&2
+  exit 42
+fi
 
 echo "==> Capturing and validating pre-migration database backup"
 install -d -m 700 "$BACKUP_DIR"
