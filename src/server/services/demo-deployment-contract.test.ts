@@ -20,10 +20,11 @@ describe('demo showcase deployment contract', () => {
     const staging = read('scripts/deploy-staging.sh');
 
     expect(staging).toContain('git status --porcelain');
-    expect(staging).toContain('git archive HEAD');
-    expect(staging).toContain('docker save');
+    expect(staging).toContain('git archive --format=tar.gz');
+    expect(staging).toContain('scp -O');
     expect(staging).toContain('ARCHIVE_SHA256');
     expect(staging).toContain('org.opencontainers.image.revision');
+    expect(staging).toContain('docker build');
     expect(staging).toContain('pg_dump');
     expect(staging).toContain('pg_restore --list');
     expect(staging).toContain('restore_database');
@@ -38,6 +39,9 @@ describe('demo showcase deployment contract', () => {
     );
     expect(staging).toContain('bowin-staging-rollback');
     expect(staging).toContain('restore_previous_release');
+    expect(staging).toContain('BOWIN_STAGING_INJECT_FAILURE');
+    expect(staging).toContain('after-demo-reset');
+    expect(staging).toContain('bowin-staging-deploy.lock');
     expect(staging).toContain('STAGING_URL=https://staging-tkd.ashbi.ca');
     expect(staging).toContain('$STAGING_URL/api/health/ready');
     expect(staging).toContain('http://127.0.0.1:18302/api/health/ready');
@@ -49,40 +53,36 @@ describe('demo showcase deployment contract', () => {
   it('documents and forwards both production demo safety gates', () => {
     const example = read('.env.example');
     const compose = read('docker-compose.yml');
-    const deploy = read('scripts/deploy-to-vps.sh');
+    const deploy = read('scripts/deploy-production.sh');
+    const legacyEntryPoint = read('scripts/deploy-to-vps.sh');
 
     expect(example).toContain('DEMO_ISOLATED_DATA=');
     expect(example).toContain('DEMO_RATE_LIMIT_MAX=');
     expect(compose).toContain('DEMO_ISOLATED_DATA=${DEMO_ISOLATED_DATA:-}');
     expect(compose).toContain('DEMO_RATE_LIMIT_MAX=${DEMO_RATE_LIMIT_MAX:-30}');
-    expect(deploy).toContain('DEMO_ISOLATED_DATA=1');
-    expect(deploy).toContain('DEMO_RATE_LIMIT_MAX=30');
+    expect(deploy).toContain('BOWIN_PRODUCTION_RESET_DEMO');
+    expect(deploy).toContain('Refusing demo reset outside an isolated synthetic environment');
     expect(deploy).toContain('npm run demo:reset:production');
-    expect(deploy).toMatch(/dist dist-server dist-demo prisma/);
-    expect(deploy).toContain('COPY --chown=node:node dist-demo ./dist-demo');
-    expect(deploy).not.toContain('COPY --chown=node:node .env ./.env');
     expect(deploy).toContain('--name taekwondo-tournament-candidate');
     expect(deploy).toContain('taekwondo-tournament-rollback');
-    expect(deploy.indexOf('npm run demo:reset:production')).toBeLessThan(
-      deploy.indexOf('-p 127.0.0.1:18301:3001'),
-    );
     expect(deploy).toContain('restore_previous_release');
-    expect(deploy).toContain('CUTOVER_STARTED=1');
-    expect(deploy).toContain('trap cleanup_on_exit EXIT');
-    expect(deploy).toMatch(/release-.*openssl rand -hex 4/);
+    expect(deploy).toContain('bowin-production-deploy.lock');
+    expect(deploy).toContain('pg_dump -U markup -Fc --create');
+    expect(deploy).toContain('pg_restore -U markup -d postgres --clean --if-exists --create');
+    expect(legacyEntryPoint).toContain('deploy-production.sh');
   });
 
   it('provisions matching offline capability keys through every supported image path', () => {
     const dockerfile = read('Dockerfile');
     const staging = read('scripts/deploy-staging.sh');
-    const vps = read('scripts/deploy-to-vps.sh');
+    const production = read('scripts/deploy-production.sh');
     const workflow = read('.github/workflows/build-and-push.yml');
 
     expect(dockerfile).toContain('ARG VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64');
-    expect(staging).toContain('--build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${BOWIN_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64}"');
+    expect(staging).toContain('--build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${PUBLIC_KEY}"');
     expect(staging).toContain('OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64');
-    expect(vps).toContain('--build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64}"');
-    expect(vps).toContain('OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64');
+    expect(production).toContain('--build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${PUBLIC_KEY}"');
+    expect(production).toContain('OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64');
     expect(workflow).toContain('VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${{ vars.OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64 }}');
   });
 });
