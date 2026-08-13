@@ -194,6 +194,10 @@ done
 test "${CANDIDATE_HEALTHY:-0}" -eq 1
 docker exec -e DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 \
   bowin-staging-candidate npm run demo:reset:production
+if [ "$INJECT_FAILURE" = after-demo-reset ]; then
+  echo "Injected staging failure after database mutation" >&2
+  exit 43
+fi
 
 echo "==> Publishing validated release"
 docker rm -f bowin-staging-candidate >/dev/null
