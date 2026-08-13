@@ -47,6 +47,7 @@ DB_MUTATED=0
 PREVIOUS_RENAMED=0
 PREVIOUS_IMAGE_ID=""
 LIVE_STOPPED=0
+LOCK_DIR=/var/lock/bowin-production-deploy.lock
 
 wait_for_health() {
   local url=$1
@@ -83,9 +84,15 @@ cleanup() {
     docker start "$LIVE" >/dev/null 2>&1 || { echo "CRITICAL: stopped live container could not restart" >&2; status=90; }
   fi
   [ -z "$ENV_FILE" ] || rm -f "$ENV_FILE"
+  rmdir "$LOCK_DIR" 2>/dev/null || true
   exit "$status"
 }
 trap cleanup EXIT
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "Another production deployment is already running" >&2
+  exit 1
+fi
 
 docker inspect "$LIVE" >/dev/null
 LIVE_PORT=$(docker inspect "$LIVE" --format '{{(index (index .NetworkSettings.Ports "3001/tcp") 0).HostPort}}')
