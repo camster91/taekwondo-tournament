@@ -63,7 +63,8 @@ describe('demo showcase deployment contract', () => {
     expect(deploy).toContain('BOWIN_PRODUCTION_RESET_DEMO');
     expect(deploy).toContain('Refusing demo reset outside an isolated synthetic environment');
     expect(deploy).toContain('npm run demo:reset:production');
-    expect(deploy).toContain('--name taekwondo-tournament-candidate');
+    expect(deploy).toContain('CANDIDATE=taekwondo-tournament-candidate');
+    expect(deploy).toContain('--name "$CANDIDATE"');
     expect(deploy).toContain('taekwondo-tournament-rollback');
     expect(deploy).toContain('restore_previous_release');
     expect(deploy).toContain('bowin-production-deploy.lock');
