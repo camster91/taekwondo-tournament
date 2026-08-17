@@ -60,6 +60,7 @@ async function startAuthServer(options: {
   app.locals.prisma = {
     user: {
       update,
+      count: vi.fn().mockResolvedValue(1),
       findUnique: vi.fn().mockResolvedValue({
         id: 'demo-user',
         email: 'demo@bowin.app',
@@ -135,6 +136,10 @@ describe('demo session isolation', () => {
   it('hides demo login in production without isolated-data attestation', async () => {
     const { baseUrl } = await startAuthServer({ nodeEnv: 'production' });
     expect((await fetch(`${baseUrl}/demo`, { method: 'POST' })).status).toBe(404);
+    expect(await (await fetch(`${baseUrl}/setup-status`)).json()).toMatchObject({
+      needsSetup: false,
+      demoLoginEnabled: false,
+    });
   });
 
   it('exposes demo login in production with isolated-data attestation', async () => {
@@ -143,6 +148,10 @@ describe('demo session isolation', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       message: expect.stringMatching(/synthetic demo/i),
+    });
+    expect(await (await fetch(`${baseUrl}/setup-status`)).json()).toMatchObject({
+      needsSetup: false,
+      demoLoginEnabled: true,
     });
   });
 

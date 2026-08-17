@@ -314,7 +314,8 @@ export default function Login() {
                   <EmailForm
                     email={email} setEmail={setEmail}
                     onSubmit={handleEmailSubmit} loading={isLoading}
-                    onDemo={handleDemoLogin} demoLoading={demoLoading}
+                    onDemo={setupStatus?.demoLoginEnabled ? handleDemoLogin : undefined}
+                    demoLoading={demoLoading}
                   />
                 ) : (
                   <CodeForm
@@ -397,25 +398,29 @@ function EmailForm({
         </Button>
       </form>
 
-      <div className="relative my-6 flex items-center">
-        <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
-        <span className="px-3 text-xs text-slate-600 dark:text-slate-500 uppercase tracking-wider">or</span>
-        <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
-      </div>
+      {onDemo && (
+        <>
+          <div className="relative my-6 flex items-center">
+            <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
+            <span className="px-3 text-xs text-slate-600 dark:text-slate-500 uppercase tracking-wider">or</span>
+            <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
+          </div>
 
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={onDemo}
-        loading={demoLoading}
-        className="w-full text-slate-600 dark:text-slate-300"
-      >
-        <Sparkles className="h-4 w-4 mr-2" /> Explore the live demo
-      </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onDemo}
+            loading={demoLoading}
+            className="w-full text-slate-600 dark:text-slate-300"
+          >
+            <Sparkles className="h-4 w-4 mr-2" /> Explore the live demo
+          </Button>
 
-      <p className="text-center text-xs text-slate-600">
-        Fabricated tournament data. No signup. Demo activity may be reset.
-      </p>
+          <p className="text-center text-xs text-slate-600">
+            Fabricated tournament data. No signup. Demo activity may be reset.
+          </p>
+        </>
+      )}
 
       <div className="relative">
         <Button

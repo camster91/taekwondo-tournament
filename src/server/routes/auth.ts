@@ -454,11 +454,17 @@ router.post('/setup', registerLimiter, async (req: Request, res: Response) => {
   }
 });
 
-// Check if setup is needed (no users exist)
+function isDemoLoginEnabled(): boolean {
+  return process.env.ENABLE_DEMO_LOGIN === '1'
+    && (process.env.NODE_ENV !== 'production' || process.env.DEMO_ISOLATED_DATA === '1');
+}
+
+// Check if setup is needed (no users exist) and advertise only capabilities
+// that this exact server instance will accept.
 router.get('/setup-status', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const count = await prisma.user.count();
-  res.json({ needsSetup: count === 0 });
+  res.json({ needsSetup: count === 0, demoLoginEnabled: isDemoLoginEnabled() });
 });
 
 // v2: dev-only token endpoint for seeding + testing without SMTP.
@@ -1083,9 +1089,7 @@ async function cleanupExpiredDemoPrincipals(prisma: PrismaClient): Promise<void>
 // or set to "staging". The demo user is admin. Now requires an
 // explicit ENABLE_DEMO_LOGIN=1, no NODE_ENV fallback. Production fails closed
 // unless the separate isolated-data attestation is also present.
-const demoLoginEnabled =
-  process.env.ENABLE_DEMO_LOGIN === '1' &&
-  (process.env.NODE_ENV !== 'production' || process.env.DEMO_ISOLATED_DATA === '1');
+const demoLoginEnabled = isDemoLoginEnabled();
 
 if (demoLoginEnabled) {
   router.post('/demo', demoLimiter, async (_req: Request, res: Response) => {

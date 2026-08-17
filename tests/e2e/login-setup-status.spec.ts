@@ -55,3 +55,25 @@ test('honors setup-required and rate-limited readiness states', async ({ page })
   await expect(page.getByRole('heading', { name: 'Set up your admin account' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toHaveCount(0);
 });
+
+test('shows the demo action only when the server advertises it', async ({ page }) => {
+  await page.route('**/api/auth/setup-status', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: '{"needsSetup":false,"demoLoginEnabled":false}',
+  }));
+
+  await page.goto('/login');
+  await expect(page.getByRole('button', { name: 'Explore the live demo' })).toHaveCount(0);
+  await expect(page.getByText('Fabricated tournament data. No signup.')).toHaveCount(0);
+
+  await page.unroute('**/api/auth/setup-status');
+  await page.route('**/api/auth/setup-status', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: '{"needsSetup":false,"demoLoginEnabled":true}',
+  }));
+  await page.reload();
+
+  await expect(page.getByRole('button', { name: 'Explore the live demo' })).toBeVisible();
+});
