@@ -4,16 +4,17 @@ This roadmap records the remaining work between the verified production hotfix a
 
 ## Verified release baseline
 
-- Production revision: `07f23477db1da3ba528640dcd038acb274623f9f`
+- Production revision: `45daa0b344ab22e2da8b93fd0597f1b4f743310c`
 - Production readiness: application and database healthy.
 - Production demo policy: the server reports `demoLoginEnabled: false`; the client now hides the demo action instead of calling a disabled endpoint and displaying an HTML-as-JSON error.
 - Staging policy: isolated synthetic data with demo login enabled.
 - Staging browser smoke: Chromium, Firefox, and WebKit passed the demo journey against the exact production revision.
-- Automated verification: 770 tests passed, 24 skipped; typecheck, lint, production build, and whitespace checks passed.
+- Automated verification baseline: 770 tests passed, 24 skipped. The final login-copy delta passed 17 focused tests, typecheck, lint, production build, whitespace checks, and the staging browser smoke.
 - Release recovery artifacts:
   - Production rollback container: `taekwondo-tournament-rollback`
-  - Production pre-release backup: `/var/backups/taekwondo/pre-20260817T224621Z-07f23477db1d.dump`
+  - Production pre-release backup: `/var/backups/taekwondo/pre-20260817T225844Z-45daa0b344ab.dump`
   - Staging rollback container: `bowin-staging-rollback`
+  - Staging pre-release backup: `/opt/bowin-staging-backups/bowin-staging-pre-45daa0b344ab22e2da8b93fd0597f1b4f743310c.OOGGen.dump`
 
 The production fix is complete. The product is not yet an unattended general-availability service: the remaining gates below include infrastructure provisioning, human approvals, and physical rehearsal evidence.
 
