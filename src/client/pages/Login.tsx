@@ -258,10 +258,12 @@ export default function Login() {
                   <Shield className="h-3.5 w-3.5" />
                   <span>Self-hosted option</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Users className="h-3.5 w-3.5" />
-                  <span>Live demo data, fully featured</span>
-                </div>
+                {setupStatus?.demoLoginEnabled ? (
+                  <div className="flex items-center gap-2">
+                    <Users className="h-3.5 w-3.5" />
+                    <span>Live demo data, fully featured</span>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

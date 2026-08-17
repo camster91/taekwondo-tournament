@@ -66,6 +66,7 @@ test('shows the demo action only when the server advertises it', async ({ page }
   await page.goto('/login');
   await expect(page.getByRole('button', { name: 'Explore the live demo' })).toHaveCount(0);
   await expect(page.getByText('Fabricated tournament data. No signup.')).toHaveCount(0);
+  await expect(page.getByText('Live demo data, fully featured')).toHaveCount(0);
 
   await page.unroute('**/api/auth/setup-status');
   await page.route('**/api/auth/setup-status', (route) => route.fulfill({
@@ -76,4 +77,5 @@ test('shows the demo action only when the server advertises it', async ({ page }
   await page.reload();
 
   await expect(page.getByRole('button', { name: 'Explore the live demo' })).toBeVisible();
+  await expect(page.getByText('Live demo data, fully featured')).toBeVisible();
 });
