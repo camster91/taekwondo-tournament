@@ -19,6 +19,8 @@ The production fix is complete. The product is not yet an unattended general-ava
 
 ## Phase 1 — isolated public demo
 
+Tracking issue: #164.
+
 ### Outcome
 
 Give prospects a safe, useful demonstration without connecting public demo identities to a customer or mixed production database.
@@ -40,6 +42,8 @@ Give prospects a safe, useful demonstration without connecting public demo ident
 - Exact-image health, fixture, and rollback evidence is recorded.
 
 ## Phase 2 — production operations and recovery
+
+Tracking issue: #165.
 
 ### Outcome
 
@@ -63,6 +67,8 @@ Existing dependencies: #120, #148, and #19.
 
 ## Phase 3 — venue, device, and accessibility rehearsal
 
+Tracking issue: #166.
+
 ### Outcome
 
 Prove the tournament-day workflows on the hardware, networks, displays, and assistive technologies that staff and visitors will actually use.
@@ -84,6 +90,8 @@ Prove the tournament-day workflows on the hardware, networks, displays, and assi
 Existing dependency: #128.
 
 ## Phase 4 — policy, rules, and support approval
+
+Tracking issue: #167.
 
 ### Outcome
 
@@ -145,4 +153,3 @@ Keep the released baseline reproducible and prevent known maintenance debt from 
 ## Release decision
 
 The current production revision is suitable for controlled testing of the repaired login and existing authenticated workflows. A public demo should remain disabled on production until Phase 1 is complete. A staffed pilot should not be declared complete until Phases 2–4 have signed evidence. General availability additionally requires the retained launch scope in Phases 5–6 to pass its release gates.
-
