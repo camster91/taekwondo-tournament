@@ -28,6 +28,7 @@ import { Card, CardHeader, CardBody } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
+import { getTournamentDestination } from '../utils/tournament-navigation';
 
 interface Tournament {
   id: string;
@@ -191,7 +192,7 @@ export default function Dashboard() {
                   {tournaments.slice(0, 5).map((t, i) => (
                     <Link
                       key={t.id}
-                      to={`/tournaments/${t.id}`}
+                      to={getTournamentDestination(t)}
                       className="group flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors animate-slide-up"
                       style={{ animationDelay: `${i * 40}ms` }}
                     >

@@ -12,6 +12,11 @@ import { getAuthHeaders } from '../context/AuthContext';
 import { SPORT_PROFILES } from '../../shared/constants/sport-profiles';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { isTestData } from '../utils/test-data';
+import {
+  getTournamentDestination,
+  getTournamentPrimaryActionLabel,
+  getTournamentPrimaryActionAriaLabel,
+} from '../utils/tournament-navigation';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
@@ -321,10 +326,13 @@ function TournamentCard({
   onDelete: () => void;
 }) {
   const isCompleted = tournament.status === 'completed';
+  const destination = getTournamentDestination(tournament);
+  const actionLabel = getTournamentPrimaryActionLabel(tournament);
+  const actionAriaLabel = getTournamentPrimaryActionAriaLabel(tournament);
 
   return (
     <Card interactive={!isCompleted} className={isCompleted ? 'opacity-75' : 'border-l-4 border-l-primary-500'}>
-      <Link to={`/tournaments/${tournament.id}`} className="block hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+      <Link to={destination} className="block hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
         <CardBody>
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center min-w-0">
@@ -388,12 +396,12 @@ function TournamentCard({
       <div className="px-4 pb-4 pt-0 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row gap-2">
         <Button
           as={Link}
-          to={`/tournaments/${tournament.id}`}
+          to={destination}
           variant="primary"
           className="flex-1"
-          aria-label={isCompleted ? `View results for ${tournament.name}` : `Manage ${tournament.name}`}
+          aria-label={actionAriaLabel}
         >
-          {isCompleted ? 'View Results' : 'Manage'}
+          {actionLabel}
         </Button>
         <Button
           onClick={onDelete}
