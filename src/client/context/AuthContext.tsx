@@ -24,7 +24,7 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+export const AuthContext = createContext<AuthContextType | null>(null);
 
 /**
  * Auth is now cookie-based. The HttpOnly `bowin_session` cookie is set

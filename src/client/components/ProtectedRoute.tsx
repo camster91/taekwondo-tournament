@@ -46,8 +46,15 @@ export default function ProtectedRoute({
 
   // Check if user is authenticated
   if (!isAuthenticated) {
-    // Redirect to login, preserving the intended destination
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    // Redirect to login, preserving the intended destination in both state and search params
+    const returnTo = location.pathname + location.search;
+    return (
+      <Navigate
+        to={`/login?returnTo=${encodeURIComponent(returnTo)}`}
+        state={{ from: location }}
+        replace
+      />
+    );
   }
 
   // Check role requirements

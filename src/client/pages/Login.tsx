@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Trophy,
@@ -18,6 +18,7 @@ import {
   Copy,
   ExternalLink,
   Terminal,
+  RotateCw,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/ui/Spinner';
@@ -26,18 +27,25 @@ import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
 import { BowinLogo } from '../components/brand/BowinLogo';
+import { getSafeRedirectUrl } from '../utils/safe-redirect';
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { requestMagicLink, verifyCode, isAuthenticated } = useAuth();
 
+  const queryEmail = searchParams.get('email');
+  const queryReturnTo = searchParams.get('returnTo') || searchParams.get('from');
+
   const [step, setStep] = useState<'email' | 'code'>('email');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(queryEmail || '');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(30);
+  const [isResending, setIsResending] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
 
   // Dev mode magic link data
@@ -59,16 +67,18 @@ export default function Login() {
 
   const needsSetup = setupStatus?.needsSetup === true;
 
+  const getEffectiveDestination = () => {
+    const state = location.state as { from?: { pathname?: string; search?: string } } | null;
+    const stateFrom = state?.from ? `${state.from.pathname || ''}${state.from.search || ''}` : null;
+    return getSafeRedirectUrl(queryReturnTo || stateFrom, '/');
+  };
+
   // Redirect if already logged in
   useEffect(() => {
     if (isAuthenticated) {
-      // React Router's `location.state` is loosely typed — narrow via
-      // a structural check before reaching into `from.pathname`.
-      const state = location.state as { from?: { pathname?: string } } | null;
-      const from = state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+      navigate(getEffectiveDestination(), { replace: true });
     }
-  }, [isAuthenticated, location.state, navigate]);
+  }, [isAuthenticated, navigate]);
 
   // Focus code input when switching to code step
   useEffect(() => {
@@ -76,6 +86,15 @@ export default function Login() {
       codeInputRef.current?.focus();
     }
   }, [step]);
+
+  // Handle resend cooldown countdown
+  useEffect(() => {
+    if (step !== 'code' || resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [step, resendCooldown]);
 
   const handleSetupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +113,7 @@ export default function Login() {
       } else {
         // Session cookie is set by the server. Hard nav so
         // AuthProvider re-mounts and hydrates user state from /me.
-        window.location.href = '/';
+        window.location.href = getEffectiveDestination();
       }
     } catch {
       setError('Setup failed. Please try again.');
@@ -111,9 +130,17 @@ export default function Login() {
     const result = await requestMagicLink(email);
 
     if (result.success) {
+      setResendCooldown(30);
       if (result.devMode && result.magicUrl && result.code) {
-        // Dev mode: show the magic link directly in UI
-        setDevModeData({ magicUrl: result.magicUrl, code: result.code, email });
+        // Forward returnTo to the dev mode magic link if present
+        let devUrl = result.magicUrl;
+        const dest = getEffectiveDestination();
+        if (dest && dest !== '/') {
+          const parsed = new URL(devUrl, window.location.origin);
+          parsed.searchParams.set('returnTo', dest);
+          devUrl = parsed.pathname + parsed.search;
+        }
+        setDevModeData({ magicUrl: devUrl, code: result.code, email });
         setStep('code');
       } else {
         setStep('code');
@@ -125,6 +152,31 @@ export default function Login() {
     setIsLoading(false);
   };
 
+  const handleResend = async () => {
+    if (resendCooldown > 0 || isResending) return;
+    setIsResending(true);
+    setError('');
+
+    const result = await requestMagicLink(email);
+    if (result.success) {
+      setResendCooldown(30);
+      if (result.devMode && result.magicUrl && result.code) {
+        let devUrl = result.magicUrl;
+        const dest = getEffectiveDestination();
+        if (dest && dest !== '/') {
+          const parsed = new URL(devUrl, window.location.origin);
+          parsed.searchParams.set('returnTo', dest);
+          devUrl = parsed.pathname + parsed.search;
+        }
+        setDevModeData({ magicUrl: devUrl, code: result.code, email });
+      }
+    } else {
+      setError(result.error || 'Failed to resend sign-in link');
+    }
+
+    setIsResending(false);
+  };
+
   const handleCodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -133,11 +185,7 @@ export default function Login() {
     const result = await verifyCode(email, code);
 
     if (result.success) {
-      // Same structural narrowing as the auth-effect above — keeps the
-      // post-verify redirect in sync with where the user was heading.
-      const state = location.state as { from?: { pathname?: string } } | null;
-      const from = state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+      navigate(getEffectiveDestination(), { replace: true });
     } else {
       setError(result.error || 'Verification failed');
     }
@@ -156,7 +204,7 @@ export default function Login() {
       if (!res.ok) throw new Error(data.error || 'Demo login failed');
       // Session cookie is set by the server. Hard nav so the
       // AuthProvider re-mounts and hydrates user state from /me.
-      window.location.href = '/';
+      window.location.href = getEffectiveDestination();
     } catch (err: unknown) {
       console.error('Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -282,6 +330,9 @@ export default function Login() {
                     email={email} code={code} setCode={setCode}
                     onSubmit={handleCodeSubmit} loading={isLoading}
                     onBack={() => { setStep('email'); setCode(''); setError(''); setDevModeData(null); }}
+                    onResend={handleResend}
+                    isResending={isResending}
+                    resendCooldown={resendCooldown}
                     codeInputRef={codeInputRef}
                     devModeData={devModeData}
                   />
@@ -398,6 +449,9 @@ function CodeForm({
   onSubmit,
   loading,
   onBack,
+  onResend,
+  isResending,
+  resendCooldown,
   codeInputRef,
   devModeData,
 }: {
@@ -407,6 +461,9 @@ function CodeForm({
   onSubmit: (e: React.FormEvent) => void;
   loading: boolean;
   onBack: () => void;
+  onResend: () => void;
+  isResending: boolean;
+  resendCooldown: number;
   codeInputRef: React.RefObject<HTMLInputElement | null>;
   devModeData: { magicUrl: string; code: string; email: string } | null;
 }) {
@@ -521,12 +578,35 @@ function CodeForm({
         </Button>
       </form>
 
-      <button
-        onClick={onBack}
-        className="w-full flex items-center justify-center text-sm text-slate-600 hover:text-slate-700 dark:hover:text-slate-300"
-      >
-        <ArrowLeft className="h-4 w-4 mr-1.5" /> Use a different email
-      </button>
+      <div className="flex flex-col gap-2 pt-1">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onResend}
+          disabled={resendCooldown > 0 || isResending}
+          className="w-full text-xs text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+        >
+          {isResending ? (
+            <><Spinner size="sm" className="mr-1.5" /> Sending new code...</>
+          ) : resendCooldown > 0 ? (
+            `Resend code (in ${resendCooldown}s)`
+          ) : (
+            <><RotateCw className="h-3.5 w-3.5 mr-1.5" /> Resend sign-in code</>
+          )}
+        </Button>
+
+        <button
+          type="button"
+          onClick={onBack}
+          className="w-full flex items-center justify-center text-sm text-slate-600 hover:text-slate-700 dark:hover:text-slate-300 min-h-[44px]"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1.5" /> Use a different email
+        </button>
+
+        <p className="text-center text-xs text-slate-600 dark:text-slate-400">
+          Sign-in links and 6-digit codes expire in 15 minutes.
+        </p>
+      </div>
     </div>
   );
 }
