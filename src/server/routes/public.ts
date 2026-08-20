@@ -20,9 +20,9 @@ import {
   type AuthenticatedRequest,
 } from '../middleware/auth.js';
 import {
-  generateManagementToken,
-  hashManagementToken,
-  isValidManagementToken,
+  issueManagementToken,
+  verifyManagementToken,
+  type TokenAction,
 } from '../utils/registration-management-token.js';
 
 const router = Router();
@@ -38,6 +38,24 @@ const legalConfig = () => registrationLegalConfigFromEnv(
 // hitting the cap.) NEVER honor in production.
 const rateLimitDisabled =
   process.env.RATE_LIMIT_DISABLED === '1' && process.env.NODE_ENV !== 'production';
+
+/**
+ * Build the audit context for a management token verify. Used by every
+ * public route that consumes :token. Pinned here so the four handlers
+ * (GET / PATCH / DELETE / future rotate) all record the same fields.
+ */
+function verifyCtxFromRequest(req: Request, action: TokenAction) {
+  return {
+    action,
+    ip:
+      (req.headers['x-forwarded-for'] as string | undefined)
+        ?.split(',')[0]
+        ?.trim() ||
+      req.socket?.remoteAddress ||
+      null,
+    userAgent: (req.headers['user-agent'] as string | undefined) ?? null,
+  };
+}
 
 /** Expose only public-safe fields from tournament.settings JSON. */
 function publicRegistrationSettings(raw: string | null): { registrationFee?: string } | null {
@@ -320,8 +338,10 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     }
 
     // Create registration. The raw bearer token is returned/sent once;
-    // only its digest is persisted.
-    const managementToken = generateManagementToken();
+    // only its digest is persisted, alongside a TTL (90 days by default).
+    // The token is bound to this registration row only and can be rotated
+    // or revoked at any time by the parent or a director.
+    const issued = issueManagementToken();
     const registration = await prisma.registration.create({
       data: {
         tournamentId,
@@ -336,7 +356,8 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         // v2: parent opt-in fields
         competeWithOlder: competeWithOlder === true,
         specialNeeds: specialNeeds?.trim() || null,
-        managementTokenHash: hashManagementToken(managementToken),
+        managementTokenHash: issued.tokenHash,
+        managementTokenExpiresAt: issued.expiresAt,
         ...consent.data,
       },
       include: {
@@ -358,7 +379,8 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         // on the success screen AND in the confirmation email so they
         // can match the two if needed.
         confirmationCode: registration.id.slice(0, 8),
-        managementToken,
+        managementToken: issued.token,
+        managementTokenExpiresAt: issued.expiresAt.toISOString(),
         competitorName: `${competitor.firstName} ${competitor.lastName}`,
         tournamentName: registration.tournament.name,
         tournamentDate: registration.tournament.date,
@@ -393,7 +415,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
             <p style="margin: 4px 0;"><strong>Events:</strong> ${escapeHtml(eventList)}</p>
             <p style="margin: 4px 0;"><strong>Age Group:</strong> ${escapeHtml(getAgeGroupLabel(ageAtTournament))}</p>
           </div>
-          <p><a href="${escapeHtml(`${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`)}">Edit or withdraw this registration</a></p>
+          <p><a href="${escapeHtml(`${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(issued.token)}`)}">Edit or withdraw this registration</a></p>
           <p style="color: #6B7280; font-size: 14px;">Please keep this email for your records. You may be asked to provide registration confirmation at check-in.</p>
         </div>
       `;
@@ -631,19 +653,26 @@ const manageLimiter = rateLimit({
 router.get('/registrations/:token', manageLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const token = String(req.params.token || '');
-  if (!isValidManagementToken(token)) return res.status(404).json({ error: 'No matching registration found.' });
 
-  // Match by registration.id prefix (first 8 chars)
-  const registration = await prisma.registration.findFirst({
-    where: {
-      managementTokenHash: hashManagementToken(token),
-    },
+  // Single verify point — handles malformed/expired/revoked/not_found
+  // uniformly and records an audit row regardless of outcome. The
+  // 404-everywhere response shape is preserved so the endpoint cannot
+  // be used to enumerate registrations.
+  const result = await verifyManagementToken(
+    prisma,
+    token,
+    verifyCtxFromRequest(req, 'read'),
+  );
+  if (!result.ok || !result.registration) {
+    return res.status(404).json({ error: 'No matching registration found.' });
+  }
+  const registration = await prisma.registration.findUnique({
+    where: { id: result.registration.id },
     include: {
       competitor: true,
       tournament: { select: { id: true, name: true, date: true, status: true } },
     },
   });
-
   if (!registration) {
     return res.status(404).json({ error: 'No matching registration found.' });
   }
@@ -667,6 +696,10 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
       tournamentDate: registration.tournament.date,
       tournamentStatus: registration.tournament.status,
       checkedIn: registration.checkedIn,
+      // Expose the token's expiry so the UI can warn the parent before
+      // it lapses. The token itself is never echoed back; only the
+      // timestamp.
+      managementTokenExpiresAt: registration.managementTokenExpiresAt,
     },
   });
 });
@@ -686,12 +719,17 @@ const manageUpdateLimiter = rateLimit({
 router.patch('/registrations/:token', manageUpdateLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const token = String(req.params.token || '');
-  if (!isValidManagementToken(token)) return res.status(404).json({ error: 'No matching registration found.' });
 
-  const registration = await prisma.registration.findFirst({
-    where: {
-      managementTokenHash: hashManagementToken(token),
-    },
+  const result = await verifyManagementToken(
+    prisma,
+    token,
+    verifyCtxFromRequest(req, 'update'),
+  );
+  if (!result.ok || !result.registration) {
+    return res.status(404).json({ error: 'No matching registration found.' });
+  }
+  const registration = await prisma.registration.findUnique({
+    where: { id: result.registration.id },
     include: { tournament: { select: { status: true, date: true } } },
   });
 
@@ -756,12 +794,17 @@ router.patch('/registrations/:token', manageUpdateLimiter, async (req: Request, 
 router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const token = String(req.params.token || '');
-  if (!isValidManagementToken(token)) return res.status(404).json({ error: 'No matching registration found.' });
 
-  const registration = await prisma.registration.findFirst({
-    where: {
-      managementTokenHash: hashManagementToken(token),
-    },
+  const result = await verifyManagementToken(
+    prisma,
+    token,
+    verifyCtxFromRequest(req, 'withdraw'),
+  );
+  if (!result.ok || !result.registration) {
+    return res.status(404).json({ error: 'No matching registration found.' });
+  }
+  const registration = await prisma.registration.findUnique({
+    where: { id: result.registration.id },
     include: { tournament: { select: { status: true } } },
   });
 

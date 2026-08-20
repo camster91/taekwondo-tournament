@@ -108,7 +108,18 @@ model Registration {
   parentName           String?
   parentEmail          String?
   parentPhone          String?
-  managementTokenHash String?   @unique
+  managementTokenHash     String?   @unique
+  // When the current management token stops being valid. Null = never
+  // expires (legacy rows; only the hash-based capability matters there).
+  managementTokenExpiresAt DateTime?
+  // When a director or the parent themselves revoked the current token.
+  // Null = active. The token's hash remains in the row for audit but is
+  // no longer accepted.
+  managementTokenRevokedAt DateTime?
+  // Last successful verification (read/update/withdraw) of the token.
+  // Used to surface "last activity" to directors and to drive the
+  // lastUsedAt audit clock. Not used as an authentication signal.
+  managementTokenLastUsedAt DateTime?
   consentVersion       String?
   consentAcceptedAt    DateTime?
   privacyAccepted      Boolean   @default(false)
@@ -426,6 +437,25 @@ model MatchAuditLog {
 
   @@index([matchId])
   @@index([createdAt])
+}
+
+// Audit log for registration management token usage. Records every
+// verification attempt (read/update/withdraw/rotate) with the outcome
+// (ok/expired/revoked/malformed/not_found), but never the raw token or
+// any returned PII. Indexed by registrationId + createdAt for director
+// review and for the support/migration path on legacy rows.
+model ManagementTokenAuditLog {
+  id             String   @id @default(uuid())
+  registrationId String? // Null when the token didn't match any row
+  action         String // read, update, withdraw, rotate
+  outcome        String // ok, expired, revoked, malformed, not_found
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  @@index([registrationId])
+  @@index([createdAt])
+  @@index([action, outcome])
 }
 
 // Organization (multi-tenant isolation)
