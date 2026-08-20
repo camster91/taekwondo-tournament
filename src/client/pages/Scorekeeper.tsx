@@ -557,14 +557,14 @@ export default function Scorekeeper() {
                 <Monitor className="h-4 w-4 mr-1" aria-hidden="true" />
                 <span className="hidden sm:inline">Public Display</span>
               </Link>
-              <Link to={`/tournaments/${tournamentId}`} className="text-gray-600 hover:text-white">
+              <Link to={`/tournaments/${tournamentId}`} className="text-gray-300 hover:text-white">
                 Exit
               </Link>
             </div>
           </div>
 
           {isLoading ? (
-            <div className="text-center py-12 text-gray-600">Loading divisions...</div>
+            <div className="text-center py-12 text-gray-400">Loading divisions...</div>
           ) : divisionsError ? (
             <div role="alert" className="text-center py-12 text-red-300">
               <p className="mb-4">Could not load divisions. Check the venue connection and try again.</p>
@@ -597,19 +597,19 @@ export default function Scorekeeper() {
               </div>
               <div className="grid gap-3">
                 {divisions && divisions.length === 0 && (
-                  <div className="text-center py-12 text-gray-600">
-                    <Trophy className="h-12 w-12 mx-auto mb-3 text-gray-600" aria-hidden="true" />
+                  <div className="text-center py-12 text-gray-400">
+                    <Trophy className="h-12 w-12 mx-auto mb-3 text-gray-500" aria-hidden="true" />
                     <p className="text-base font-medium mb-1">No divisions to score yet</p>
-                    <p className="text-sm text-gray-600 mb-4">
+                    <p className="text-sm text-gray-400 mb-4">
                       Divisions need to be created before matches can be scored.
                     </p>
                   </div>
                 )}
                 {divisions && divisions.length > 0 && divisions.every((d) => !d.bracket) && (
-                  <div className="text-center py-12 text-gray-600">
-                    <Trophy className="h-12 w-12 mx-auto mb-3 text-gray-600" aria-hidden="true" />
+                  <div className="text-center py-12 text-gray-400">
+                    <Trophy className="h-12 w-12 mx-auto mb-3 text-gray-500" aria-hidden="true" />
                     <p className="text-base font-medium mb-1">No brackets generated yet</p>
-                    <p className="text-sm text-gray-600 mb-4">
+                    <p className="text-sm text-gray-400 mb-4">
                       {divisions.length} {divisions.length === 1 ? 'division exists' : 'divisions exist'} but no brackets have been generated. Go to the Divisions page to generate a bracket for each one.
                     </p>
                     <Link
@@ -654,19 +654,19 @@ export default function Scorekeeper() {
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="font-semibold text-lg">{division.name}</div>
-                            <div className="text-sm text-gray-600 mt-1">{getEventLabel(division.eventType)}</div>
+                            <div className="text-sm text-gray-300 mt-1">{getEventLabel(division.eventType)}</div>
                           </div>
                           <div className="text-right">
                             {readyCount > 0 ? (
                               <span className="text-green-400 font-bold">{readyCount} ready</span>
                             ) : totalCount > 0 && completedCount === totalCount ? (
-                              <span className="text-gray-600">Complete</span>
+                              <span className="text-gray-400">Complete</span>
                             ) : totalCount === 0 ? (
                               <span className="text-yellow-500">No bracket</span>
                             ) : (
                               <span className="text-blue-400">No ready</span>
                             )}
-                            <div className="text-xs text-gray-600 mt-1">
+                            <div className="text-xs text-gray-400 mt-1">
                               {completedCount}/{totalCount} done
                             </div>
                           </div>
@@ -703,7 +703,7 @@ export default function Scorekeeper() {
       {/* Header */}
       <div className="bg-gray-800 p-4">
         <div className="flex items-center justify-between">
-          <button onClick={() => setSelectedDivision(null)} className="flex items-center text-gray-600 hover:text-white">
+          <button onClick={() => setSelectedDivision(null)} className="flex items-center text-gray-300 hover:text-white min-h-[44px]">
             <ChevronLeft className="h-5 w-5 mr-1" /> Back
           </button>
           <div className="text-center">
@@ -715,14 +715,14 @@ export default function Scorekeeper() {
             >
               {division?.name}
             </div>
-            <div className="text-sm text-gray-600" aria-live="polite">
+            <div className="text-sm text-gray-300" aria-live="polite">
               Match {currentMatchIndex + 1} of {readyMatches.length}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowTimer(!showTimer)}
-              className={`flex items-center text-sm px-2 py-1 rounded ${showTimer ? 'bg-green-600' : 'bg-gray-700'}`}
+              className={`flex items-center text-sm px-2 py-1 min-h-[44px] rounded ${showTimer ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-200'}`}
               title="Toggle timer"
               aria-label={showTimer ? 'Hide match timer' : 'Show match timer'}
               aria-pressed={showTimer}
@@ -731,7 +731,7 @@ export default function Scorekeeper() {
             </button>
             <button
               onClick={() => setShowKeyboardHelp(true)}
-              className="flex items-center gap-1 text-gray-600 hover:text-white text-sm"
+              className="flex items-center gap-1 text-gray-300 hover:text-white text-sm min-h-[44px] px-2"
               title="Keyboard shortcuts (?)"
               aria-label="Show keyboard shortcuts"
             >
@@ -784,7 +784,7 @@ export default function Scorekeeper() {
             <>
               <Check className="h-16 w-16 text-green-500 mx-auto mb-4" />
               <h2 className="text-xl font-semibold mb-2">All Matches Complete!</h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-300 mb-6">
                 {divisionMatchCounts.completed} of {divisionMatchCounts.total} matches done.
               </p>
               <Button variant="primary" className="px-8 py-3" onClick={() => setSelectedDivision(null)}>
@@ -795,7 +795,7 @@ export default function Scorekeeper() {
             <>
               <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
               <h2 className="text-xl font-semibold mb-2">No bracket generated</h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-300 mb-6">
                 This division doesn't have a bracket yet. Generate brackets from the Divisions page.
               </p>
               <Button variant="primary" className="px-8 py-3" onClick={() => setSelectedDivision(null)}>
@@ -806,7 +806,7 @@ export default function Scorekeeper() {
             <>
               <Clock className="h-16 w-16 text-blue-400 mx-auto mb-4" />
               <h2 className="text-xl font-semibold mb-2">No ready matches</h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-300 mb-6">
                 {divisionMatchCounts.completed} of {divisionMatchCounts.total} done — matches are pending or being seeded from prior rounds. Check back shortly.
               </p>
               <Button variant="primary" className="px-8 py-3" onClick={() => setSelectedDivision(null)}>
@@ -822,18 +822,18 @@ export default function Scorekeeper() {
             <button
               onClick={() => setCurrentMatchIndex((prev) => Math.max(0, prev - 1))}
               disabled={currentMatchIndex === 0}
-              className="p-2 rounded-lg bg-gray-700 disabled:opacity-30"
+              className="p-2 rounded-lg bg-gray-700 disabled:opacity-30 min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
               aria-label="Previous match"
             >
               <ChevronLeft className="h-6 w-6" aria-hidden="true" />
             </button>
-            <div className="text-sm text-gray-600" aria-hidden="true">
+            <div className="text-sm text-gray-300 font-medium" aria-hidden="true">
               Match #{currentMatch.matchNumber} - Round {currentMatch.roundNumber} ({currentMatch.bracketType})
             </div>
             <button
               onClick={() => setCurrentMatchIndex((prev) => Math.min(readyMatches.length - 1, prev + 1))}
               disabled={currentMatchIndex === readyMatches.length - 1}
-              className="p-2 rounded-lg bg-gray-700 disabled:opacity-30"
+              className="p-2 rounded-lg bg-gray-700 disabled:opacity-30 min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
               aria-label="Next match"
             >
               <ChevronRight className="h-6 w-6" aria-hidden="true" />
@@ -845,6 +845,7 @@ export default function Scorekeeper() {
             {/* Competitor 1 */}
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={() => { if (currentMatch.competitor1) setSelectedWinner(currentMatch.competitor1.id); }}
                 disabled={!currentMatch.competitor1}
                 aria-pressed={selectedWinner === currentMatch.competitor1?.id}
@@ -857,8 +858,8 @@ export default function Scorekeeper() {
               >
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
-                    <div className="text-2xl font-bold">{getCompetitorName(currentMatch.competitor1)}</div>
-                    <div className="text-gray-600 mt-1">{getCompetitorSchool(currentMatch.competitor1)}</div>
+                    <div className="text-2xl font-bold text-white">{getCompetitorName(currentMatch.competitor1)}</div>
+                    <div className="text-gray-300 mt-1">{getCompetitorSchool(currentMatch.competitor1)}</div>
                     {currentMatch.competitor1 && (
                       <div className="mt-2">
                         <SpecialNeedsBadge
@@ -883,33 +884,36 @@ export default function Scorekeeper() {
               {/* Penalty Controls for Competitor 1 */}
               <div className="flex flex-col gap-2" role="group" aria-label={`${getCompetitorName(currentMatch.competitor1)} penalty controls`}>
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); setPenalties1(p => p + 1); }}
-                  className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold"
+                  className="px-3 py-2 min-h-[44px] bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold text-white"
                   title={`Add ${sportProfile.scoringConfig.penaltyName}`}
                   aria-label={`Add ${sportProfile.scoringConfig.penaltyName} to ${getCompetitorName(currentMatch.competitor1)}`}
                 >
                   +{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); setPenalties1(p => Math.max(0, p - 1)); }}
                   disabled={penalties1 === 0}
-                  className="px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-sm disabled:opacity-50"
+                  className="px-3 py-2 min-h-[44px] bg-gray-600 hover:bg-gray-500 rounded-lg text-sm disabled:opacity-50 text-white"
                   title={`Remove ${sportProfile.scoringConfig.penaltyName}`}
                   aria-label={`Remove ${sportProfile.scoringConfig.penaltyName} from ${getCompetitorName(currentMatch.competitor1)}`}
                 >
                   -{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
-                <div className={`text-center text-xl font-bold ${penalties1 > 0 ? 'text-red-400' : 'text-gray-500'}`} aria-live="polite" aria-atomic="true">
+                <div className={`text-center text-xl font-bold ${penalties1 > 0 ? 'text-red-400' : 'text-gray-400'}`} aria-live="polite" aria-atomic="true">
                   {penalties1}
                 </div>
               </div>
             </div>
 
-            <div className="text-center text-gray-600 font-bold">VS</div>
+            <div className="text-center text-gray-300 font-bold">VS</div>
 
             {/* Competitor 2 */}
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={() => { if (currentMatch.competitor2) setSelectedWinner(currentMatch.competitor2.id); }}
                 disabled={!currentMatch.competitor2}
                 aria-pressed={selectedWinner === currentMatch.competitor2?.id}
@@ -922,8 +926,8 @@ export default function Scorekeeper() {
               >
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
-                    <div className="text-2xl font-bold">{getCompetitorName(currentMatch.competitor2)}</div>
-                    <div className="text-gray-600 mt-1">{getCompetitorSchool(currentMatch.competitor2)}</div>
+                    <div className="text-2xl font-bold text-white">{getCompetitorName(currentMatch.competitor2)}</div>
+                    <div className="text-gray-300 mt-1">{getCompetitorSchool(currentMatch.competitor2)}</div>
                     {currentMatch.competitor2 && (
                       <div className="mt-2">
                         <SpecialNeedsBadge
@@ -948,23 +952,25 @@ export default function Scorekeeper() {
               {/* Penalty Controls for Competitor 2 */}
               <div className="flex flex-col gap-2" role="group" aria-label={`${getCompetitorName(currentMatch.competitor2)} penalty controls`}>
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); setPenalties2(p => p + 1); }}
-                  className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold"
+                  className="px-3 py-2 min-h-[44px] bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold text-white"
                   title={`Add ${sportProfile.scoringConfig.penaltyName}`}
                   aria-label={`Add ${sportProfile.scoringConfig.penaltyName} to ${getCompetitorName(currentMatch.competitor2)}`}
                 >
                   +{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); setPenalties2(p => Math.max(0, p - 1)); }}
                   disabled={penalties2 === 0}
-                  className="px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg text-sm disabled:opacity-50"
+                  className="px-3 py-2 min-h-[44px] bg-gray-600 hover:bg-gray-500 rounded-lg text-sm disabled:opacity-50 text-white"
                   title={`Remove ${sportProfile.scoringConfig.penaltyName}`}
                   aria-label={`Remove ${sportProfile.scoringConfig.penaltyName} from ${getCompetitorName(currentMatch.competitor2)}`}
                 >
                   -{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
-                <div className={`text-center text-xl font-bold ${penalties2 > 0 ? 'text-red-400' : 'text-gray-500'}`} aria-live="polite" aria-atomic="true">
+                <div className={`text-center text-xl font-bold ${penalties2 > 0 ? 'text-red-400' : 'text-gray-400'}`} aria-live="polite" aria-atomic="true">
                   {penalties2}
                 </div>
               </div>
@@ -975,7 +981,7 @@ export default function Scorekeeper() {
           <div className="p-4 bg-gray-800/50">
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label htmlFor="scorekeeper-score1" className="block text-sm text-gray-600 mb-1">
+                <label htmlFor="scorekeeper-score1" className="block text-sm text-gray-300 font-medium mb-1">
                   {getCompetitorName(currentMatch.competitor1)} Score
                 </label>
                 <input
@@ -984,12 +990,12 @@ export default function Scorekeeper() {
                   inputMode="numeric"
                   value={score1}
                   onChange={(e) => setScore1(e.target.value)}
-                  className="w-full p-4 text-2xl text-center bg-gray-700 rounded-lg"
+                  className="w-full p-4 text-2xl text-center bg-gray-700 text-white rounded-lg min-h-[44px]"
                   placeholder="0"
                 />
               </div>
               <div>
-                <label htmlFor="scorekeeper-score2" className="block text-sm text-gray-600 mb-1">
+                <label htmlFor="scorekeeper-score2" className="block text-sm text-gray-300 font-medium mb-1">
                   {getCompetitorName(currentMatch.competitor2)} Score
                 </label>
                 <input
@@ -998,7 +1004,7 @@ export default function Scorekeeper() {
                   inputMode="numeric"
                   value={score2}
                   onChange={(e) => setScore2(e.target.value)}
-                  className="w-full p-4 text-2xl text-center bg-gray-700 rounded-lg"
+                  className="w-full p-4 text-2xl text-center bg-gray-700 text-white rounded-lg min-h-[44px]"
                   placeholder="0"
                 />
               </div>
@@ -1010,9 +1016,9 @@ export default function Scorekeeper() {
             <fieldset className="border-0 p-0 m-0 mb-4">
               <legend className="sr-only">Result type</legend>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-gray-600 uppercase tracking-wider">Result</span>
+                <span className="text-xs text-gray-300 uppercase tracking-wider font-semibold">Result</span>
                 {selectedWinner && resultType !== 'win' && (
-                  <span className="text-xs text-gray-600">
+                  <span className="text-xs text-gray-300">
                     {getCompetitorName(
                       currentMatch.competitor1?.id === selectedWinner
                         ? currentMatch.competitor1
@@ -1023,19 +1029,26 @@ export default function Scorekeeper() {
                   </span>
                 )}
               </div>
-              <div className="flex gap-2" role="radiogroup" aria-label={`Result type${selectedWinner ? ' — winner: ' + getCompetitorName(selectedWinner === currentMatch.competitor1?.id ? currentMatch.competitor1 : currentMatch.competitor2) : ''}`}>
+              <div
+                className="flex gap-2"
+                role="radiogroup"
+                aria-label={`Result type${selectedWinner ? ' — winner: ' + getCompetitorName(selectedWinner === currentMatch.competitor1?.id ? currentMatch.competitor1 : currentMatch.competitor2) : ''}`}
+              >
                 {(['win', 'dq', 'forfeit', 'injury'] as ResultType[]).map((type) => (
                   <button
                     key={type}
+                    type="button"
+                    role="radio"
                     onClick={() => setResultType(type)}
-                    aria-pressed={resultType === type}
+                    aria-checked={resultType === type}
+                    tabIndex={resultType === type ? 0 : -1}
                     aria-label={`Result type: ${type.toUpperCase()}`}
-                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    className={`flex-1 min-h-[44px] py-2 px-3 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
                       resultType === type
                         ? type === 'win'
-                          ? 'bg-green-600'
-                          : 'bg-red-600'
-                        : 'bg-gray-700 hover:bg-gray-600'
+                          ? 'bg-green-600 ring-2 ring-white text-white font-bold'
+                          : 'bg-red-600 ring-2 ring-white text-white font-bold'
+                        : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
                     }`}
                   >
                     {type.toUpperCase()}

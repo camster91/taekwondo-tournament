@@ -160,12 +160,24 @@ export default function MatchTimer({
     setIsRunning(prev => !prev);
   }, []);
 
-  // Space bar shortcut to start/pause timer
+  // Space bar shortcut to start/pause timer — guarded against focused interactive elements and dialogs
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'SELECT' && document.activeElement?.tagName !== 'TEXTAREA') {
-        e.preventDefault();
-        toggleTimer();
+      if (e.code === 'Space') {
+        const active = document.activeElement;
+        const isInteractive = active && (
+          active.tagName === 'INPUT' ||
+          active.tagName === 'SELECT' ||
+          active.tagName === 'TEXTAREA' ||
+          active.tagName === 'BUTTON' ||
+          active.getAttribute('role') === 'button' ||
+          active.getAttribute('role') === 'radio'
+        );
+        const hasOpenDialog = Boolean(document.querySelector('[role="dialog"]'));
+        if (!isInteractive && !hasOpenDialog) {
+          e.preventDefault();
+          toggleTimer();
+        }
       }
     };
     window.addEventListener('keydown', handler);
@@ -195,8 +207,8 @@ export default function MatchTimer({
 
   const getTimerColor = () => {
     if (isBreak) return 'text-blue-400';
-    if (timeLeft <= 10) return 'text-red-500 animate-pulse';
-    if (timeLeft <= 30) return 'text-yellow-500';
+    if (timeLeft <= 10) return 'text-red-500 motion-safe:animate-pulse motion-reduce:animate-none';
+    if (timeLeft <= 30) return 'text-yellow-400';
     return 'text-green-400';
   };
 
@@ -204,7 +216,7 @@ export default function MatchTimer({
     <div className="bg-gray-800 rounded-lg p-4">
       {/* Timer Display */}
       <div className="text-center mb-4">
-        <div className="text-sm text-gray-400 mb-1">
+        <div className="text-sm text-gray-300 mb-1">
           {isBreak ? 'BREAK' : `ROUND ${currentRound} of ${totalRounds}`}
         </div>
         <div className={`text-6xl font-mono font-bold ${getTimerColor()}`}>
@@ -213,47 +225,59 @@ export default function MatchTimer({
       </div>
 
       {/* Controls */}
-      <div className="flex items-center justify-center gap-3 mb-3">
+      <div className="flex items-center justify-center gap-3 mb-3 flex-wrap">
         <button
+          type="button"
           onClick={toggleTimer}
-          className={`p-3 rounded-full ${
+          aria-label={isRunning ? 'Pause timer (Space)' : 'Start timer (Space)'}
+          className={`p-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full ${
             isRunning ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-green-600 hover:bg-green-700'
-          } transition-colors`}
+          } transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400`}
           title={isRunning ? 'Pause (Space)' : 'Start (Space)'}
         >
-          {isRunning ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+          {isRunning ? <Pause className="h-6 w-6" aria-hidden="true" /> : <Play className="h-6 w-6" aria-hidden="true" />}
         </button>
 
         <button
+          type="button"
           onClick={resetRound}
-          className="p-3 rounded-full bg-gray-600 hover:bg-gray-700 transition-colors"
+          aria-label="Reset round"
+          className="p-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full bg-gray-600 hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400"
           title="Reset Round"
         >
-          <RotateCcw className="h-6 w-6" />
+          <RotateCcw className="h-6 w-6" aria-hidden="true" />
         </button>
 
         <button
+          type="button"
           onClick={() => setShowResetConfirm(true)}
-          className="p-2 rounded-lg bg-red-600 hover:bg-red-700 transition-colors text-sm px-3"
+          aria-label="Reset entire match timer"
+          className="p-2 min-h-[44px] inline-flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 transition-colors text-sm px-3 font-medium focus:outline-none focus:ring-2 focus:ring-yellow-400"
           title="Reset Match"
         >
           Reset All
         </button>
 
         <button
+          type="button"
           onClick={() => setSoundEnabled(!soundEnabled)}
-          className={`p-2 rounded-lg ${soundEnabled ? 'bg-gray-600' : 'bg-gray-700'} hover:bg-gray-500 transition-colors`}
+          aria-label={soundEnabled ? 'Mute sound' : 'Unmute sound'}
+          aria-pressed={soundEnabled}
+          className={`p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg ${soundEnabled ? 'bg-gray-600' : 'bg-gray-700'} hover:bg-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400`}
           title={soundEnabled ? 'Mute' : 'Unmute'}
         >
-          {soundEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+          {soundEnabled ? <Volume2 className="h-5 w-5" aria-hidden="true" /> : <VolumeX className="h-5 w-5" aria-hidden="true" />}
         </button>
 
         <button
+          type="button"
           onClick={() => setShowSettings(!showSettings)}
-          className="p-2 rounded-lg bg-gray-600 hover:bg-gray-500 transition-colors"
+          aria-label="Timer settings"
+          aria-expanded={showSettings}
+          className="p-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg bg-gray-600 hover:bg-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400"
           title="Settings"
         >
-          <Settings className="h-5 w-5" />
+          <Settings className="h-5 w-5" aria-hidden="true" />
         </button>
       </div>
 
