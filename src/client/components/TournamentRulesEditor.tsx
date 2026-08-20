@@ -70,7 +70,6 @@ const BELT_PRESETS: Record<string, BeltGroup[]> = {
 export default function TournamentRulesEditor({ rules, onChange, onReset }: RulesEditorProps) {
   // Local edit buffer so changes feel instant
   const [local, setLocal] = useState<TournamentRules>(rules);
-  const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   useEffect(() => { setLocal(rules); }, [rules]);
 
@@ -105,12 +104,11 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
         {local.brackets.avoidSameSchoolRound1 && <Badge color="pink">no same-school R1</Badge>}
         <button
           type="button"
-          onClick={() => { onReset(); setSavedAt(new Date()); }}
+          onClick={onReset}
           className="ml-auto text-xs text-gray-600 hover:text-gray-900 underline"
         >
           Reset to defaults
         </button>
-        {savedAt && <span className="text-xs text-green-700">Saved {savedAt.toLocaleTimeString()}</span>}
       </div>
 
       {/* Belt tier preset */}

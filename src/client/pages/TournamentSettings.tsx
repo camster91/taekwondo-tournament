@@ -120,6 +120,18 @@ export default function TournamentSettings() {
     },
   });
 
+  // Protect against accidental tab close or page reload when dirty
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
+
   // Load settings from tournament
   useEffect(() => {
     if (tournament?.settings) {
@@ -196,15 +208,22 @@ export default function TournamentSettings() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ settings: newSettings }),
       });
-      if (!res.ok) throw new Error('Failed to save settings');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || 'Failed to save settings');
+      }
 
       // Also persist weight classes to the DB if any are defined
       if (newSettings.weightClasses.length > 0) {
-        await fetch(`/api/tournaments/${id}/weight-classes`, {
+        const wcRes = await fetch(`/api/tournaments/${id}/weight-classes`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({ weightClasses: newSettings.weightClasses }),
         });
+        if (!wcRes.ok) {
+          const body = await wcRes.json().catch(() => ({}));
+          throw new Error((body as { error?: string }).error || 'Failed to save weight classes');
+        }
       }
 
       return res.json();
@@ -213,9 +232,28 @@ export default function TournamentSettings() {
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
       setHasChanges(false);
       setShowSaveSuccess(true);
+      addToast('Settings saved successfully', 'success');
       setTimeout(() => setShowSaveSuccess(false), 3000);
     },
+    onError: (err: Error) => {
+      addToast(err.message || 'Failed to save settings. Your edits are preserved so you can retry.', 'error');
+    },
   });
+
+  const discardChanges = () => {
+    if (tournament?.settings) {
+      try {
+        const parsed = JSON.parse(tournament.settings);
+        setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+      } catch {
+        setSettings(DEFAULT_SETTINGS);
+      }
+    } else {
+      setSettings(DEFAULT_SETTINGS);
+    }
+    setHasChanges(false);
+    addToast('Changes discarded', 'info');
+  };
 
   const updateSettings = (updates: Partial<TournamentSettings>) => {
     setSettings((prev) => ({ ...prev, ...updates }));
@@ -778,15 +816,34 @@ export default function TournamentSettings() {
 
       {/* Unsaved Changes Warning */}
       {hasChanges && (
-        <div className="fixed bottom-4 right-4 bg-yellow-100 dark:bg-yellow-900/80 border border-yellow-400 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3">
-          <span className="text-sm">You have unsaved changes</span>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => saveMutation.mutate(settings)}
-          >
-            Save
-          </Button>
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 z-40 bg-amber-50 dark:bg-amber-950/90 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 p-3 rounded-lg shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3 max-w-lg"
+        >
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" aria-hidden="true" />
+            <span>You have unsaved changes</span>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={discardChanges}
+              className="flex-1 sm:flex-initial"
+            >
+              Discard
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => saveMutation.mutate(settings)}
+              loading={saveMutation.isPending}
+              className="flex-1 sm:flex-initial"
+            >
+              <Save className="h-4 w-4 mr-1.5" /> Save
+            </Button>
+          </div>
         </div>
       )}
 

@@ -215,7 +215,8 @@ export const DEFAULT_TOURNAMENT_RULES: TournamentRules = {
 export function parseTournamentRules(json: string | null | undefined): TournamentRules {
   if (!json) return DEFAULT_TOURNAMENT_RULES;
   try {
-    const parsed = JSON.parse(json);
+    const raw = JSON.parse(json);
+    const parsed = raw && typeof raw === 'object' && raw.rules && typeof raw.rules === 'object' ? raw.rules : raw;
     // Shallow-merge with defaults to handle schema additions gracefully
     return {
       ...DEFAULT_TOURNAMENT_RULES,
