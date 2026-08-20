@@ -9,6 +9,7 @@ export { default as ConfirmDialog } from './ConfirmDialog';
 export { default as IconButton } from './IconButton';
 export { default as DataTable, TableHead, TableBody, TableRow, TableCell } from './DataTable';
 export { default as EmptyState } from './EmptyState';
+export { default as FormField } from './FormField';
 export { default as Input } from './Input';
 export { default as Label } from './Label';
 export { default as Modal } from './Modal';
