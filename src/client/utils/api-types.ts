@@ -1,72 +1,77 @@
 /**
  * Shared response shapes for the dashboard / detail page API calls.
  *
- * These mirror the server-side include shape used in `routes/divisions.ts`
- * and `routes/brackets.ts`. Keeping them in one place stops each page from
- * declaring its own ad-hoc `any[]` shape and lets the same types flow
- * through hooks, derived selectors, and components.
+ * **Single source of truth lives in `src/shared/contracts/`.** The Zod
+ * schemas there are validated by the server-side contract tests; this
+ * file just re-exports the inferred types so the client cannot drift
+ * from the wire format.
  *
- * Only the fields the dashboards actually consume are typed; the server
- * returns more (registration, audit log, etc.) but pages that don't
- * need them should not pretend they do.
+ * If you need a wider shape (a field the server includes but the page
+ * doesn't), prefer adding it to the contract schema first and letting
+ * the type flow through here — that way the field is typed *and* locked
+ * by a contract test.
+ *
+ * Historical note: before issue #130, this file hand-mirrored Prisma
+ * include shapes, which produced the #26/#31/#38/#42, #32/#36/#44, and
+ * #41 shape-drift clusters. The re-exports below fix that for the two
+ * highest-traffic endpoints (public scoreboard, tournament detail
+ * divisions) and lay the foundation for rolling the same pattern to
+ * the remaining endpoints — see `docs/contracts.md`.
  */
 
-export type MatchStatus = 'pending' | 'ready' | 'in_progress' | 'completed' | 'bye';
+import type {
+  BracketType,
+  DivisionMatch,
+  DivisionWithMatches,
+  DivisionWithMatchesResponse,
+  EnrichedDivisionMatch,
+  MatchStatus,
+  PublicBracket,
+  PublicMatch,
+  PublicMatchCompetitor,
+  PublicScoreboardDivision,
+  PublicScoreboardResponse,
+} from '@shared/contracts';
+
+export type {
+  BracketType,
+  DivisionMatch,
+  DivisionWithMatches,
+  DivisionWithMatchesResponse,
+  EnrichedDivisionMatch,
+  MatchStatus,
+  PublicBracket,
+  PublicMatch,
+  PublicMatchCompetitor,
+  PublicScoreboardDivision,
+  PublicScoreboardResponse,
+};
+
+// ---------------------------------------------------------------------------
+// Legacy types — kept as thin re-exports so existing imports keep working.
+// New code should import directly from `@shared/contracts` or from the
+// re-exports above.
+// ---------------------------------------------------------------------------
 
 /** A match competitor slot — populated by scorekeeper PATCH or null when TBD. */
-export interface MatchCompetitorSlot {
-  id: string;
-  competitor: {
-    firstName: string;
-    lastName: string;
-    schoolDojang?: string | null;
-  };
-}
+export type MatchCompetitorSlot = PublicMatchCompetitor;
 
 /** A bracket match as returned by /api/divisions/tournament/:id?withMatches=true. */
-export interface ApiMatch {
-  id: string;
-  matchNumber: number;
-  roundNumber: number;
-  bracketType: 'winners' | 'losers' | 'finals';
-  status: MatchStatus;
-  ringNumber?: number | null;
-  competitor1?: MatchCompetitorSlot | null;
-  competitor2?: MatchCompetitorSlot | null;
-  winner?: MatchCompetitorSlot | null;
-  score1?: string | null;
-  score2?: string | null;
-  startedAt?: string | null;
-  updatedAt?: string | null;
-  /** Internal helper used by DirectorDashboard after flatMap. Not server-side. */
-  _divisionId?: string;
-  _divisionName?: string;
-}
+export type ApiMatch = EnrichedDivisionMatch;
 
 /** A bracket as embedded in the division response. */
-export interface ApiBracket {
-  id: string;
-  format?: string | null;
-  matches: ApiMatch[];
-}
+export type ApiBracket = PublicBracket;
 
 /** A division as returned by the tournament-divisions endpoint. */
-export interface ApiDivision {
-  id: string;
-  name: string;
-  eventType: string;
-  beltLevel?: string | null;
-  gender?: string | null;
-  ageMin?: number | null;
-  ageMax?: number | null;
-  weightClass?: string | null;
-  bracket: ApiBracket | null;
-}
+export type ApiDivision = DivisionWithMatches;
 
 /**
  * Minimal tournament shape used by dashboards. The full tournament
  * response has many more fields (organizationId, settings JSON string,
  * etc.); pages that need them should declare a wider local type.
+ *
+ * Not yet covered by a Zod contract — see `docs/contracts.md` for the
+ * staged rollout.
  */
 export interface ApiTournamentSummary {
   id: string;
