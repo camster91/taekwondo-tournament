@@ -21,3 +21,7 @@ _p*-*.cjs
 _screenshot*.cjs
 _scorekeeper-check.cjs
 _walk*.cjs
+
+# Local PR description scratch files (never commit)
+PR_BODY_*.md
+coverage/
