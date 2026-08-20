@@ -1,10 +1,18 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  ReactNode,
+} from 'react';
 import { CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import CloseButton from '../components/ui/CloseButton';
 
-type ToastType = 'success' | 'error' | 'info' | 'warning';
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
-interface Toast {
+export interface Toast {
   id: string;
   message: string;
   type: ToastType;
@@ -33,46 +41,22 @@ export function useToast() {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const removeToast = useCallback((id: string) => {
-    const timer = timersRef.current.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      timersRef.current.delete(id);
-    }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   const addToast = useCallback(
     (message: string, type: ToastType = 'info', duration: number = 5000) => {
-      const id = Math.random().toString(36).substr(2, 9);
+      const id = Math.random().toString(36).substring(2, 9);
       const toast: Toast = { id, message, type, duration };
-
       setToasts((prev) => [...prev, toast]);
-
-      if (duration > 0) {
-        const timer = setTimeout(() => {
-          timersRef.current.delete(id);
-          removeToast(id);
-        }, duration);
-        timersRef.current.set(id, timer);
-      }
     },
-    [removeToast]
+    []
   );
 
-  // Clear all pending timers on unmount so setState isn't called after teardown.
-  useEffect(() => {
-    const timers = timersRef.current;
-    return () => {
-      for (const timer of timers.values()) clearTimeout(timer);
-      timers.clear();
-    };
-  }, []);
-
   const success = useCallback(
-    (message: string) => addToast(message, 'success'),
+    (message: string) => addToast(message, 'success', 5000),
     [addToast]
   );
 
@@ -82,7 +66,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 
   const info = useCallback(
-    (message: string) => addToast(message, 'info'),
+    (message: string) => addToast(message, 'info', 5000),
     [addToast]
   );
 
@@ -110,7 +94,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
-function ToastContainer({
+export function ToastContainer({
   toasts,
   onRemove,
 }: {
@@ -120,7 +104,10 @@ function ToastContainer({
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+    <div
+      aria-label="Notifications"
+      className="fixed bottom-4 right-4 left-4 sm:left-auto z-50 flex flex-col items-end gap-2 pointer-events-none"
+    >
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
       ))}
@@ -128,47 +115,115 @@ function ToastContainer({
   );
 }
 
-function ToastItem({
+export function ToastItem({
   toast,
   onRemove,
 }: {
   toast: Toast;
   onRemove: (id: string) => void;
 }) {
+  const isAlert = toast.type === 'error' || toast.type === 'warning';
+  const duration = toast.duration ?? (isAlert ? 8000 : 5000);
+
+  const remainingRef = useRef<number>(duration);
+  const startRef = useRef<number>(Date.now());
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPausedRef = useRef<boolean>(false);
+
+  const startTimer = useCallback(() => {
+    if (duration <= 0) return; // persistent
+    isPausedRef.current = false;
+    startRef.current = Date.now();
+    timerRef.current = setTimeout(() => {
+      onRemove(toast.id);
+    }, remainingRef.current);
+  }, [duration, onRemove, toast.id]);
+
+  const pauseTimer = useCallback(() => {
+    if (duration <= 0 || isPausedRef.current) return;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    const elapsed = Date.now() - startRef.current;
+    remainingRef.current = Math.max(0, remainingRef.current - elapsed);
+    isPausedRef.current = true;
+  }, [duration]);
+
+  const resumeTimer = useCallback(() => {
+    if (duration <= 0 || !isPausedRef.current) return;
+    if (remainingRef.current <= 0) {
+      onRemove(toast.id);
+      return;
+    }
+    startTimer();
+  }, [duration, onRemove, startTimer, toast.id]);
+
+  useEffect(() => {
+    startTimer();
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [startTimer]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        pauseTimer();
+      } else {
+        resumeTimer();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [pauseTimer, resumeTimer]);
+
   const icons = {
-    success: <CheckCircle className="h-5 w-5 text-green-500" />,
-    error: <AlertCircle className="h-5 w-5 text-red-500" />,
-    info: <Info className="h-5 w-5 text-blue-500" />,
-    warning: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
+    success: <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" aria-hidden="true" />,
+    error: <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" aria-hidden="true" />,
+    info: <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" aria-hidden="true" />,
+    warning: <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" aria-hidden="true" />,
   };
 
   const backgrounds = {
-    success: 'bg-green-50 border-green-200',
-    error: 'bg-red-50 border-red-200',
-    info: 'bg-blue-50 border-blue-200',
-    warning: 'bg-yellow-50 border-yellow-200',
+    success: 'bg-green-50 border-green-200 dark:bg-green-950/80 dark:border-green-800',
+    error: 'bg-red-50 border-red-200 dark:bg-red-950/80 dark:border-red-800',
+    info: 'bg-blue-50 border-blue-200 dark:bg-blue-950/80 dark:border-blue-800',
+    warning: 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/80 dark:border-yellow-800',
   };
 
   const textColors = {
-    success: 'text-green-800',
-    error: 'text-red-800',
-    info: 'text-blue-800',
-    warning: 'text-yellow-800',
+    success: 'text-green-900 dark:text-green-100',
+    error: 'text-red-900 dark:text-red-100',
+    info: 'text-blue-900 dark:text-blue-100',
+    warning: 'text-yellow-900 dark:text-yellow-100',
   };
+
+  const truncatedMessage = toast.message.length > 40 ? `${toast.message.slice(0, 37)}...` : toast.message;
+  const dismissLabel = `Dismiss notification: ${truncatedMessage}`;
 
   return (
     <div
-      className={`flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg min-w-[300px] max-w-md animate-slide-in ${backgrounds[toast.type]}`}
+      role={isAlert ? 'alert' : 'status'}
+      aria-live={isAlert ? 'assertive' : 'polite'}
+      aria-atomic="true"
+      onPointerEnter={pauseTimer}
+      onPointerLeave={resumeTimer}
+      onMouseEnter={pauseTimer}
+      onMouseLeave={resumeTimer}
+      onFocusCapture={pauseTimer}
+      onBlurCapture={resumeTimer}
+      className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg w-full max-w-[calc(100vw-2rem)] sm:max-w-md min-w-0 motion-safe:animate-slide-in motion-reduce:animate-none ${backgrounds[toast.type]}`}
     >
       {icons[toast.type]}
-      <p className={`flex-1 text-sm font-medium ${textColors[toast.type]}`}>
+      <p className={`flex-1 text-sm font-medium break-words ${textColors[toast.type]}`}>
         {toast.message}
       </p>
       <CloseButton
         onClose={() => onRemove(toast.id)}
         size="sm"
-        label="Dismiss"
-        className={`${textColors[toast.type]} opacity-60 hover:opacity-100`}
+        label={dismissLabel}
+        className={`${textColors[toast.type]} opacity-70 hover:opacity-100 flex-shrink-0`}
       />
     </div>
   );

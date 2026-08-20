@@ -11,7 +11,7 @@ export default defineConfig({
       JWT_SECRET: 'test-secret-32-characters-min-for-tests',
       ...process.env,
     },
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
