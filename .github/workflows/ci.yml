@@ -79,6 +79,16 @@ jobs:
           # Placeholder for prisma generate schema validation (no DB connection is made)
           DATABASE_URL: postgresql://placeholder:***@localhost:5432/placeholder
 
+      - name: Bundle budget
+        # Closes #65: enforce the per-chunk and initial-entry bundle
+        # budgets defined in scripts/bundle-manifest.mjs. Refuses the
+        # build if the initial entry exceeds 600 kB raw / 180 kB gz,
+        # if any single chunk exceeds its named budget, or if the
+        # lazy export chunks grow without the budget being raised.
+        # The script also regenerates dist/bundle-manifest.json and
+        # docs/bundle-sizes.md so the size table is current.
+        run: npm run build:manifest
+
       - name: Install Playwright browsers
         # Required for `npm run test:e2e` below. ~150MB download.
         run: npx playwright install --with-deps chromium firefox webkit
