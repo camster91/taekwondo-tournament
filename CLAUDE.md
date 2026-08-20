@@ -866,5 +866,10 @@ and `2025 NEWTONS CHAMPIONSHIP LIST.xlsm` only as reference.
   the `headers` object spread).
 - **Database changes**: edit `prisma/schema.prisma`, then
   `npm run db:push` (idempotent). Restart dev server.
-- **Git branch**: `main` (single branch). PRs land directly.
-  No CI configured — tests are local + manual deploy verification.
+- **Git workflow**: see [CONTRIBUTING.md](./CONTRIBUTING.md). The
+  short version: branch `agent/<issue>-<short-description>`, one
+  independently reviewable slice per branch, draft PR by default,
+  squash-merge to `main`. The previous "main is a single branch,
+  PRs land directly" rule from this file is **stale and must not
+  be followed** — `main` is protected, CI is required, and PRs
+  must reference an open issue.
