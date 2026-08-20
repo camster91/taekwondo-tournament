@@ -9,7 +9,12 @@ import { Button } from '../components/ui';
 import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 import { resolveDisplayRing } from '../utils/scoreboard-display';
 import { BowinLogo } from '../components/brand/BowinLogo';
-import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availability';
+import {
+  SCOREBOARD_POLL_INTERVAL_MS,
+  STALE_AFTER_SECONDS,
+  getScoreboardState,
+  getStaleBannerMessage,
+} from '../utils/scoreboard-availability';
 
 interface Match {
   id: string;
@@ -108,20 +113,35 @@ export default function PublicScoreboard() {
       setLastFetchAt(new Date());
       return res.json();
     },
-    refetchInterval: 5000, // TV mode: refresh every 5s (was 3s — cuts poll load)
+    refetchInterval: SCOREBOARD_POLL_INTERVAL_MS,
     refetchIntervalInBackground: false,
     enabled: !tournamentError, // Don't keep retrying the scoreboard if the tournament is bad
   });
   const divisions = scoreboardData?.divisions;
   const displaySettings = scoreboardData?.displaySettings;
-  const scoreboardUnavailableMessage = getScoreboardUnavailableMessage(scoreboardError);
 
-  // Stale-data warning. If 15+ seconds have passed since the last successful
-  // fetch, the venue Wi-Fi may be flaky or the backend is down. Show an
-  // explicit warning in the header so the director notices. Closes the
-  // polish tail of M10 from the UI audit.
+  // Stale-data warning. If STALE_AFTER_SECONDS+ have passed since the last
+  // successful fetch, the venue Wi-Fi may be flaky or the backend is down.
+  // Closes the polish tail of M10 from the UI audit.
   const staleSeconds = lastFetchAt ? Math.floor((currentTime.getTime() - lastFetchAt.getTime()) / 1000) : null;
-  const isStale = staleSeconds != null && staleSeconds > 15;
+
+  // Single source of truth for which UI mode the scoreboard is in. The
+  // decision lives in the utility so it can be unit-tested without
+  // rendering the component.
+  const scoreboardState = getScoreboardState({
+    tournamentError,
+    tournamentLoading,
+    hasData: !!divisions,
+    divisionsLoading,
+    hasError: !!scoreboardError,
+    staleSeconds,
+    staleAfterSeconds: STALE_AFTER_SECONDS,
+  });
+
+  // Pre-compute the stale banner copy. The headline stays stable across
+  // re-renders so the aria-live region only fires on state transitions,
+  // not on every poll tick of the "stale for N seconds" counter.
+  const staleBanner = getStaleBannerMessage(!!scoreboardError, staleSeconds);
 
   // Group by ring. Matches without a ringNumber are NOT bucketed into a
   // default ring — they go into a separate "unassigned" bucket so the LIVE
@@ -194,6 +214,24 @@ export default function PublicScoreboard() {
 
   return (
     <div className="min-h-screen bg-[#0a0e1a] text-white overflow-hidden">
+      {/* Hidden live region. Carries the current scoreboard status as
+          a short, stable string. AT users hear "Scoreboard is live"
+          on first paint, "Scoreboard data is stale" if the feed
+          drops, and "Live scoreboard unavailable" if we never got
+          data — and only on those state changes, not on every poll
+          tick. The per-second "stale for N seconds" detail is
+          rendered separately, in an aria-hidden element, so the
+          live region doesn't re-announce every second. */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid="scoreboard-status-announcement"
+        className="sr-only"
+      >
+        {scoreboardState.announcement}
+      </div>
+
       {/* Error / not-found state. Replaces the old behavior of rendering an
           empty scoreboard template (NOW COMPETING / UP NEXT headings with
           no body) when the tournament ID is invalid. Closes #35.
@@ -215,24 +253,25 @@ export default function PublicScoreboard() {
       )}
       {/* Loading state. Spinner only shown while the tournament query is
           in-flight. After the tournament loads we keep the layout rendered
-          even while divisions re-fetch (3s polling) so the TV doesn't flash.
+          even while divisions re-fetch so the TV doesn't flash.
           Closes #33. */}
-      {(tournamentLoading || divisionsLoading) && !tournamentError && !scoreboardUnavailableMessage && (
+      {scoreboardState.status === 'loading' && (
         <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center">
           <Loader2 className="h-16 w-16 text-primary-400 mb-6 animate-spin" />
           <h1 className="text-2xl font-bold mb-2">Loading tournament…</h1>
           <p className="text-slate-300">Fetching live brackets and match data</p>
         </div>
       )}
-      {/* Main board — only render once we have a valid tournament. */}
-      {scoreboardUnavailableMessage && !tournamentError && (
+      {/* Initial-failure state. No data, scoreboard errored. Full-screen
+          message; we have nothing to show. */}
+      {scoreboardState.status === 'unavailable' && (
         <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center" role="alert">
           <AlertCircle className="h-20 w-20 text-amber-400 mb-6" aria-hidden="true" />
           <h1 className="text-3xl font-bold mb-3">Live scoreboard unavailable</h1>
-          <p className="text-slate-300 max-w-md">{scoreboardUnavailableMessage}</p>
+          <p className="text-slate-300 max-w-md">Live match data is unavailable right now. Please try again shortly.</p>
         </div>
       )}
-      {!tournamentLoading && !divisionsLoading && !tournamentError && !scoreboardUnavailableMessage && (
+      {scoreboardState.showMainBoard && (
       <>
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-900 via-primary-950 to-slate-900 border-b border-white/5">
@@ -333,14 +372,44 @@ export default function PublicScoreboard() {
             )}
           </div>
           </div>
-          <div className={`text-xs pb-3 flex items-center gap-2 ${isStale ? 'text-amber-400' : 'text-slate-300'}`}>
-            <span className={`h-2 w-2 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
+          <div
+            className={`text-xs pb-3 flex items-center gap-2 ${
+              scoreboardState.status === 'stale' ? 'text-amber-400' : 'text-slate-300'
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`h-2 w-2 rounded-full ${
+                scoreboardState.status === 'stale'
+                  ? 'bg-amber-400'
+                  : 'bg-emerald-400 animate-pulse'
+              }`}
+            />
             <span data-testid="auto-refresh-status">
-              {isStale
-                ? `STALE — no update for ${staleSeconds}s. Check venue Wi-Fi.`
-                : `Auto-refresh every 5s · Last update ${lastFetchAt ? lastFetchAt.toLocaleTimeString() : currentTime.toLocaleTimeString()}`}
+              {scoreboardState.status === 'stale'
+                ? `Stale${staleSeconds != null ? ` — no update for ${staleSeconds}s` : ''}. Check venue Wi-Fi.`
+                : `Auto-refresh every ${SCOREBOARD_POLL_INTERVAL_MS / 1000}s · Last update ${
+                    lastFetchAt ? lastFetchAt.toLocaleTimeString() : currentTime.toLocaleTimeString()
+                  }`}
             </span>
           </div>
+          {/* In-board stale banner. Only renders when we have data and
+              the latest fetch errored (or is past the stale threshold).
+              Uses the pre-computed `staleBanner` copy so the headline
+              stays stable across re-renders and the per-second
+              counter sits in a separate (aria-hidden) span. */}
+          {scoreboardState.showStaleBanner && (
+            <div
+              data-testid="scoreboard-stale-banner"
+              className="px-4 md:px-8 pb-3"
+              role="alert"
+            >
+              <div className="bg-amber-500/15 border border-amber-500/40 text-amber-100 rounded-md px-4 py-2 text-sm">
+                <strong className="font-semibold">{staleBanner.headline}.</strong>{' '}
+                <span aria-hidden="true">{staleBanner.detail}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Progress Bar */}
