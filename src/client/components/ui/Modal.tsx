@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef } from 'react';
+import { ReactNode, useEffect, useId, useRef } from 'react';
 import CloseButton from './CloseButton';
 
 type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
@@ -14,7 +14,7 @@ const sizeClassMap: Record<ModalSize, string> = {
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Modal title. For a11y, prefer a plain string. Use a ReactNode for branded headers (icon + text). */
+  /** Modal title. Can be a string or ReactNode (e.g. icon + text). */
   title: ReactNode;
   /** Optional subtitle shown under the title in the header. */
   subtitle?: ReactNode;
@@ -45,12 +45,14 @@ const FOCUSABLE_SELECTOR =
  * keyboard focus trap + focus return to the trigger element on close.
  *
  * a11y contract:
+ *  - Title & description connected via aria-labelledby and aria-describedby.
  *  - Tab / Shift+Tab cycle inside the panel (focus trap).
  *  - Escape closes the modal.
+ *  - Body scroll is locked while open.
  *  - On open, the first focusable element in the panel is focused,
  *    falling back to the panel itself.
  *  - On close, focus returns to whichever element was focused when
- *    the modal opened (typically the trigger button).
+ *    the modal opened.
  */
 export default function Modal({
   isOpen,
@@ -65,12 +67,21 @@ export default function Modal({
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<Element | null>(null);
+  const baseId = useId();
+  const titleId = `modal-title-${baseId}`;
+  const subtitleId = subtitle ? `modal-subtitle-${baseId}` : undefined;
 
   useEffect(() => {
     if (!isOpen) return;
+
     previouslyFocusedRef.current = typeof document !== 'undefined'
       ? document.activeElement
       : null;
+
+    // Lock body scroll
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     const id = window.setTimeout(() => {
       const panel = panelRef.current;
       if (!panel) return;
@@ -110,8 +121,11 @@ export default function Modal({
         }
       }
     };
+
     document.addEventListener('keydown', handleKeyDown, true);
+
     return () => {
+      document.body.style.overflow = originalOverflow;
       window.clearTimeout(id);
       document.removeEventListener('keydown', handleKeyDown, true);
       const prev = previouslyFocusedRef.current;
@@ -130,10 +144,11 @@ export default function Modal({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={typeof title === 'string' ? title : undefined}
+        aria-labelledby={titleId}
+        aria-describedby={subtitleId}
         tabIndex={-1}
         className={[
-          'modal-panel flex flex-col overflow-hidden',
+          'modal-panel flex flex-col overflow-hidden w-full',
           sizeClassMap[size],
           panelClassName,
         ]
@@ -142,11 +157,11 @@ export default function Modal({
       >
         <div className="modal-header">
           <div className="min-w-0 flex-1 pr-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+            <h2 id={titleId} className="text-lg font-semibold text-gray-900 dark:text-white truncate">
               {title}
             </h2>
             {subtitle && (
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+              <p id={subtitleId} className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
                 {subtitle}
               </p>
             )}

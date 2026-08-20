@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Play, Pause, RotateCcw, Volume2, VolumeX, Settings } from 'lucide-react';
+import ConfirmDialog from './ui/ConfirmDialog';
 
 interface MatchTimerProps {
   defaultRoundTime?: number; // seconds
@@ -22,6 +23,7 @@ export default function MatchTimer({
   const [isBreak, setIsBreak] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Configurable settings
   const [roundTime, setRoundTime] = useState(defaultRoundTime);
@@ -170,10 +172,8 @@ export default function MatchTimer({
     return () => window.removeEventListener('keydown', handler);
   }, [toggleTimer]);
 
-  const resetTimer = () => {
-    if (!window.confirm('Reset the entire match timer? This wipes round count, time-left, and break state. There is no undo on tournament day.')) {
-      return;
-    }
+  const handleConfirmReset = () => {
+    setShowResetConfirm(false);
     setIsRunning(false);
     endAtRef.current = null;
     setTimeLeft(roundTime);
@@ -233,7 +233,7 @@ export default function MatchTimer({
         </button>
 
         <button
-          onClick={resetTimer}
+          onClick={() => setShowResetConfirm(true)}
           className="p-2 rounded-lg bg-red-600 hover:bg-red-700 transition-colors text-sm px-3"
           title="Reset Match"
         >
@@ -312,6 +312,18 @@ export default function MatchTimer({
       <div className="text-center text-xs text-gray-500 mt-2">
         Press <kbd className="px-1 bg-gray-700 rounded">Space</kbd> to start/pause
       </div>
+
+      {/* Reset Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showResetConfirm}
+        onClose={() => setShowResetConfirm(false)}
+        onConfirm={handleConfirmReset}
+        title="Reset Match Timer"
+        message="Reset the entire match timer? This wipes round count, time-left, and break state. There is no undo on tournament day."
+        confirmText="Reset Timer"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
