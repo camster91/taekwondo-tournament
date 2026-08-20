@@ -1,0 +1,90 @@
+version: 2
+
+# GitGuardian ignore list.
+#
+# Why this file exists:
+# Several of our test files and CI workflows contain high-entropy
+# byte sequences by design — random tokens, hashes, base64url
+# fixtures, and CI-only JWT_SECRET stubs — and a generic
+# high-entropy / generic-password detector cannot tell the
+# difference between a test fixture and a leaked credential. This
+# file tells the scanner which paths / detectors to skip so we
+# get a clean bill of health on real secrets while still catching
+# accidental leaks in application code.
+#
+# Add a new entry only when:
+#   1. The path / detector has produced a known false positive
+#   2. The justification below names the file and the kind of
+#      fixture it contains
+# Never use this file to silence a real finding — fix the leak.
+ignore:
+  # ── Test fixtures ────────────────────────────────────────────────
+  # Vitest test files may contain 256-bit random tokens, SHA-256
+  # hex digests, base64url fixtures, and the JWT_SECRET stub from
+  # vitest.config.ts. All of these are intentional test data, not
+  # production secrets.
+  - path: "**/*.test.ts"
+    detectors:
+      - generic_high_entropy_secret
+      - generic_password
+    reason: "Test fixtures: random management tokens, hash digests, and base64url samples used as malformed-input cases."
+  - path: "**/*.test.tsx"
+    detectors:
+      - generic_high_entropy_secret
+      - generic_password
+    reason: "Test fixtures (TSX)."
+  - path: "vitest.config.ts"
+    detectors:
+      - generic_high_entropy_secret
+      - generic_password
+    reason: "Test config: contains a throwaway JWT_SECRET value used only when the test process boots auth.ts."
+
+  # ── CI / GitHub Actions ──────────────────────────────────────────
+  # Workflow files contain placeholder JWT_SECRETs and DB URLs
+  # that look like real secrets to a generic detector. The literal
+  # value 'ci-throwaway-secret-not-used-in-tests-min-32-chars-xx'
+  # is intentionally marked as a CI stub; rotate nothing if it
+  # leaks because there is nothing to rotate.
+  - path: ".github/workflows/**"
+    detectors:
+      - generic_high_entropy_secret
+      - generic_password
+    reason: "CI stub secrets (JWT_SECRET, throwaway DB passwords) used only on GitHub Actions runners; not real production credentials."
+
+  # ── Build / typecheck / lint outputs ─────────────────────────────
+  - path: "dist/**"
+    reason: "Build output."
+  - path: "dist-server/**"
+    reason: "Server build output."
+  - path: "node_modules/**"
+    reason: "Third-party dependencies."
+  - path: "coverage/**"
+    reason: "Vitest coverage output."
+
+  # Generated Prisma client — the schema is the source of truth
+  # and the generated client contains no production secrets.
+  - path: "src/generated/**"
+    reason: "Generated client code."
+
+  # ── Deployment / infra ───────────────────────────────────────────
+  # Traefik / Coolify / Docker compose files reference hostnames,
+  # container names, and other strings that look credential-shaped
+  # but are not secrets. If a real secret is ever needed in a
+  # compose / Traefik file, it must come from a runtime env var
+  # (and a real secret scanner would still flag the env var name,
+  # not the file).
+  - path: "docker-compose*.yml"
+    reason: "Compose wiring; secrets are injected at runtime from Coolify / env."
+  - path: "Dockerfile"
+    reason: "Build instructions, no embedded credentials."
+
+  # ── Legacy / historical artifacts ─────────────────────────────────
+  # The root has spreadsheets and PDFs of past tournaments. None
+  # of them contain real secrets but they do contain names /
+  # addresses / school info that could trip a PII detector.
+  - path: "*.xlsm"
+    reason: "Tournament entry spreadsheets (historical data)."
+  - path: "*.xlsx"
+    reason: "Tournament entry spreadsheets (historical data)."
+  - path: "*.pdf"
+    reason: "Tournament schedules / rules (historical data)."

@@ -9,6 +9,8 @@ dist/
 dist-server/
 test-results/
 playwright-report/
+# vitest coverage output (regenerated on every `npm test -- --coverage`)
+coverage/
 .hermes/
 # Debug-helper files that get created during dev — never commit
 _debug_loader.cjs
