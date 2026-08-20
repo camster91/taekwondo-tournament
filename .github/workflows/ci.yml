@@ -89,6 +89,27 @@ jobs:
         # docs/bundle-sizes.md so the size table is current.
         run: npm run build:manifest
 
+      - name: Compose security
+        # Closes audit #63. The DB service MUST NOT bind
+        # 5432:5432 (or 3306:3306, 27017:27017) to the host.
+        # The DB is reachable only from the app container on the
+        # internal bridge network. A regex against docker-compose.yml
+        # enforces this — a future commit that re-adds a
+        # `ports: <host>:5432` line on a `*-db` service fails the
+        # build. The /:\d+:\d+ pattern is intentionally loose
+        # so a typo can't slip through; the "5432|3306|27017" gate
+        # is the actual rule.
+        run: |
+          if grep -E '^\s*-\s*"?[0-9]+:(5432|3306|27017)"?' docker-compose.yml; then
+            echo "ERROR: docker-compose.yml binds a database port to the host."
+            echo "The DB service is reachable only from the app container on"
+            echo "the internal bridge network. Exposing 5432/3306/27017 on the"
+            echo "host lets any other container on the same host connect with"
+            echo "the credentials in POSTGRES_PASSWORD. See audit #63."
+            exit 1
+          fi
+          echo "Compose security: no host-bound DB ports."
+
       - name: Install Playwright browsers
         # Required for `npm run test:e2e` below. ~150MB download.
         run: npx playwright install --with-deps chromium firefox webkit

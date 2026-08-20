@@ -1,3 +1,25 @@
+# Security posture for this compose file (closes audit finding #63):
+#
+#   - The `app` service binds 3001:3001 so the host / reverse
+#     proxy can reach the HTTP server. That is the only host-
+#     bound port.
+#   - The `taekwondo-db` Postgres service has NO `ports:` block.
+#     It is reachable only from the `app` container on the
+#     internal `tkd-net` bridge network. Exposing 5432:5432 on
+#     the host would let any other container on the same host
+#     (or anyone who reaches the host via the bastion) connect
+#     to the database with the credentials in
+#     POSTGRES_PASSWORD. The audit swarm flagged that pattern
+#     across the fleet; this file is the explicit "no" answer.
+#   - DB password is required at deploy time via
+#     `${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}` —
+#     compose refuses to start without it. No default, no
+#     baked-in value.
+#   - A CI grep in `.github/workflows/ci.yml` fails the build
+#     if any `ports: <host>:5432|3306|27017` mapping is
+#     re-introduced on a service whose name matches
+#     `taekwondo-db` (or any future *-db service).
+
 services:
   app:
     build:
