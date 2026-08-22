@@ -170,64 +170,68 @@ async function notifySupportTeam(ticketId: string, subject: string, message: str
   }
 }
 
-router.post(
-  '/',
+async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const body = req.body;
+  const normalizedMessage = body.message.trim();
+
+  const assistantMessage = await generateAssistantReply(normalizedMessage, body.page);
+  const conversationId = body.conversationId?.trim() || null;
+  const escalate = shouldEscalate(normalizedMessage, body.createTicket === true);
+
+  let existingTicket: SupportTicketPayload | null = null;
+  const subject = buildSubject(normalizedMessage);
+  const priority = classifyPriority(normalizedMessage, body.priority);
+
+  if (escalate) {
+    const conversation: SupportChatMessage[] = appendConversation(
+      conversationId ? [] : null,
+      normalizedMessage,
+      assistantMessage,
+    );
+    const ticket = await prisma.supportTicket.create({
+      data: {
+        source: req.user ? 'app' : 'marketing',
+        status: 'open',
+        priority,
+        subject,
+        requestedByEmail: body.contactEmail ?? req.user?.email ?? null,
+        requestedByName: body.contactName ?? (req.user ? `${req.user.firstName} ${req.user.lastName}` : null),
+        page: body.page,
+        lastUserMessage: normalizedMessage,
+        lastAssistantMessage: assistantMessage,
+        conversation: JSON.stringify(conversation),
+        userId: req.user?.id ?? null,
+      },
+    });
+
+    void notifySupportTeam(ticket.id, subject, normalizedMessage);
+
+    existingTicket = {
+      id: ticket.id,
+      status: ticket.status,
+      priority: ticket.priority,
+      subject: ticket.subject,
+    };
+  }
+
+  return res.json({
+    answer: assistantMessage,
+    ticket: existingTicket,
+    escalated: Boolean(existingTicket),
+    conversationId,
+  });
+}
+
+const supportChatHandler = [
   optionalAuthenticate,
   chatLimiter,
   validateRequest(supportChatSchema),
-  async (req: AuthenticatedRequest, res: Response) => {
-    const prisma: PrismaClient = req.app.locals.prisma;
-    const body = req.body;
-    const normalizedMessage = body.message.trim();
+  handleSupportChat,
+] as const;
 
-    const assistantMessage = await generateAssistantReply(normalizedMessage, body.page);
-    const conversationId = body.conversationId?.trim() || null;
-    const escalate = shouldEscalate(normalizedMessage, body.createTicket === true);
-
-    let existingTicket: SupportTicketPayload | null = null;
-    const subject = buildSubject(normalizedMessage);
-    const priority = classifyPriority(normalizedMessage, body.priority);
-
-    if (escalate) {
-      const conversation: SupportChatMessage[] = appendConversation(
-        conversationId ? [] : null,
-        normalizedMessage,
-        assistantMessage,
-      );
-      const ticket = await prisma.supportTicket.create({
-        data: {
-          source: req.user ? 'app' : 'marketing',
-          status: 'open',
-          priority,
-          subject,
-          requestedByEmail: body.contactEmail ?? req.user?.email ?? null,
-          requestedByName: body.contactName ?? (req.user ? `${req.user.firstName} ${req.user.lastName}` : null),
-          page: body.page,
-          lastUserMessage: normalizedMessage,
-          lastAssistantMessage: assistantMessage,
-          conversation: JSON.stringify(conversation),
-          userId: req.user?.id ?? null,
-        },
-      });
-
-      void notifySupportTeam(ticket.id, subject, normalizedMessage);
-
-      existingTicket = {
-        id: ticket.id,
-        status: ticket.status,
-        priority: ticket.priority,
-        subject: ticket.subject,
-      };
-    }
-
-    return res.json({
-      answer: assistantMessage,
-      ticket: existingTicket,
-      escalated: Boolean(existingTicket),
-      conversationId,
-    });
-  }
-);
+router.post('/', ...supportChatHandler);
+router.post('/chat', ...supportChatHandler);
 
 router.get(
   '/',
