@@ -71,7 +71,7 @@ export default function SupportChatWidget() {
     addMessage({ role: 'user', text: outgoing });
 
     try {
-      const response = await fetch('/api/support/chat', {
+      const response = await fetch('/api/support', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -206,7 +206,7 @@ export default function SupportChatWidget() {
                         });
                         if (!forceTicket) {
                           setForceTicket(true);
-                          const response = await fetch('/api/support/chat', {
+                          const response = await fetch('/api/support', {
                             method: 'POST',
                             headers: {
                               'Content-Type': 'application/json',
