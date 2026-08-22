@@ -9,6 +9,7 @@ import {
   supportChatSchema,
   supportTicketQuerySchema,
   supportTicketUpdateSchema,
+  supportConfigSchema,
 } from './support-validation.js';
 
 interface SupportChatMessage {
@@ -33,10 +34,9 @@ const chatLimiter = rateLimit({
   message: { error: 'Too many support requests, please slow down.' },
 });
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim() || '';
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-const SUPPORT_ALERT_EMAIL = process.env.SUPPORT_ALERT_EMAIL?.trim() || '';
+const SUPPORT_SETTINGS_KEY = 'supportIntegration';
+const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const DEFAULT_OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
 
 const escalationKeywords = [
   'urgent',
@@ -94,20 +94,114 @@ function buildFallbackReply(message: string): string {
   return 'I logged your question and can pass it to the support team. Share a preferred contact name/email if you want me to create a ticket now.';
 }
 
-async function generateAssistantReply(message: string, page?: string | null): Promise<string> {
-  if (!OPENAI_API_KEY) {
+interface SupportRuntimeConfig {
+  openAiApiKey: string;
+  openAiModel: string;
+  openAiBaseUrl: string;
+  supportAlertEmail: string;
+}
+
+interface SupportConfigForOrg {
+  openAiApiKey?: string;
+  openAiModel?: string;
+  openAiBaseUrl?: string;
+  supportAlertEmail?: string;
+}
+
+function readOrganizationSettings(raw: string | null): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // ignore corrupt settings
+  }
+  return {};
+}
+
+function readSupportSection(settings: Record<string, unknown>): SupportConfigForOrg {
+  const section = settings[SUPPORT_SETTINGS_KEY];
+  if (!section || typeof section !== 'object' || Array.isArray(section)) {
+    return {};
+  }
+  const record = section as Record<string, unknown>;
+  return {
+    openAiApiKey: typeof record.openAiApiKey === 'string' ? record.openAiApiKey.trim() : undefined,
+    openAiModel: typeof record.openAiModel === 'string' ? record.openAiModel.trim() : undefined,
+    openAiBaseUrl: typeof record.openAiBaseUrl === 'string' ? record.openAiBaseUrl.trim() : undefined,
+    supportAlertEmail: typeof record.supportAlertEmail === 'string' ? record.supportAlertEmail.trim() : undefined,
+  };
+}
+
+function sanitizeSupportConfig(config: SupportRuntimeConfig) {
+  return {
+    hasOpenAiApiKey: Boolean(config.openAiApiKey),
+    openAiModel: config.openAiModel,
+    openAiBaseUrl: config.openAiBaseUrl,
+    supportAlertEmail: config.supportAlertEmail,
+  };
+}
+
+async function getSupportOrganizationId(prisma: PrismaClient, userId: string): Promise<string | null> {
+  const memberships = await prisma.organizationMember.findMany({
+    where: { userId },
+    select: { organizationId: true },
+    orderBy: { createdAt: 'asc' },
+    take: 1,
+  });
+  return memberships[0]?.organizationId ?? null;
+}
+
+async function resolveSupportConfig(
+  prisma: PrismaClient,
+  userId?: string
+): Promise<SupportRuntimeConfig> {
+  const envConfig = {
+    openAiApiKey: process.env.OPENAI_API_KEY?.trim() || '',
+    openAiModel: DEFAULT_OPENAI_MODEL,
+    openAiBaseUrl: DEFAULT_OPENAI_BASE_URL,
+    supportAlertEmail: process.env.SUPPORT_ALERT_EMAIL?.trim() || '',
+  };
+  if (!userId) return envConfig;
+
+  const organizationId = await getSupportOrganizationId(prisma, userId);
+  if (!organizationId) return envConfig;
+
+  const organization = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { settings: true },
+  });
+  if (!organization) return envConfig;
+
+  const orgConfig = readSupportSection(readOrganizationSettings(organization.settings));
+  return {
+    openAiApiKey: orgConfig.openAiApiKey?.trim() || envConfig.openAiApiKey,
+    openAiModel: orgConfig.openAiModel || envConfig.openAiModel,
+    openAiBaseUrl: orgConfig.openAiBaseUrl || envConfig.openAiBaseUrl,
+    supportAlertEmail: orgConfig.supportAlertEmail || envConfig.supportAlertEmail,
+  };
+}
+
+async function generateAssistantReply(
+  message: string,
+  config: SupportRuntimeConfig,
+  page?: string | null
+): Promise<string> {
+  if (!config.openAiApiKey) {
     return buildFallbackReply(message);
   }
 
   try {
-    const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+    const response = await fetch(`${config.openAiBaseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${config.openAiApiKey}`,
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
+        model: config.openAiModel,
         temperature: 0.15,
         max_tokens: 500,
         messages: [
@@ -157,11 +251,16 @@ function appendConversation(
   return base;
 }
 
-async function notifySupportTeam(ticketId: string, subject: string, message: string): Promise<void> {
-  if (!SUPPORT_ALERT_EMAIL) return;
+async function notifySupportTeam(
+  ticketId: string,
+  subject: string,
+  message: string,
+  supportEmail: string,
+): Promise<void> {
+  if (!supportEmail) return;
   try {
     await sendEmail(
-      SUPPORT_ALERT_EMAIL,
+      supportEmail,
       `Support ticket queued: ${subject}`,
       `<p>New support ticket <strong>${ticketId}</strong> has been created.</p><p>${message}</p>`
     );
@@ -174,8 +273,9 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
   const prisma: PrismaClient = req.app.locals.prisma;
   const body = req.body;
   const normalizedMessage = body.message.trim();
+  const config = await resolveSupportConfig(prisma, req.user?.id);
 
-  const assistantMessage = await generateAssistantReply(normalizedMessage, body.page);
+  const assistantMessage = await generateAssistantReply(normalizedMessage, config, body.page);
   const conversationId = body.conversationId?.trim() || null;
   const escalate = shouldEscalate(normalizedMessage, body.createTicket === true);
 
@@ -205,7 +305,7 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
       },
     });
 
-    void notifySupportTeam(ticket.id, subject, normalizedMessage);
+    void notifySupportTeam(ticket.id, subject, normalizedMessage, config.supportAlertEmail);
 
     existingTicket = {
       id: ticket.id,
@@ -232,6 +332,96 @@ const supportChatHandler = [
 
 router.post('/', ...supportChatHandler);
 router.post('/chat', ...supportChatHandler);
+
+router.get(
+  '/config',
+  authenticate,
+  requireRole('admin'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const config = await resolveSupportConfig(prisma, req.user?.id);
+    res.json(sanitizeSupportConfig(config));
+  }
+);
+
+router.patch(
+  '/config',
+  authenticate,
+  requireRole('admin'),
+  validateRequest(supportConfigSchema),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const update = req.body;
+    const organizationId = req.user?.id ? await getSupportOrganizationId(prisma, req.user.id) : null;
+    if (!organizationId) {
+      return res.status(404).json({ error: 'No organization found for this account.' });
+    }
+
+    if (update.clearOpenAiApiKey === true && update.openAiApiKey !== undefined) {
+      return res.status(400).json({ error: 'Use either clearOpenAiApiKey or openAiApiKey, not both.' });
+    }
+
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { settings: true },
+    });
+    if (!organization) {
+      return res.status(404).json({ error: 'Organization not found.' });
+    }
+
+    const settings = readOrganizationSettings(organization.settings);
+    const currentSection = readSupportSection(settings);
+    const nextSection: {
+      openAiApiKey?: string | null;
+      openAiModel?: string;
+      openAiBaseUrl?: string;
+      supportAlertEmail?: string;
+    } = { ...currentSection };
+
+    if (update.openAiModel !== undefined) nextSection.openAiModel = update.openAiModel;
+    if (update.openAiBaseUrl !== undefined) nextSection.openAiBaseUrl = update.openAiBaseUrl;
+    if (update.supportAlertEmail !== undefined) nextSection.supportAlertEmail = update.supportAlertEmail;
+
+    if (update.clearOpenAiApiKey === true) {
+      nextSection.openAiApiKey = null;
+    } else if (update.openAiApiKey !== undefined) {
+      nextSection.openAiApiKey = update.openAiApiKey;
+    }
+
+    const hasAnyChanges =
+      update.openAiApiKey !== undefined ||
+      update.openAiModel !== undefined ||
+      update.openAiBaseUrl !== undefined ||
+      update.supportAlertEmail !== undefined ||
+      update.clearOpenAiApiKey === true;
+    if (!hasAnyChanges) {
+      return res.status(400).json({ error: 'No supported support settings were provided.' });
+    }
+
+    const storedSection = nextSection as Record<string, unknown>;
+    const mergedSettings: Record<string, unknown> = {
+      ...settings,
+      [SUPPORT_SETTINGS_KEY]: {
+        ...(settings[SUPPORT_SETTINGS_KEY] && typeof settings[SUPPORT_SETTINGS_KEY] === 'object' && !Array.isArray(settings[SUPPORT_SETTINGS_KEY])
+          ? settings[SUPPORT_SETTINGS_KEY]
+          : {}),
+        ...storedSection,
+      },
+    };
+
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { settings: JSON.stringify(mergedSettings) },
+    });
+
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Authentication required.' });
+    }
+
+    const resolved = await resolveSupportConfig(prisma, req.user.id);
+    res.json(sanitizeSupportConfig(resolved));
+  }
+);
 
 router.get(
   '/',
@@ -314,3 +504,4 @@ router.patch(
 );
 
 export default router;
+

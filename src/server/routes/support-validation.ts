@@ -39,3 +39,33 @@ export const supportTicketQuerySchema = z
     status: value.status,
     limit: value.limit,
   }));
+
+export const supportConfigSchema = z
+  .object({
+    openAiApiKey: z
+      .string()
+      .trim()
+      .min(1)
+      .max(500)
+      .optional()
+      .nullable()
+      .transform((value) => value?.trim() || null),
+    openAiModel: z.string().trim().min(1).max(120).optional(),
+    openAiBaseUrl: z
+      .string()
+      .trim()
+      .max(300)
+      .url('Invalid base URL')
+      .optional(),
+    supportAlertEmail: z.string().trim().email().max(254).optional(),
+    clearOpenAiApiKey: z.boolean().optional(),
+  })
+  .refine(
+    (value) =>
+      value.openAiApiKey !== undefined ||
+      value.openAiModel !== undefined ||
+      value.openAiBaseUrl !== undefined ||
+      value.supportAlertEmail !== undefined ||
+      value.clearOpenAiApiKey === true,
+    { message: 'No support configuration values provided.' },
+  );
