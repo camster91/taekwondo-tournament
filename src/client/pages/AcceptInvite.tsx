@@ -78,7 +78,7 @@ export default function AcceptInvite() {
       login({ user: data.user });
 
       // Redirect to dashboard
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Invalid or expired invite');
     } finally {

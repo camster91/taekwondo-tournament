@@ -264,7 +264,7 @@ export default function UserManagement() {
         <ShieldX className="mx-auto h-12 w-12 text-red-400 dark:text-red-500" />
         <h2 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Access Denied</h2>
         <p className="mt-2 text-gray-600 dark:text-gray-400">You need admin privileges to access this page.</p>
-        <Button as={Link} to="/" variant="primary" className="mt-4">
+        <Button as={Link} to="/dashboard" variant="primary" className="mt-4">
           Go to Dashboard
         </Button>
       </div>
@@ -285,7 +285,7 @@ export default function UserManagement() {
         }
       >
         <Link
-          to="/"
+          to="/dashboard"
           className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to Dashboard

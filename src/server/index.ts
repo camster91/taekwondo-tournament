@@ -24,6 +24,7 @@ import incidentsRouter from './routes/incidents.js';
 import recommendationsRouter from './routes/recommendations.js';
 import organizationsRouter from './routes/organizations.js';
 import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
+import supportRouter from './routes/support.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 import {
@@ -224,6 +225,7 @@ app.use('/api/invites', invitesRouter);
 app.use('/api/sports', sportsRouter);
 app.use('/api/rules', rulesRouter);
 app.use('/api/incidents', incidentsRouter);
+app.use('/api/support', supportRouter);
 app.use('/api/recommendations', recommendationsRouter);
 app.use('/api/organizations', organizationsRouter);
 app.use('/api/billing', billingRouter);

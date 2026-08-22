@@ -624,6 +624,31 @@ model Incident {
   @@index([deletedAt])
 }
 
+// Customer support requests created from app chat and marketing leads.
+// Supports both authenticated users and anonymous users that provide
+// a contact name/email in the support widget.
+model SupportTicket {
+  id                 String   @id @default(uuid())
+  source             String // web-chat, support-widget, api
+  status             String   @default("open") // open | in_progress | resolved | closed
+  priority           String   @default("normal") // low | normal | high
+  subject            String
+  requestedByEmail   String?
+  requestedByName    String?
+  page               String?
+  lastUserMessage    String
+  lastAssistantMessage String?
+  conversation       String // JSON array: [{role:'user'|'assistant',content:string,at:string}]
+  notes              String?
+  resolvedAt         DateTime?
+  userId             String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId])
+}
+
 // Tournament fairness rules (configurable per tournament)
 model TournamentRule {
   id           String   @id @default(uuid())

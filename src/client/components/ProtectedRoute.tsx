@@ -74,7 +74,7 @@ export default function ProtectedRoute({
               Your current role: <span className="font-medium">{user?.role}</span>
             </p>
             <div className="mt-6 space-x-4">
-              <Button as="a" href="/" variant="primary">
+              <Button as="a" href="/dashboard" variant="primary">
                 Go to Dashboard
               </Button>
               <Button

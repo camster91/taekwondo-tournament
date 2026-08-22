@@ -30,7 +30,7 @@ export default function VerifyMagicLink() {
     verificationAttempt.current.promise.then((result) => {
       if (!active) return;
       if (result.success) {
-        navigate('/', { replace: true });
+        navigate('/dashboard', { replace: true });
       } else {
         setSessionVerified(result.sessionVerified === true);
         setError(result.error || 'Your sign-in link is invalid or has expired. Please request a new one.');
@@ -44,7 +44,7 @@ export default function VerifyMagicLink() {
     setIsVerifying(true);
     const result = await retrySessionHydration();
     if (result.success) {
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
       return;
     }
     setError(result.error || 'The session could not be loaded. Try again.');

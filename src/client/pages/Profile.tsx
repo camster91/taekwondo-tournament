@@ -99,7 +99,7 @@ export default function Profile() {
         description="Manage your account information"
       >
         <Link
-          to="/"
+          to="/dashboard"
           className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />

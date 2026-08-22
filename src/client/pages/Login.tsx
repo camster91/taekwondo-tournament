@@ -109,7 +109,7 @@ export default function Login() {
       } else {
         // Session cookie is set by the server. Hard nav so
         // AuthProvider re-mounts and hydrates user state from /me.
-        window.location.href = '/';
+        window.location.href = '/dashboard';
       }
     } catch {
       setError('Setup failed. Please try again.');
@@ -175,7 +175,7 @@ export default function Login() {
       markDemoEntryPending();
       // Session cookie is set by the server. Hard nav so the
       // AuthProvider re-mounts and hydrates user state from /me.
-      window.location.href = '/';
+      window.location.href = '/dashboard';
     } catch (err: unknown) {
       console.error('Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
