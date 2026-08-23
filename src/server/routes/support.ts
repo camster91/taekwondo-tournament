@@ -11,6 +11,7 @@ import {
   supportTicketUpdateSchema,
   supportConfigSchema,
 } from './support-validation.js';
+import { answerOperationalQuery, parseOperationalQuery } from '../services/operational-query.js';
 
 interface SupportChatMessage {
   role: 'user' | 'assistant';
@@ -92,6 +93,141 @@ function buildFallbackReply(message: string): string {
     return 'If sign-in is failing, clear browser cache and try again from the login screen. If you still cannot access your account, we can raise this directly with support.';
   }
   return 'I logged your question and can pass it to the support team. Share a preferred contact name/email if you want me to create a ticket now.';
+}
+
+interface SupportAssistOutput {
+  executed: boolean;
+  request: string;
+  intent?: string;
+  details: string;
+  recommendations: string[];
+}
+
+interface SupportDiagnosticsSnapshot {
+  openSupportTickets: number;
+  inProgressSupportTickets: number;
+  highPrioritySupportTickets: number;
+  staleDraftTournaments: number;
+  openScoreboards: number;
+}
+
+const HIGH_PRIORITY_SUPPORT_AGE_HOURS = 48;
+
+function formatSupportRecommendation(lines: string[]): string {
+  if (lines.length === 0) return '';
+  return `\n\nRecommended next steps:\n${lines.map((line) => `• ${line}`).join('\n')}`;
+}
+
+function buildDiagnosticRecommendations(intent: string): string[] {
+  switch (intent) {
+    case 'ring_delay':
+      return [
+        'Reassign available competitors to the ring where delay is detected.',
+        'Check match statuses and swap any stalled match into the queue.',
+        'Confirm judges/timer devices are signed in on the ring scoreboard page.',
+      ];
+    case 'blocked_divisions':
+      return [
+        'Open Tournament Settings and review division setup for missing brackets.',
+        'Run the category auto-generation again after confirming registrations are complete.',
+      ];
+    case 'next_competitors':
+      return [
+        'Refresh the schedule and open the director page to review queue order.',
+      ];
+    case 'schools_need_checkin':
+      return [
+        'Open Check-in and complete registration confirmations by school.',
+        'Ask remaining parents to confirm their confirmation code in Register flow.',
+      ];
+    default:
+      return [
+        'If the same condition repeats, use the Support Tickets page and include a screenshot.',
+      ];
+  }
+}
+
+async function buildSupportDiagnosticsSnapshot(prisma: PrismaClient): Promise<SupportDiagnosticsSnapshot> {
+  const staleCutoff = new Date(Date.now() - HIGH_PRIORITY_SUPPORT_AGE_HOURS * 60 * 60_000);
+  const [
+    openSupportTickets,
+    inProgressSupportTickets,
+    highPrioritySupportTickets,
+    staleDraftTournaments,
+    openScoreboards,
+  ] = await Promise.all([
+    prisma.supportTicket.count({ where: { status: 'open' } }),
+    prisma.supportTicket.count({ where: { status: 'in_progress' } }),
+    prisma.supportTicket.count({
+      where: {
+        status: { in: ['open', 'in_progress'] },
+        priority: 'high',
+      },
+    }),
+    prisma.tournament.count({ where: { status: 'draft', deletedAt: null, createdAt: { lte: staleCutoff } } }),
+    prisma.tournament.count({ where: { status: 'registration', publicSlug: { not: null }, deletedAt: null } }),
+  ]);
+
+  return {
+    openSupportTickets,
+    inProgressSupportTickets,
+    highPrioritySupportTickets,
+    staleDraftTournaments,
+    openScoreboards,
+  };
+}
+
+async function runSupportAssist(
+  prisma: PrismaClient,
+  message: string,
+  requestedTournamentId?: string,
+  requestedExplicitly = false,
+): Promise<SupportAssistOutput | null> {
+  const trimmedMessage = message.trim();
+  if (!trimmedMessage) return null;
+
+  const lower = trimmedMessage.toLowerCase();
+  if (requestedTournamentId) {
+    const parsedIntent = parseOperationalQuery(trimmedMessage);
+    if (parsedIntent.kind !== 'unsupported') {
+      const operationalAnswer = await answerOperationalQuery(prisma, requestedTournamentId, trimmedMessage);
+      if (operationalAnswer) {
+        return {
+          executed: true,
+          request: trimmedMessage,
+          intent: parsedIntent.kind,
+          details: `${operationalAnswer.answer}\nEvidence: ${operationalAnswer.evidence
+            .slice(0, 4)
+            .map((e) => e.label || e.href)
+            .join(', ') || 'none recorded'}`,
+          recommendations: buildDiagnosticRecommendations(parsedIntent.kind),
+        };
+      }
+      return {
+        executed: false,
+        request: trimmedMessage,
+        details: 'That tournament could not be located, so I could not safely run tournament diagnostics.',
+        recommendations: ['Verify the tournament ID and try again.'],
+      };
+    }
+  }
+
+  if (!requestedExplicitly && !/diagnostic|health|support status|support snapshot|support dashboard/i.test(lower)) {
+    return null;
+  }
+
+  const snapshot = await buildSupportDiagnosticsSnapshot(prisma);
+  return {
+    executed: true,
+    request: trimmedMessage,
+    intent: 'platform_diagnostics',
+    details: `Current support health snapshot: ${snapshot.openSupportTickets} open tickets, ${snapshot.inProgressSupportTickets} in progress, ${snapshot.highPrioritySupportTickets} high-priority, ${snapshot.staleDraftTournaments} stale draft tournament(s), ${snapshot.openScoreboards} public scoreboards.`,
+    recommendations: [
+      'Prioritize high-priority and older open tickets first.',
+      'Refresh stale draft tournaments before publishing if they are blocked from launch.',
+      'If API responses look inconsistent, open a new support ticket with timestamps and browser console output.',
+    ],
+  };
 }
 
 interface SupportRuntimeConfig {
@@ -273,7 +409,10 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
   const prisma: PrismaClient = req.app.locals.prisma;
   const body = req.body;
   const normalizedMessage = body.message.trim();
+  const requestedTournamentId = body.tournamentId?.trim() || undefined;
+  const requestAssist = body.requestAssist === true;
   const config = await resolveSupportConfig(prisma, req.user?.id);
+  const supportAssist = await runSupportAssist(prisma, normalizedMessage, requestedTournamentId, requestAssist);
 
   const assistantMessage = await generateAssistantReply(normalizedMessage, config, body.page);
   const conversationId = body.conversationId?.trim() || null;
@@ -282,12 +421,14 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
   let existingTicket: SupportTicketPayload | null = null;
   const subject = buildSubject(normalizedMessage);
   const priority = classifyPriority(normalizedMessage, body.priority);
+  const operationalMessage = supportAssist ? `${assistantMessage}\n\n${supportAssist.details}${supportAssist.recommendations.length ? formatSupportRecommendation(supportAssist.recommendations) : ''}` : null;
+  const finalMessage = supportAssist ? operationalMessage : assistantMessage;
 
   if (escalate) {
     const conversation: SupportChatMessage[] = appendConversation(
       conversationId ? [] : null,
       normalizedMessage,
-      assistantMessage,
+      finalMessage,
     );
     const ticket = await prisma.supportTicket.create({
       data: {
@@ -316,10 +457,18 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
   }
 
   return res.json({
-    answer: assistantMessage,
+    answer: finalMessage,
     ticket: existingTicket,
     escalated: Boolean(existingTicket),
     conversationId,
+    supportAssistant: supportAssist
+      ? {
+          request: supportAssist.request,
+          intent: supportAssist.intent ?? 'general',
+          executed: supportAssist.executed,
+          recommendations: supportAssist.recommendations,
+        }
+      : null,
   });
 }
 

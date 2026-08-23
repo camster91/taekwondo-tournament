@@ -8,6 +8,12 @@ const messageSchema = z
 
 export const supportChatSchema = z.object({
   message: messageSchema,
+  tournamentId: z
+    .string()
+    .uuid({ message: 'Tournament ID must be a valid UUID' })
+    .optional()
+    .nullable(),
+  requestAssist: z.boolean().optional(),
   page: z.string().trim().max(255).optional().nullable(),
   conversationId: z.string().uuid().optional().nullable(),
   contactName: z.string().trim().min(1).max(120).optional().nullable(),
