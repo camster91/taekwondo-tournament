@@ -10,8 +10,15 @@ import {
   supportTicketQuerySchema,
   supportTicketUpdateSchema,
   supportConfigSchema,
+  supportConfigTestSchema,
 } from './support-validation.js';
 import { answerOperationalQuery, parseOperationalQuery } from '../services/operational-query.js';
+import {
+  assertSafeSupportProviderUrl,
+  readSupportConfigAuditTrail,
+  testSupportProviderConnection,
+  type SupportConfigAuditEntry,
+} from '../services/support-provider.js';
 
 interface SupportChatMessage {
   role: 'user' | 'assistant';
@@ -271,13 +278,20 @@ function readSupportSection(settings: Record<string, unknown>): SupportConfigFor
   };
 }
 
-function sanitizeSupportConfig(config: SupportRuntimeConfig) {
+function sanitizeSupportConfig(config: SupportRuntimeConfig, recentChanges: SupportConfigAuditEntry[] = []) {
   return {
     hasOpenAiApiKey: Boolean(config.openAiApiKey),
     openAiModel: config.openAiModel,
     openAiBaseUrl: config.openAiBaseUrl,
     supportAlertEmail: config.supportAlertEmail,
+    recentChanges,
   };
+}
+
+function getSupportAuditTrail(settings: Record<string, unknown>): SupportConfigAuditEntry[] {
+  const section = settings[SUPPORT_SETTINGS_KEY];
+  if (!section || typeof section !== 'object' || Array.isArray(section)) return [];
+  return readSupportConfigAuditTrail((section as Record<string, unknown>).auditTrail);
 }
 
 async function getSupportOrganizationId(prisma: PrismaClient, userId: string): Promise<string | null> {
@@ -330,8 +344,11 @@ async function generateAssistantReply(
   }
 
   try {
-    const response = await fetch(`${config.openAiBaseUrl}/chat/completions`, {
+    const baseUrl = await assertSafeSupportProviderUrl(config.openAiBaseUrl);
+    const endpoint = new URL(`${baseUrl.pathname.replace(/\/$/, '')}/chat/completions`, baseUrl.origin);
+    const response = await fetch(endpoint, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${config.openAiApiKey}`,
@@ -489,8 +506,16 @@ router.get(
   requireRole('admin'),
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
+    if (!req.user?.id) return res.status(401).json({ error: 'Authentication required.' });
     const config = await resolveSupportConfig(prisma, req.user?.id);
-    res.json(sanitizeSupportConfig(config));
+    const organizationId = await getSupportOrganizationId(prisma, req.user.id);
+    const organization = organizationId
+      ? await prisma.organization.findUnique({ where: { id: organizationId }, select: { settings: true } })
+      : null;
+    const recentChanges = organization
+      ? getSupportAuditTrail(readOrganizationSettings(organization.settings))
+      : [];
+    res.json(sanitizeSupportConfig(config, recentChanges));
   }
 );
 
@@ -502,7 +527,8 @@ router.patch(
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
     const update = req.body;
-    const organizationId = req.user?.id ? await getSupportOrganizationId(prisma, req.user.id) : null;
+    if (!req.user?.id) return res.status(401).json({ error: 'Authentication required.' });
+    const organizationId = await getSupportOrganizationId(prisma, req.user.id);
     if (!organizationId) {
       return res.status(404).json({ error: 'No organization found for this account.' });
     }
@@ -521,6 +547,20 @@ router.patch(
 
     const settings = readOrganizationSettings(organization.settings);
     const currentSection = readSupportSection(settings);
+    const changedFields = [
+      update.openAiApiKey !== undefined || update.clearOpenAiApiKey === true ? 'openAiApiKey' : null,
+      update.openAiModel !== undefined ? 'openAiModel' : null,
+      update.openAiBaseUrl !== undefined ? 'openAiBaseUrl' : null,
+      update.supportAlertEmail !== undefined ? 'supportAlertEmail' : null,
+    ].filter((field): field is string => Boolean(field));
+    const auditEntry: SupportConfigAuditEntry = {
+      id: crypto.randomUUID(),
+      action: 'settings_updated',
+      changedFields,
+      changedByUserId: req.user.id,
+      at: new Date().toISOString(),
+    };
+    const auditTrail = [auditEntry, ...getSupportAuditTrail(settings)].slice(0, 25);
     const nextSection: {
       openAiApiKey?: string | null;
       openAiModel?: string;
@@ -556,6 +596,7 @@ router.patch(
           ? settings[SUPPORT_SETTINGS_KEY]
           : {}),
         ...storedSection,
+        auditTrail,
       },
     };
 
@@ -564,13 +605,27 @@ router.patch(
       data: { settings: JSON.stringify(mergedSettings) },
     });
 
-    if (!req.user?.id) {
-      return res.status(401).json({ error: 'Authentication required.' });
-    }
-
     const resolved = await resolveSupportConfig(prisma, req.user.id);
-    res.json(sanitizeSupportConfig(resolved));
+    res.json(sanitizeSupportConfig(resolved, auditTrail));
   }
+);
+
+router.post(
+  '/config/test',
+  authenticate,
+  requireRole('admin'),
+  validateRequest(supportConfigTestSchema),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    if (!req.user?.id) return res.status(401).json({ error: 'Authentication required.' });
+    const saved = await resolveSupportConfig(prisma, req.user.id);
+    const result = await testSupportProviderConnection({
+      openAiApiKey: req.body.openAiApiKey || saved.openAiApiKey,
+      openAiModel: req.body.openAiModel || saved.openAiModel,
+      openAiBaseUrl: req.body.openAiBaseUrl || saved.openAiBaseUrl,
+    });
+    res.status(result.ok ? 200 : result.category === 'configuration' ? 400 : 502).json(result);
+  },
 );
 
 router.get(

@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+const providerBaseUrlSchema = z
+  .string()
+  .trim()
+  .max(300)
+  .url('Invalid base URL')
+  .refine((value) => new URL(value).protocol === 'https:', 'Provider base URL must use HTTPS');
+
 const messageSchema = z
   .string()
   .trim()
@@ -58,10 +65,7 @@ export const supportConfigSchema = z
       .transform((value) => value?.trim() || null),
     openAiModel: z.string().trim().min(1).max(120).optional(),
     openAiBaseUrl: z
-      .string()
-      .trim()
-      .max(300)
-      .url('Invalid base URL')
+      .union([providerBaseUrlSchema, z.undefined()])
       .optional(),
     supportAlertEmail: z.string().trim().email().max(254).optional(),
     clearOpenAiApiKey: z.boolean().optional(),
@@ -75,3 +79,9 @@ export const supportConfigSchema = z
       value.clearOpenAiApiKey === true,
     { message: 'No support configuration values provided.' },
   );
+
+export const supportConfigTestSchema = z.object({
+  openAiApiKey: z.string().trim().min(1).max(500).optional(),
+  openAiModel: z.string().trim().min(1).max(120).optional(),
+  openAiBaseUrl: providerBaseUrlSchema.optional(),
+});

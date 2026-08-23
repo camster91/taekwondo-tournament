@@ -49,6 +49,18 @@ type SupportConfig = {
   openAiModel: string;
   openAiBaseUrl: string;
   supportAlertEmail: string;
+  recentChanges: Array<{
+    id: string;
+    changedFields: string[];
+    changedByUserId: string;
+    at: string;
+  }>;
+};
+
+type SupportConnectionResult = {
+  ok: boolean;
+  category: string;
+  message: string;
 };
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -230,6 +242,22 @@ export default function OrganizationSettings() {
       toast.success('Support integration saved.');
       void queryClient.invalidateQueries({ queryKey: ['support', 'config'] });
     },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const supportConnectionMutation = useMutation({
+    mutationFn: async () => {
+      const payload: { openAiApiKey?: string; openAiModel?: string; openAiBaseUrl?: string } = {};
+      if (supportApiKeyInput.trim()) payload.openAiApiKey = supportApiKeyInput.trim();
+      if (supportOpenAiModel.trim()) payload.openAiModel = supportOpenAiModel.trim();
+      if (supportOpenAiBaseUrl.trim()) payload.openAiBaseUrl = supportOpenAiBaseUrl.trim();
+      return responseJson<SupportConnectionResult>(await fetch('/api/support/config/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(payload),
+      }));
+    },
+    onSuccess: (result) => toast.success(result.message),
     onError: (error: Error) => toast.error(error.message),
   });
 
@@ -516,14 +544,37 @@ export default function OrganizationSettings() {
                 </label>
               </div>
             </div>
-            <Button
-              type="submit"
-              className="w-full sm:w-auto"
-              loading={supportConfigMutation.isPending}
-              disabled={supportConfigMutation.isPending || supportConfigQuery.isLoading}
-            >
-              Save support integration
-            </Button>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button
+                type="submit"
+                className="w-full sm:w-auto"
+                loading={supportConfigMutation.isPending}
+                disabled={supportConfigMutation.isPending || supportConfigQuery.isLoading}
+              >
+                Save support integration
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full sm:w-auto"
+                loading={supportConnectionMutation.isPending}
+                disabled={supportConnectionMutation.isPending || supportConfigQuery.isLoading || clearSupportApiKey}
+                onClick={() => supportConnectionMutation.mutate()}
+              >
+                Test connection
+              </Button>
+            </div>
+            {supportConnectionMutation.data && (
+              <OperationStatus state="resolved" message={supportConnectionMutation.data.message} />
+            )}
+            {supportConnectionMutation.error && (
+              <OperationStatus state="rejected" message={supportConnectionMutation.error.message} />
+            )}
+            {supportConfigQuery.data?.recentChanges?.[0] && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Last changed {new Date(supportConfigQuery.data.recentChanges[0].at).toLocaleString()} ({supportConfigQuery.data.recentChanges[0].changedFields.join(', ')}).
+              </p>
+            )}
           </form>
         </Card>
       )}
