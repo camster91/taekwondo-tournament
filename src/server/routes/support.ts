@@ -421,8 +421,9 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
   let existingTicket: SupportTicketPayload | null = null;
   const subject = buildSubject(normalizedMessage);
   const priority = classifyPriority(normalizedMessage, body.priority);
-  const operationalMessage = supportAssist ? `${assistantMessage}\n\n${supportAssist.details}${supportAssist.recommendations.length ? formatSupportRecommendation(supportAssist.recommendations) : ''}` : null;
-  const finalMessage = supportAssist ? operationalMessage : assistantMessage;
+  const finalMessage = supportAssist
+    ? `${assistantMessage}\n\n${supportAssist.details}${supportAssist.recommendations.length ? formatSupportRecommendation(supportAssist.recommendations) : ''}`
+    : assistantMessage;
 
   if (escalate) {
     const conversation: SupportChatMessage[] = appendConversation(
