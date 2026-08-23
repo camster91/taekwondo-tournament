@@ -41,6 +41,10 @@ export function validateRequest<T extends z.ZodTypeAny>(
     // schema-derived type instead of `any` for downstream handlers.
     if (source === 'body') {
       (req as Request & { body: z.infer<T> }).body = result.data;
+    } else if (source === 'query') {
+      (req as Request & { query: z.infer<T> }).query = result.data;
+    } else {
+      (req as Request & { params: z.infer<T> }).params = result.data;
     }
     next();
   };
@@ -81,6 +85,10 @@ export function validateMultiple(schemas: {
           });
         } else if (source === 'body') {
           (req as Request & { body: z.infer<typeof schema> }).body = result.data;
+        } else if (source === 'query') {
+          (req as Request & { query: z.infer<typeof schema> }).query = result.data;
+        } else {
+          (req as Request & { params: z.infer<typeof schema> }).params = result.data;
         }
       }
     }
