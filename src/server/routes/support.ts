@@ -433,7 +433,7 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
     );
     const ticket = await prisma.supportTicket.create({
       data: {
-        source: req.user ? 'app' : 'marketing',
+      source: req.user ? 'app' : 'marketing',
         status: 'open',
         priority,
         subject,
@@ -441,7 +441,7 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
         requestedByName: body.contactName ?? (req.user ? `${req.user.firstName} ${req.user.lastName}` : null),
         page: body.page,
         lastUserMessage: normalizedMessage,
-        lastAssistantMessage: assistantMessage,
+        lastAssistantMessage: finalMessage,
         conversation: JSON.stringify(conversation),
         userId: req.user?.id ?? null,
       },

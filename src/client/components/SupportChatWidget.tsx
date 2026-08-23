@@ -26,6 +26,17 @@ interface ChatResponse {
     priority: string;
     subject: string;
   };
+  supportAssistant?: {
+    request: string;
+    intent: string;
+    executed: boolean;
+    recommendations: string[];
+  } | null;
+}
+
+function formatSupportRecommendations(lines: string[]): string {
+  if (!lines.length) return '';
+  return `\n\nRecommended next steps:\n${lines.map((line) => `• ${line}`).join('\n')}`;
 }
 
 export default function SupportChatWidget() {
@@ -93,10 +104,13 @@ export default function SupportChatWidget() {
       }
 
       const payload = await response.json() as ChatResponse;
+      const supportAssistantText = payload.supportAssistant
+        ? `${formatSupportRecommendations(payload.supportAssistant.recommendations)}`
+        : '';
       const ticketText = payload.ticket
         ? `\n\nTicket created (${payload.ticket.id}). Status: ${payload.ticket.status} | Priority: ${payload.ticket.priority}.`
         : '';
-      addMessage({ role: 'assistant', text: `${payload.answer}${ticketText}` });
+      addMessage({ role: 'assistant', text: `${payload.answer}${supportAssistantText}${ticketText}` });
       if (payload.ticket) {
         toast.success(`Support ticket created: ${payload.ticket.id}`);
       }
@@ -214,6 +228,7 @@ export default function SupportChatWidget() {
                             },
                             body: JSON.stringify({
                               message: `Support diagnostic detected unhealthy /api/health/ready response: ${ready.status} ${ready.statusText}. Response: ${text.slice(0, 180)}`,
+                              requestAssist: true,
                               page: location.pathname,
                               conversationId: null,
                               createTicket: true,
