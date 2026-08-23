@@ -40,11 +40,14 @@ export function validateRequest<T extends z.ZodTypeAny>(
     // Augment the Express Request type so `req.body` carries the
     // schema-derived type instead of `any` for downstream handlers.
     if (source === 'body') {
-      (req as Request & { body: z.infer<T> }).body = result.data;
+      (req as Request & { body: Request['body'] }).body =
+        result.data as Request['body'];
     } else if (source === 'query') {
-      (req as Request & { query: z.infer<T> }).query = result.data;
+      (req as Request & { query: Request['query'] }).query =
+        result.data as Request['query'];
     } else {
-      (req as Request & { params: z.infer<T> }).params = result.data;
+      (req as Request & { params: Request['params'] }).params =
+        result.data as Request['params'];
     }
     next();
   };
@@ -84,11 +87,14 @@ export function validateMultiple(schemas: {
             });
           });
         } else if (source === 'body') {
-          (req as Request & { body: z.infer<typeof schema> }).body = result.data;
+          (req as Request & { body: Request['body'] }).body =
+            result.data as Request['body'];
         } else if (source === 'query') {
-          (req as Request & { query: z.infer<typeof schema> }).query = result.data;
+          (req as Request & { query: Request['query'] }).query =
+            result.data as Request['query'];
         } else {
-          (req as Request & { params: z.infer<typeof schema> }).params = result.data;
+          (req as Request & { params: Request['params'] }).params =
+            result.data as Request['params'];
         }
       }
     }
