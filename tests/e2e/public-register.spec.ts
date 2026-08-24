@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { loginAsDemo } from './helpers';
 
 async function fillMinorRegistration(page: import('@playwright/test').Page, suffix: string) {
   const tournamentSelect = page.locator('select[name="tournamentId"]');
@@ -155,6 +156,45 @@ test.describe('public registration (self-register)', () => {
     await expect(page.getByText(/Registration successful/i)).toBeVisible();
     await expect(page.getByText('TestKid').first()).toBeVisible();
     await expect(page.getByText(/E2E Open 2026/).first()).toBeVisible();
+  });
+
+  test('a completed public registration is available to staff at check-in', async ({ page }) => {
+    const suffix = `CheckIn${Date.now()}`;
+    await page.goto('/register');
+
+    const tournamentSelect = page.locator('select[name="tournamentId"]');
+    const e2eOption = page.locator('option', { hasText: 'E2E Open 2026' }).first();
+    await expect(e2eOption).toHaveCount(1, { timeout: 10_000 });
+    await tournamentSelect.selectOption((await e2eOption.getAttribute('value'))!);
+    await page.locator('input[name="firstName"]').fill('CheckIn');
+    await page.locator('input[name="lastName"]').fill(suffix);
+    await page.locator('select[name="gender"]').selectOption('F');
+    await page.locator('input[name="dateOfBirth"]').fill('2016-01-15');
+    await page.locator('select[name="belt"]').selectOption('Yellow');
+    await page.locator('input[name="schoolDojang"]').fill('E2E Test Dojang');
+    await page.locator('input[name="heightInches"]').fill('54');
+    await page.locator('input[name="weightLbs"]').fill('80');
+    await page.locator('input[name="patterns"]').check();
+    await page.getByRole('button', { name: /Next: Parent & Consent/i }).click();
+    await page.locator('input[name="parentName"]').fill('E2E Guardian');
+    await page.locator('input[name="parentEmail"]').fill(`e2e-checkin-${Date.now()}@example.com`);
+    await page.locator('input[name="privacyAccepted"]').check();
+    await page.locator('input[name="rulesAccepted"]').check();
+    await page.locator('input[name="guardianAttested"]').check();
+    await page.getByRole('button', { name: /Complete Registration/i }).click();
+    await expect(page.getByText('Registration Complete!')).toBeVisible({ timeout: 10_000 });
+
+    await loginAsDemo(page);
+    await page.goto('/tournaments');
+    const href = await page.locator('a', { hasText: 'E2E Open 2026' }).first().getAttribute('href');
+    expect(href).toMatch(/^\/tournaments\/[a-f0-9-]+$/);
+    await page.goto(`/checkin/${href!.replace('/tournaments/', '')}`);
+
+    const searchInput = page.locator('input[placeholder*="Search"]').first();
+    await expect(searchInput).toBeVisible({ timeout: 10_000 });
+    await searchInput.fill(suffix);
+    await expect(page.getByText(`CheckIn ${suffix}`)).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Check In$/i })).toBeVisible();
   });
 
   test('registration cannot be submitted without versioned privacy, rules, and guardian acceptance', async ({ page }) => {

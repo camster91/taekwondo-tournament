@@ -14,6 +14,7 @@ test.describe('guided fabricated showcase', () => {
       await page.goto('/login');
       await page.getByRole('button', { name: 'Explore the live demo' }).click();
       await expect(page).toHaveURL('/');
+      await expect(page.getByRole('status', { name: 'Fabricated demo data notice' })).toBeVisible();
 
       const guide = page.getByRole('dialog', { name: 'Choose your tournament-day view' });
       await expect(guide).toBeVisible();
@@ -23,6 +24,7 @@ test.describe('guided fabricated showcase', () => {
 
       await guide.getByRole('button', { name: new RegExp(journey.name, 'i') }).click();
       await expect(page).toHaveURL(journey.url);
+      await expect(page.getByRole('status', { name: 'Fabricated demo data notice' })).toBeVisible();
       await expect(page.getByRole('heading', { name: journey.heading }).first()).toBeVisible();
     });
   }

@@ -95,6 +95,34 @@ interface ScoreSubmission {
   notes: string;
 }
 
+function validateWinResult(
+  resultType: ResultType,
+  selectedWinner: string | null,
+  match: Match | undefined,
+  score1: string,
+  score2: string,
+): string | null {
+  if (!selectedWinner || !match || resultType !== 'win') return null;
+
+  const first = Number(score1);
+  const second = Number(score2);
+  if (
+    !/^\d{1,3}$/.test(score1) ||
+    !/^\d{1,3}$/.test(score2) ||
+    !Number.isInteger(first) ||
+    !Number.isInteger(second)
+  ) {
+    return 'Enter a whole-number score from 0 to 999 for both competitors.';
+  }
+  if (first === second) return 'A win cannot end in a tie. Choose a non-tied score or a different result type.';
+
+  const scoreWinnerId = first > second ? match.competitor1?.id : match.competitor2?.id;
+  if (!scoreWinnerId || scoreWinnerId !== selectedWinner) {
+    return 'The selected winner must have the higher score.';
+  }
+  return null;
+}
+
 export default function Scorekeeper() {
   const { tournamentId } = useParams();
   const queryClient = useQueryClient();
@@ -212,6 +240,10 @@ export default function Scorekeeper() {
   }, [divisions, selectedDivision]);
 
   const currentMatch = readyMatches[currentMatchIndex];
+  const resultValidationError = useMemo(
+    () => validateWinResult(resultType, selectedWinner, currentMatch, score1, score2),
+    [currentMatch, resultType, score1, score2, selectedWinner],
+  );
   const selectedDivisionMatches = useMemo(() => (
     divisions?.find((division) => division.id === selectedDivision)?.bracket?.matches || []
   ), [divisions, selectedDivision]);
@@ -416,6 +448,12 @@ export default function Scorekeeper() {
 
   const handleSubmit = () => {
     if (!currentMatch || !selectedWinner) return;
+    if (resultValidationError) {
+      setShowConfirm(false);
+      setAnnounce(resultValidationError);
+      addToast(resultValidationError, 'error');
+      return;
+    }
 
     let noteText = '';
     if (penalties1 > 0 || penalties2 > 0) {
@@ -1160,6 +1198,9 @@ export default function Scorekeeper() {
                   id="scorekeeper-score1"
                   type="number"
                   inputMode="numeric"
+                  min="0"
+                  max="999"
+                  step="1"
                   value={score1}
                   onChange={(e) => setScore1(e.target.value)}
                   className="w-full p-4 text-2xl text-center bg-gray-700 rounded-lg"
@@ -1174,6 +1215,9 @@ export default function Scorekeeper() {
                   id="scorekeeper-score2"
                   type="number"
                   inputMode="numeric"
+                  min="0"
+                  max="999"
+                  step="1"
                   value={score2}
                   onChange={(e) => setScore2(e.target.value)}
                   className="w-full p-4 text-2xl text-center bg-gray-700 rounded-lg"
@@ -1242,11 +1286,17 @@ export default function Scorekeeper() {
             {/* Submit Button */}
             <button
               onClick={() => setShowConfirm(true)}
-              disabled={!selectedWinner}
+              disabled={!selectedWinner || Boolean(resultValidationError)}
+              aria-describedby={resultValidationError ? 'scorekeeper-result-validation' : undefined}
               className="w-full py-4 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-xl text-xl font-bold transition-colors"
             >
               Record Result
             </button>
+            {resultValidationError && (
+              <p id="scorekeeper-result-validation" role="alert" className="mt-2 text-sm text-red-300">
+                {resultValidationError}
+              </p>
+            )}
 
             {/* Report Incident Button */}
             <button
@@ -1373,7 +1423,7 @@ export default function Scorekeeper() {
               <Button variant="secondary" className="flex-1" onClick={() => setShowConfirm(false)}>
                 Cancel <span className="text-xs text-gray-600" aria-hidden="true">(Esc)</span>
               </Button>
-              <Button variant="primary" className="flex-1" loading={recordResult.isPending} onClick={handleSubmit}>
+              <Button variant="primary" className="flex-1" loading={recordResult.isPending} disabled={Boolean(resultValidationError)} onClick={handleSubmit}>
                 Confirm <span className="text-xs text-green-200" aria-hidden="true">(Enter)</span>
               </Button>
             </div>

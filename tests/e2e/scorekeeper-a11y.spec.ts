@@ -139,6 +139,33 @@ test.describe('scorekeeper (a11y)', () => {
     await expect(score1ByLabel).toHaveAttribute('id', 'scorekeeper-score1');
   });
 
+  test('blocks an incomplete, tied, or winner-mismatched win before confirmation', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
+    await page.waitForLoadState('networkidle');
+
+    await page.locator('button').filter({ has: page.locator('text=/\\d+ ready/i') }).first().click();
+    const competitors = page.locator('button[aria-pressed][aria-label*="select as winner"]');
+    await competitors.first().click();
+
+    const record = page.getByRole('button', { name: /^Record Result$/i });
+    await expect(record).toBeDisabled();
+    await expect(page.getByRole('alert')).toContainText(/Enter a whole-number score/i);
+
+    await page.locator('#scorekeeper-score1').fill('5');
+    await page.locator('#scorekeeper-score2').fill('5');
+    await expect(record).toBeDisabled();
+    await expect(page.getByRole('alert')).toContainText(/cannot end in a tie/i);
+
+    await page.locator('#scorekeeper-score1').fill('2');
+    await page.locator('#scorekeeper-score2').fill('5');
+    await expect(record).toBeDisabled();
+    await expect(page.getByRole('alert')).toContainText(/selected winner must have the higher score/i);
+
+    await page.locator('#scorekeeper-score1').fill('6');
+    await expect(record).toBeEnabled();
+  });
+
   test('result-type buttons live in a radiogroup with aria-pressed', async ({ page }) => {
     const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);

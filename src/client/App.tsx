@@ -85,6 +85,23 @@ function PageFallback() {
   );
 }
 
+function isIsolatedDemoHost(): boolean {
+  return typeof window !== 'undefined' && window.location.hostname === 'demo.tkd.ashbi.ca';
+}
+
+function DemoDataNotice() {
+  return (
+    <aside
+      role="status"
+      aria-label="Fabricated demo data notice"
+      className="border-b border-amber-300/40 bg-amber-100 px-4 py-2 text-center text-sm text-amber-950"
+    >
+      <strong>Fabricated demo data.</strong>{' '}
+      Scores and check-ins can be visible to other demo visitors and may be reset.
+    </aside>
+  );
+}
+
 // Navigation: top-level workspace items
 const primaryNav = [
   { name: 'Dashboard', href: '/dashboard', icon: Home, section: 'workspace' },
@@ -500,6 +517,8 @@ function LegacyRedirect({ toKey }: { toKey: 'scorekeeper' | 'checkin' | 'display
 
 function AppRoutes() {
   const location = useLocation();
+  const { user } = useAuth();
+  const showDemoNotice = isDemoUser(user) || isIsolatedDemoHost();
 
   // Public pages (no sidebar)
   const isPublicPage =
@@ -522,6 +541,7 @@ function AppRoutes() {
   if (isPublicPage) {
     return (
       <Suspense fallback={<PageFallback />}>
+        {showDemoNotice && <DemoDataNotice />}
         <Routes>
           <Route path="/" element={<Marketing />} />
           <Route path="/legal/privacy" element={<Legal kind="privacy" />} />
@@ -556,6 +576,7 @@ function AppRoutes() {
   return (
     <ProtectedRoute>
       <AdminLayout>
+        {showDemoNotice && <DemoDataNotice />}
         <Suspense fallback={<PageFallback />}>
           <Routes>
             {/* General pages - any authenticated user */}
