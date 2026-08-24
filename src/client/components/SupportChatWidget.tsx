@@ -59,6 +59,8 @@ export default function SupportChatWidget() {
   const [isSending, setIsSending] = useState(false);
 
   const canOpenQueue = user?.role === 'admin' || user?.role === 'director';
+  const hasAnonymousContact = Boolean(displayName.trim() && contactEmail.trim());
+  const canSend = Boolean(draft.trim()) && !isSending && (Boolean(user) || hasAnonymousContact);
 
   useEffect(() => {
     if (user?.firstName || user?.lastName) {
@@ -75,6 +77,10 @@ export default function SupportChatWidget() {
     event.preventDefault();
     const outgoing = draft.trim();
     if (!outgoing || isSending) return;
+    if (!user && !hasAnonymousContact) {
+      toast.error('Enter your name and email before sending a support request.');
+      return;
+    }
 
     setDraft('');
     setIsSending(true);
@@ -162,21 +168,29 @@ export default function SupportChatWidget() {
 
             {!user ? (
               <div className="grid gap-2 border-t border-slate-200 px-4 py-3 dark:border-slate-800 sm:grid-cols-2">
-                <Label htmlFor="supportName">Name</Label>
-                <Label htmlFor="supportEmail">Email</Label>
-                <div className="sm:col-span-2 flex flex-col gap-2">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="supportName">Name <span aria-hidden="true">(required)</span></Label>
                   <Input
                     id="supportName"
                     value={displayName}
                     onChange={(event) => setDisplayName(event.target.value)}
                     placeholder="Your name"
+                    autoComplete="name"
+                    required
+                    aria-required="true"
                   />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="supportEmail">Email <span aria-hidden="true">(required)</span></Label>
                   <Input
                     id="supportEmail"
                     type="email"
                     value={contactEmail}
                     onChange={(event) => setContactEmail(event.target.value)}
                     placeholder="you@school.com"
+                    autoComplete="email"
+                    required
+                    aria-required="true"
                   />
                 </div>
               </div>
@@ -279,7 +293,9 @@ export default function SupportChatWidget() {
 
             <form onSubmit={handleSubmit} className="border-t border-slate-200 p-3 dark:border-slate-800">
               <div className="flex items-end gap-2">
+                <Label className="sr-only" htmlFor="supportMessage">Describe your issue</Label>
                 <Input
+                  id="supportMessage"
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={(event) => {
@@ -291,16 +307,21 @@ export default function SupportChatWidget() {
                   placeholder="Describe your issue..."
                   className="min-h-11"
                   disabled={isSending}
+                  aria-describedby="support-send-hint"
                 />
                 <Button
                   type="submit"
                   variant="primary"
-                  disabled={isSending || !draft.trim()}
+                  disabled={!canSend}
                   className="whitespace-nowrap"
+                  aria-describedby="support-send-hint"
                 >
                   {isSending ? <><SendHorizontal className="h-4 w-4 animate-pulse" /> Sending</> : <><Send className="h-4 w-4" /> Send</>}
                 </Button>
               </div>
+              <p id="support-send-hint" className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                {!user && !hasAnonymousContact ? 'Enter your name and email before sending.' : 'Press Enter to send. Use Shift+Enter for a new line.'}
+              </p>
             </form>
           </div>
         </div>

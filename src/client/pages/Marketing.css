@@ -35,6 +35,9 @@
 .bowin-nav a::after { position: absolute; right: 0; bottom: -7px; left: 0; height: 2px; content: ''; background: var(--rose); transform: scaleX(0); transform-origin: left; transition: transform 180ms ease; }
 .bowin-nav a:hover::after, .bowin-nav a:focus-visible::after { transform: scaleX(1); }
 .bowin-header > .bowin-button { justify-self: end; }
+.bowin-mobile-nav { display: none; }
+.bowin-mobile-nav summary { cursor: pointer; list-style: none; }
+.bowin-mobile-nav summary::-webkit-details-marker { display: none; }
 
 .bowin-button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; padding: 14px 24px; border: 1px solid transparent; border-radius: 999px; font-size: .925rem; font-weight: 700; line-height: 1; text-decoration: none; transition: transform 180ms ease, box-shadow 180ms ease; }
 .bowin-button svg, .bowin-text-link svg { width: 18px; height: 18px; }
@@ -144,8 +147,15 @@
 @keyframes bowin-rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
 
 @media (max-width: 1020px) {
-  .bowin-header { grid-template-columns: 1fr auto; }
+  .bowin-header { grid-template-columns: 1fr auto auto; column-gap: 12px; }
   .bowin-nav { display: none; }
+  .bowin-mobile-nav { position: relative; display: block; }
+  .bowin-mobile-nav summary { display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); background: var(--paper); font-size: .825rem; font-weight: 800; }
+  .bowin-mobile-nav[open] summary { border-color: var(--ink); }
+  .bowin-mobile-nav[open] summary span:last-child { transform: rotate(45deg); }
+  .bowin-mobile-nav nav { position: absolute; top: calc(100% + 10px); right: 0; display: grid; width: min(280px, calc(100vw - 36px)); gap: 4px; padding: 10px; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: 0 20px 45px rgb(11 18 32 / 16%); }
+  .bowin-mobile-nav nav a { padding: 12px; border-radius: 10px; color: var(--ink); font-size: .9rem; font-weight: 700; text-decoration: none; }
+  .bowin-mobile-nav nav a:hover, .bowin-mobile-nav nav a:focus-visible { background: rgb(225 29 72 / 8%); }
   .bowin-hero, .bowin-support-section { grid-template-columns: 1fr; }
   .bowin-product-preview { min-height: 540px; }
   .bowin-workflow-grid { grid-template-columns: repeat(2, 1fr); }
@@ -158,6 +168,9 @@
   .bowin-brand { font-size: 1.05rem; }
   .bowin-brand-mark { width: 13px; height: 13px; }
   .bowin-header .bowin-button { min-height: 42px; padding: 10px 17px; }
+  .bowin-mobile-nav summary { min-height: 42px; padding: 10px 12px; }
+  .bowin-mobile-nav summary span:first-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .bowin-mobile-nav summary span:last-child { font-size: 1.2rem; line-height: 1; }
   .bowin-hero { gap: 46px; padding: 48px 18px 72px; }
   .bowin-eyebrow { padding: 0; border: 0; background: transparent; }
   .bowin-hero h1 { margin-top: 20px; font-size: clamp(2.8rem, 14vw, 4.25rem); }
@@ -181,6 +194,151 @@
   .bowin-final-cta > div { align-items: flex-start; flex-direction: column; }
   .bowin-footer { grid-template-columns: 1fr; align-items: start; padding-top: 36px; padding-bottom: 36px; }
   .bowin-footer nav { flex-wrap: wrap; justify-content: flex-start; gap: 14px 22px; }
+}
+
+.bowin-product-gallery {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(5rem, 9vw, 9rem) max(1.25rem, calc((100vw - 1180px) / 2));
+  background:
+    linear-gradient(135deg, rgba(82, 182, 236, 0.08), transparent 34%),
+    #0b1220;
+  color: #f8f5ec;
+}
+
+.bowin-product-gallery::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image: url('/brand-kit/bowin-control-grid.svg');
+  background-size: cover;
+  background-position: center;
+}
+
+.bowin-product-gallery::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.16;
+  background:
+    linear-gradient(90deg, #0b1220 0%, rgba(11, 18, 32, 0.88) 46%, rgba(11, 18, 32, 0.22) 100%),
+    url('/brand-kit/bowin-control-room-hero.png') center / cover no-repeat;
+}
+
+.bowin-product-gallery > * {
+  position: relative;
+  z-index: 1;
+}
+
+.bowin-product-gallery .bowin-section-kicker {
+  color: #f6b93b;
+}
+
+.bowin-product-gallery__intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(18rem, 0.7fr);
+  align-items: end;
+  gap: clamp(2rem, 7vw, 7rem);
+  margin: 1.25rem 0 clamp(3rem, 6vw, 5rem);
+}
+
+.bowin-product-gallery__intro h2 {
+  max-width: 820px;
+  margin: 0;
+  color: #f8f5ec;
+  font-size: clamp(2.45rem, 5.7vw, 5.6rem);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.bowin-product-gallery__intro p {
+  max-width: 520px;
+  margin: 0 0 0.5rem;
+  color: rgba(248, 245, 236, 0.72);
+  font-size: clamp(1rem, 1.3vw, 1.2rem);
+  line-height: 1.65;
+}
+
+.bowin-product-gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  align-items: start;
+}
+
+.bowin-product-shot {
+  margin: 0;
+}
+
+.bowin-product-shot--wide {
+  grid-column: 1 / -1;
+}
+
+.bowin-product-shot--lifted {
+  transform: translateY(clamp(1.5rem, 4vw, 4rem));
+}
+
+.bowin-product-shot__frame {
+  overflow: hidden;
+  padding: clamp(0.4rem, 0.8vw, 0.75rem);
+  border: 1px solid rgba(248, 245, 236, 0.22);
+  border-radius: clamp(1rem, 2.2vw, 1.75rem);
+  background: rgba(248, 245, 236, 0.07);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+}
+
+.bowin-product-shot__frame img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top center;
+  border-radius: calc(clamp(1rem, 2.2vw, 1.75rem) - 0.5rem);
+  background: #f8f5ec;
+}
+
+.bowin-product-shot figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 0.25rem 0;
+  color: #f8f5ec;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.bowin-product-shot figcaption span {
+  color: #f6b93b;
+  font-family: Consolas, 'SFMono-Regular', monospace;
+}
+
+.bowin-product-shot figcaption em {
+  margin-left: auto;
+  color: rgba(248, 245, 236, 0.58);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 760px) {
+  .bowin-product-gallery__intro,
+  .bowin-product-gallery__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bowin-product-shot--wide {
+    grid-column: auto;
+  }
+
+  .bowin-product-shot--lifted {
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -105,6 +105,15 @@ export default function Marketing() {
         <nav className="bowin-nav" aria-label="Marketing navigation">
           <a href="#workflow">How it works</a><a href="#audiences">For organizers</a><a href="#support">AI support</a>
         </nav>
+        <details className="bowin-mobile-nav">
+          <summary><span>Explore</span><span aria-hidden="true">+</span></summary>
+          <nav aria-label="Mobile marketing navigation">
+            <a href="#workflow">How it works</a>
+            <a href="#audiences">For organizers</a>
+            <a href="#support">AI support</a>
+            <a href="#product">Product screens</a>
+          </nav>
+        </details>
         <Link className="bowin-button bowin-button-dark bowin-button-compact" to="/login">Sign in</Link>
       </header>
 
@@ -115,7 +124,7 @@ export default function Marketing() {
             <h1 id="bowin-hero-title">Run the tournament.<span>Not the spreadsheet.</span></h1>
             <p className="bowin-hero-lede">Bowin connects registration, brackets, rings, results, and event-day support in one operational flow built for martial arts tournaments.</p>
             <div className="bowin-actions" aria-label="Get started">
-              <Link className="bowin-button bowin-button-primary" to="/login">Open Bowin <ArrowRight aria-hidden="true" /></Link>
+              <a className="bowin-button bowin-button-primary" href="mailto:support@ashbi.ca?subject=Bowin%20organizer%20setup">Plan organizer setup <ArrowRight aria-hidden="true" /></a>
               <a className="bowin-button bowin-button-light" href="#workflow">See the workflow</a>
             </div>
             <ul className="bowin-proof-list" aria-label="Product capabilities">
@@ -165,7 +174,7 @@ export default function Marketing() {
 
         <section className="bowin-decision" aria-labelledby="decision-title">
           <div><p className="bowin-section-kicker">A practical first step</p><h2 id="decision-title">Evaluate Bowin with a real workflow.</h2></div>
-          <div className="bowin-decision-actions"><Link className="bowin-button bowin-button-primary" to="/login">Open the app <ArrowRight aria-hidden="true" /></Link><Link className="bowin-text-link" to="/register">View public registration <ChevronRight aria-hidden="true" /></Link></div>
+          <div className="bowin-decision-actions"><a className="bowin-button bowin-button-primary" href="mailto:support@ashbi.ca?subject=Bowin%20organizer%20setup">Plan organizer setup <ArrowRight aria-hidden="true" /></a><a className="bowin-text-link" href="#product">See product screens <ChevronRight aria-hidden="true" /></a></div>
         </section>
 
         <section className="bowin-faq" aria-labelledby="faq-title">
@@ -173,8 +182,36 @@ export default function Marketing() {
           <div className="bowin-faq-list">{faqs.map((faq) => <details key={faq.question}><summary><span>{faq.question}</span><span aria-hidden="true">+</span></summary><p>{faq.answer}</p></details>)}</div>
         </section>
 
-        <section className="bowin-final-cta" aria-labelledby="final-cta-title"><div><Trophy aria-hidden="true" /><h2 id="final-cta-title">Ready to replace event-day guesswork?</h2></div><Link className="bowin-button bowin-button-white" to="/login">Open Bowin <ArrowRight aria-hidden="true" /></Link></section>
+        <section className="bowin-final-cta" aria-labelledby="final-cta-title"><div><Trophy aria-hidden="true" /><h2 id="final-cta-title">Ready to replace event-day guesswork?</h2></div><a className="bowin-button bowin-button-white" href="mailto:support@ashbi.ca?subject=Bowin%20organizer%20setup">Plan organizer setup <ArrowRight aria-hidden="true" /></a></section>
       </main>
+
+      <section className="bowin-product-gallery" id="product" aria-labelledby="product-gallery-title">
+        <div className="bowin-section-kicker">Inside the control room</div>
+        <div className="bowin-product-gallery__intro">
+          <h2 id="product-gallery-title">See the whole tournament, not another disconnected tool.</h2>
+          <p>Real Bowin screens shown with synthetic sample data. Move from the event overview into registration, divisions, brackets, and support without losing operational context.</p>
+        </div>
+        <div className="bowin-product-gallery__grid">
+          <figure className="bowin-product-shot bowin-product-shot--wide">
+            <div className="bowin-product-shot__frame">
+              <img src="/brand-kit/sample-organizer-dashboard.png" alt="Sample Bowin organizer dashboard showing synthetic tournament data" loading="lazy" />
+            </div>
+            <figcaption><span>01</span> Organizer overview <em>Sample data</em></figcaption>
+          </figure>
+          <figure className="bowin-product-shot">
+            <div className="bowin-product-shot__frame">
+              <img src="/brand-kit/sample-tournament-operations.png" alt="Sample Bowin tournament operations screen using synthetic records" loading="lazy" />
+            </div>
+            <figcaption><span>02</span> Tournament operations <em>Sample data</em></figcaption>
+          </figure>
+          <figure className="bowin-product-shot bowin-product-shot--lifted">
+            <div className="bowin-product-shot__frame">
+              <img src="/brand-kit/sample-divisions-brackets.png" alt="Sample Bowin division and bracket screen using synthetic competitors" loading="lazy" />
+            </div>
+            <figcaption><span>03</span> Divisions and brackets <em>Sample data</em></figcaption>
+          </figure>
+        </div>
+      </section>
 
       <footer className="bowin-footer">
         <Link className="bowin-brand bowin-brand-inverse" to="/" aria-label="Bowin home"><span className="bowin-brand-mark" aria-hidden="true" /><span>BOWIN</span></Link>

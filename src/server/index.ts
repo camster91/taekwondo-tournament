@@ -283,6 +283,9 @@ if (serveBuiltClient) {
       });
       return;
     }
+    if (req.path === '/register' || req.path === '/check-registration') {
+      res.setHeader('X-Robots-Tag', 'noindex');
+    }
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
