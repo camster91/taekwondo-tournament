@@ -197,6 +197,42 @@ test.describe('public registration (self-register)', () => {
     await expect(page.getByRole('button', { name: /^Check In$/i })).toBeVisible();
   });
 
+  test('an adult public registration is available to staff at check-in', async ({ page }) => {
+    const suffix = `AdultCheckIn${Date.now()}`;
+    await page.goto('/register');
+
+    const tournamentSelect = page.locator('select[name="tournamentId"]');
+    const e2eOption = page.locator('option', { hasText: 'E2E Open 2026' }).first();
+    await expect(e2eOption).toHaveCount(1, { timeout: 10_000 });
+    await tournamentSelect.selectOption((await e2eOption.getAttribute('value'))!);
+    await page.locator('input[name="firstName"]').fill('AdultCheckIn');
+    await page.locator('input[name="lastName"]').fill(suffix);
+    await page.locator('select[name="gender"]').selectOption('M');
+    await page.locator('input[name="dateOfBirth"]').fill('1990-01-15');
+    await page.locator('select[name="belt"]').selectOption('Blue');
+    await page.locator('input[name="schoolDojang"]').fill('E2E Test Dojang');
+    await page.locator('input[name="heightInches"]').fill('70');
+    await page.locator('input[name="weightLbs"]').fill('175');
+    await page.locator('input[name="patterns"]').check();
+    await page.getByRole('button', { name: /Next: Parent & Consent/i }).click();
+    await page.locator('input[name="privacyAccepted"]').check();
+    await page.locator('input[name="rulesAccepted"]').check();
+    await page.getByRole('button', { name: /Complete Registration/i }).click();
+    await expect(page.getByText('Registration Complete!')).toBeVisible({ timeout: 10_000 });
+
+    await loginAsDemo(page);
+    await page.goto('/tournaments');
+    const href = await page.locator('a', { hasText: 'E2E Open 2026' }).first().getAttribute('href');
+    expect(href).toMatch(/^\/tournaments\/[a-f0-9-]+$/);
+    await page.goto(`/checkin/${href!.replace('/tournaments/', '')}`);
+
+    const searchInput = page.locator('input[placeholder*="Search"]').first();
+    await expect(searchInput).toBeVisible({ timeout: 10_000 });
+    await searchInput.fill(suffix);
+    await expect(page.getByText(`AdultCheckIn ${suffix}`)).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Check In$/i })).toBeVisible();
+  });
+
   test('registration cannot be submitted without versioned privacy, rules, and guardian acceptance', async ({ page }) => {
     await page.goto('/register');
     const tournamentSelect = page.locator('select[name="tournamentId"]');
