@@ -55,6 +55,7 @@ const PublicRegister = lazy(() => import('./pages/PublicRegister'));
 const CheckRegistration = lazy(() => import('./pages/CheckRegistration'));
 const ManageRegistration = lazy(() => import('./pages/ManageRegistration'));
 const Marketing = lazy(() => import('./pages/Marketing'));
+const Legal = lazy(() => import('./pages/Legal'));
 const Login = lazy(() => import('./pages/Login'));
 const VerifyMagicLink = lazy(() => import('./pages/VerifyMagicLink'));
 const Scorekeeper = lazy(() => import('./pages/Scorekeeper'));
@@ -523,6 +524,8 @@ function AppRoutes() {
       <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<Marketing />} />
+          <Route path="/legal/privacy" element={<Legal kind="privacy" />} />
+          <Route path="/legal/terms" element={<Legal kind="terms" />} />
           <Route path="/register" element={<PublicRegister />} />
           <Route path="/check-registration" element={<CheckRegistration />} />
           <Route path="/manage-registration" element={<ManageRegistration />} />
