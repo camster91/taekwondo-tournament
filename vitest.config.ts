@@ -12,6 +12,11 @@ export default defineConfig({
       ...process.env,
     },
     include: ['src/**/*.test.ts'],
+    // Several authentication tests deliberately change process.env and reload
+    // auth.ts to exercise deployment gates and rate-limit configuration. Files
+    // must not overlap or one test server can inherit another file's limiter
+    // state, producing false 429s and timeouts in a full suite run.
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
