@@ -11,6 +11,7 @@ import {
 } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { sendEmail } from '../services/email.js';
+import { escapeHtml } from '../services/email-templates.js';
 import {
   supportChatSchema,
   supportTicketQuerySchema,
@@ -320,7 +321,8 @@ async function getSupportOrganizationIds(prisma: PrismaClient, userId: string): 
 
 async function resolveSupportConfig(
   prisma: PrismaClient,
-  userId?: string
+  userId?: string,
+  organizationIdOverride?: string | null,
 ): Promise<SupportRuntimeConfig> {
   const envConfig = {
     openAiApiKey: process.env.OPENAI_API_KEY?.trim() || '',
@@ -328,9 +330,11 @@ async function resolveSupportConfig(
     openAiBaseUrl: DEFAULT_OPENAI_BASE_URL,
     supportAlertEmail: process.env.SUPPORT_ALERT_EMAIL?.trim() || '',
   };
-  if (!userId) return envConfig;
-
-  const organizationId = await getSupportOrganizationId(prisma, userId);
+  const organizationId = organizationIdOverride !== undefined
+    ? organizationIdOverride
+    : userId
+      ? await getSupportOrganizationId(prisma, userId)
+      : null;
   if (!organizationId) return envConfig;
 
   const organization = await prisma.organization.findUnique({
@@ -429,7 +433,7 @@ async function notifySupportTeam(
     await sendEmail(
       supportEmail,
       `Support ticket queued: ${subject}`,
-      `<p>New support ticket <strong>${ticketId}</strong> has been created.</p><p>${message}</p>`
+      `<p>New support ticket <strong>${escapeHtml(ticketId)}</strong> has been created.</p><p>${escapeHtml(message)}</p>`
     );
   } catch (error) {
     console.warn('[support] failed to notify support email:', error);
@@ -442,7 +446,7 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
   const normalizedMessage = body.message.trim();
   const requestedTournamentId = body.tournamentId?.trim() || undefined;
   const requestAssist = body.requestAssist === true;
-  const config = await resolveSupportConfig(prisma, req.user?.id);
+  let supportOrganizationId: string | null = null;
 
   // Public support chat can create a ticket, but must never expose platform
   // diagnostics or tournament operational data. Those are available only to
@@ -454,9 +458,20 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
       if (!access.ok) {
         return res.status(access.status || 403).json({ error: access.error || 'Forbidden' });
       }
+      const tournament = await prisma.tournament.findUnique({
+        where: { id: requestedTournamentId },
+        select: { organizationId: true, deletedAt: true },
+      });
+      if (!tournament || tournament.deletedAt) {
+        return res.status(404).json({ error: 'Tournament not found' });
+      }
+      supportOrganizationId = tournament.organizationId;
+    } else {
+      supportOrganizationId = await getSupportOrganizationId(prisma, req.user.id);
     }
     supportAssist = await runSupportAssist(prisma, normalizedMessage, requestedTournamentId, requestAssist);
   }
+  const config = await resolveSupportConfig(prisma, req.user?.id, supportOrganizationId);
 
   const anonymousContactComplete = Boolean(body.contactName?.trim() && body.contactEmail?.trim());
   if (!req.user && body.createTicket === true && !anonymousContactComplete) {
@@ -481,7 +496,6 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
       normalizedMessage,
       finalMessage,
     );
-    const organizationId = req.user ? await getSupportOrganizationId(prisma, req.user.id) : null;
     const ticket = await prisma.supportTicket.create({
       data: {
         source: req.user ? 'app' : 'marketing',
@@ -495,7 +509,7 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
         lastAssistantMessage: finalMessage,
         conversation: JSON.stringify(conversation),
         userId: req.user?.id ?? null,
-        organizationId,
+        organizationId: supportOrganizationId,
       },
     });
 

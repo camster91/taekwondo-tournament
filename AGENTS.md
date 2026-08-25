@@ -23,9 +23,10 @@ must be started manually each session:
    ```
    The `taekwondo` role + `taekwondo_tournament` database already
    exist in the VM snapshot (matching `DATABASE_URL` in `.env`).
-2. Sync schema only after a `prisma/schema.prisma` change:
-   `npm run db:push` (idempotent; this repo uses `db:push`, never
-   `prisma migrate` — see `CLAUDE.md`).
+2. For disposable local development only, sync a schema change with
+   `npm run db:push`. Production and CI use the checked-in `prisma/migrations`
+   through `prisma migrate deploy`; release-bound schema changes must include
+   and validate a migration rather than pushing the schema directly.
 3. Start dev servers: `npm run dev` (concurrently runs Vite `:5173`
    + `tsx watch` server `:3001`). Health check: `curl
    http://localhost:3001/api/health/ready` → `{"status":"ok","db":"ok"}`.

@@ -3,6 +3,15 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 describe('production migration contract', () => {
+  it('uses checked-in migrations for production while keeping db push local-only', () => {
+    const productionDeploy = readFileSync(join(process.cwd(), 'scripts', 'deploy-production.sh'), 'utf8');
+    const agentsGuide = readFileSync(join(process.cwd(), 'AGENTS.md'), 'utf8');
+
+    expect(productionDeploy).toContain('prisma migrate deploy');
+    expect(agentsGuide).toContain('Production and CI use the checked-in `prisma/migrations`');
+    expect(agentsGuide).not.toContain('never\n   `prisma migrate`');
+  });
+
   it('creates base tables before migrations that alter or index them', () => {
     const names = readdirSync(join(process.cwd(), 'prisma', 'migrations'), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())

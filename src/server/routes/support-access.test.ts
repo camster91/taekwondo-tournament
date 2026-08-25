@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   checkTournamentAccess: vi.fn(),
+  sendEmail: vi.fn(),
   handlers: [] as Array<{ method: string; path: string; handler: any }>,
 }));
 
@@ -26,7 +27,7 @@ vi.mock('../middleware/auth.js', () => ({
   checkTournamentAccess: (...args: any[]) => mocks.checkTournamentAccess(...args),
 }));
 vi.mock('../middleware/validate.js', () => ({ validateRequest: () => (_req: any, _res: any, next: any) => next() }));
-vi.mock('../services/email.js', () => ({ sendEmail: vi.fn() }));
+vi.mock('../services/email.js', () => ({ sendEmail: (...args: any[]) => mocks.sendEmail(...args) }));
 vi.mock('./support-validation.js', () => ({
   supportChatSchema: {}, supportTicketQuerySchema: {}, supportTicketUpdateSchema: {},
   supportConfigSchema: {}, supportConfigTestSchema: {},
@@ -156,6 +157,68 @@ describe('support access boundaries', () => {
 
     expect(res.statusCode).toBe(403);
     expect(mocks.checkTournamentAccess).toHaveBeenCalledWith(req, prisma, 'foreign-tournament', 'viewer');
+  });
+
+  it('scopes a requested-tournament ticket and provider config to that tournament organization', async () => {
+    mocks.checkTournamentAccess.mockResolvedValueOnce({ ok: true });
+    const ticket = {
+      id: 'org-b-ticket', status: 'open', priority: 'normal', subject: 'Please create a ticket',
+    };
+    const prisma: any = {
+      tournament: { findUnique: vi.fn().mockResolvedValue({ organizationId: 'org-b', deletedAt: null }) },
+      organizationMember: { findMany: vi.fn().mockResolvedValue([{ organizationId: 'org-a' }]) },
+      organization: {
+        findUnique: vi.fn(({ where }: any) => Promise.resolve({
+          settings: JSON.stringify({ supportIntegration: { openAiModel: `model-${where.id}` } }),
+        })),
+      },
+      supportTicket: { create: vi.fn().mockResolvedValue(ticket) },
+    };
+    const req: any = {
+      user: { id: 'multi-org-user', email: 'synthetic@example.test', role: 'viewer', firstName: 'Synthetic', lastName: 'User' },
+      body: { message: 'Please create a ticket', createTicket: true, tournamentId: 'tournament-b' },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/')(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma.organization.findUnique).toHaveBeenCalledWith({
+      where: { id: 'org-b' },
+      select: { settings: true },
+    });
+    expect(prisma.supportTicket.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ organizationId: 'org-b' }),
+    }));
+  });
+
+  it('escapes public message markup in support notification email HTML', async () => {
+    const ticket = {
+      id: 'escaped-ticket', status: 'open', priority: 'normal', subject: '<img src=x onerror=alert(1)>',
+    };
+    const prisma: any = {
+      organizationMember: { findMany: vi.fn().mockResolvedValue([{ organizationId: 'org-a' }]) },
+      organization: {
+        findUnique: vi.fn().mockResolvedValue({
+          settings: JSON.stringify({ supportIntegration: { supportAlertEmail: 'support@example.test' } }),
+        }),
+      },
+      supportTicket: { create: vi.fn().mockResolvedValue(ticket) },
+    };
+    const req: any = {
+      user: { id: 'user-a', email: 'synthetic@example.test', role: 'viewer', firstName: 'Synthetic', lastName: 'User' },
+      body: { message: '<img src=x onerror=alert(1)>', createTicket: true },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/')(req, res);
+    await vi.waitFor(() => expect(mocks.sendEmail).toHaveBeenCalledOnce());
+
+    const html = mocks.sendEmail.mock.calls[0][2] as string;
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).not.toContain('<img src=x onerror=alert(1)>');
   });
 
   it('limits director ticket lists to their organization memberships', async () => {
