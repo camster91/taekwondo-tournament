@@ -15,10 +15,30 @@ test('mobile marketing navigation and anonymous support intake remain accessible
   await expect(mobileNavigation.getByRole('link', { name: 'Product screens', exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Open support chat' }).click();
-  await expect(page.getByRole('button', { name: 'Close support chat' })).toBeVisible();
+  const supportPanel = page.getByRole('dialog', { name: 'Support Assistant' });
+  await expect(supportPanel).toBeVisible();
+  await expect(page.getByLabel('Describe your issue')).toBeFocused();
+  await expect(page.locator('#supportName')).toHaveCount(0);
+  await expect(page.locator('#supportEmail')).toHaveCount(0);
+
+  await page.route('**/api/support', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ answer: 'Synthetic help response.', escalated: false, ticket: null }),
+    });
+  });
+  await page.getByLabel('Describe your issue').fill('How do I find public registration?');
+  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(supportPanel.getByText('Synthetic help response.')).toBeVisible();
+
+  await page.getByLabel('Escalate to support').check();
   await expect(page.locator('#supportName')).toHaveAttribute('aria-required', 'true');
   await expect(page.locator('#supportEmail')).toHaveAttribute('aria-required', 'true');
-  await expect(page.getByLabel('Describe your issue')).toHaveAttribute('aria-describedby', 'support-send-hint');
-  await expect(page.locator('#support-send-hint')).toContainText('Enter your name and email before sending.');
-  await expect(page.getByRole('button', { name: 'Send' })).toBeDisabled();
+  await expect(supportPanel.getByRole('link', { name: 'Privacy Notice' })).toHaveAttribute('href', '/legal/privacy');
+
+  await page.keyboard.press('Escape');
+  await expect(supportPanel).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Open support chat' })).toBeFocused();
 });

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Activity, MessageCircle, Send, User, SendHorizontal, X, Bot, Shield } from 'lucide-react';
 import { useAuth, getAuthHeaders } from '../context/AuthContext';
@@ -57,10 +57,16 @@ export default function SupportChatWidget() {
     },
   ]);
   const [isSending, setIsSending] = useState(false);
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  const messageInputRef = useRef<HTMLInputElement>(null);
+  const wasOpenRef = useRef(false);
 
   const canOpenQueue = user?.role === 'admin' || user?.role === 'director';
-  const hasAnonymousContact = Boolean(displayName.trim() && contactEmail.trim());
-  const canSend = Boolean(draft.trim()) && !isSending && (Boolean(user) || hasAnonymousContact);
+  const hasAnonymousContact = Boolean(
+    displayName.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim()),
+  );
+  const needsAnonymousContact = !user && forceTicket;
+  const canSend = Boolean(draft.trim()) && !isSending && (!needsAnonymousContact || hasAnonymousContact);
 
   useEffect(() => {
     if (user?.firstName || user?.lastName) {
@@ -68,6 +74,27 @@ export default function SupportChatWidget() {
       setContactEmail(user.email);
     }
   }, [user?.firstName, user?.lastName, user?.email]);
+
+  useEffect(() => {
+    if (isOpen) {
+      wasOpenRef.current = true;
+      messageInputRef.current?.focus();
+      return;
+    }
+    if (wasOpenRef.current) {
+      wasOpenRef.current = false;
+      launcherRef.current?.focus();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [isOpen]);
 
   const addMessage = (next: Omit<MessageRow, 'id'>) => {
     setMessages((current) => [...current, { id: current.length + 1000, ...next }]);
@@ -77,8 +104,8 @@ export default function SupportChatWidget() {
     event.preventDefault();
     const outgoing = draft.trim();
     if (!outgoing || isSending) return;
-    if (!user && !hasAnonymousContact) {
-      toast.error('Enter your name and email before sending a support request.');
+    if (needsAnonymousContact && !hasAnonymousContact) {
+      toast.error('Enter your name and a valid email before creating a support ticket.');
       return;
     }
 
@@ -98,8 +125,8 @@ export default function SupportChatWidget() {
           message: outgoing,
           page: location.pathname,
           conversationId: null,
-          contactName: user ? displayName.trim() : displayName.trim(),
-          contactEmail: user ? undefined : contactEmail.trim(),
+          contactName: user ? displayName.trim() : forceTicket ? displayName.trim() : undefined,
+          contactEmail: !user && forceTicket ? contactEmail.trim() : undefined,
           createTicket: forceTicket,
         }),
       });
@@ -131,13 +158,18 @@ export default function SupportChatWidget() {
   return (
     <>
       {isOpen ? (
-        <div className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md sm:right-6 sm:left-auto sm:inset-x-auto">
+        <div
+          className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md sm:right-6 sm:left-auto sm:inset-x-auto"
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby="support-assistant-title"
+        >
           <div className="rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <Bot className="h-4 w-4 text-primary-600" />
                 <div>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Support Assistant</p>
+                  <h2 id="support-assistant-title" className="text-sm font-semibold text-slate-900 dark:text-slate-50">Support Assistant</h2>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">Ask for help anytime</p>
                 </div>
               </div>
@@ -146,7 +178,7 @@ export default function SupportChatWidget() {
               </button>
             </div>
 
-            <div className="h-72 overflow-y-auto space-y-2 bg-slate-50 p-3 dark:bg-slate-950">
+            <div className="h-72 overflow-y-auto space-y-2 bg-slate-50 p-3 dark:bg-slate-950" aria-live="polite" aria-label="Support conversation">
               {messages.map((message) => (
                 <div
                   key={message.id}
@@ -166,7 +198,7 @@ export default function SupportChatWidget() {
               ))}
             </div>
 
-            {!user ? (
+            {needsAnonymousContact ? (
               <div className="grid gap-2 border-t border-slate-200 px-4 py-3 dark:border-slate-800 sm:grid-cols-2">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="supportName">Name <span aria-hidden="true">(required)</span></Label>
@@ -178,6 +210,7 @@ export default function SupportChatWidget() {
                     autoComplete="name"
                     required
                     aria-required="true"
+                    aria-describedby="support-contact-privacy"
                   />
                 </div>
                 <div className="flex flex-col gap-2">
@@ -191,14 +224,20 @@ export default function SupportChatWidget() {
                     autoComplete="email"
                     required
                     aria-required="true"
+                    aria-describedby="support-contact-privacy"
                   />
                 </div>
+                <p id="support-contact-privacy" className="text-xs text-slate-500 dark:text-slate-400 sm:col-span-2">
+                  Contact details are used to follow up on this ticket. Read the{' '}
+                  <Link className="underline hover:text-slate-900 dark:hover:text-white" to="/legal/privacy">Privacy Notice</Link>.
+                </p>
               </div>
             ) : null}
 
             <div className="flex items-center justify-between px-4 py-2 border-t border-slate-200 dark:border-slate-800">
               <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
                 <input
+                  aria-label="Escalate to support"
                   type="checkbox"
                   className="h-4 w-4"
                   checked={forceTicket}
@@ -295,6 +334,7 @@ export default function SupportChatWidget() {
               <div className="flex items-end gap-2">
                 <Label className="sr-only" htmlFor="supportMessage">Describe your issue</Label>
                 <Input
+                  ref={messageInputRef}
                   id="supportMessage"
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -320,13 +360,16 @@ export default function SupportChatWidget() {
                 </Button>
               </div>
               <p id="support-send-hint" className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                {!user && !hasAnonymousContact ? 'Enter your name and email before sending.' : 'Press Enter to send. Use Shift+Enter for a new line.'}
+                {needsAnonymousContact && !hasAnonymousContact
+                  ? 'Enter your name and a valid email before creating a support ticket.'
+                  : 'Press Enter to send. Basic questions do not create a support ticket.'}
               </p>
             </form>
           </div>
         </div>
       ) : (
         <button
+          ref={launcherRef}
           type="button"
           onClick={() => setIsOpen(true)}
           className="fixed right-4 bottom-4 z-50 rounded-full bg-primary-600 text-white p-4 shadow-xl hover:bg-primary-700"

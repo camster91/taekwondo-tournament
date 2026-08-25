@@ -105,7 +105,7 @@ function buildFallbackReply(message: string): string {
   if (lowered.includes('sign in') || lowered.includes('login') || lowered.includes('magic')) {
     return 'If sign-in is failing, clear browser cache and try again from the login screen. If you still cannot access your account, we can raise this directly with support.';
   }
-  return 'I logged your question and can pass it to the support team. Share a preferred contact name/email if you want me to create a ticket now.';
+  return 'I can help troubleshoot here. Select “Escalate to support” if you want the support team to follow up.';
 }
 
 interface SupportAssistOutput {
@@ -458,9 +458,15 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
     supportAssist = await runSupportAssist(prisma, normalizedMessage, requestedTournamentId, requestAssist);
   }
 
+  const anonymousContactComplete = Boolean(body.contactName?.trim() && body.contactEmail?.trim());
+  if (!req.user && body.createTicket === true && !anonymousContactComplete) {
+    return res.status(400).json({ error: 'Name and email are required to create a support ticket.' });
+  }
   const assistantMessage = await generateAssistantReply(normalizedMessage, config, body.page);
   const conversationId = body.conversationId?.trim() || null;
-  const escalate = shouldEscalate(normalizedMessage, body.createTicket === true);
+  const escalate = req.user
+    ? shouldEscalate(normalizedMessage, body.createTicket === true)
+    : body.createTicket === true;
 
   let existingTicket: SupportTicketPayload | null = null;
   const subject = buildSubject(normalizedMessage);

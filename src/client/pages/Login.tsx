@@ -191,7 +191,7 @@ export default function Login() {
       {/* Header — minimal brand bar */}
       <header className="border-b border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-950/60 backdrop-blur-xl sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/login" aria-label="Bowin home">
+          <Link to="/" aria-label="Bowin home">
             <BowinLogo />
           </Link>
           <div className="flex items-center gap-4 text-sm">
@@ -335,8 +335,11 @@ export default function Login() {
 
                 {step === 'email' && (
                   <p className="mt-6 text-center text-xs text-slate-600">
-                    By continuing you agree to the tournament's data handling policy.
-                    Email addresses are only used to send sign-in links and never shared.
+                    By continuing, you acknowledge Bowin&apos;s{' '}
+                    <Link className="underline hover:text-slate-900 dark:hover:text-white" to="/legal/privacy">Privacy Notice</Link>
+                    {' '}and{' '}
+                    <Link className="underline hover:text-slate-900 dark:hover:text-white" to="/legal/terms">Tournament Terms</Link>.
+                    Email addresses are used to send sign-in links and provide account access.
                   </p>
                 )}
               </div>

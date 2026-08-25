@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Trophy, CheckCircle, AlertCircle, User, Calendar, Award, CreditCard, Printer } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
 import { Card, CardBody } from '../components/ui';
@@ -618,15 +618,18 @@ export default function PublicRegister() {
 
   if (tournaments.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+      <main className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
         <div className="max-w-md mx-auto text-center">
-          <Trophy className="h-16 w-16 text-gray-600 dark:text-gray-500 mx-auto mb-4" />
+          <Trophy aria-hidden="true" className="h-16 w-16 text-gray-600 dark:text-gray-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">No Open Tournaments</h1>
           <p className="text-gray-600 dark:text-gray-400">
             There are currently no tournaments open for registration. Please check back later.
           </p>
+          <Button as={Link} to="/" variant="secondary" className="mt-6">
+            Return to Bowin home
+          </Button>
         </div>
-      </div>
+      </main>
     );
   }
 

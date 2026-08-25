@@ -74,6 +74,74 @@ describe('support access boundaries', () => {
     expect(prisma.supportTicket.count).not.toHaveBeenCalled();
   });
 
+  it('answers an anonymous support question without creating a ticket', async () => {
+    const prisma: any = { supportTicket: { create: vi.fn() } };
+    const req: any = {
+      body: { message: 'I need support with registration', createTicket: false },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/')(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.escalated).toBe(false);
+    expect(res.body.ticket).toBeNull();
+    expect(prisma.supportTicket.create).not.toHaveBeenCalled();
+  });
+
+  it('does not claim an anonymous question was externally logged', async () => {
+    const prisma: any = { supportTicket: { create: vi.fn() } };
+    const req: any = {
+      body: { message: 'How do I change a setting?', createTicket: false },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/')(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.answer).not.toMatch(/logged|submitted|sent to/i);
+    expect(prisma.supportTicket.create).not.toHaveBeenCalled();
+  });
+
+  it('requires contact details before an anonymous ticket is created', async () => {
+    const prisma: any = { supportTicket: { create: vi.fn() } };
+    const req: any = {
+      body: { message: 'Please create a support ticket', createTicket: true },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/')(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: 'Name and email are required to create a support ticket.' });
+    expect(prisma.supportTicket.create).not.toHaveBeenCalled();
+  });
+
+  it('creates an anonymous ticket only after explicit escalation with contact details', async () => {
+    const ticket = {
+      id: 'synthetic-ticket', status: 'open', priority: 'normal', subject: 'Please create a support ticket',
+    };
+    const prisma: any = { supportTicket: { create: vi.fn().mockResolvedValue(ticket) } };
+    const req: any = {
+      body: {
+        message: 'Please create a support ticket', createTicket: true,
+        contactName: 'Synthetic Organizer', contactEmail: 'synthetic.organizer@example.test',
+      },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/')(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.escalated).toBe(true);
+    expect(res.body.ticket).toEqual(ticket);
+    expect(prisma.supportTicket.create).toHaveBeenCalledOnce();
+  });
+
   it('checks tournament access before authenticated support diagnostics', async () => {
     mocks.checkTournamentAccess.mockResolvedValueOnce({ ok: false, status: 403, error: 'Forbidden' });
     const prisma: any = { organizationMember: { findMany: vi.fn().mockResolvedValue([]) } };

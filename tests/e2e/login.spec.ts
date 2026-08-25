@@ -2,6 +2,14 @@ import { test, expect } from '@playwright/test';
 import { loginAsEmail, loginAsDemo } from './helpers';
 
 test.describe('login (magic link flow)', () => {
+  test('brand home link returns to the marketing homepage', async ({ page }) => {
+    await page.goto('/login');
+
+    await expect(page.getByRole('link', { name: 'Bowin home' })).toHaveAttribute('href', '/');
+    await expect(page.getByRole('link', { name: 'Privacy Notice' })).toHaveAttribute('href', '/legal/privacy');
+    await expect(page.getByRole('link', { name: 'Tournament Terms' })).toHaveAttribute('href', '/legal/terms');
+  });
+
   test('magic-link OTP signs in a new user in dev mode', async ({ page }) => {
     const email = `e2e-${Date.now()}@example.com`;
 

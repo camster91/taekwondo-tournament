@@ -183,9 +183,8 @@ export default function Marketing() {
         </section>
 
         <section className="bowin-final-cta" aria-labelledby="final-cta-title"><div><Trophy aria-hidden="true" /><h2 id="final-cta-title">Ready to replace event-day guesswork?</h2></div><a className="bowin-button bowin-button-white" href="mailto:support@ashbi.ca?subject=Bowin%20organizer%20setup">Plan organizer setup <ArrowRight aria-hidden="true" /></a></section>
-      </main>
 
-      <section className="bowin-product-gallery" id="product" aria-labelledby="product-gallery-title">
+        <section className="bowin-product-gallery" id="product" aria-labelledby="product-gallery-title">
         <div className="bowin-section-kicker">Inside the control room</div>
         <div className="bowin-product-gallery__intro">
           <h2 id="product-gallery-title">See the whole tournament, not another disconnected tool.</h2>
@@ -211,12 +210,13 @@ export default function Marketing() {
             <figcaption><span>03</span> Divisions and brackets <em>Sample data</em></figcaption>
           </figure>
         </div>
-      </section>
+        </section>
+      </main>
 
       <footer className="bowin-footer">
         <Link className="bowin-brand bowin-brand-inverse" to="/" aria-label="Bowin home"><span className="bowin-brand-mark" aria-hidden="true" /><span>BOWIN</span></Link>
         <p>Tournament operations for martial arts events.</p>
-        <nav aria-label="Footer navigation"><Link to="/register">Public registration</Link><a href="#support">Support</a><Link to="/login">Sign in</Link></nav>
+        <nav aria-label="Footer navigation"><Link to="/register">Public registration</Link><a href="#support">Support</a><Link to="/legal/privacy">Privacy Notice</Link><Link to="/legal/terms">Tournament Terms</Link><Link to="/login">Sign in</Link></nav>
       </footer>
     </div>
   );

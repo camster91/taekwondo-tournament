@@ -8,6 +8,9 @@ test.describe('marketing conversion flow', () => {
     await expect(page.getByText('Illustrative interface, not live event data.')).toBeVisible();
     await expect(page.getByRole('link', { name: /open bowin/i }).first()).toHaveAttribute('href', '/login');
     await expect(page.getByRole('link', { name: /view public registration/i })).toHaveAttribute('href', '/register');
+    await expect(page.locator('main #product')).toHaveCount(1);
+    await expect(page.getByRole('navigation', { name: 'Footer navigation' }).getByRole('link', { name: 'Privacy Notice' })).toHaveAttribute('href', '/legal/privacy');
+    await expect(page.getByRole('navigation', { name: 'Footer navigation' }).getByRole('link', { name: 'Tournament Terms' })).toHaveAttribute('href', '/legal/terms');
   });
 
   test('publishes route-specific SEO metadata and structured data', async ({ page }) => {
