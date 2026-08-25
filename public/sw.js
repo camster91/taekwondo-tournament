@@ -3,7 +3,7 @@ const CACHE_VERSION = BUILD_VERSION.replace(/[^a-zA-Z0-9._-]/g, '-').slice(-96);
 const SHELL_CACHE = `bowin-shell-${CACHE_VERSION}`;
 const STATIC_CACHE = `bowin-static-${CACHE_VERSION}`;
 const SHELL_URL = '/index.html';
-const MANIFEST_URL = '/.vite/manifest.json';
+const MANIFEST_URL = '/manifest.json';
 const SHELL_MARKER = '<meta name="bowin-app-shell" content="1"';
 
 async function offlineShellResponse() {

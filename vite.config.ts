@@ -21,6 +21,6 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    manifest: true,
+    manifest: 'manifest.json',
   },
 });

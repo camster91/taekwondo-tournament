@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 const workerSource = () => readFileSync(resolve(process.cwd(), 'public/sw.js'), 'utf8');
+const viteConfigSource = () => readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 
 async function runNavigation(fetchResult: Response | Error, cached?: Response): Promise<Response> {
   let fetchHandler: ((event: { request: Request; respondWith(value: Promise<Response>): void }) => void) | undefined;
@@ -36,6 +37,12 @@ describe('offline application shell contract', () => {
   it('registers a service worker from the client entrypoint', () => {
     const main = readFileSync(resolve(process.cwd(), 'src/client/main.tsx'), 'utf8');
     expect(main).toContain('registerOfflineShell(`/sw.js?v=${encodeURIComponent(buildAsset)}`)');
+  });
+
+  it('emits and requests the build manifest from a publicly served path', () => {
+    expect(viteConfigSource()).toContain("manifest: 'manifest.json'");
+    expect(workerSource()).toContain("const MANIFEST_URL = '/manifest.json'");
+    expect(workerSource()).not.toContain('/.vite/manifest.json');
   });
 
   it('caches navigation and static assets without caching private API responses', () => {
