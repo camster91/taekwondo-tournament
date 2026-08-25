@@ -525,6 +525,7 @@ function AppRoutes() {
     location.pathname.startsWith('/register') ||
     location.pathname.startsWith('/check-registration') ||
     location.pathname.startsWith('/manage-registration') ||
+    location.pathname.startsWith('/legal') ||
     location.pathname === '/' ||
     location.pathname.startsWith('/login') ||
     location.pathname.startsWith('/verify') ||
