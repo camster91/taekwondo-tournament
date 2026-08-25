@@ -161,7 +161,10 @@ function buildDiagnosticRecommendations(intent: string): string[] {
   }
 }
 
-async function buildSupportDiagnosticsSnapshot(prisma: PrismaClient): Promise<SupportDiagnosticsSnapshot> {
+async function buildSupportDiagnosticsSnapshot(
+  prisma: PrismaClient,
+  organizationId: string,
+): Promise<SupportDiagnosticsSnapshot> {
   const staleCutoff = new Date(Date.now() - HIGH_PRIORITY_SUPPORT_AGE_HOURS * 60 * 60_000);
   const [
     openSupportTickets,
@@ -170,16 +173,17 @@ async function buildSupportDiagnosticsSnapshot(prisma: PrismaClient): Promise<Su
     staleDraftTournaments,
     openScoreboards,
   ] = await Promise.all([
-    prisma.supportTicket.count({ where: { status: 'open' } }),
-    prisma.supportTicket.count({ where: { status: 'in_progress' } }),
+    prisma.supportTicket.count({ where: { organizationId, status: 'open' } }),
+    prisma.supportTicket.count({ where: { organizationId, status: 'in_progress' } }),
     prisma.supportTicket.count({
       where: {
+        organizationId,
         status: { in: ['open', 'in_progress'] },
         priority: 'high',
       },
     }),
-    prisma.tournament.count({ where: { status: 'draft', deletedAt: null, createdAt: { lte: staleCutoff } } }),
-    prisma.tournament.count({ where: { status: 'registration', publicSlug: { not: null }, deletedAt: null } }),
+    prisma.tournament.count({ where: { organizationId, status: 'draft', deletedAt: null, createdAt: { lte: staleCutoff } } }),
+    prisma.tournament.count({ where: { organizationId, status: 'registration', publicSlug: { not: null }, deletedAt: null } }),
   ]);
 
   return {
@@ -194,6 +198,7 @@ async function buildSupportDiagnosticsSnapshot(prisma: PrismaClient): Promise<Su
 async function runSupportAssist(
   prisma: PrismaClient,
   message: string,
+  organizationId: string,
   requestedTournamentId?: string,
   requestedExplicitly = false,
 ): Promise<SupportAssistOutput | null> {
@@ -230,7 +235,7 @@ async function runSupportAssist(
     return null;
   }
 
-  const snapshot = await buildSupportDiagnosticsSnapshot(prisma);
+  const snapshot = await buildSupportDiagnosticsSnapshot(prisma, organizationId);
   return {
     executed: true,
     request: trimmedMessage,
@@ -344,8 +349,11 @@ async function resolveSupportConfig(
   if (!organization) return envConfig;
 
   const orgConfig = readSupportSection(readOrganizationSettings(organization.settings));
+  const organizationOverridesProvider = Boolean(
+    orgConfig.openAiBaseUrl && orgConfig.openAiBaseUrl !== envConfig.openAiBaseUrl,
+  );
   return {
-    openAiApiKey: orgConfig.openAiApiKey?.trim() || envConfig.openAiApiKey,
+    openAiApiKey: orgConfig.openAiApiKey?.trim() || (organizationOverridesProvider ? '' : envConfig.openAiApiKey),
     openAiModel: orgConfig.openAiModel || envConfig.openAiModel,
     openAiBaseUrl: orgConfig.openAiBaseUrl || envConfig.openAiBaseUrl,
     supportAlertEmail: orgConfig.supportAlertEmail || envConfig.supportAlertEmail,
@@ -469,7 +477,15 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
     } else {
       supportOrganizationId = await getSupportOrganizationId(prisma, req.user.id);
     }
-    supportAssist = await runSupportAssist(prisma, normalizedMessage, requestedTournamentId, requestAssist);
+    if (supportOrganizationId) {
+      supportAssist = await runSupportAssist(
+        prisma,
+        normalizedMessage,
+        supportOrganizationId,
+        requestedTournamentId,
+        requestAssist,
+      );
+    }
   }
   const config = await resolveSupportConfig(prisma, req.user?.id, supportOrganizationId);
 
@@ -668,8 +684,21 @@ router.post(
     const prisma: PrismaClient = req.app.locals.prisma;
     if (!req.user?.id) return res.status(401).json({ error: 'Authentication required.' });
     const saved = await resolveSupportConfig(prisma, req.user.id);
+    let organizationOwnedApiKey = '';
+    if (req.body.openAiBaseUrl && !req.body.openAiApiKey) {
+      const organizationId = await getSupportOrganizationId(prisma, req.user.id);
+      const organization = organizationId
+        ? await prisma.organization.findUnique({ where: { id: organizationId }, select: { settings: true } })
+        : null;
+      organizationOwnedApiKey = organization
+        ? readSupportSection(readOrganizationSettings(organization.settings)).openAiApiKey || ''
+        : '';
+      if (!organizationOwnedApiKey) {
+        return res.status(400).json({ error: 'An API key is required when testing a custom provider URL.' });
+      }
+    }
     const result = await testSupportProviderConnection({
-      openAiApiKey: req.body.openAiApiKey || saved.openAiApiKey,
+      openAiApiKey: req.body.openAiApiKey || organizationOwnedApiKey || saved.openAiApiKey,
       openAiModel: req.body.openAiModel || saved.openAiModel,
       openAiBaseUrl: req.body.openAiBaseUrl || saved.openAiBaseUrl,
     });

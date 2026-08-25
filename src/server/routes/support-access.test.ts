@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   checkTournamentAccess: vi.fn(),
   sendEmail: vi.fn(),
+  testSupportProviderConnection: vi.fn(),
   handlers: [] as Array<{ method: string; path: string; handler: any }>,
 }));
 
@@ -39,7 +40,7 @@ vi.mock('../services/operational-query.js', () => ({
 vi.mock('../services/support-provider.js', () => ({
   assertSafeSupportProviderUrl: vi.fn(),
   readSupportConfigAuditTrail: vi.fn(() => []),
-  testSupportProviderConnection: vi.fn(),
+  testSupportProviderConnection: (...args: any[]) => mocks.testSupportProviderConnection(...args),
 }));
 
 import './support.js';
@@ -59,6 +60,7 @@ const response = () => {
 
 describe('support access boundaries', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
   it('does not run platform diagnostics for anonymous support chat', async () => {
     const prisma: any = { supportTicket: { count: vi.fn() } };
@@ -157,6 +159,78 @@ describe('support access boundaries', () => {
 
     expect(res.statusCode).toBe(403);
     expect(mocks.checkTournamentAccess).toHaveBeenCalledWith(req, prisma, 'foreign-tournament', 'viewer');
+  });
+
+  it('scopes platform diagnostics to the authenticated organization', async () => {
+    const prisma: any = {
+      organizationMember: { findMany: vi.fn().mockResolvedValue([{ organizationId: 'org-a' }]) },
+      organization: { findUnique: vi.fn().mockResolvedValue({ settings: null }) },
+      supportTicket: { count: vi.fn().mockResolvedValue(0) },
+      tournament: { count: vi.fn().mockResolvedValue(0) },
+    };
+    const req: any = {
+      user: { id: 'viewer-a', email: 'viewer@example.test', role: 'viewer' },
+      body: { message: 'Show the health snapshot', requestAssist: true },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/')(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma.supportTicket.count).toHaveBeenCalledTimes(3);
+    for (const [query] of prisma.supportTicket.count.mock.calls) {
+      expect(query.where).toEqual(expect.objectContaining({ organizationId: 'org-a' }));
+    }
+    expect(prisma.tournament.count).toHaveBeenCalledTimes(2);
+    for (const [query] of prisma.tournament.count.mock.calls) {
+      expect(query.where).toEqual(expect.objectContaining({ organizationId: 'org-a' }));
+    }
+  });
+
+  it('does not send the platform provider key to a request-supplied provider URL', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'platform-secret-must-not-leave');
+    const prisma: any = {
+      organizationMember: { findMany: vi.fn().mockResolvedValue([{ organizationId: 'org-a' }]) },
+      organization: { findUnique: vi.fn().mockResolvedValue({ settings: null }) },
+    };
+    const req: any = {
+      user: { id: 'admin-a', role: 'admin' },
+      body: { openAiBaseUrl: 'https://tenant-provider.example.test/v1' },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/config/test')(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: 'An API key is required when testing a custom provider URL.' });
+    expect(mocks.testSupportProviderConnection).not.toHaveBeenCalled();
+  });
+
+  it('does not combine an organization provider URL with the platform key', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'platform-secret-must-not-leave');
+    const prisma: any = {
+      organizationMember: { findMany: vi.fn().mockResolvedValue([{ organizationId: 'org-a' }]) },
+      organization: {
+        findUnique: vi.fn().mockResolvedValue({
+          settings: JSON.stringify({
+            supportIntegration: { openAiBaseUrl: 'https://tenant-provider.example.test/v1' },
+          }),
+        }),
+      },
+    };
+    const req: any = {
+      user: { id: 'admin-a', role: 'admin' },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('get', '/config')(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.hasOpenAiApiKey).toBe(false);
+    expect(res.body.openAiBaseUrl).toBe('https://tenant-provider.example.test/v1');
   });
 
   it('scopes a requested-tournament ticket and provider config to that tournament organization', async () => {
