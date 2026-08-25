@@ -2,7 +2,13 @@ import { Router } from 'express';
 import type { Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import rateLimit from 'express-rate-limit';
-import { authenticate, optionalAuthenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import {
+  authenticate,
+  checkTournamentAccess,
+  optionalAuthenticate,
+  requireRole,
+  type AuthenticatedRequest,
+} from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { sendEmail } from '../services/email.js';
 import {
@@ -304,6 +310,14 @@ async function getSupportOrganizationId(prisma: PrismaClient, userId: string): P
   return memberships[0]?.organizationId ?? null;
 }
 
+async function getSupportOrganizationIds(prisma: PrismaClient, userId: string): Promise<string[]> {
+  const memberships = await prisma.organizationMember.findMany({
+    where: { userId },
+    select: { organizationId: true },
+  });
+  return memberships.map((membership) => membership.organizationId);
+}
+
 async function resolveSupportConfig(
   prisma: PrismaClient,
   userId?: string
@@ -429,7 +443,20 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
   const requestedTournamentId = body.tournamentId?.trim() || undefined;
   const requestAssist = body.requestAssist === true;
   const config = await resolveSupportConfig(prisma, req.user?.id);
-  const supportAssist = await runSupportAssist(prisma, normalizedMessage, requestedTournamentId, requestAssist);
+
+  // Public support chat can create a ticket, but must never expose platform
+  // diagnostics or tournament operational data. Those are available only to
+  // authenticated users with access to the requested tournament.
+  let supportAssist: SupportAssistOutput | null = null;
+  if (req.user) {
+    if (requestedTournamentId) {
+      const access = await checkTournamentAccess(req, prisma, requestedTournamentId, 'viewer');
+      if (!access.ok) {
+        return res.status(access.status || 403).json({ error: access.error || 'Forbidden' });
+      }
+    }
+    supportAssist = await runSupportAssist(prisma, normalizedMessage, requestedTournamentId, requestAssist);
+  }
 
   const assistantMessage = await generateAssistantReply(normalizedMessage, config, body.page);
   const conversationId = body.conversationId?.trim() || null;
@@ -448,9 +475,10 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
       normalizedMessage,
       finalMessage,
     );
+    const organizationId = req.user ? await getSupportOrganizationId(prisma, req.user.id) : null;
     const ticket = await prisma.supportTicket.create({
       data: {
-      source: req.user ? 'app' : 'marketing',
+        source: req.user ? 'app' : 'marketing',
         status: 'open',
         priority,
         subject,
@@ -461,6 +489,7 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
         lastAssistantMessage: finalMessage,
         conversation: JSON.stringify(conversation),
         userId: req.user?.id ?? null,
+        organizationId,
       },
     });
 
@@ -636,9 +665,16 @@ router.get(
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
     const parsed = req.query as { status?: 'open' | 'in_progress' | 'resolved' | 'closed'; limit?: number };
+    const organizationIds = req.user?.role === 'admin' || !req.user
+      ? null
+      : await getSupportOrganizationIds(prisma, req.user.id);
+    const where = {
+      ...(parsed.status ? { status: parsed.status } : {}),
+      ...(organizationIds ? { organizationId: { in: organizationIds } } : {}),
+    };
 
     const tickets = await prisma.supportTicket.findMany({
-      where: parsed.status ? { status: parsed.status } : {},
+      where,
       orderBy: { createdAt: 'desc' },
       take: parsed.limit ?? 60,
     });
@@ -656,9 +692,15 @@ router.patch(
     const prisma: PrismaClient = req.app.locals.prisma;
     const ticketId = req.params.id;
     const update = req.body;
+    const organizationIds = req.user?.role === 'admin' || !req.user
+      ? null
+      : await getSupportOrganizationIds(prisma, req.user.id);
 
-    const existing = await prisma.supportTicket.findUnique({
-      where: { id: ticketId },
+    const existing = await prisma.supportTicket.findFirst({
+      where: {
+        id: ticketId,
+        ...(organizationIds ? { organizationId: { in: organizationIds } } : {}),
+      },
     });
 
     if (!existing) {

@@ -510,6 +510,7 @@ model Organization {
 
   members     OrganizationMember[]
   tournaments Tournament[]
+  supportTickets SupportTicket[]
   billingSubscription OrganizationBillingSubscription?
   planChanges         OrganizationPlanChange[]
 
@@ -642,11 +643,15 @@ model SupportTicket {
   notes              String?
   resolvedAt         DateTime?
   userId             String?
+  organizationId     String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
   @@index([status, createdAt])
   @@index([userId])
+  @@index([organizationId, createdAt])
 }
 
 // Tournament fairness rules (configurable per tournament)

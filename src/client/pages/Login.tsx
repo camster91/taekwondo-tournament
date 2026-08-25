@@ -80,7 +80,10 @@ export default function Login() {
       // React Router's `location.state` is loosely typed — narrow via
       // a structural check before reaching into `from.pathname`.
       const state = location.state as { from?: { pathname?: string } } | null;
-      const from = state?.from?.pathname || '/';
+      // The marketing homepage is public. A sign-in without a preserved
+      // protected destination must enter the authenticated workspace instead
+      // of bouncing back to marketing and then to the login page.
+      const from = state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     }
   }, [isAuthenticated, location.state, navigate]);
@@ -153,7 +156,7 @@ export default function Login() {
       // Same structural narrowing as the auth-effect above — keeps the
       // post-verify redirect in sync with where the user was heading.
       const state = location.state as { from?: { pathname?: string } } | null;
-      const from = state?.from?.pathname || '/';
+      const from = state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     } else {
       setSessionVerified(result.sessionVerified === true);

@@ -35,8 +35,9 @@ test.describe('login (magic link flow)', () => {
     await page.getByLabel('6-digit code').fill(code);
     await page.getByRole('button', { name: /Verify code/i }).click();
 
-    // Success lands somewhere other than /login.
-    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 10_000 });
+    // A sign-in from the public marketing page must enter the authenticated
+    // workspace, not loop back through the public homepage and login route.
+    await page.waitForURL(/\/dashboard/, { timeout: 10_000 });
 
     // Auth is now cookie-based — the HttpOnly ashbi_token cookie is
     // set by the server and JS can't read it directly. Verify the
