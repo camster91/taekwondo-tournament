@@ -15,6 +15,12 @@ import {
 
 const router = Router();
 
+function organizationWithoutSettings<T extends object>(organization: T): Omit<T, 'settings'> {
+  const safe = { ...organization } as T & { settings?: unknown };
+  delete safe.settings;
+  return safe;
+}
+
 async function ownedOrganization(
   prisma: PrismaClient,
   organizationId: string,
@@ -44,7 +50,7 @@ router.get('/current', authenticate, async (req: AuthenticatedRequest, res: Resp
 
   res.json({
     organizations: memberships.map(({ organization, role }) => ({
-      ...organization,
+      ...organizationWithoutSettings(organization),
       membershipRole: role,
       entitlements: getPlanEntitlements(organization.plan),
     })),
@@ -86,6 +92,7 @@ router.post(
       });
       res.status(201).json({
         ...result,
+        organization: organizationWithoutSettings(result.organization),
         entitlements: getPlanEntitlements(result.organization.plan),
       });
     } catch (error) {
@@ -149,7 +156,11 @@ router.post(
       return { organization, billing, audit };
     });
 
-    res.json({ ...result, entitlements: getPlanEntitlements(result.organization.plan) });
+    res.json({
+      ...result,
+      organization: organizationWithoutSettings(result.organization),
+      entitlements: getPlanEntitlements(result.organization.plan),
+    });
   },
 );
 
@@ -185,7 +196,7 @@ router.get('/:id/export', authenticate, async (req: AuthenticatedRequest, res: R
   res.setHeader('Content-Disposition', `attachment; filename="${organization.slug}-export.json"`);
   return res.json({
     exportedAt: new Date().toISOString(),
-    organization,
+    organization: organizationWithoutSettings(organization),
     members,
     tournaments,
   });

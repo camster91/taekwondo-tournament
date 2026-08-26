@@ -90,10 +90,175 @@ test.describe('check-in (weigh-in flow)', () => {
     const stored = await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'));
     expect(stored).toContain('check_in');
 
+    let rejectSync = true;
+    await page.route('**/api/tournaments/*/registrations/*', async (route) => {
+      if (route.request().method() === 'PUT' && rejectSync) {
+        await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Registration changed during the venue outage' }) });
+        return;
+      }
+      await route.continue();
+    });
     await context.setOffline(false);
     await page.evaluate(() => window.dispatchEvent(new Event('online')));
-    await expect(page.getByText(/1 check-in pending sync/i)).toBeHidden({ timeout: 10_000 });
-    expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toBe('[]');
+    await expect(page.getByRole('alert').filter({ hasText: /Registration changed during the venue outage/i })).toBeVisible();
+    await expect(page.getByText(/Minho/i).filter({ hasText: /Attempted: Checked in/i })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toContain('needs_review');
 
+    await page.reload();
+    const persistedReview = page.getByRole('alert').filter({ hasText: /Registration changed during the venue outage/i });
+    await expect(persistedReview).toBeVisible();
+    await persistedReview.getByRole('button', { name: /Discard local change/i }).click();
+    const discardDialog = page.getByRole('dialog', { name: /Discard unsynced check-in/i });
+    await expect(discardDialog).toBeVisible();
+    await discardDialog.getByRole('button', { name: /^Cancel$/i }).click();
+    await expect(persistedReview).toBeVisible();
+
+    rejectSync = false;
+    await persistedReview.getByRole('button', { name: /^Retry$/i }).click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1')), { timeout: 10_000 }).toBe('[]');
+    await expect(page.getByText(/Registration changed during the venue outage/i)).toBeHidden();
+
+  });
+
+  test('a lost online acknowledgement is quarantined and never auto-resent', async ({ page }) => {
+    await loginAsDemo(page);
+    await page.goto('/tournaments');
+    const href = await page.locator('a', { hasText: 'Spring Championship 2026' }).first().getAttribute('href');
+    const tournamentId = href!.replace('/tournaments/', '');
+    await page.goto(`/checkin/${tournamentId}`);
+    await page.locator('input[placeholder*="Search"]').first().fill('Minho');
+
+    let putCount = 0;
+    await page.route('**/api/tournaments/*/registrations/*', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      putCount += 1;
+      const committed = await route.fetch();
+      expect(committed.ok()).toBeTruthy();
+      await route.abort('failed');
+    });
+    await page.getByRole('button', { name: /^Check In$/i }).first().click();
+    await page.getByRole('button', { name: /Confirm Check-In/i }).click();
+
+    await expect(page.getByText(/check-in delivery is uncertain/i).first()).toBeVisible();
+    const review = page.getByRole('alert').filter({ hasText: /may already be saved on the server/i });
+    await expect(review).toBeVisible();
+    await expect(review.getByRole('button', { name: /^Retry$/i })).toHaveCount(0);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await page.waitForTimeout(750);
+    expect(putCount).toBe(1);
+    const stored = await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'));
+    expect(stored).toContain('delivery_uncertain');
+    expect(stored).toContain('acknowledgement was not received');
+  });
+
+  test('response loss plus device-storage failure warns against resubmission', async ({ page }) => {
+    await loginAsDemo(page);
+    await page.goto('/tournaments');
+    const href = await page.locator('a', { hasText: 'Spring Championship 2026' }).first().getAttribute('href');
+    await page.goto(`/checkin/${href!.replace('/tournaments/', '')}`);
+    await page.locator('input[placeholder*="Search"]').first().fill('Minho');
+    await page.evaluate(() => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function setItem(key: string, value: string) {
+        if (key === 'bowin_offline_operations_v1') throw new DOMException('quota', 'QuotaExceededError');
+        return original.call(this, key, value);
+      };
+    });
+    let putCount = 0;
+    await page.route('**/api/tournaments/*/registrations/*', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      putCount += 1;
+      await route.fetch();
+      await route.abort('failed');
+    });
+    await page.getByRole('button', { name: /^Check In$/i }).first().click();
+    await page.getByRole('button', { name: /Confirm Check-In/i }).click();
+    const warning = page.getByRole('alert').filter({ hasText: /could not retain the safety record/i });
+    await expect(warning).toContainText(/Minho Kim/i);
+    await expect(warning).toContainText(/checked in at/i);
+    await expect(warning).toContainText(/Do not resubmit it/i);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await page.waitForTimeout(750);
+    expect(putCount).toBe(1);
+    await warning.getByRole('button', { name: /I verified server state/i }).click();
+    await expect(warning).toHaveCount(0);
+  });
+
+  test('bulk check-in retries only confirmed rejections and retains uncertain delivery review', async ({ page }) => {
+    await loginAsDemo(page);
+    await page.goto('/tournaments');
+    const href = await page.locator('a', { hasText: 'Spring Championship 2026' }).first().getAttribute('href');
+    const tournamentId = href!.replace('/tournaments/', '');
+    const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+    const candidates = await prisma.registration.findMany({
+      where: { tournamentId, patterns: true, sparring: false },
+      take: 3,
+      select: { id: true, checkedIn: true, checkInTime: true, checkInWeight: true },
+    });
+    expect(candidates).toHaveLength(3);
+    const ids = candidates.map(({ id }) => id);
+    try {
+      await prisma.registration.updateMany({
+      where: { id: { in: ids } },
+      data: { checkedIn: false, checkInTime: null, checkInWeight: null },
+    });
+
+      let retryConfirmed = false;
+      const attempts = new Map<string, number>();
+      await page.route(`**/api/tournaments/${tournamentId}/registrations`, async (route) => {
+      const response = await route.fetch();
+      const body = await response.json() as Array<{ id: string; competitor: { schoolDojang: string | null } }>;
+      body.forEach((registration) => {
+        if (ids.includes(registration.id)) registration.competitor.schoolDojang = '[E2E] Bulk School';
+      });
+      await route.fulfill({ response, body: JSON.stringify(body) });
+    });
+      await page.route(`**/api/tournaments/${tournamentId}/registrations/*`, async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      const id = route.request().url().split('/').pop()!;
+      attempts.set(id, (attempts.get(id) || 0) + 1);
+      if (id === ids[0] && !retryConfirmed) {
+        await route.fulfill({ status: 409, contentType: 'application/json', body: '{"error":"Already changed by another desk"}' });
+      } else if (id === ids[1]) {
+        await route.abort('failed');
+      } else {
+        await route.continue();
+      }
+      });
+
+      await page.goto(`/checkin/${tournamentId}`);
+      await page.getByLabel('Filter by school').selectOption({ label: '[E2E] Bulk School' });
+      await page.getByRole('button', { name: /Check In All Filtered \(3\)/i }).click();
+
+      const rejected = page.getByRole('alert').filter({ hasText: /Already changed by another desk/i });
+      const uncertain = page.getByRole('alert').filter({ hasText: /acknowledgement was lost/i });
+      await expect(rejected).toBeVisible();
+      await expect(uncertain).toBeVisible();
+      expect(attempts.get(ids[0])).toBe(1);
+      expect(attempts.get(ids[1])).toBe(1);
+
+      retryConfirmed = true;
+      await rejected.getByRole('button', { name: /Retry failed/i }).click();
+      await expect(rejected).toHaveCount(0);
+      await expect(uncertain).toBeVisible();
+      expect(attempts.get(ids[0])).toBe(2);
+      expect(attempts.get(ids[1])).toBe(1);
+
+      await page.evaluate(() => window.dispatchEvent(new Event('online')));
+      await page.waitForTimeout(300);
+      expect(attempts.get(ids[1])).toBe(1);
+      await uncertain.getByRole('button', { name: /I verified server state/i }).click();
+      await expect(uncertain).toHaveCount(0);
+    } finally {
+      await prisma.$transaction(candidates.map((registration) => prisma.registration.update({
+        where: { id: registration.id },
+        data: {
+          checkedIn: registration.checkedIn,
+          checkInTime: registration.checkInTime,
+          checkInWeight: registration.checkInWeight,
+        },
+      })));
+      await prisma.$disconnect();
+    }
   });
 });

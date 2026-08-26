@@ -1,15 +1,16 @@
 import { expect, test } from '@playwright/test';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { loginRequestAsEmail } from './helpers';
 
 test.describe('organization onboarding', () => {
   test('an authenticated operator creates an organization and receives enforced free-plan capabilities', async ({ request }) => {
-    const login = await request.post('/api/auth/demo');
-    expect(login.ok()).toBeTruthy();
-    const { token } = await login.json() as { token: string };
-    const state = await request.storageState();
-    const csrf = state.cookies.find((cookie) => cookie.name === 'bowin_csrf')?.value;
-    expect(csrf).toBeTruthy();
-    const headers = { Authorization: `Bearer ${token}`, 'X-CSRF-Token': csrf! };
     const suffix = Date.now();
+    const email = `organization-onboarding-${suffix}@example.com`;
+    const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+    await prisma.user.create({ data: { email, firstName: 'Organization', lastName: 'Admin', role: 'admin', isActive: true } });
+    await prisma.$disconnect();
+    const headers = await loginRequestAsEmail(request, email);
 
     const created = await request.post('/api/organizations', {
       headers,

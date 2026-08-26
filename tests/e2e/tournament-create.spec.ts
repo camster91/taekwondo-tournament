@@ -1,9 +1,19 @@
 import { test, expect } from '@playwright/test';
-import { loginAsDemo } from './helpers';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { loginAsEmail, skipOnboardingTour } from './helpers';
+
+const email = 'tournament-create-e2e@example.com';
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
 test.describe('tournament create (admin form)', () => {
+  test.beforeAll(async () => {
+    await prisma.user.upsert({ where: { email }, update: { role: 'admin', isActive: true }, create: { email, firstName: 'Tournament', lastName: 'Creator', role: 'admin', isActive: true } });
+  });
+  test.afterAll(async () => { await prisma.user.deleteMany({ where: { email } }); await prisma.$disconnect(); });
   test.beforeEach(async ({ page }) => {
-    await loginAsDemo(page);
+    await skipOnboardingTour(page);
+    await loginAsEmail(page, email);
   });
 
   test('admin can create a new tournament and it appears in the list', async ({ page }) => {

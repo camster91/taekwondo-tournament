@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 5173;
+const PORT = Number(process.env.E2E_PORT || 5173);
 const BASE_URL = `http://localhost:${PORT}`;
 const E2E_STRIPE_WEBHOOK_SECRET = ['whsec', 'e2e', 'bowin', 'webhook', 'secret'].join('_');
 const E2E_METRICS_TOKEN = ['metrics', 'e2e', 'bowin', 'private', 'monitoring', 'token'].join('-');
@@ -53,7 +53,7 @@ export default defineConfig({
     // MUST be a string, not an array. The array form is broken in
     // Playwright 1.55-1.62 (Received an instance of Array from
     // the loader's resolve hook when the command is a tuple).
-    command: 'npm run dev',
+    command: `concurrently "npm run dev:server" "vite --port ${PORT}"`,
     // ENABLE_E2E_AUTH_BYPASS lets the dev-mode magic-link endpoint
     // return `code` + `magicUrl` in the response so the e2e suite
     // can sign in without a real email round-trip. NEVER set in

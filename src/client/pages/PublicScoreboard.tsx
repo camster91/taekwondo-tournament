@@ -10,6 +10,8 @@ import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 import { resolveDisplayRing } from '../utils/scoreboard-display';
 import { BowinLogo } from '../components/brand/BowinLogo';
 import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availability';
+import { fetchJson } from '../utils/api-status';
+import { resolveParentScoreboardState } from '../utils/parent-scoreboard-state';
 
 interface Match {
   id: string;
@@ -75,21 +77,14 @@ export default function PublicScoreboard() {
     data: tournament,
     isLoading: tournamentLoading,
     error: tournamentError,
+    refetch: retryTournament,
   } = useQuery<Tournament>({
     queryKey: ['scoreboard-tournament', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/public/tournaments/${tournamentId}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const msg = res.status === 404
-          ? 'Tournament not found'
-          : res.status === 400
-          ? (body.error || 'Tournament is not open')
-          : `Failed to load tournament (${res.status})`;
-        throw new Error(msg);
-      }
-      return res.json();
+      return fetchJson<Tournament>(fetch, `/api/public/tournaments/${tournamentId}`);
     },
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
     retry: false,
   });
 
@@ -97,24 +92,52 @@ export default function PublicScoreboard() {
   // Returns `{ divisions, displaySettings }` — displaySettings carries
   // director overrides (mode: 'all' | 'ring:N' | 'featured:<matchId>').
   // Closes M8 from the UI audit.
-  const { data: scoreboardData, isLoading: divisionsLoading, error: scoreboardError } = useQuery<{
+  const { data: scoreboardData, isLoading: divisionsLoading, error: scoreboardError, refetch: retryScoreboard } = useQuery<{
     divisions: Division[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
     queryKey: ['scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
-      const res = await fetch(buildScoreboardApiUrl(tournamentId || '', publicKey));
-      if (!res.ok) throw new Error('Failed to fetch scoreboard');
+      const data = await fetchJson<{
+        divisions: Division[];
+        displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
+      }>(fetch, buildScoreboardApiUrl(tournamentId || '', publicKey));
       setLastFetchAt(new Date());
-      return res.json();
+      return data;
     },
     refetchInterval: 5000, // TV mode: refresh every 5s (was 3s — cuts poll load)
     refetchIntervalInBackground: false,
     enabled: !tournamentError, // Don't keep retrying the scoreboard if the tournament is bad
+    retry: false,
   });
   const divisions = scoreboardData?.divisions;
   const displaySettings = scoreboardData?.displaySettings;
   const scoreboardUnavailableMessage = getScoreboardUnavailableMessage(scoreboardError);
+  const pageState = resolveParentScoreboardState({
+    tournamentLoading,
+    tournamentError,
+    tournamentReady: Boolean(tournament),
+    scoreboardLoading: divisionsLoading,
+    scoreboardError,
+    scoreboardReady: Boolean(scoreboardData),
+  });
+
+  useEffect(() => {
+    // A heartbeat means this display has just received current scoreboard data.
+    // Cached stale data must not keep a failing display looking healthy.
+    if (pageState !== 'ready') return;
+    const encodedId = encodeURIComponent(tournamentId || '');
+    const query = publicKey ? `?key=${encodeURIComponent(publicKey)}` : '';
+    const heartbeat = () => {
+      void fetch(`/api/public/tournaments/${encodedId}/display-heartbeat${query}`, {
+        method: 'POST',
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 15_000);
+    return () => window.clearInterval(timer);
+  }, [pageState, publicKey, tournamentId]);
 
   // Stale-data warning. If 15+ seconds have passed since the last successful
   // fetch, the venue Wi-Fi may be flaky or the backend is down. Show an
@@ -199,11 +222,11 @@ export default function PublicScoreboard() {
           no body) when the tournament ID is invalid. Closes #35.
           Same conditional handles 400 "Tournament is not open" — a common
           case for TV operators who paste the wrong URL mid-event. */}
-      {tournamentError && (
+      {pageState === 'tournament-unavailable' && (
         <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center">
           <AlertCircle className="h-20 w-20 text-red-400 mb-6" />
           <h1 className="text-3xl font-bold mb-3">
-            {tournamentError.message || 'Could not load tournament'}
+            {tournamentError?.message || 'Could not load tournament'}
           </h1>
           <p className="text-slate-300 max-w-md">
             Check the URL with the tournament director. The display link looks like
@@ -211,13 +234,14 @@ export default function PublicScoreboard() {
               /display/&lt;tournament-id&gt;
             </code>
           </p>
+          <button type="button" onClick={() => void retryTournament()} className="mt-5 min-h-11 rounded-lg border border-slate-500 px-4 py-2 font-semibold">Try again</button>
         </div>
       )}
       {/* Loading state. Spinner only shown while the tournament query is
           in-flight. After the tournament loads we keep the layout rendered
           even while divisions re-fetch (3s polling) so the TV doesn't flash.
           Closes #33. */}
-      {(tournamentLoading || divisionsLoading) && !tournamentError && !scoreboardUnavailableMessage && (
+      {(pageState === 'loading-tournament' || pageState === 'loading-scoreboard') && (
         <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center">
           <Loader2 className="h-16 w-16 text-primary-400 mb-6 animate-spin" />
           <h1 className="text-2xl font-bold mb-2">Loading tournament…</h1>
@@ -225,15 +249,24 @@ export default function PublicScoreboard() {
         </div>
       )}
       {/* Main board — only render once we have a valid tournament. */}
-      {scoreboardUnavailableMessage && !tournamentError && (
+      {pageState === 'scoreboard-unavailable' && (
         <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center" role="alert">
           <AlertCircle className="h-20 w-20 text-amber-400 mb-6" aria-hidden="true" />
           <h1 className="text-3xl font-bold mb-3">Live scoreboard unavailable</h1>
           <p className="text-slate-300 max-w-md">{scoreboardUnavailableMessage}</p>
+          <button type="button" onClick={() => void retryScoreboard()} className="mt-5 min-h-11 rounded-lg border border-slate-500 px-4 py-2 font-semibold">Try again</button>
         </div>
       )}
-      {!tournamentLoading && !divisionsLoading && !tournamentError && !scoreboardUnavailableMessage && (
+      {(pageState === 'ready' || pageState === 'stale-scoreboard') && (
       <>
+      {pageState === 'stale-scoreboard' && (
+        <div role="alert" className="border-b border-amber-400/40 bg-amber-400/15 px-4 py-3 text-center text-amber-100">
+          <p className="font-semibold">Showing the last confirmed scoreboard</p>
+          <p className="text-sm">Live updates are temporarily unavailable. Match information below may be out of date.</p>
+          {lastFetchAt && <p className="mt-1 text-xs">Last confirmed at {lastFetchAt.toLocaleTimeString()}.</p>}
+          <button type="button" onClick={() => { if (tournamentError) void retryTournament(); if (scoreboardError) void retryScoreboard(); }} className="mt-2 min-h-11 rounded-lg border border-amber-300/60 px-4 py-2 text-sm font-semibold">Try again</button>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-900 via-primary-950 to-slate-900 border-b border-white/5">
         <div className="px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">

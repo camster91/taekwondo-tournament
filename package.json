@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:client": "vite",
-    "build": "prisma generate && vite build && tsc -p tsconfig.server.json",
+    "build": "prisma generate && vite build && tsc -p tsconfig.server.json && tsc -p tsconfig.demo.json",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
     "build:client": "vite build",
@@ -24,7 +24,10 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium firefox webkit",
+    "qa:smoke": "node scripts/production-smoke.mjs",
     "seed": "tsx prisma/seed.ts",
+    "demo:reset": "tsx prisma/demo-seed.ts",
+    "demo:reset:production": "node dist-demo/prisma/demo-seed.js",
     "build:full": "prisma generate && prisma db push && vite build && tsc -p tsconfig.server.json"
   },
   "keywords": [

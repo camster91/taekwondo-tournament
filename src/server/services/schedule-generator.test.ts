@@ -9,6 +9,7 @@
 // strings (the only thing that matters for the user). If the loop
 // changes, this test will fail and force the change to be revisited.
 
+import { describe, expect, it, vi } from 'vitest';
 import { generateSchedule } from './schedule-generator.js';
 
 interface Slot {
@@ -203,5 +204,17 @@ describe('generateSchedule: registration identity conflicts', () => {
     const conflicts = result.warnings.filter((warning) => warning.includes('double-booked'));
     expect(conflicts).toHaveLength(1);
     expect(conflicts[0]).toContain('Alex Kim');
+  });
+
+  it('is side-effect free when evaluating configuration overrides for a preview', async () => {
+    const update = vi.fn();
+    const prisma = {
+      tournament: { findUnique: async () => tournament, update },
+      division: { findMany: async () => [] },
+    };
+
+    await generateSchedule(prisma as never, tournament.id, { ringCount: 2 });
+
+    expect(update).not.toHaveBeenCalled();
   });
 });

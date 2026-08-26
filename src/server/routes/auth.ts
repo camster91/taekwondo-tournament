@@ -3,13 +3,14 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { type RateLimitExceededEventHandler } from 'express-rate-limit';
 import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, setCsrfCookie, type AuthenticatedRequest, invalidateAuthCache } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
 import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
+import { maybeIssueOfflineCapability } from '../services/offline-capability.js';
 
 const router = Router();
 
@@ -46,6 +47,25 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => rateLimitDisabled,
+});
+const demoRateLimitMax = Number.parseInt(process.env.DEMO_RATE_LIMIT_MAX ?? '30', 10);
+const demoLimitHandler: RateLimitExceededEventHandler = (req, res) => {
+  const resetTime = (req as unknown as { rateLimit?: { resetTime?: Date } }).rateLimit?.resetTime;
+  const retryAfterSeconds = resetTime
+    ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 1000))
+    : 15 * 60;
+  (res as unknown as Response).status(429).json({
+    error: 'Too many demo sign-in attempts. Please try the demo again later.',
+    retryAfterSeconds,
+  });
+};
+const demoLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: Number.isSafeInteger(demoRateLimitMax) && demoRateLimitMax > 0 ? demoRateLimitMax : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => rateLimitDisabled,
+  handler: demoLimitHandler,
 });
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
@@ -434,11 +454,17 @@ router.post('/setup', registerLimiter, async (req: Request, res: Response) => {
   }
 });
 
-// Check if setup is needed (no users exist)
+function isDemoLoginEnabled(): boolean {
+  return process.env.ENABLE_DEMO_LOGIN === '1'
+    && (process.env.NODE_ENV !== 'production' || process.env.DEMO_ISOLATED_DATA === '1');
+}
+
+// Check if setup is needed (no users exist) and advertise only capabilities
+// that this exact server instance will accept.
 router.get('/setup-status', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const count = await prisma.user.count();
-  res.json({ needsSetup: count === 0 });
+  res.json({ needsSetup: count === 0, demoLoginEnabled: isDemoLoginEnabled() });
 });
 
 // v2: dev-only token endpoint for seeding + testing without SMTP.
@@ -549,6 +575,7 @@ router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response)
         role: true,
         createdAt: true,
         lastLogin: true,
+        demoExpiresAt: true,
         tournamentAccess: {
           include: {
             tournament: {
@@ -563,7 +590,21 @@ router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response)
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(user);
+    const responseUser = {
+      ...user,
+      isDemo: user.demoExpiresAt !== null,
+    };
+    const offlineCapability = maybeIssueOfflineCapability({
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      createdAt: user.createdAt.toISOString(),
+      isDemo: responseUser.isDemo,
+      demoExpiresAt: user.demoExpiresAt?.toISOString() ?? null,
+    });
+    res.json(offlineCapability ? { ...responseUser, offlineCapability } : responseUser);
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
@@ -1002,39 +1043,74 @@ router.post('/setup-admin', registerLimiter, async (req: Request, res: Response)
 });
 
 // Demo mode: anyone can sign in as a guest without an email.
-// - Creates (or reuses) a "demo@bowin.app" user
+// - Creates a unique synthetic demo principal for each login
 // - Mints a JWT with a 4-hour expiry
 // - Designed for the public live URL so visitors can try the app
 //   without needing to receive a magic-link email
 //
-// SECURITY: gated by ENABLE_DEMO_LOGIN. Defaults to ON in development
-// and OFF in production. Operators must explicitly opt in to expose
-// the demo account on a live deploy (the demo user has admin role).
-const DEMO_EMAIL = 'demo@bowin.app';
+// SECURITY: gated by ENABLE_DEMO_LOGIN. Production additionally requires
+// DEMO_ISOLATED_DATA=1 as an operator attestation that this admin account can
+// access only synthetic, isolated data.
 const DEMO_TTL_SECONDS = 4 * 60 * 60; // 4 hours
+const DEMO_CLEANUP_BATCH_SIZE = 100;
+
+async function cleanupExpiredDemoPrincipals(prisma: PrismaClient): Promise<void> {
+  try {
+    const cleanupNow = new Date();
+    const expiredUsers = await prisma.user.findMany({
+      where: {
+        demoExpiresAt: { lt: cleanupNow },
+        tournamentAccess: { none: {} },
+        organizationMembers: { none: {} },
+      },
+      orderBy: { demoExpiresAt: 'asc' },
+      take: DEMO_CLEANUP_BATCH_SIZE,
+      select: { id: true },
+    });
+
+    if (expiredUsers.length === 0) return;
+
+    await prisma.user.deleteMany({
+      where: {
+        id: { in: expiredUsers.map(({ id }) => id) },
+        demoExpiresAt: { lt: cleanupNow },
+        tournamentAccess: { none: {} },
+        organizationMembers: { none: {} },
+      },
+    });
+  } catch {
+    // Cleanup is maintenance, not an authentication dependency. Avoid
+    // logging the database error because it may contain user data.
+    console.warn('Demo principal cleanup failed; continuing login.');
+  }
+}
 // Closes S2 — old gate "on unless NODE_ENV=production" let the
 // demo account activate on any deploy where NODE_ENV was unset
 // or set to "staging". The demo user is admin. Now requires an
-// explicit ENABLE_DEMO_LOGIN=1, no NODE_ENV fallback.
-const demoLoginEnabled = process.env.ENABLE_DEMO_LOGIN === '1';
+// explicit ENABLE_DEMO_LOGIN=1, no NODE_ENV fallback. Production fails closed
+// unless the separate isolated-data attestation is also present.
+const demoLoginEnabled = isDemoLoginEnabled();
 
 if (demoLoginEnabled) {
-  router.post('/demo', authLimiter, async (_req: Request, res: Response) => {
+  router.post('/demo', demoLimiter, async (_req: Request, res: Response) => {
     try {
       const prisma: PrismaClient = _req.app.locals.prisma;
 
-      // Find or create the demo user (idempotent, shared across all visitors)
-      let user = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            email: DEMO_EMAIL,
-            firstName: 'Demo',
-            lastName: 'Visitor',
-            role: 'admin', // demo gets full admin so they can poke every feature
-          },
-        });
-      }
+      void cleanupExpiredDemoPrincipals(prisma);
+
+      // Each visitor gets an independent principal. Standard logout can then
+      // revoke only that visitor's JWT without affecting concurrent sessions.
+      const demoSessionId = crypto.randomBytes(16).toString('hex');
+      const demoExpiresAt = new Date(Date.now() + DEMO_TTL_SECONDS * 1000);
+      const user = await prisma.user.create({
+        data: {
+          email: `demo-${demoSessionId}@bowin.app`,
+          firstName: 'Demo',
+          lastName: 'Visitor',
+          role: 'admin', // safe only behind the isolated synthetic-data gate
+          demoExpiresAt,
+        },
+      });
 
       const { createToken } = await import('../middleware/auth.js');
       const token = createToken(
@@ -1054,7 +1130,7 @@ if (demoLoginEnabled) {
         ...maybeTokenField(token),
         user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
         expiresIn: DEMO_TTL_SECONDS,
-        message: 'Demo session active. Changes you make are visible to all demo visitors.',
+        message: 'Synthetic demo session active. All data in this environment is fabricated.',
       });
     } catch (err: unknown) {
       console.error('Demo login error:', err);

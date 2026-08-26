@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -14,12 +14,15 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders } from '../context/AuthContext';
-import { Card, CardHeader, CardBody } from '../components/ui';
+import { Card, CardHeader, CardBody, Modal, ConfirmDialog, Select } from '../components/ui';
+import OperationStatus from '../components/ui/OperationStatus';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
 import { DataTable, TableHead, TableBody } from '../components/ui';
+import ScheduleOptimizationReview from '../components/schedule/ScheduleOptimizationReview';
+import { isScheduleConditionBufferDirty, type ScheduleRecommendationRecord } from '../utils/schedule-recommendation';
 
 interface ScheduledDivision {
   divisionId: string;
@@ -32,6 +35,7 @@ interface ScheduledDivision {
   startTime: string;
   endTime: string;
   estimatedDurationMinutes: number;
+  locked?: boolean;
   // Optional list of competitor names, populated when the
   // /api/tournaments/:id/schedule endpoint enriches the response
   // with division contents (used by the bracket preview to show
@@ -60,9 +64,37 @@ interface TournamentSchedule {
   warnings: string[];
 }
 
+interface ScheduleImpact {
+  affectedDivisionIds: string[];
+  affectedLabels: string[];
+  ringChanges: number;
+  timeChanges: number;
+  addedWarnings: string[];
+  removedWarnings: string[];
+}
+
+interface SchedulePreview {
+  before: TournamentSchedule;
+  after: TournamentSchedule;
+  impact: ScheduleImpact;
+  expectedUpdatedAt: string;
+  expectedInputVersion: string;
+  operationKey: string;
+  proposedConfig: ScheduleConfig;
+}
+
+interface ScheduleConditions {
+  restWindowMinutes: number;
+  liveDelaySources: Array<{ ring: number; delayMinutes: number; source: string; observedAt: string }>;
+  incidentSources: Array<{ incidentId: string; ring: number; label: string; observedAt: string }>;
+}
+
+interface TournamentIncident { id: string; type: string; severity: string; actionTaken: string | null; deletedAt: string | null }
+
 export default function Schedule() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [config, setConfig] = useState<Partial<ScheduleConfig>>({
     startTime: '09:00',
     endTime: '17:00',
@@ -83,35 +115,257 @@ export default function Schedule() {
     },
   });
 
-  const regenerateMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/tournaments/${id}/schedule`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ config }),
-      });
-      if (!res.ok) throw new Error('Failed to regenerate schedule');
-      return res.json();
+  const [preview, setPreview] = useState<SchedulePreview | null>(null);
+  const [lastAuditId, setLastAuditId] = useState<string | null>(null);
+  const [lastOperationKey, setLastOperationKey] = useState<string | null>(null);
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [uncertainOperation, setUncertainOperation] = useState<{ phase: 'apply' | 'undo'; operationKey: string; auditId?: string } | null>(null);
+  const [optimizationOpen, setOptimizationOpen] = useState(false);
+  const [optimizationApplyConfirm, setOptimizationApplyConfirm] = useState(false);
+  const [optimizationStatus, setOptimizationStatus] = useState<{ state: 'pending' | 'rejected' | 'resolved'; message: string } | null>(null);
+  const [optimizationUncertain, setOptimizationUncertain] = useState(false);
+  const [optimizationUndoConfirm, setOptimizationUndoConfirm] = useState<{ recommendation: ScheduleRecommendationRecord; returnToReview: boolean } | null>(null);
+  const [restWindowMinutes, setRestWindowMinutes] = useState(10);
+  const [ringDelays, setRingDelays] = useState<Record<number, string>>({});
+  const [incidentRings, setIncidentRings] = useState<Record<string, string>>({});
+  const [conditionsHydratedForId, setConditionsHydratedForId] = useState<string | null>(null);
+
+  const { data: scheduleConditions, isLoading: conditionsLoading, isError: scheduleConditionsError, refetch: refetchConditions } = useQuery<ScheduleConditions>({
+    queryKey: ['schedule-conditions', id], enabled: Boolean(id), retry: false,
+    queryFn: async () => {
+      const res = await fetch(`/api/recommendations/tournament/${id}/schedule/conditions`, { headers: getAuthHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Live conditions could not be loaded');
+      return body as ScheduleConditions;
     },
-    onSuccess: () => {
-      refetch();
+  });
+  const { data: unresolvedIncidents = [], isLoading: incidentsLoading, isError: incidentsError, refetch: refetchIncidents } = useQuery<TournamentIncident[]>({
+    queryKey: ['schedule-incidents', id], enabled: Boolean(id),
+    queryFn: async () => {
+      const res = await fetch(`/api/incidents/tournament/${id}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Incidents could not be loaded');
+      return (await res.json() as TournamentIncident[]).filter((incident) => !incident.actionTaken && !incident.deletedAt);
     },
   });
 
-  // Live region announcement for schedule regeneration success/failure.
-  const [scheduleAnnounce, setScheduleAnnounce] = useState('');
+  const {
+    data: optimizationRecommendations,
+    isLoading: optimizationLoading,
+    isError: optimizationLoadError,
+    refetch: refetchOptimization,
+  } = useQuery<ScheduleRecommendationRecord[]>({
+    queryKey: ['schedule-recommendations', id],
+    enabled: Boolean(id),
+    queryFn: async () => {
+      const res = await fetch(`/api/recommendations/tournament/${id}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Current schedule recommendations could not be loaded');
+      return (await res.json() as ScheduleRecommendationRecord[])
+        .filter((item) => item.recommendationType === 'schedule_optimization_v1');
+    },
+  });
+  const latestOptimization = optimizationRecommendations?.[0];
+  const latestReversibleOptimization = optimizationRecommendations?.find((item) => item.status === 'applied' && item.operationAudit?.canUndo);
+  const conditionsHydrated = Boolean(id && conditionsHydratedForId === id && scheduleConditions);
+  const conditionsDirty = conditionsHydrated && isScheduleConditionBufferDirty(
+    { restWindowMinutes, ringDelays, incidentRings },
+    scheduleConditions,
+  );
+  const optimizationInputsUnavailable = !conditionsHydrated || conditionsDirty || scheduleConditionsError || incidentsLoading || incidentsError;
+
+  const optimizationMutation = useMutation({
+    mutationFn: async ({ action, recommendationId }: { action: 'propose' | 'approve' | 'reject' | 'apply' | 'undo'; recommendationId?: string; returnToReview?: boolean }) => {
+      if (optimizationInputsUnavailable && (action === 'propose' || action === 'approve' || action === 'apply')) {
+        throw new Error('Save live-condition edits and load unresolved incidents before this action');
+      }
+      const path = action === 'propose'
+        ? `/api/recommendations/tournament/${id}/schedule/propose`
+        : `/api/recommendations/tournament/${id}/${recommendationId}/${action}`;
+      const res = await fetch(path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: action === 'reject' ? JSON.stringify({ reason: 'Rejected during director schedule review' }) : undefined,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : `Could not ${action} schedule recommendation`);
+      return { action };
+    },
+    onMutate: ({ action }) => setOptimizationStatus({ state: 'pending', message: `${action === 'propose' ? 'Generating' : `${action[0].toUpperCase()}${action.slice(1)}ing`} the deterministic schedule recommendation…` }),
+    onError: (error, variables) => {
+      const uncertain = error instanceof TypeError && (variables.action === 'apply' || variables.action === 'undo');
+      if (uncertain) {
+        setOptimizationUncertain(true);
+        setOptimizationApplyConfirm(false);
+        setOptimizationOpen(false);
+      } else if (variables.action === 'apply' || variables.action === 'undo') {
+        setOptimizationApplyConfirm(false);
+        setOptimizationUndoConfirm(null);
+        if (variables.action === 'apply' || variables.returnToReview) setOptimizationOpen(true);
+      }
+      setOptimizationStatus({
+        state: 'rejected',
+        message: uncertain
+        ? 'The request was sent but its acknowledgement was not received. It may have changed the schedule. Do not submit again; check current server state.'
+        : error instanceof Error ? error.message : 'Schedule recommendation operation failed',
+      });
+    },
+    onSuccess: async ({ action }) => {
+      await queryClient.invalidateQueries({ queryKey: ['schedule-recommendations', id] });
+      if (action === 'apply' || action === 'undo') await refetch();
+      setOptimizationApplyConfirm(false);
+      setOptimizationUndoConfirm(null);
+      setOptimizationUncertain(false);
+      setOptimizationStatus({ state: 'resolved', message: action === 'propose'
+        ? 'Proposal ready for review. The schedule has not changed.'
+        : action === 'approve' ? 'Proposal approved. The schedule is still unchanged.'
+          : action === 'apply' ? 'Approved optimization applied and reconciled with the current schedule.'
+            : action === 'undo' ? 'Optimization undone after verifying no later schedule edit.'
+              : 'Proposal rejected without changing the schedule.' });
+    },
+  });
+
+  const scheduleLockMutation = useMutation({
+    mutationFn: async ({ divisionId, locked }: { divisionId: string; locked: boolean }) => {
+      const res = await fetch(`/api/recommendations/tournament/${id}/schedule/divisions/${divisionId}/lock`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, body: JSON.stringify({ locked }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Schedule lock could not be saved');
+      return { divisionId, locked };
+    },
+    onMutate: ({ locked }) => setOptimizationStatus({ state: 'pending', message: `${locked ? 'Locking' : 'Unlocking'} the reviewed schedule position…` }),
+    onError: (error) => setOptimizationStatus({ state: 'rejected', message: error instanceof Error ? error.message : 'Schedule lock could not be saved' }),
+    onSuccess: async ({ locked }) => {
+      await Promise.all([refetch(), queryClient.invalidateQueries({ queryKey: ['schedule-recommendations', id] })]);
+      setOptimizationStatus({ state: 'resolved', message: `Schedule position ${locked ? 'locked' : 'unlocked'} and current proposals invalidated for review.` });
+    },
+  });
+
+  const conditionsMutation = useMutation({
+    mutationFn: async () => {
+      const body = {
+        restWindowMinutes,
+        ringDelays: Object.entries(ringDelays).flatMap(([ring, value]) => value === '' ? [] : [{ ring: Number(ring), delayMinutes: Number(value) }]),
+        incidentBlocks: Object.entries(incidentRings).flatMap(([incidentId, ring]) => ring === '' ? [] : [{ incidentId, ring: Number(ring) }]),
+      };
+      const res = await fetch(`/api/recommendations/tournament/${id}/schedule/conditions`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, body: JSON.stringify(body),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof result.error === 'string' ? result.error : 'Live conditions could not be saved');
+    },
+    onMutate: () => setOptimizationStatus({ state: 'pending', message: 'Saving bounded live conditions with server-confirmed provenance…' }),
+    onError: (error) => setOptimizationStatus({ state: 'rejected', message: error instanceof Error ? error.message : 'Live conditions could not be saved' }),
+    onSuccess: async () => {
+      await Promise.all([refetchConditions(), queryClient.invalidateQueries({ queryKey: ['schedule-recommendations', id] })]);
+      setOptimizationStatus({ state: 'resolved', message: 'Live conditions saved with server time. Existing proposals were marked stale; generate a fresh proposal.' });
+    },
+  });
+
+  const previewMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/tournaments/${id}/schedule/preview`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ config }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to preview schedule');
+      return res.json() as Promise<SchedulePreview>;
+    },
+    onMutate: () => setOperationError(null),
+    onSuccess: setPreview,
+    onError: (error) => setOperationError(error instanceof Error ? error.message : 'Failed to preview schedule'),
+  });
+
+  const regenerateMutation = useMutation({
+    mutationFn: async (confirmed: SchedulePreview) => {
+      const res = await fetch(`/api/tournaments/${id}/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          config: confirmed.proposedConfig,
+          expectedUpdatedAt: confirmed.expectedUpdatedAt,
+          expectedInputVersion: confirmed.expectedInputVersion,
+          operationKey: confirmed.operationKey,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to regenerate schedule');
+      return res.json() as Promise<TournamentSchedule & { auditId: string }>;
+    },
+    onMutate: () => setOperationError(null),
+    onSuccess: async (result, confirmed) => {
+      await refetch();
+      setLastAuditId(result.auditId);
+      setLastOperationKey(confirmed.operationKey);
+      setPreview(null);
+    },
+    onError: (error, confirmed) => {
+      if (error instanceof TypeError) {
+        setUncertainOperation({ phase: 'apply', operationKey: confirmed.operationKey });
+        setPreview(null);
+        return;
+      }
+      setOperationError(error instanceof Error ? error.message : 'Failed to regenerate schedule');
+    },
+  });
+
+  const undoMutation = useMutation({
+    mutationFn: async ({ auditId }: { auditId: string; operationKey: string }) => {
+      const res = await fetch(`/api/tournaments/${id}/schedule/undo/${auditId}`, { method: 'POST', headers: getAuthHeaders() });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to undo schedule change');
+    },
+    onMutate: () => setOperationError(null),
+    onSuccess: async () => { await refetch(); setLastAuditId(null); setLastOperationKey(null); },
+    onError: (error, operation) => {
+      if (error instanceof TypeError) {
+        setUncertainOperation({ phase: 'undo', operationKey: operation.operationKey, auditId: operation.auditId });
+        return;
+      }
+      setOperationError(error instanceof Error ? error.message : 'Failed to undo schedule change');
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async (operation: NonNullable<typeof uncertainOperation>) => {
+      const res = await fetch(`/api/tournaments/${id}/schedule/operations/${operation.operationKey}`, { headers: getAuthHeaders() });
+      if (res.status === 404) return { found: false as const };
+      if (!res.ok) throw new Error('Could not check schedule operation status');
+      return { found: true as const, ...(await res.json() as { auditId: string; applied: boolean; undone: boolean }) };
+    },
+    onSuccess: async (status, operation) => {
+      if (!status.found) {
+        setUncertainOperation(null);
+        setOperationError('The server has no record of that schedule change. Review the latest schedule before trying again.');
+        await refetch();
+        return;
+      }
+      await refetch();
+      if (operation.phase === 'apply' && !status.undone) {
+        setLastAuditId(status.auditId);
+        setLastOperationKey(operation.operationKey);
+      } else if (operation.phase === 'undo' && status.undone) {
+        setLastAuditId(null);
+        setLastOperationKey(null);
+      }
+      setUncertainOperation(null);
+    },
+    onError: (error) => setOperationError(error instanceof Error ? error.message : 'Could not check schedule operation status'),
+  });
+
   useEffect(() => {
-    if (regenerateMutation.isSuccess) {
-      setScheduleAnnounce('Schedule regenerated.');
-    }
-  }, [regenerateMutation.isSuccess]);
+    if (schedule?.config && !preview) setConfig(schedule.config);
+  }, [preview, schedule?.config]);
+
   useEffect(() => {
-    if (regenerateMutation.isError) {
-      setScheduleAnnounce(
-        `Failed to regenerate schedule: ${(regenerateMutation.error as Error)?.message ?? 'Unknown error'}`
-      );
-    }
-  }, [regenerateMutation.isError]);
+    setConditionsHydratedForId(null);
+  }, [id]);
+
+  useEffect(() => {
+    if (!scheduleConditions || !id) return;
+    setRestWindowMinutes(scheduleConditions.restWindowMinutes);
+    setRingDelays(Object.fromEntries(scheduleConditions.liveDelaySources.map((entry) => [entry.ring, String(entry.delayMinutes)])));
+    setIncidentRings(Object.fromEntries(scheduleConditions.incidentSources.map((entry) => [entry.incidentId, String(entry.ring)])));
+    setConditionsHydratedForId(id);
+  }, [id, scheduleConditions]);
+
+  const scheduleBusy = previewMutation.isPending || regenerateMutation.isPending || undoMutation.isPending || statusMutation.isPending || optimizationMutation.isPending || scheduleLockMutation.isPending || conditionsMutation.isPending || optimizationUncertain || Boolean(uncertainOperation);
 
   const exportPDF = async () => {
     if (!schedule) return;
@@ -254,12 +508,21 @@ export default function Schedule() {
             </Button>
             <Button
               variant="secondary"
-              onClick={() => regenerateMutation.mutate()}
-              disabled={regenerateMutation.isPending}
+              onClick={() => previewMutation.mutate()}
+              disabled={scheduleBusy}
               aria-label="Regenerate schedule"
             >
-              {regenerateMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" />}
-              <span className="hidden sm:inline">{regenerateMutation.isPending ? 'Generating...' : 'Regenerate'}</span>
+              {previewMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" />}
+              <span className="hidden sm:inline">{previewMutation.isPending ? 'Preparing preview...' : 'Regenerate'}</span>
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setOptimizationOpen(true)}
+              disabled={scheduleBusy || !schedule?.schedule.length || optimizationInputsUnavailable}
+              aria-label="Optimize live schedule"
+            >
+              <Clock className="h-4 w-4 mr-2" aria-hidden="true" />
+              <span className="hidden sm:inline">Optimize live</span>
             </Button>
             <Button
               variant="primary"
@@ -283,10 +546,87 @@ export default function Schedule() {
         </Link>
       </PageHeader>
 
+      {operationError && !preview && <OperationStatus state="rejected" message={operationError} className="mb-6" />}
+      {uncertainOperation && (
+        <OperationStatus
+          state="rejected"
+          message={uncertainOperation.phase === 'apply'
+            ? 'The schedule request was sent, but its acknowledgement was not received. It may have applied. Do not submit again until server status is checked.'
+            : 'The undo request was sent, but its acknowledgement was not received. The previous schedule may already be restored.'}
+          actionLabel={statusMutation.isPending ? undefined : 'Check server status'}
+          onAction={statusMutation.isPending ? undefined : () => statusMutation.mutate(uncertainOperation)}
+          className="mb-6"
+        />
+      )}
+      {regenerateMutation.isPending && <OperationStatus state="pending" message="Applying the confirmed schedule and recording its audit history." className="mb-6" />}
+      {undoMutation.isPending && <OperationStatus state="pending" message="Restoring the previous schedule after verifying no later change conflicts." className="mb-6" />}
+      {lastAuditId && !undoMutation.isPending && !uncertainOperation && (
+        <OperationStatus
+          state="resolved"
+          message="Schedule applied and reconciled. This change can be undone while no later schedule edit has replaced it."
+          actionLabel="Undo schedule change"
+          onAction={lastOperationKey ? () => undoMutation.mutate({ auditId: lastAuditId, operationKey: lastOperationKey }) : undefined}
+          className="mb-6"
+        />
+      )}
+
+      <Card className="mb-6">
+        <CardHeader title="Live conditions" description="Director-confirmed delays and unresolved incidents expire automatically and are revalidated before application." />
+        <CardBody className="space-y-4">
+          {conditionsLoading && <div role="status" className="flex items-center gap-2 text-sm"><Spinner size="sm" /> Loading saved live conditionsâ€¦</div>}
+          {scheduleConditionsError && <OperationStatus state="rejected" message="Stored live conditions could not be loaded. Editing and optimization are disabled until the authoritative snapshot is available." actionLabel="Try again" onAction={() => void refetchConditions()} />}
+          {conditionsDirty && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><p className="font-semibold">Unsaved changes</p><p>These live-condition edits are not used by the optimizer. Save or restore them before generating, approving, or applying a proposal.</p></div>}
+          {incidentsLoading && <div role="status" className="flex items-center gap-2 text-sm"><Spinner size="sm" /> Loading unresolved incidents…</div>}
+          {incidentsError && <OperationStatus state="rejected" message="Unresolved incidents could not be loaded. Saving and optimization are disabled so missing incident evidence is not treated as zero." actionLabel="Try again" onAction={() => void refetchIncidents()} />}
+          <fieldset disabled={scheduleBusy || !conditionsHydrated || scheduleConditionsError || incidentsLoading || incidentsError} aria-busy={conditionsMutation.isPending || conditionsLoading} className="space-y-4">
+            <div className="max-w-xs"><Label htmlFor="optimizer-rest-window">Athlete rest window (minutes)</Label><Input id="optimizer-rest-window" type="number" min={0} max={240} value={restWindowMinutes} onChange={(event) => setRestWindowMinutes(Number(event.target.value))} /></div>
+            <div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Director-confirmed ring delays</h3><div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: schedule?.config.ringCount ?? 0 }, (_, index) => index + 1).map((ring) => <div key={ring}><Label htmlFor={`optimizer-ring-delay-${ring}`}>Ring {ring} delay (minutes)</Label><Input id={`optimizer-ring-delay-${ring}`} type="number" min={0} max={240} placeholder="No delay" value={ringDelays[ring] ?? ''} onChange={(event) => setRingDelays((current) => ({ ...current, [ring]: event.target.value }))} /></div>)}
+            </div></div>
+            {unresolvedIncidents.length > 0 && <div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Unresolved incident ring blocks</h3><div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {unresolvedIncidents.map((incident) => <div key={incident.id}><Label htmlFor={`optimizer-incident-${incident.id}`}>{incident.type} ({incident.severity})</Label><Select id={`optimizer-incident-${incident.id}`} value={incidentRings[incident.id] ?? ''} onChange={(event) => setIncidentRings((current) => ({ ...current, [incident.id]: event.target.value }))}><option value="">Does not block a ring</option>{Array.from({ length: schedule?.config.ringCount ?? 0 }, (_, index) => index + 1).map((ring) => <option key={ring} value={ring}>Blocks Ring {ring}</option>)}</Select></div>)}
+            </div></div>}
+            <Button variant="secondary" loading={conditionsMutation.isPending} disabled={!conditionsHydrated || Boolean(scheduleConditionsError) || incidentsLoading || incidentsError} onClick={() => conditionsMutation.mutate()}>Save live conditions</Button>
+          </fieldset>
+        </CardBody>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader title="Live schedule optimization" description="Deterministic, server-validated proposals. Approval does not change the schedule; application is a separate confirmed action." />
+        <CardBody className="space-y-3">
+          {optimizationStatus && <OperationStatus state={optimizationStatus.state} message={optimizationStatus.message}
+            actionLabel={optimizationStatus.state === 'rejected' ? 'Check current server state' : undefined}
+            onAction={optimizationStatus.state === 'rejected' ? () => void (async () => {
+              const result = await refetchOptimization();
+              await refetch();
+              if (!result.error) {
+                setOptimizationUncertain(false);
+                setOptimizationStatus({ state: 'resolved', message: 'Current recommendation and schedule state reloaded from the server. Review them before another action.' });
+              }
+            })() : undefined} />}
+          {optimizationLoading ? <div role="status" className="flex items-center gap-2 text-sm"><Spinner size="sm" /> Loading current optimization state…</div>
+            : optimizationLoadError ? <OperationStatus state="rejected" message="Current optimization state is unavailable. Proposal actions are disabled until the server state is known." actionLabel="Try again" onAction={() => void refetchOptimization()} />
+              : <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-gray-600 dark:text-gray-300">{latestOptimization ? `Latest proposal: ${latestOptimization.status}. Review its evidence before acting.` : 'No optimization proposal exists for the current schedule.'}</p>
+                <div className="flex gap-2">
+                  {latestOptimization && <Button variant="secondary" onClick={() => setOptimizationOpen(true)}>Review proposal</Button>}
+                  {(!latestOptimization || latestOptimization.status === 'rejected' || latestOptimization.status === 'applied') && (
+                    <Button variant="secondary" loading={optimizationMutation.isPending} disabled={optimizationInputsUnavailable} onClick={() => optimizationMutation.mutate({ action: 'propose' })}>Generate proposal</Button>
+                  )}
+                </div>
+              </div>}
+          {latestReversibleOptimization && latestReversibleOptimization.id !== latestOptimization?.id && (
+            <OperationStatus state="resolved" message={`A previously applied optimization remains reversible (${latestReversibleOptimization.proposedDiff.moved.length} moves).`}
+              actionLabel="Review undo" onAction={() => setOptimizationUndoConfirm({ recommendation: latestReversibleOptimization, returnToReview: false })} />
+          )}
+        </CardBody>
+      </Card>
+
       {/* Configuration */}
       <Card className="mb-6">
         <CardHeader title="Schedule Configuration" as="h2" />
         <CardBody>
+          <fieldset disabled={scheduleBusy} aria-busy={scheduleBusy} className="contents">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <Label htmlFor="schedule-start-time">Start Time</Label>
@@ -384,6 +724,7 @@ export default function Schedule() {
               />
             </div>
           </div>
+          </fieldset>
         </CardBody>
       </Card>
 
@@ -453,6 +794,15 @@ export default function Schedule() {
                           {div.competitorCount} competitors •{' '}
                           {div.estimatedDurationMinutes} min
                         </p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="mt-2 w-full"
+                          aria-pressed={Boolean(div.locked)}
+                          aria-label={`${div.locked ? 'Unlock' : 'Lock'} ${div.divisionName} at Ring ${div.ring}, ${div.startTime}`}
+                          disabled={scheduleBusy}
+                          onClick={() => scheduleLockMutation.mutate({ divisionId: div.divisionId, locked: !div.locked })}
+                        >{div.locked ? 'Locked — unlock position' : 'Lock ring and time'}</Button>
                       </div>
                     ))}
                   </div>
@@ -469,7 +819,7 @@ export default function Schedule() {
               description="Generate divisions first, then create a schedule."
               action={{
                 label: 'Generate Schedule',
-                onClick: () => regenerateMutation.mutate(),
+                onClick: () => previewMutation.mutate(),
               }}
               secondaryAction={{
                 label: 'Manage Divisions',
@@ -550,10 +900,100 @@ export default function Schedule() {
         </Card>
       )}
 
-      {/* Live region for schedule regeneration announcements. */}
-      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-        {scheduleAnnounce}
-      </div>
+      <Modal
+        isOpen={optimizationOpen}
+        onClose={() => { if (!optimizationMutation.isPending) setOptimizationOpen(false); }}
+        closeDisabled={optimizationMutation.isPending}
+        title="Review schedule optimization"
+        subtitle="A deterministic proposal from server-owned schedule and live-condition evidence. Nothing changes until approval and application."
+        size="xl"
+      >
+        {optimizationLoading ? <div role="status" className="flex items-center gap-2"><Spinner size="sm" /> Loading proposal…</div>
+          : optimizationLoadError ? <OperationStatus state="rejected" message="The current proposal cannot be loaded safely." actionLabel="Try again" onAction={() => void refetchOptimization()} />
+            : latestOptimization ? <div className="space-y-4">
+              {optimizationInputsUnavailable && <OperationStatus state="rejected" message="Save live-condition edits and resolve incident loading before approving or applying this proposal." />}
+              {optimizationStatus?.state === 'rejected' && <OperationStatus state="rejected" message={optimizationStatus.message} />}
+              <ScheduleOptimizationReview
+              recommendation={latestOptimization}
+              busy={optimizationMutation.isPending || optimizationUncertain || optimizationInputsUnavailable}
+              onApprove={() => optimizationMutation.mutate({ action: 'approve', recommendationId: latestOptimization.id })}
+              onReject={() => optimizationMutation.mutate({ action: 'reject', recommendationId: latestOptimization.id })}
+              onApply={() => { setOptimizationOpen(false); setOptimizationApplyConfirm(true); }}
+              onUndo={() => { setOptimizationOpen(false); setOptimizationUndoConfirm({ recommendation: latestOptimization, returnToReview: true }); }}
+            /></div> : <div className="space-y-3"><p>No proposal exists for the current schedule.</p><Button variant="primary" loading={optimizationMutation.isPending} disabled={optimizationInputsUnavailable} onClick={() => optimizationMutation.mutate({ action: 'propose' })}>Generate deterministic proposal</Button></div>}
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={optimizationApplyConfirm}
+        onClose={() => { if (!optimizationMutation.isPending) { setOptimizationApplyConfirm(false); setOptimizationOpen(true); } }}
+        closeDisabled={optimizationMutation.isPending}
+        isLoading={optimizationMutation.isPending}
+        title="Apply approved schedule optimization?"
+        confirmText={`Apply ${latestOptimization?.proposedDiff.moved.length ?? 0} schedule moves`}
+        variant="warning"
+        message={latestOptimization ? `This applies ${latestOptimization.proposedDiff.moved.length} reviewed moves while preserving ${latestOptimization.inputSnapshot.optimizerInput.divisions.filter((division) => division.locked).length} locks. The server will revalidate the live snapshot first. Undo remains available only while no later schedule edit exists.` : ''}
+        onConfirm={() => latestOptimization && !optimizationUncertain && optimizationMutation.mutate({ action: 'apply', recommendationId: latestOptimization.id })}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(optimizationUndoConfirm)}
+        onClose={() => { if (!optimizationMutation.isPending) { const returnToReview = optimizationUndoConfirm?.returnToReview; setOptimizationUndoConfirm(null); if (returnToReview) setOptimizationOpen(true); } }}
+        closeDisabled={optimizationMutation.isPending}
+        isLoading={optimizationMutation.isPending}
+        title="Undo applied schedule optimization?"
+        confirmText="Restore audited schedule"
+        variant="warning"
+        message={optimizationUndoConfirm ? `This restores the exact schedule from before ${optimizationUndoConfirm.recommendation.proposedDiff.moved.length} optimization moves. The server will refuse if any later schedule edit made restoration unsafe.` : ''}
+        onConfirm={() => optimizationUndoConfirm && !optimizationUncertain && optimizationMutation.mutate({ action: 'undo', recommendationId: optimizationUndoConfirm.recommendation.id, returnToReview: optimizationUndoConfirm.returnToReview })}
+      />
+
+      <Modal
+        isOpen={Boolean(preview)}
+        onClose={() => { if (!regenerateMutation.isPending) setPreview(null); }}
+        closeDisabled={regenerateMutation.isPending}
+        title="Review schedule impact"
+        subtitle="Nothing changes until you confirm."
+        size="lg"
+        footer={preview ? (
+          <div className="flex w-full justify-end gap-3">
+            <Button variant="secondary" onClick={() => setPreview(null)} disabled={regenerateMutation.isPending}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={regenerateMutation.isPending}
+              onClick={() => regenerateMutation.mutate(preview)}
+            >
+              Apply schedule
+            </Button>
+          </div>
+        ) : undefined}
+      >
+        {preview && (
+          <div className="space-y-5">
+            {operationError && <OperationStatus state="rejected" message={operationError} />}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">Affected divisions</p><p className="text-xl font-semibold">{preview.impact.affectedDivisionIds.length}</p></div>
+              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">Ring changes</p><p className="text-xl font-semibold">{preview.impact.ringChanges}</p></div>
+              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">Time changes</p><p className="text-xl font-semibold">{preview.impact.timeChanges}</p></div>
+              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">New warnings</p><p className="text-xl font-semibold">{preview.impact.addedWarnings.length}</p></div>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white">Affected divisions</h3>
+              {preview.impact.affectedLabels.length ? (
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700 dark:text-gray-300">
+                  {preview.impact.affectedLabels.map((label) => <li key={label}>{label}</li>)}
+                </ul>
+              ) : <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">The proposed configuration produces the same division timing and rings.</p>}
+            </div>
+            {preview.impact.addedWarnings.length > 0 && (
+              <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                <p className="font-semibold">Review new warnings before applying</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">{preview.impact.addedWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+              </div>
+            )}
+            <p className="text-sm text-gray-700 dark:text-gray-300">Applying records who approved the change and preserves the previous schedule for one-click undo. Undo is blocked if another schedule edit occurs first.</p>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

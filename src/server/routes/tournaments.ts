@@ -25,8 +25,25 @@ import {
   canOpenPublicRegistration,
   getPlanEntitlements,
 } from '../services/entitlements.js';
+import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from '../services/tournament-settings.js';
+import { loadTournamentAttention } from '../services/tournament-attention.js';
+import { answerOperationalQuery } from '../services/operational-query.js';
+import {
+  applyScheduleCorrection,
+  buildScheduleImpact,
+  readStoredScheduleConfig,
+  scheduleInputVersion,
+  scheduleResultVersion,
+  getScheduleOperationStatus,
+  undoScheduleCorrection,
+} from '../services/schedule-correction.js';
+import { materializeCanonicalTournamentSchedule } from '../services/canonical-schedule.js';
 
 const router = Router();
+
+const operationalQuerySchema = z.object({
+  question: z.string().trim().min(1, 'A question is required').max(500, 'Question is too long'),
+});
 
 // Validation schemas
 const tournamentCreateSchema = z.object({
@@ -78,6 +95,24 @@ const weightClassesSchema = z.object({
     weightMaxLbs: z.number().optional(),
     displayOrder: z.number().int().optional(),
   })),
+});
+
+const atomicTournamentSettingsSchema = z.object({
+  settings: z.record(z.string(), z.unknown()),
+  weightClasses: weightClassesSchema.shape.weightClasses,
+});
+
+const scheduleConfigSchema = z.object({
+  startTime: z.string(), endTime: z.string(), ringCount: z.number().int().min(1).max(10),
+  matchDurationMinutes: z.object({ patterns: z.number().positive(), sparring: z.number().positive() }),
+  breakBetweenDivisions: z.number().min(0).max(30),
+});
+
+const scheduleApplySchema = z.object({
+  config: scheduleConfigSchema,
+  expectedUpdatedAt: z.string().datetime(),
+  expectedInputVersion: z.string().length(64),
+  operationKey: z.string().uuid(),
 });
 
 // Ring reassignment body — moves a division's matches to a different
@@ -218,7 +253,7 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
       name,
       date: normalizeDate(date),
       location,
-      settings: settings ? JSON.stringify(settings) : null,
+      settings: settings ? JSON.stringify(stripReservedOperationSettings(settings)) : null,
       status: 'draft',
       sportProfileSlug: sportProfileSlug || 'taekwondo',
       organizationId: resolvedOrgId,
@@ -295,7 +330,7 @@ router.post('/:id/clone', authenticate, requireTournamentAccess('director'), asy
       date: new Date(newDate.toISOString().slice(0, 10) + 'T12:00:00.000Z'),
       location: original.location,
       status: 'draft',
-      settings: original.settings,
+      settings: stripReservedOperationSettingsFromRaw(original.settings),
       sportProfileSlug: original.sportProfileSlug,
       sportProfileId: original.sportProfileId,
       organizationId: original.organizationId,
@@ -440,6 +475,30 @@ router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'),
   });
 });
 
+router.put('/:id/settings', authenticate, requireTournamentAccess('director'), validateRequest(atomicTournamentSettingsSchema), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournament = await saveTournamentSettingsAtomic(
+    prisma,
+    getParam(req.params.id),
+    req.body.settings,
+    req.body.weightClasses,
+  );
+  res.json(tournament);
+});
+
+router.get('/:id/attention', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const alerts = await loadTournamentAttention(prisma, getParam(req.params.id));
+  if (!alerts) return res.status(404).json({ error: 'Tournament not found' });
+  res.json({ alerts, generatedAt: new Date().toISOString() });
+});
+
+router.post('/:id/operational-query', authenticate, requireTournamentAccess('director'), validateRequest(operationalQuerySchema), async (req: Request, res: Response) => {
+  const answer = await answerOperationalQuery(req.app.locals.prisma as PrismaClient, getParam(req.params.id), req.body.question);
+  if (!answer) return res.status(404).json({ error: 'Tournament not found' });
+  res.json(answer);
+});
+
 router.put('/:id', authenticate, requireTournamentAccess('director'), validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { name, date, location, status, settings } = req.body;
@@ -457,16 +516,22 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
         });
       }
     }
-    const tournament = await prisma.tournament.update({
-      where: { id: getParam(req.params.id) },
-      data: {
-        name,
-        date: date ? new Date(date) : undefined,
-        location,
-        status,
-        settings: settings ? JSON.stringify(settings) : undefined,
-      },
-    });
+    const tournamentId = getParam(req.params.id);
+    const tournament = await prisma.$transaction(async (tx) => {
+      const current = settings
+        ? await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { settings: true } })
+        : null;
+      return tx.tournament.update({
+        where: { id: tournamentId },
+        data: {
+          name,
+          date: date ? new Date(date) : undefined,
+          location,
+          status,
+          settings: settings ? JSON.stringify(mergeGeneralSettings(current!.settings, settings)) : undefined,
+        },
+      });
+    }, { isolationLevel: 'Serializable' });
 
     res.json(tournament);
   } catch (error: unknown) {
@@ -514,22 +579,30 @@ router.put('/:id/rules', authenticate, requireTournamentAccess('director'), asyn
   // with defaults). Anything the schema doesn't know about is
   // dropped silently.
   const normalized = parseTournamentRules(JSON.stringify(rules));
-  const tournament = await prisma.tournament.update({
-    where: { id: getParam(req.params.id) },
-    data: { settings: serializeTournamentRules(normalized) },
-    select: { id: true, settings: true },
-  });
+  const tournamentId = getParam(req.params.id);
+  const tournament = await prisma.$transaction(async (tx) => {
+    const existing = await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { settings: true } });
+    return tx.tournament.update({
+      where: { id: tournamentId },
+      data: { settings: JSON.stringify(mergeRulesSettings(existing.settings, JSON.parse(serializeTournamentRules(normalized)))) },
+      select: { id: true, settings: true },
+    });
+  }, { isolationLevel: 'Serializable' });
   res.json({ rules: parseTournamentRules(tournament.settings) });
 });
 
 // POST /api/tournaments/:id/rules/reset — restore defaults
 router.post('/:id/rules/reset', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const tournament = await prisma.tournament.update({
-    where: { id: getParam(req.params.id) },
-    data: { settings: serializeTournamentRules(DEFAULT_TOURNAMENT_RULES) },
-    select: { id: true, settings: true },
-  });
+  const tournamentId = getParam(req.params.id);
+  const tournament = await prisma.$transaction(async (tx) => {
+    const existing = await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { settings: true } });
+    return tx.tournament.update({
+      where: { id: tournamentId },
+      data: { settings: JSON.stringify(mergeRulesSettings(existing.settings, JSON.parse(serializeTournamentRules(DEFAULT_TOURNAMENT_RULES)))) },
+      select: { id: true, settings: true },
+    });
+  }, { isolationLevel: 'Serializable' });
   res.json({ rules: parseTournamentRules(tournament.settings) });
 });
 
@@ -835,9 +908,51 @@ router.put('/:id/weight-classes', authenticate, requireTournamentAccess('directo
 });
 
 // Generate tournament schedule (requires authentication)
-router.post('/:id/schedule', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+router.post('/:id/schedule/preview', authenticate, requireTournamentAccess('director'), validateRequest(z.object({ config: scheduleConfigSchema })), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const configOverrides = req.body.config || {};
+  const tournamentId = getParam(req.params.id);
+  const proposedConfig = req.body.config as ScheduleConfig;
+  validateScheduleConfig(proposedConfig);
+  const preview = await prisma.$transaction(async (tx) => {
+    const tournament = await tx.tournament.findUnique({
+      where: { id: tournamentId },
+      select: {
+        settings: true, updatedAt: true, organization: { select: { plan: true } },
+        divisions: {
+          where: { deletedAt: null },
+          select: {
+            id: true, name: true, eventType: true, beltLevel: true, gender: true, ageMin: true, ageMax: true,
+            assignments: { select: { registrationId: true, registration: { select: { competitor: { select: { firstName: true, lastName: true } } } } } },
+          },
+        },
+      },
+    });
+    if (!tournament) return null;
+    if (tournament.organization) {
+      const { maxRings } = getPlanEntitlements(tournament.organization.plan);
+      if (proposedConfig.ringCount > maxRings) throw new Error(`Your plan supports up to ${maxRings} rings.`);
+    }
+    const before = materializeCanonicalTournamentSchedule(
+      await generateSchedule(tx as never, tournamentId, readStoredScheduleConfig(tournament.settings)),
+      tournament.settings,
+    );
+    const after = await generateSchedule(tx as never, tournamentId, proposedConfig);
+    return {
+      before, after, proposedConfig, impact: buildScheduleImpact(before, after),
+      expectedUpdatedAt: tournament.updatedAt.toISOString(),
+      expectedInputVersion: scheduleInputVersion(tournament.divisions),
+      operationKey: crypto.randomUUID(),
+    };
+  }, { isolationLevel: 'Serializable' });
+  if (!preview) return res.status(404).json({ error: 'Tournament not found' });
+  res.json(preview);
+});
+
+router.post('/:id/schedule', authenticate, requireTournamentAccess('director'), validateRequest(scheduleApplySchema), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = getParam(req.params.id);
+  const configOverrides = req.body.config as ScheduleConfig;
+  const authReq = req as AuthenticatedRequest;
 
   try {
     // Resolve the merged config so we can validate it before handing
@@ -847,8 +962,8 @@ router.post('/:id/schedule', authenticate, requireTournamentAccess('director'), 
     validateScheduleConfig(mergedConfig);
 
     const tournament = await prisma.tournament.findUnique({
-      where: { id: getParam(req.params.id) },
-      select: { organization: { select: { plan: true } } },
+      where: { id: tournamentId },
+      select: { organization: { select: { plan: true } }, settings: true, updatedAt: true },
     });
     if (tournament?.organization) {
       const { maxRings } = getPlanEntitlements(tournament.organization.plan);
@@ -860,8 +975,24 @@ router.post('/:id/schedule', authenticate, requireTournamentAccess('director'), 
       }
     }
 
-    const schedule = await generateSchedule(prisma, getParam(req.params.id), configOverrides);
-    res.json(schedule);
+    if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+    const before = materializeCanonicalTournamentSchedule(
+      await generateSchedule(prisma, tournamentId, readStoredScheduleConfig(tournament.settings)),
+      tournament.settings,
+    );
+    const schedule = await generateSchedule(prisma, tournamentId, mergedConfig);
+    const impact = buildScheduleImpact(before, schedule);
+    const applied = await applyScheduleCorrection(prisma, {
+      tournamentId,
+      config: mergedConfig,
+      expectedUpdatedAt: req.body.expectedUpdatedAt,
+      expectedInputVersion: req.body.expectedInputVersion,
+      resultVersion: scheduleResultVersion(schedule),
+      operationKey: req.body.operationKey,
+      approvedBy: authReq.user!.id,
+      impact,
+    });
+    res.json({ ...schedule, impact: applied.impact ?? impact, auditId: applied.auditId });
   } catch (error: unknown) {
     // Validation errors get a 400; never echo raw Error.message —
     // schedule config may embed internal details and Prisma errors
@@ -870,11 +1001,32 @@ router.post('/:id/schedule', authenticate, requireTournamentAccess('director'), 
     const isValidation =
       error instanceof Error &&
       /invalid|required|must be|config/i.test(error.message);
-    res.status(400).json({
-      error: isValidation && error instanceof Error
+    const stale = error instanceof Error && error.message === 'Schedule preview is stale';
+    res.status(stale ? 409 : 400).json({
+      error: stale
+        ? 'Schedule preview is stale. Review the latest schedule before applying.'
+        : isValidation && error instanceof Error
         ? error.message
         : 'Schedule generation failed',
     });
+  }
+});
+
+router.get('/:id/schedule/operations/:operationKey', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const status = await getScheduleOperationStatus(prisma, getParam(req.params.id), getParam(req.params.operationKey));
+  if (!status) return res.status(404).json({ error: 'Schedule operation not found' });
+  res.json(status);
+});
+
+router.post('/:id/schedule/undo/:auditId', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const authReq = req as AuthenticatedRequest;
+  try {
+    await undoScheduleCorrection(prisma, getParam(req.params.auditId), authReq.user!.id, new Date(), getParam(req.params.id));
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : 'Schedule change cannot be undone' });
   }
 });
 
@@ -883,7 +1035,13 @@ router.get('/:id/schedule', authenticate, requireTournamentAccess('viewer'), asy
   const prisma: PrismaClient = req.app.locals.prisma;
 
   try {
-    const schedule = await generateSchedule(prisma, getParam(req.params.id));
+    const tournamentId = getParam(req.params.id);
+    const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { settings: true } });
+    if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+    const schedule = materializeCanonicalTournamentSchedule(
+      await generateSchedule(prisma, tournamentId, readStoredScheduleConfig(tournament.settings)),
+      tournament.settings,
+    );
     res.json(schedule);
   } catch (error: unknown) {
     console.error('[schedule] GET generation failed:', error);

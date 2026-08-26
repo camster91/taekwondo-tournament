@@ -2,6 +2,14 @@ import { test, expect } from '@playwright/test';
 import { loginAsEmail, loginAsDemo } from './helpers';
 
 test.describe('login (magic link flow)', () => {
+  test('brand home link returns to the marketing homepage', async ({ page }) => {
+    await page.goto('/login');
+
+    await expect(page.getByRole('link', { name: 'Bowin home' })).toHaveAttribute('href', '/');
+    await expect(page.getByRole('link', { name: 'Privacy Notice' })).toHaveAttribute('href', '/legal/privacy');
+    await expect(page.getByRole('link', { name: 'Tournament Terms' })).toHaveAttribute('href', '/legal/terms');
+  });
+
   test('magic-link OTP signs in a new user in dev mode', async ({ page }) => {
     const email = `e2e-${Date.now()}@example.com`;
 
@@ -35,8 +43,9 @@ test.describe('login (magic link flow)', () => {
     await page.getByLabel('6-digit code').fill(code);
     await page.getByRole('button', { name: /Verify code/i }).click();
 
-    // Success lands somewhere other than /login.
-    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 10_000 });
+    // A sign-in from the public marketing page must enter the authenticated
+    // workspace, not loop back through the public homepage and login route.
+    await page.waitForURL(/\/dashboard/, { timeout: 10_000 });
 
     // Auth is now cookie-based — the HttpOnly ashbi_token cookie is
     // set by the server and JS can't read it directly. Verify the
@@ -70,7 +79,7 @@ test.describe('login (magic link flow)', () => {
   });
 
   test('demo button is a one-click authenticated shortcut', async ({ page }) => {
-    // The "Try the demo" button is a fast path: a 4-hour admin session
+    // The "Explore the live demo" button is a fast path: a 4-hour admin session
     // without email. This guards against that path regressing — the e2e
     // suite uses it as the standard auth for the heavier flows.
     await loginAsDemo(page);

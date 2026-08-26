@@ -20,6 +20,9 @@ import {
   Terminal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { markDemoEntryPending } from '../utils/demo-progress';
+import { fetchJson, getApiFailure } from '../utils/api-status';
+import { parseSetupStatus, type SetupStatus } from '../utils/setup-status';
 import Spinner from '../components/ui/Spinner';
 import { Card, CardBody } from '../components/ui';
 import { Button } from '../components/ui';
@@ -30,7 +33,7 @@ import { BowinLogo } from '../components/brand/BowinLogo';
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { requestMagicLink, verifyCode, isAuthenticated } = useAuth();
+  const { requestMagicLink, verifyCode, retrySessionHydration, isAuthenticated } = useAuth();
 
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
@@ -38,6 +41,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [sessionVerified, setSessionVerified] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
 
   // Dev mode magic link data
@@ -47,17 +51,28 @@ export default function Login() {
   const [setupFirstName, setSetupFirstName] = useState('');
   const [setupLastName, setSetupLastName] = useState('');
 
-  const { data: setupStatus } = useQuery<{ needsSetup: boolean }>({
+  const {
+    data: setupStatus,
+    isLoading: setupStatusLoading,
+    isError: setupStatusError,
+    error: setupStatusFailure,
+    refetch: retrySetupStatus,
+    isFetching: setupStatusFetching,
+  } = useQuery<SetupStatus>({
     queryKey: ['setup-status'],
     queryFn: async () => {
-      const res = await fetch('/api/auth/setup-status');
-      if (!res.ok) throw new Error('Failed to fetch setup status');
-      return res.json();
+      const payload = await fetchJson<unknown>(fetch, '/api/auth/setup-status');
+      return parseSetupStatus(payload);
     },
     staleTime: 60000,
+    retry: false,
   });
 
   const needsSetup = setupStatus?.needsSetup === true;
+  const setupApiFailure = getApiFailure(setupStatusFailure);
+  const setupFailureMessage = setupApiFailure?.kind === 'rate_limited'
+    ? `System readiness is busy. Try again${setupApiFailure.retryAfterSeconds ? ` in ${setupApiFailure.retryAfterSeconds} seconds` : ' shortly'}.`
+    : 'We could not confirm whether this system is ready for sign-in. Try again before continuing.';
 
   // Redirect if already logged in
   useEffect(() => {
@@ -65,7 +80,10 @@ export default function Login() {
       // React Router's `location.state` is loosely typed — narrow via
       // a structural check before reaching into `from.pathname`.
       const state = location.state as { from?: { pathname?: string } } | null;
-      const from = state?.from?.pathname || '/';
+      // The marketing homepage is public. A sign-in without a preserved
+      // protected destination must enter the authenticated workspace instead
+      // of bouncing back to marketing and then to the login page.
+      const from = state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     }
   }, [isAuthenticated, location.state, navigate]);
@@ -94,7 +112,7 @@ export default function Login() {
       } else {
         // Session cookie is set by the server. Hard nav so
         // AuthProvider re-mounts and hydrates user state from /me.
-        window.location.href = '/';
+        window.location.href = '/dashboard';
       }
     } catch {
       setError('Setup failed. Please try again.');
@@ -130,15 +148,18 @@ export default function Login() {
     setError('');
     setIsLoading(true);
 
-    const result = await verifyCode(email, code);
+    const result = sessionVerified
+      ? await retrySessionHydration()
+      : await verifyCode(email, code);
 
     if (result.success) {
       // Same structural narrowing as the auth-effect above — keeps the
       // post-verify redirect in sync with where the user was heading.
       const state = location.state as { from?: { pathname?: string } } | null;
-      const from = state?.from?.pathname || '/';
+      const from = state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     } else {
+      setSessionVerified(result.sessionVerified === true);
       setError(result.error || 'Verification failed');
     }
 
@@ -154,9 +175,10 @@ export default function Login() {
       const res = await fetch('/api/auth/demo', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Demo login failed');
+      markDemoEntryPending();
       // Session cookie is set by the server. Hard nav so the
       // AuthProvider re-mounts and hydrates user state from /me.
-      window.location.href = '/';
+      window.location.href = '/dashboard';
     } catch (err: unknown) {
       console.error('Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -169,19 +191,19 @@ export default function Login() {
       {/* Header — minimal brand bar */}
       <header className="border-b border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-950/60 backdrop-blur-xl sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/login" aria-label="Bowin home">
+          <Link to="/" aria-label="Bowin home">
             <BowinLogo />
           </Link>
           <div className="flex items-center gap-4 text-sm">
             <span className="text-slate-600 hidden sm:inline">Real tournament management, end-to-end.</span>
-            {needsSetup ? null : (
+            {setupStatus?.needsSetup === false ? (
               <Link
                 to="/register"
                 className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
               >
                 Public registration →
               </Link>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
@@ -239,10 +261,12 @@ export default function Login() {
                   <Shield className="h-3.5 w-3.5" />
                   <span>Self-hosted option</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Users className="h-3.5 w-3.5" />
-                  <span>Live demo data, fully featured</span>
-                </div>
+                {setupStatus?.demoLoginEnabled ? (
+                  <div className="flex items-center gap-2">
+                    <Users className="h-3.5 w-3.5" />
+                    <span>Live demo data, fully featured</span>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -251,7 +275,27 @@ export default function Login() {
         {/* ─── Right: Auth card ─── */}
         <section className="flex items-center justify-center px-6 py-12 lg:py-24 bg-[#fafbfc] dark:bg-[#0a0e1a]">
           <div className="w-full max-w-md">
-            {needsSetup ? (
+            {setupStatusLoading ? (
+              <div role="status" aria-live="polite" className="text-center py-10">
+                <Spinner size="lg" />
+                <h1 className="mt-4 text-xl font-semibold">Checking system readiness</h1>
+                <p className="mt-2 text-sm text-slate-600">Sign-in will appear after this check completes.</p>
+              </div>
+            ) : setupStatusError ? (
+              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 dark:border-red-800 dark:bg-red-900/20">
+                <h1 className="text-xl font-semibold text-red-900 dark:text-red-100">Sign-in temporarily unavailable</h1>
+                <p className="mt-2 text-sm text-red-700 dark:text-red-300">{setupFailureMessage}</p>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="mt-4"
+                  loading={setupStatusFetching}
+                  onClick={() => { void retrySetupStatus(); }}
+                >
+                  Retry readiness check
+                </Button>
+              </div>
+            ) : needsSetup ? (
               <SetupForm
                 email={email} setEmail={setEmail}
                 firstName={setupFirstName} setFirstName={setSetupFirstName}
@@ -275,13 +319,15 @@ export default function Login() {
                   <EmailForm
                     email={email} setEmail={setEmail}
                     onSubmit={handleEmailSubmit} loading={isLoading}
-                    onDemo={handleDemoLogin} demoLoading={demoLoading}
+                    onDemo={setupStatus?.demoLoginEnabled ? handleDemoLogin : undefined}
+                    demoLoading={demoLoading}
                   />
                 ) : (
                   <CodeForm
                     email={email} code={code} setCode={setCode}
                     onSubmit={handleCodeSubmit} loading={isLoading}
-                    onBack={() => { setStep('email'); setCode(''); setError(''); setDevModeData(null); }}
+                    sessionVerified={sessionVerified}
+                    onBack={() => { setStep('email'); setCode(''); setError(''); setSessionVerified(false); setDevModeData(null); }}
                     codeInputRef={codeInputRef}
                     devModeData={devModeData}
                   />
@@ -289,8 +335,11 @@ export default function Login() {
 
                 {step === 'email' && (
                   <p className="mt-6 text-center text-xs text-slate-600">
-                    By continuing you agree to the tournament's data handling policy.
-                    Email addresses are only used to send sign-in links and never shared.
+                    By continuing, you acknowledge Bowin&apos;s{' '}
+                    <Link className="underline hover:text-slate-900 dark:hover:text-white" to="/legal/privacy">Privacy Notice</Link>
+                    {' '}and{' '}
+                    <Link className="underline hover:text-slate-900 dark:hover:text-white" to="/legal/terms">Tournament Terms</Link>.
+                    Email addresses are used to send sign-in links and provide account access.
                   </p>
                 )}
               </div>
@@ -357,25 +406,29 @@ function EmailForm({
         </Button>
       </form>
 
-      <div className="relative my-6 flex items-center">
-        <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
-        <span className="px-3 text-xs text-slate-600 dark:text-slate-500 uppercase tracking-wider">or</span>
-        <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
-      </div>
+      {onDemo && (
+        <>
+          <div className="relative my-6 flex items-center">
+            <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
+            <span className="px-3 text-xs text-slate-600 dark:text-slate-500 uppercase tracking-wider">or</span>
+            <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
+          </div>
 
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={onDemo}
-        loading={demoLoading}
-        className="w-full text-slate-600 dark:text-slate-300"
-      >
-        <Sparkles className="h-4 w-4 mr-2" /> Try the demo
-      </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onDemo}
+            loading={demoLoading}
+            className="w-full text-slate-600 dark:text-slate-300"
+          >
+            <Sparkles className="h-4 w-4 mr-2" /> Explore the live demo
+          </Button>
 
-      <p className="text-center text-xs text-slate-600">
-        Want to look around first? Use a demo account — full access, no signup.
-      </p>
+          <p className="text-center text-xs text-slate-600">
+            Fabricated tournament data. No signup. Demo activity may be reset.
+          </p>
+        </>
+      )}
 
       <div className="relative">
         <Button
@@ -397,6 +450,7 @@ function CodeForm({
   setCode,
   onSubmit,
   loading,
+  sessionVerified,
   onBack,
   codeInputRef,
   devModeData,
@@ -406,6 +460,7 @@ function CodeForm({
   setCode: (v: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   loading: boolean;
+  sessionVerified: boolean;
   onBack: () => void;
   codeInputRef: React.RefObject<HTMLInputElement | null>;
   devModeData: { magicUrl: string; code: string; email: string } | null;
@@ -516,8 +571,10 @@ function CodeForm({
           />
         </div>
 
-        <Button type="submit" variant="primary" loading={loading} disabled={code.length !== 6} className="w-full">
-          {loading ? <><Spinner size="sm" className="mr-2" /> Verifying...</> : 'Verify code'}
+        <Button type="submit" variant="primary" loading={loading} disabled={!sessionVerified && code.length !== 6} className="w-full">
+          {loading
+            ? <><Spinner size="sm" className="mr-2" /> Loading session...</>
+            : sessionVerified ? 'Retry session' : 'Verify code'}
         </Button>
       </form>
 

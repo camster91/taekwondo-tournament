@@ -24,12 +24,15 @@ import {
   PanelLeft,
   HelpCircle,
   Building2,
+  LifeBuoy,
   type LucideIcon,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { isDemoUser } from './utils/demo-progress';
 import { ToastProvider } from './context/ToastContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import SupportChatWidget from './components/SupportChatWidget';
 import Tour from './components/Tour';
 import CloseButton from './components/ui/CloseButton';
 import Spinner from './components/ui/Spinner';
@@ -51,6 +54,8 @@ const BracketEditor = lazy(() => import('./pages/BracketEditor'));
 const PublicRegister = lazy(() => import('./pages/PublicRegister'));
 const CheckRegistration = lazy(() => import('./pages/CheckRegistration'));
 const ManageRegistration = lazy(() => import('./pages/ManageRegistration'));
+const Marketing = lazy(() => import('./pages/Marketing'));
+const Legal = lazy(() => import('./pages/Legal'));
 const Login = lazy(() => import('./pages/Login'));
 const VerifyMagicLink = lazy(() => import('./pages/VerifyMagicLink'));
 const Scorekeeper = lazy(() => import('./pages/Scorekeeper'));
@@ -67,6 +72,7 @@ const NotFound = lazy(() => import('./pages/NotFound'));
 const FairnessRules = lazy(() => import('./pages/FairnessRules'));
 const SchoolPortal = lazy(() => import('./pages/SchoolPortal'));
 const OrganizationSettings = lazy(() => import('./pages/OrganizationSettings'));
+const SupportTickets = lazy(() => import('./pages/SupportTickets'));
 
 // Fallback rendered while a lazy page chunk is fetched. Centred spinner
 // keeps the chrome stable so the page doesn't reflow when the real
@@ -79,9 +85,26 @@ function PageFallback() {
   );
 }
 
+function isIsolatedDemoHost(): boolean {
+  return typeof window !== 'undefined' && window.location.hostname === 'demo.tkd.ashbi.ca';
+}
+
+function DemoDataNotice() {
+  return (
+    <aside
+      role="status"
+      aria-label="Fabricated demo data notice"
+      className="border-b border-amber-300/40 bg-amber-100 px-4 py-2 text-center text-sm text-amber-950"
+    >
+      <strong>Fabricated demo data.</strong>{' '}
+      Scores and check-ins can be visible to other demo visitors and may be reset.
+    </aside>
+  );
+}
+
 // Navigation: top-level workspace items
 const primaryNav = [
-  { name: 'Dashboard', href: '/', icon: Home, section: 'workspace' },
+  { name: 'Dashboard', href: '/dashboard', icon: Home, section: 'workspace' },
   { name: 'Competitors', href: '/competitors', icon: Users, section: 'workspace' },
   { name: 'Trash', href: '/trash', icon: Trash2, section: 'admin' },
   { name: 'Tournaments', href: '/tournaments', icon: Trophy, section: 'workspace' },
@@ -224,10 +247,8 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
               </div>
             )}
             <div className={classNames('space-y-0.5', sidebarCollapsed && 'flex flex-col items-center')}>
-              {primaryNav.map((item) => {
-                const isActive = item.href === '/'
-                  ? location.pathname === '/'
-                  : location.pathname === item.href || location.pathname.startsWith(item.href + '/');
+                {primaryNav.map((item) => {
+                const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/');
                 return (
                   <NavItem
                     key={item.name}
@@ -284,6 +305,12 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                   onClick={closeMobile}
                   collapsed={sidebarCollapsed}
                 />
+                <NavItem
+                  item={{ name: 'Support Tickets', href: '/support/tickets', icon: LifeBuoy }}
+                  active={location.pathname === '/support/tickets'}
+                  onClick={closeMobile}
+                  collapsed={sidebarCollapsed}
+                />
               </div>
             </div>
           )}
@@ -331,7 +358,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                   <>
                     <div className="flex-1 text-left min-w-0">
                       <div className="text-sm font-medium text-white truncate">{userName}</div>
-                      <div className="text-[11px] text-white/40 capitalize truncate">{user.role}{user.email.includes('demo') ? ' • shared demo' : ''}</div>
+                      <div className="text-[11px] text-white/40 capitalize truncate">{user.role}{isDemoUser(user) ? ' • synthetic demo' : ''}</div>
                     </div>
                     <ChevronRight className={classNames('h-3.5 w-3.5 text-white/40 transition-transform', userMenuOpen && 'rotate-90')} />
                   </>
@@ -470,7 +497,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       {/* Onboarding tour — first-time directors only (persists in localStorage).
           Public pages and unauthenticated viewers never see this because
           AdminLayout only wraps admin routes. */}
-      <Tour />
+      {!isDemoUser(user) && <Tour />}
     </div>
   );
 }
@@ -490,12 +517,16 @@ function LegacyRedirect({ toKey }: { toKey: 'scorekeeper' | 'checkin' | 'display
 
 function AppRoutes() {
   const location = useLocation();
+  const { user } = useAuth();
+  const showDemoNotice = isDemoUser(user) || isIsolatedDemoHost();
 
   // Public pages (no sidebar)
   const isPublicPage =
     location.pathname.startsWith('/register') ||
     location.pathname.startsWith('/check-registration') ||
     location.pathname.startsWith('/manage-registration') ||
+    location.pathname.startsWith('/legal') ||
+    location.pathname === '/' ||
     location.pathname.startsWith('/login') ||
     location.pathname.startsWith('/verify') ||
     location.pathname.startsWith('/accept-invite') ||
@@ -511,7 +542,11 @@ function AppRoutes() {
   if (isPublicPage) {
     return (
       <Suspense fallback={<PageFallback />}>
+        {showDemoNotice && <DemoDataNotice />}
         <Routes>
+          <Route path="/" element={<Marketing />} />
+          <Route path="/legal/privacy" element={<Legal kind="privacy" />} />
+          <Route path="/legal/terms" element={<Legal kind="terms" />} />
           <Route path="/register" element={<PublicRegister />} />
           <Route path="/check-registration" element={<CheckRegistration />} />
           <Route path="/manage-registration" element={<ManageRegistration />} />
@@ -542,10 +577,11 @@ function AppRoutes() {
   return (
     <ProtectedRoute>
       <AdminLayout>
+        {showDemoNotice && <DemoDataNotice />}
         <Suspense fallback={<PageFallback />}>
           <Routes>
             {/* General pages - any authenticated user */}
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/competitors" element={<Competitors />} />
             <Route path="/trash" element={<Trash />} />
             <Route path="/tournaments" element={<Tournaments />} />
@@ -564,6 +600,7 @@ function AppRoutes() {
                 </ProtectedRoute>
               }
             />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
             {/* Director+ pages - admin or director only */}
             <Route
@@ -616,6 +653,14 @@ function AppRoutes() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/support/tickets"
+              element={
+                <ProtectedRoute requiredRoles={['admin', 'director']}>
+                  <SupportTickets />
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
@@ -630,6 +675,7 @@ export default function App() {
       <AuthProvider>
         <ToastProvider>
           <AppRoutes />
+          <SupportChatWidget />
         </ToastProvider>
       </AuthProvider>
     </ThemeProvider>

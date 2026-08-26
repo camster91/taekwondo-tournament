@@ -7,13 +7,16 @@
 //
 // Reachable at /scoreboard/parent/:tournamentId. No auth required -
 // this is intentionally a public URL a parent can bookmark.
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
-import { Trophy, Clock, Users, ChevronRight, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
-import { Card, CardBody } from '../components/ui';
+import { Clock, AlertCircle, RefreshCw, ArrowLeft, Search, Star } from 'lucide-react';
+import { Button, Card, CardBody, Input } from '../components/ui';
 import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availability';
+import { resolveParentScoreboardState } from '../utils/parent-scoreboard-state';
+import { fetchJson } from '../utils/api-status';
+import { buildParentMatchView, describeParentMatchTransition, filterParentMatches, parseParentScoreboardPayload, readParentFavorites, writeParentFavorites } from '../utils/parent-live-finder';
 
 interface Match {
   id: string;
@@ -21,6 +24,7 @@ interface Match {
   roundNumber: number;
   bracketType: string;
   ringNumber?: number | null;
+  scheduledTime?: string | null;
   status: string;
   score1: number | null;
   score2: number | null;
@@ -54,30 +58,34 @@ export default function ParentScoreboard() {
   const { tournamentId } = useParams();
   const [searchParams] = useSearchParams();
   const publicKey = searchParams.get('key');
+  const [finderQuery, setFinderQuery] = useState('');
+  const [favorites, setFavorites] = useState<Set<string>>(() => {
+    if (!tournamentId || typeof window === 'undefined') return new Set();
+    return readParentFavorites(window.localStorage, tournamentId);
+  });
+  const [liveAnnouncement, setLiveAnnouncement] = useState('');
+  const previousMatches = useRef<Array<Match & { divisionName: string; eventType: string }>>([]);
 
   // Refresh every 5s - slower than the TV version (3s) to save battery
   // on the parent's phone.
-  const { data: tournament, error: tournamentError } = useQuery<Tournament>({
+  const { data: tournament, isLoading: tournamentLoading, error: tournamentError, refetch: retryTournament } = useQuery<Tournament>({
     queryKey: ['parent-scoreboard-tournament', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/public/tournaments/${tournamentId}`);
-      if (!res.ok) throw new Error('Tournament not found');
-      return res.json();
+      return fetchJson<Tournament>(fetch, `/api/public/tournaments/${tournamentId}`);
     },
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
     retry: false,
   });
 
-  const { data: scoreboardData, isLoading: scoreboardLoading, error: scoreboardError } = useQuery<{
+  const { data: scoreboardData, isLoading: scoreboardLoading, error: scoreboardError, refetch: retryScoreboard, dataUpdatedAt: scoreboardUpdatedAt } = useQuery<{
     divisions: Division[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
     queryKey: ['parent-scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
-      const res = await fetch(buildScoreboardApiUrl(tournamentId || '', publicKey));
-      if (!res.ok) throw new Error('Scoreboard fetch failed');
-      return res.json();
+      const payload = await fetchJson<unknown>(fetch, buildScoreboardApiUrl(tournamentId || '', publicKey));
+      return parseParentScoreboardPayload(payload) as { divisions: Division[]; displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string } };
     },
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
@@ -88,6 +96,14 @@ export default function ParentScoreboard() {
   const divisions = scoreboardData?.divisions || [];
   const displaySettings = scoreboardData?.displaySettings;
   const scoreboardUnavailableMessage = getScoreboardUnavailableMessage(scoreboardError);
+  const pageState = resolveParentScoreboardState({
+    tournamentLoading,
+    tournamentError,
+    tournamentReady: Boolean(tournament),
+    scoreboardLoading,
+    scoreboardError,
+    scoreboardReady: Boolean(scoreboardData),
+  });
 
   // Pick "now competing" + "up next" matches. Status values from the
   // bracket-generator: 'ready', 'in_progress', 'completed'.
@@ -119,6 +135,30 @@ export default function ParentScoreboard() {
     .sort((a, b) => a.roundNumber - b.roundNumber || a.matchNumber - b.matchNumber)
     .slice(-3)
     .reverse();
+  const finderMatches = useMemo(() => filterParentMatches(allMatches, finderQuery), [allMatches, finderQuery]);
+
+  useEffect(() => {
+    setFavorites(tournamentId && typeof window !== 'undefined' ? readParentFavorites(window.localStorage, tournamentId) : new Set());
+    setFinderQuery('');
+    setLiveAnnouncement('');
+    previousMatches.current = [];
+  }, [tournamentId]);
+
+  useEffect(() => {
+    const announcement = describeParentMatchTransition(previousMatches.current, allMatches, favorites);
+    previousMatches.current = allMatches;
+    if (announcement) setLiveAnnouncement(announcement);
+  }, [allMatches, favorites]);
+
+  const toggleFavorite = (matchId: string) => {
+    if (!tournamentId) return;
+    setFavorites((current) => {
+      const next = new Set(current);
+      if (next.has(matchId)) next.delete(matchId); else next.add(matchId);
+      try { writeParentFavorites(window.localStorage, tournamentId, next); } catch { /* Favorites remain usable for this visit. */ }
+      return next;
+    });
+  };
 
   // If director set featuredMatchId, override the "now competing" with
   // that match (even if it's not in_progress). Used for finals.
@@ -159,20 +199,67 @@ export default function ParentScoreboard() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-4 space-y-4">
-        {scoreboardUnavailableMessage ? (
+        {pageState === 'tournament-unavailable' ? (
+          <Card>
+            <CardBody className="p-6 text-center">
+              <div role="alert">
+                <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" aria-hidden="true" />
+                <h1 className="font-semibold text-gray-900 dark:text-white mb-1">Tournament unavailable</h1>
+                <p className="text-sm text-gray-600 dark:text-gray-300">This link may be inactive. Ask the tournament director for the current scoreboard link.</p>
+                <button type="button" onClick={() => void retryTournament()} className="mt-4 min-h-11 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold">Try again</button>
+              </div>
+            </CardBody>
+          </Card>
+        ) : pageState === 'loading-tournament' ? (
+          <p className="text-sm text-gray-600 dark:text-gray-300" role="status">Loading tournament…</p>
+        ) : pageState === 'scoreboard-unavailable' ? (
           <Card>
             <CardBody className="p-6 text-center">
               <div role="alert">
                 <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" aria-hidden="true" />
                 <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Live scoreboard unavailable</h2>
                 <p className="text-sm text-gray-600 dark:text-gray-300">{scoreboardUnavailableMessage}</p>
+                <button type="button" onClick={() => void retryScoreboard()} className="mt-4 min-h-11 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold">Try again</button>
               </div>
             </CardBody>
           </Card>
-        ) : scoreboardLoading ? (
+        ) : pageState === 'loading-scoreboard' ? (
           <p className="text-sm text-gray-600 dark:text-gray-300" role="status">Loading live matches…</p>
         ) : (
         <>
+        {pageState === 'stale-scoreboard' && (
+          <Card>
+            <CardBody className="p-4">
+              <div role="alert" className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 shrink-0 text-amber-500" aria-hidden="true" />
+                <div>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">Showing the last confirmed scoreboard</h2>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Live updates are temporarily unavailable. Match information below may be out of date.</p>
+                  {scoreboardUpdatedAt > 0 && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Last confirmed at {new Date(scoreboardUpdatedAt).toLocaleTimeString()}.</p>}
+                  <button type="button" onClick={() => { if (tournamentError) void retryTournament(); if (scoreboardError) void retryScoreboard(); }} className="mt-3 min-h-11 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold">Try again</button>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        )}
+        <section aria-labelledby="live-finder-heading">
+          <h2 id="live-finder-heading" className="text-base font-semibold text-gray-900 dark:text-white">Find an athlete</h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Search by athlete, division, or school to see where and when they compete.</p>
+          <div className="relative mt-3">
+            <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-gray-400" aria-hidden="true" />
+            <Input aria-label="Search athletes, divisions, or schools" value={finderQuery} onChange={(event) => setFinderQuery(event.target.value)} className="pl-10" />
+          </div>
+          {(finderQuery || favorites.size > 0) && (
+            <div className="mt-3 space-y-2" aria-live="polite">
+              {finderMatches.filter((match) => finderQuery || favorites.has(match.id)).length === 0 ? (
+                <p className="rounded-lg bg-gray-100 p-4 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">No matching athletes or divisions were found.</p>
+              ) : finderMatches.filter((match) => finderQuery || favorites.has(match.id)).map((match) => (
+                <FinderMatchCard key={match.id} match={match} favorite={favorites.has(match.id)} onToggleFavorite={() => toggleFavorite(match.id)} />
+              ))}
+            </div>
+          )}
+          <p className="sr-only" aria-live="polite" aria-atomic="true">{liveAnnouncement}</p>
+        </section>
         {/* NOW COMPETING - most attention-grabbing block */}
         <section>
           <h2 className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-1">
@@ -233,6 +320,36 @@ export default function ParentScoreboard() {
         </p>
       </main>
     </div>
+  );
+}
+
+function FinderMatchCard({ match, favorite, onToggleFavorite }: {
+  match: Match & { divisionName: string; eventType: string };
+  favorite: boolean;
+  onToggleFavorite: () => void;
+}) {
+  const view = buildParentMatchView(match);
+  const athletes = [match.competitor1, match.competitor2]
+    .filter(Boolean)
+    .map((entry) => `${entry!.competitor.firstName} ${entry!.competitor.lastName}`)
+    .join(' vs ');
+  return (
+    <Card>
+      <CardBody className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-900 dark:text-white">{athletes || `Match ${match.matchNumber}`}</h3>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{match.divisionName}</p>
+            <p className="mt-2 text-sm font-medium text-gray-900 dark:text-white">{view.status} · {view.location}</p>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{view.schedule}</p>
+          </div>
+          <Button type="button" variant="secondary" size="sm" onClick={onToggleFavorite} aria-pressed={favorite} aria-label={`${favorite ? 'Remove' : 'Save'} ${athletes || `match ${match.matchNumber}`} ${favorite ? 'from' : 'to'} favorites`}>
+            <Star className={`h-4 w-4 ${favorite ? 'fill-current' : ''}`} aria-hidden="true" />
+            {favorite ? 'Saved' : 'Save'}
+          </Button>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 

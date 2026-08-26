@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -36,6 +36,8 @@ import {
   buildResultsWorkbook,
 } from '../utils/excel-export';
 import { calculateResultsStats } from '../utils/results-stats';
+import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
+import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
 
 // Local interfaces `Division` and `SchoolStats` removed — they now come from
 // `../utils/csv-export` as `DivisionLike` and `SchoolStats`. The other shapes
@@ -69,6 +71,9 @@ export default function Results() {
   const [selectedSchool, setSelectedSchool] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'schools' | 'divisions' | 'breakdown'>('schools');
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportStatus, setExportStatus] = useState<{ state: OperationState; message: string } | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const exportLockRef = useRef(false);
 
   // Fetch tournament
   const { data: tournament } = useQuery<Tournament>({
@@ -177,11 +182,45 @@ export default function Results() {
   // is in the pure builder; here we just trigger the browser download. xlsx
   // is dynamically imported so its ~490KB chunk only downloads on click.
   const exportExcel = async () => {
+    if (exportLockRef.current) return;
+    exportLockRef.current = true;
     const eventSuffix = filterEvent === 'all' ? '' : `_${filterEvent}`;
-    const XLSX = await import('xlsx');
-    const wb = await buildResultsWorkbook(schoolStats, filteredDivisions ?? []);
-    XLSX.writeFile(wb, `tournament_results${eventSuffix}.xlsx`);
     setShowExportMenu(false);
+    setExporting(true);
+    setExportStatus({ state: 'pending', message: 'Preparing the complete Excel results report.' });
+    try {
+      const XLSX = await import('xlsx');
+      const wb = await buildResultsWorkbook(schoolStats, filteredDivisions ?? []);
+      XLSX.writeFile(wb, `tournament_results${eventSuffix}.xlsx`);
+      setExportStatus({ state: 'resolved', message: 'Excel results report download started.' });
+    } catch (error) {
+      setExportStatus({ state: 'rejected', message: error instanceof Error ? error.message : 'Excel export failed.' });
+    } finally {
+      setExporting(false);
+      exportLockRef.current = false;
+    }
+  };
+
+  const exportPDF = async (kind: 'results' | 'certificates', place?: number) => {
+    if (exportLockRef.current || !tournamentId) return;
+    exportLockRef.current = true;
+    setShowExportMenu(false);
+    setExporting(true);
+    const label = kind === 'results' ? 'results PDF' : place ? `${getPlaceName(place)} certificates` : 'all certificates';
+    setExportStatus({ state: 'pending', message: `Preparing ${label}.` });
+    try {
+      const query = place ? `?place=${place}` : '';
+      const path = kind === 'results' ? 'results/pdf' : `certificates${query}`;
+      const blob = await fetchAuthenticatedBlob(fetch, `/api/brackets/tournament/${tournamentId}/${path}`, 'application/pdf', getAuthHeaders());
+      const safeName = (tournament?.name || 'Tournament').replace(/[^a-zA-Z0-9]/g, '_');
+      downloadBlob(blob, `${safeName}_${kind === 'results' ? 'Results' : place ? `${getPlaceName(place)}_Certificates` : 'Certificates'}.pdf`);
+      setExportStatus({ state: 'resolved', message: `${label.charAt(0).toUpperCase()}${label.slice(1)} download started.` });
+    } catch (error) {
+      setExportStatus({ state: 'rejected', message: error instanceof Error ? error.message : `${label} export failed.` });
+    } finally {
+      setExporting(false);
+      exportLockRef.current = false;
+    }
   };
 
   return (
@@ -203,7 +242,7 @@ export default function Results() {
               </div>
             </div>
             <div className="relative">
-              <Button variant="secondary" onClick={() => setShowExportMenu(!showExportMenu)}>
+              <Button variant="secondary" disabled={exporting} onClick={() => setShowExportMenu(!showExportMenu)}>
                 <Download className="h-4 w-4 mr-2" />
                 <span className="hidden sm:inline">Export</span>
                 <ChevronDown className="h-4 w-4 ml-1" />
@@ -220,16 +259,15 @@ export default function Results() {
                       <div className="px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">
                         PDF Export
                       </div>
-                      <a
-                        href={`/api/brackets/tournament/${tournamentId}/results/pdf`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        disabled={exporting}
                         className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        onClick={() => setShowExportMenu(false)}
+                        onClick={() => void exportPDF('results')}
                       >
                         <Download className="h-4 w-4 mr-3 text-red-500 dark:text-red-400" />
                         Results PDF
-                      </a>
+                      </button>
 
                       <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
                       <div className="px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">
@@ -263,6 +301,7 @@ export default function Results() {
                       </div>
                       <button
                         onClick={exportExcel}
+                        disabled={exporting}
                         className="w-full flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                       >
                         <FileDown className="h-4 w-4 mr-3 text-blue-500 dark:text-blue-400" />
@@ -273,26 +312,24 @@ export default function Results() {
                       <div className="px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">
                         Certificates
                       </div>
-                      <a
-                        href={`/api/brackets/tournament/${tournamentId}/certificates`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        disabled={exporting}
                         className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        onClick={() => setShowExportMenu(false)}
+                        onClick={() => void exportPDF('certificates')}
                       >
                         <Award className="h-4 w-4 mr-3 text-yellow-500 dark:text-yellow-400" />
                         All Certificates (1st-3rd)
-                      </a>
-                      <a
-                        href={`/api/brackets/tournament/${tournamentId}/certificates?place=1`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      </button>
+                      <button
+                        type="button"
+                        disabled={exporting}
                         className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        onClick={() => setShowExportMenu(false)}
+                        onClick={() => void exportPDF('certificates', 1)}
                       >
                         <Medal className="h-4 w-4 mr-3 text-yellow-500 dark:text-yellow-400" />
                         Gold Only (1st Place)
-                      </a>
+                      </button>
                     </div>
                   </div>
                 </>
@@ -301,6 +338,17 @@ export default function Results() {
           </div>
         </div>
       </div>
+
+      {exportStatus && (
+        <div className="px-4 pt-4">
+          <OperationStatus
+            state={exportStatus.state}
+            message={exportStatus.message}
+            actionLabel={exportStatus.state === 'rejected' ? 'Dismiss' : undefined}
+            onAction={exportStatus.state === 'rejected' ? () => setExportStatus(null) : undefined}
+          />
+        </div>
+      )}
 
       {/* Stats Overview */}
       <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -102,6 +102,8 @@ jobs:
         with:
           context: .
           file: ${{ inputs.dockerfile || 'Dockerfile' }}
+          build-args: |
+            VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${{ vars.OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64 }}
           platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
           # Pull requests prove the image builds but cannot publish mutable
           # release tags such as latest.

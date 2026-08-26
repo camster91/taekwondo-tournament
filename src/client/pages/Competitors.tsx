@@ -30,6 +30,8 @@ import { Select } from '../components/ui';
 import { Toolbar } from '../components/ui';
 import { Badge } from '../components/ui';
 import { isTestData } from '../utils/test-data';
+import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
+import { collectAdminPages, readAdminOperationError } from '../utils/admin-operation-error';
 
 interface Competitor {
   id: string;
@@ -109,9 +111,20 @@ export default function Competitors() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [exportState, setExportState] = useState<'idle' | 'pending' | 'resolved' | 'rejected'>('idle');
+  const [exportMessage, setExportMessage] = useState('');
+  const [importPreparing, setImportPreparing] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [adminNotice, setAdminNotice] = useState<{
+    state: OperationState;
+    message: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingCompetitor, setEditingCompetitor] = useState<Competitor | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Competitor | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [formData, setFormData] = useState(emptyForm);
   const [pageLimit, setPageLimit] = useState(100);
   // The import preview is a spreadsheet row — `unknown` keyed by
@@ -135,6 +148,7 @@ export default function Competitors() {
     weight: '',
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importPreparingRef = useRef(false);
 
   // Reset form when modal opens/closes or editing changes
   useEffect(() => {
@@ -197,13 +211,15 @@ export default function Competitors() {
           weightLbs: data.weightLbs ? parseFloat(data.weightLbs) : null,
         }),
       });
-      if (!res.ok) throw new Error('Failed to create competitor');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to create competitor'));
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['competitors'] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['competitors'] });
       closeFormModal();
+      addToast('Competitor created', 'success');
     },
+    onError: (error) => setFormError(error instanceof Error ? error.message : 'Failed to create competitor'),
   });
 
   const updateMutation = useMutation({
@@ -218,26 +234,38 @@ export default function Competitors() {
           weightLbs: data.weightLbs ? parseFloat(data.weightLbs) : null,
         }),
       });
-      if (!res.ok) throw new Error('Failed to update competitor');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to update competitor'));
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['competitors'] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['competitors'] });
       closeFormModal();
+      addToast('Competitor updated', 'success');
     },
+    onError: (error) => setFormError(error instanceof Error ? error.message : 'Failed to update competitor'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/competitors/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error || 'Failed to delete competitor');
+        throw new Error(await readAdminOperationError(res, 'Failed to delete competitor'));
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['competitors'] });
+    onMutate: () => {
+      setDeleteError(null);
+      setAdminNotice({ state: 'pending', message: 'Removing competitor from active lists.' });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['competitors'] });
+      setDeleteError(null);
       setDeleteTarget(null);
+      setAdminNotice({ state: 'resolved', message: 'Competitor sent to Trash and the list is up to date.' });
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Failed to delete competitor';
+      setDeleteError(message);
+      setAdminNotice(null);
     },
   });
 
@@ -255,14 +283,26 @@ export default function Competitors() {
       }
       return results;
     },
-    onSuccess: (results) => {
-      queryClient.invalidateQueries({ queryKey: ['competitors'] });
-      setSelectedIds(new Set());
+    onMutate: (ids) => setAdminNotice({
+      state: 'pending',
+      message: `Removing ${ids.length} competitor${ids.length === 1 ? '' : 's'}.`,
+    }),
+    onSuccess: async (results) => {
+      await queryClient.invalidateQueries({ queryKey: ['competitors'] });
+      setSelectedIds(new Set(results.failed));
       setBulkDeleteOpen(false);
       if (results.failed.length === 0) {
-        addToast(`${results.ok.length} competitor${results.ok.length === 1 ? '' : 's'} deleted`, 'success');
+        setAdminNotice({
+          state: 'resolved',
+          message: `${results.ok.length} competitor${results.ok.length === 1 ? '' : 's'} sent to Trash and the list is up to date.`,
+        });
       } else {
-        addToast(`${results.ok.length} deleted, ${results.failed.length} failed`, 'warning');
+        setAdminNotice({
+          state: 'rejected',
+          message: `${results.ok.length} removed; ${results.failed.length} still need attention and remain selected.`,
+          actionLabel: 'Retry failed',
+          onAction: () => bulkDeleteMutation.mutate(results.failed),
+        });
       }
     },
   });
@@ -286,18 +326,21 @@ export default function Competitors() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error('Failed to import competitors');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to import competitors'));
       return res.json();
     },
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['competitors'] });
       addToast(
         `Import complete! Imported: ${result.imported}, Updated: ${result.updated}, Skipped: ${result.skipped}`,
         'success'
       );
-      queryClient.invalidateQueries({ queryKey: ['competitors'] });
       setShowImportModal(false);
       setImportData(null);
+      setImportFile(null);
+      setImportError(null);
     },
+    onError: (error) => setImportError(error instanceof Error ? error.message : 'Failed to import competitors'),
   });
 
   const closeFormModal = () => {
@@ -322,6 +365,7 @@ export default function Competitors() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImportError(null);
 
     // Hold onto the original File so the import step can
     // re-encode it as base64 and send the raw bytes to the
@@ -332,6 +376,7 @@ export default function Competitors() {
 
     const reader = new FileReader();
     reader.onload = async (event) => {
+      try {
       // xlsx is dynamically imported so its chunk only downloads when a
       // file is actually selected for import preview.
       const XLSX = await import('xlsx');
@@ -386,19 +431,29 @@ export default function Competitors() {
 
         setColumnMapping(autoMapping);
         setShowImportModal(true);
+      } else {
+        addToast('The spreadsheet does not contain any competitor rows.', 'error');
+      }
+      } catch {
+        addToast('The spreadsheet could not be read. Check the file and try again.', 'error');
       }
     };
+    reader.onerror = () => addToast('The spreadsheet could not be read. Check the file and try again.', 'error');
     reader.readAsArrayBuffer(file);
   };
 
   const handleImport = async () => {
-    if (!importData) return;
+    if (!importData || importPreparingRef.current || importMutation.isPending) return;
+    importPreparingRef.current = true;
+    setImportPreparing(true);
+    setImportError(null);
     // Closes P8: prefer the server-side xlsx parser when we still
     // have the original File handle. The client re-encodes to
     // base64 here, the server reads it with XLSX.read and runs
     // the same importFromExcel pipeline. If the File handle is
     // gone (e.g. user reloaded the page after uploading), fall
     // back to the pre-parsed JSON path — slower but still works.
+    try {
     if (importFile) {
       const fileBase64: string = await new Promise((resolve, reject) => {
         const r = new FileReader();
@@ -412,9 +467,26 @@ export default function Competitors() {
         r.onerror = reject;
         r.readAsDataURL(importFile);
       });
-      importMutation.mutate({ fileBase64, fileName: importFile.name, mapping: columnMapping });
+      importMutation.mutate(
+        { fileBase64, fileName: importFile.name, mapping: columnMapping },
+        { onSettled: () => {
+          importPreparingRef.current = false;
+          setImportPreparing(false);
+        } },
+      );
     } else {
-      importMutation.mutate({ data: importData, mapping: columnMapping });
+      importMutation.mutate(
+        { data: importData, mapping: columnMapping },
+        { onSettled: () => {
+          importPreparingRef.current = false;
+          setImportPreparing(false);
+        } },
+      );
+    }
+    } catch {
+      importPreparingRef.current = false;
+      setImportPreparing(false);
+      setImportError('The spreadsheet could not be prepared for import. Please try again.');
     }
   };
 
@@ -423,25 +495,22 @@ export default function Competitors() {
   };
 
   const handleExportExcel = async () => {
+    if (exportState === 'pending') return;
+    setExportState('pending');
+    setExportMessage('Preparing the complete competitor workbook.');
+    try {
     // Page through the API (server caps limit at 1000) so large
     // registries aren't silently truncated.
     const pageSize = 1000;
-    const all: Competitor[] = [];
-    let offset = 0;
-    let total = Infinity;
-    while (offset < total) {
+    const all = await collectAdminPages<Competitor>(async (offset) => {
       const res = await fetch(
         `/api/competitors?limit=${pageSize}&offset=${offset}`,
         { headers: getAuthHeaders() },
       );
-      if (!res.ok) throw new Error('Failed to export competitors');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to export competitors'));
       const result = await res.json();
-      const batch: Competitor[] = result.competitors || [];
-      total = typeof result.total === 'number' ? result.total : batch.length;
-      all.push(...batch);
-      if (batch.length === 0) break;
-      offset += batch.length;
-    }
+      return { items: result.competitors, total: result.total };
+    });
 
     const wsData = [
       ['First Name', 'Last Name', 'Gender', 'Date of Birth', 'Belt', 'Dan Rank', 'Height (in)', 'Weight (lbs)', 'School/Dojang', 'Special Needs'],
@@ -465,6 +534,12 @@ export default function Competitors() {
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     XLSX.utils.book_append_sheet(wb, ws, 'Competitors');
     XLSX.writeFile(wb, `Competitors_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    setExportState('resolved');
+    setExportMessage(`${all.length} competitor${all.length === 1 ? '' : 's'} exported.`);
+    } catch (error) {
+      setExportState('rejected');
+      setExportMessage(error instanceof Error ? error.message : 'Failed to export competitors');
+    }
   };
 
   const getBeltColor = (belt: string) => {
@@ -523,10 +598,11 @@ export default function Competitors() {
                   <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(false)} />
                   <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg py-1 z-20">
                     <button
-                      onClick={() => { handleExportExcel(); setMoreMenuOpen(false); }}
+                      onClick={() => { void handleExportExcel(); setMoreMenuOpen(false); }}
+                      disabled={exportState === 'pending'}
                       className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
                     >
-                      <FileSpreadsheet className="h-4 w-4" /> Export
+                      <FileSpreadsheet className="h-4 w-4" /> {exportState === 'pending' ? 'Exportingâ€¦' : 'Export'}
                     </button>
                     <button
                       onClick={() => { handleDownloadTemplate(); setMoreMenuOpen(false); }}
@@ -541,6 +617,24 @@ export default function Competitors() {
           </div>
         }
       />
+
+      {exportState !== 'idle' && (
+        <OperationStatus
+          state={exportState}
+          message={exportMessage}
+          actionLabel={exportState === 'pending' ? undefined : 'Dismiss'}
+          onAction={exportState === 'pending' ? undefined : () => setExportState('idle')}
+        />
+      )}
+
+      {adminNotice && (
+        <OperationStatus
+          state={adminNotice.state}
+          message={adminNotice.message}
+          actionLabel={adminNotice.actionLabel ?? (adminNotice.state === 'pending' ? undefined : 'Dismiss')}
+          onAction={adminNotice.onAction ?? (adminNotice.state === 'pending' ? undefined : () => setAdminNotice(null))}
+        />
+      )}
 
       {/* Bulk action toolbar (slides in when something is selected) */}
       {selectedIds.size > 0 && (
@@ -891,12 +985,17 @@ export default function Competitors() {
       {/* Delete Confirmation (single) */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => { if (!deleteMutation.isPending) setDeleteTarget(null); }}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
         title="Send to Trash?"
         message={
           <>
-            <span className="font-semibold">{deleteTarget?.firstName} {deleteTarget?.lastName}</span> will be removed from any tournaments they're registered in. They go to the <span className="font-semibold text-primary-600 dark:text-primary-400">Trash</span> for 7 days, then are permanently purged.
+            <span className="block"><span className="font-semibold">{deleteTarget?.firstName} {deleteTarget?.lastName}</span> will be removed from any tournaments they're registered in. They go to the <span className="font-semibold text-primary-600 dark:text-primary-400">Trash</span> for 7 days, then are permanently purged.</span>
+            {deleteError && (
+              <span role="alert" aria-live="assertive" className="mt-3 block rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                {deleteError} You can try again or cancel.
+              </span>
+            )}
           </>
         }
         confirmText="Send to Trash"
@@ -906,7 +1005,7 @@ export default function Competitors() {
       {/* Bulk Delete Confirmation */}
       <ConfirmDialog
         isOpen={bulkDeleteOpen}
-        onClose={() => setBulkDeleteOpen(false)}
+        onClose={() => { if (!bulkDeleteMutation.isPending) setBulkDeleteOpen(false); }}
         onConfirm={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
         title={`Send ${selectedIds.size} competitor${selectedIds.size === 1 ? '' : 's'} to Trash?`}
         message={
@@ -922,12 +1021,14 @@ export default function Competitors() {
       {showFormModal && (
         <Modal
           isOpen={showFormModal}
-          onClose={closeFormModal}
+          onClose={() => {
+            if (!createMutation.isPending && !updateMutation.isPending) closeFormModal();
+          }}
           title={editingCompetitor ? 'Edit Competitor' : 'Add Competitor'}
           size="lg"
           footer={
             <>
-              <Button variant="secondary" type="button" onClick={closeFormModal} className="w-full sm:w-auto">
+              <Button variant="secondary" type="button" onClick={closeFormModal} disabled={createMutation.isPending || updateMutation.isPending} className="w-full sm:w-auto">
                 Cancel
               </Button>
               <Button
@@ -964,7 +1065,7 @@ export default function Competitors() {
             className="space-y-4"
           >
             {formError && (
-              <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
+              <div role="alert" aria-live="assertive" className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
                 <span className="font-semibold">⚠</span>
                 <span>{formError}</span>
               </div>
@@ -1106,7 +1207,9 @@ export default function Competitors() {
       {showImportModal && (
         <Modal
           isOpen={showImportModal}
-          onClose={() => setShowImportModal(false)}
+          onClose={() => {
+            if (!importPreparing && !importMutation.isPending) setShowImportModal(false);
+          }}
           title={
             <div className="flex items-center gap-3">
               <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
@@ -1118,17 +1221,17 @@ export default function Competitors() {
           size="xl"
           footer={
             <>
-              <Button variant="secondary" onClick={() => setShowImportModal(false)} className="w-full sm:w-auto">
+              <Button variant="secondary" onClick={() => setShowImportModal(false)} disabled={importPreparing || importMutation.isPending} className="w-full sm:w-auto">
                 Cancel
               </Button>
               <Button
                 variant="success"
                 onClick={handleImport}
-                loading={importMutation.isPending}
-                disabled={importMutation.isPending || !columnMapping.firstName || !columnMapping.gender || !columnMapping.belt}
+                loading={importPreparing || importMutation.isPending}
+                disabled={importPreparing || importMutation.isPending || !columnMapping.firstName || !columnMapping.gender || !columnMapping.belt}
                 className="w-full sm:w-auto flex items-center justify-center"
               >
-                {importMutation.isPending ? (
+                {(importPreparing || importMutation.isPending) ? (
                   <><Spinner size="sm" className="mr-2" /> Importing {importData?.length} rows...</>
                 ) : (
                   <><Upload className="h-4 w-4 mr-2" /> Import {importData?.length} Competitors</>
@@ -1137,6 +1240,11 @@ export default function Competitors() {
             </>
           }
         >
+          {importError && (
+            <div role="alert" aria-live="assertive" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+              {importError}
+            </div>
+          )}
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-gray-600">
               Found {importData?.length} rows. Map the columns below:

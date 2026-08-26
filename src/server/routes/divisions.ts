@@ -11,8 +11,7 @@ import {
   backupDivisionState,
   saveBackup,
   getBackup,
-  clearBackup,
-  restoreDivisionState,
+  restoreSavedDivisionBackup,
 } from '../services/backup-recovery.js';
 import {
   authenticate,
@@ -872,20 +871,15 @@ router.post('/tournament/:tournamentId/restore', authenticate, requireTournament
   const prisma: PrismaClient = req.app.locals.prisma;
   const tournamentId = getParam(req.params.tournamentId);
 
-  const backup = await getBackup(prisma, tournamentId);
+  const result = await restoreSavedDivisionBackup(prisma, tournamentId);
 
-  if (!backup) {
+  if (!result) {
     return res.status(404).json({
       error: 'No backup found to restore',
       code: 'NO_BACKUP',
       suggestion: 'Backups are created automatically before auto-generation or clearing divisions',
     });
   }
-
-  const result = await restoreDivisionState(prisma, backup);
-  // Clear the backup after a successful restore so the next
-  // bad regeneration doesn't restore the same state again.
-  await clearBackup(prisma, tournamentId);
 
   res.json({
     ...result,

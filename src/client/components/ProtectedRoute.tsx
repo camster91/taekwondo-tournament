@@ -24,7 +24,7 @@ export default function ProtectedRoute({
   requiredRoles,
   requireAuth = true,
 }: ProtectedRouteProps) {
-  const { user, isLoading, isAuthenticated } = useAuth();
+  const { user, isLoading, isAuthenticated, isOfflineSession } = useAuth();
   const location = useLocation();
 
   // Show loading spinner while checking auth
@@ -74,7 +74,7 @@ export default function ProtectedRoute({
               Your current role: <span className="font-medium">{user?.role}</span>
             </p>
             <div className="mt-6 space-x-4">
-              <Button as="a" href="/" variant="primary">
+              <Button as="a" href="/dashboard" variant="primary">
                 Go to Dashboard
               </Button>
               <Button
@@ -91,7 +91,16 @@ export default function ProtectedRoute({
   }
 
   // User is authenticated and has required role (or no role required)
-  return <>{children}</>;
+  return (
+    <>
+      {isOfflineSession && (
+        <div role="status" className="sticky top-0 z-50 border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-sm font-medium text-amber-950">
+          Offline mode: identity is from a recent server-validated session. Changes stay on this device until the connection returns.
+        </div>
+      )}
+      {children}
+    </>
+  );
 }
 
 /**

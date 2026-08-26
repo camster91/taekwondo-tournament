@@ -2,6 +2,9 @@
 # runtime use the same pinned, supported baseline.
 FROM node:22.18-alpine3.22 AS builder
 
+ARG VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64
+ENV VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64}
+
 WORKDIR /app
 
 # Install all dependencies (prisma needed for postinstall)
@@ -15,7 +18,8 @@ COPY . .
 # Generate prisma client, build frontend and backend
 RUN ./node_modules/.bin/prisma generate && \
     npx vite build && \
-    npx tsc -p tsconfig.server.json
+    npx tsc -p tsconfig.server.json && \
+    npx tsc -p tsconfig.demo.json
 
 # ─── Production Dependencies Stage ─────────────────────────────────
 FROM node:22.18-alpine3.22 AS deps
@@ -42,6 +46,7 @@ RUN apk add --no-cache openssl
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/dist-server ./dist-server
+COPY --from=builder --chown=node:node /app/dist-demo ./dist-demo
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --from=builder --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 COPY --chown=node:node package.json ./

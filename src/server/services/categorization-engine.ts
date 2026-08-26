@@ -1,4 +1,4 @@
-import { PrismaClient, Registration, Competitor } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { getBeltLevel, getSimpleBeltCategory, isBlackBelt } from '../../shared/constants/belts.js';
 import { getAgeGroup, DEFAULT_AGE_GROUPS, BB_AGE_GROUPS, type AgeGroup } from '../../shared/constants/age-groups.js';
 import { getWeightClass, DEFAULT_WEIGHT_CLASSES } from '../../shared/constants/weight-classes.js';
@@ -37,7 +37,7 @@ export interface CategorizationConfig {
 // Source-internal type. Mirrors `Registration & { competitor: Competitor }` from
 // Prisma, but we declare it explicitly so tests can construct
 // fixtures without depending on the Prisma client.
-interface RegistrationWithCompetitor {
+export interface RegistrationWithCompetitor {
   id: string;
   competitorId: string;
   patterns: boolean;
@@ -50,7 +50,7 @@ interface RegistrationWithCompetitor {
     firstName: string;
     lastName: string;
     belt: string;
-    beltColor?: string;
+    beltColor?: string | null;
     gender: string;
     schoolDojang?: string | null;
     weightLbs?: number | null;
@@ -88,7 +88,7 @@ export interface PreviewDivision {
   ageMax: number;
   weightClass: string | null;
   competitorCount: number;
-  competitors: { name: string; school: string }[];
+  competitors: { registrationId: string; name: string; school: string }[];
 }
 
 export interface PreviewResult {
@@ -215,6 +215,7 @@ export function previewCategorization(
         weightClass: group.weightClass || null,
         competitorCount: group.registrations.length,
         competitors: group.registrations.map((r) => ({
+          registrationId: r.id,
           name: `${r.competitor.firstName} ${r.competitor.lastName}`,
           school: r.competitor.schoolDojang || '',
         })),
@@ -237,7 +238,7 @@ export function previewCategorization(
 }
 
 export async function autoCategorize(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   tournamentId: string,
   registrations: RegistrationWithCompetitor[],
   config: CategorizationConfig
@@ -292,7 +293,7 @@ export async function autoCategorize(
   let divisionCount = 0;
   let assignmentCount = 0;
 
-  await prisma.$transaction(async (tx) => {
+  const applyChanges = async (tx: Prisma.TransactionClient) => {
     // Clear existing divisions and assignments
     await tx.division.deleteMany({
       where: {
@@ -346,7 +347,13 @@ export async function autoCategorize(
 
       divisionCount++;
     }
-  });
+  };
+
+  if ('$transaction' in prisma) {
+    await prisma.$transaction(applyChanges);
+  } else {
+    await applyChanges(prisma);
+  }
 
   return {
     divisions: divisionCount,

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
@@ -8,6 +8,7 @@ import {
   ExternalLink,
   ShieldCheck,
   Sparkles,
+  KeyRound,
   Users,
   Trophy,
   Trash2,
@@ -15,6 +16,8 @@ import {
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Button, Card, Input, Label, Modal, PageHeader, Spinner } from '../components/ui';
+import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
+import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
 
 type Entitlements = {
   maxTournaments: number;
@@ -39,6 +42,25 @@ type Organization = {
     currentPeriodEnd?: string | null;
     providerCustomerId?: string | null;
   } | null;
+};
+
+type SupportConfig = {
+  hasOpenAiApiKey: boolean;
+  openAiModel: string;
+  openAiBaseUrl: string;
+  supportAlertEmail: string;
+  recentChanges: Array<{
+    id: string;
+    changedFields: string[];
+    changedByUserId: string;
+    at: string;
+  }>;
+};
+
+type SupportConnectionResult = {
+  ok: boolean;
+  category: string;
+  message: string;
 };
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -78,6 +100,15 @@ export default function OrganizationSettings() {
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [exportAcknowledged, setExportAcknowledged] = useState(false);
+  const [exportStatus, setExportStatus] = useState<{ state: OperationState; message: string } | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const exportLockRef = useRef(false);
+  const [supportApiKeyInput, setSupportApiKeyInput] = useState('');
+  const [supportOpenAiModel, setSupportOpenAiModel] = useState('');
+  const [supportOpenAiBaseUrl, setSupportOpenAiBaseUrl] = useState('');
+  const [supportAlertEmail, setSupportAlertEmail] = useState('');
+  const [hasSavedSupportApiKey, setHasSavedSupportApiKey] = useState(false);
+  const [clearSupportApiKey, setClearSupportApiKey] = useState(false);
 
   const organizationsQuery = useQuery({
     queryKey: ['organizations', 'current'],
@@ -85,6 +116,24 @@ export default function OrganizationSettings() {
       await fetch('/api/organizations/current', { headers: getAuthHeaders() }),
     ),
   });
+
+  const supportConfigQuery = useQuery({
+    queryKey: ['support', 'config'],
+    enabled: Boolean(organizationsQuery.data?.organizations[0]),
+    queryFn: async () => responseJson<SupportConfig>(
+      await fetch('/api/support/config', { headers: getAuthHeaders() }),
+    ),
+  });
+
+  useEffect(() => {
+    if (!supportConfigQuery.data) return;
+    setHasSavedSupportApiKey(supportConfigQuery.data.hasOpenAiApiKey);
+    setSupportOpenAiModel(supportConfigQuery.data.openAiModel || '');
+    setSupportOpenAiBaseUrl(supportConfigQuery.data.openAiBaseUrl || '');
+    setSupportAlertEmail(supportConfigQuery.data.supportAlertEmail || '');
+    setSupportApiKeyInput('');
+    setClearSupportApiKey(false);
+  }, [supportConfigQuery.data]);
 
   const createMutation = useMutation({
     mutationFn: async () => responseJson(
@@ -139,6 +188,95 @@ export default function OrganizationSettings() {
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  const supportConfigMutation = useMutation({
+    mutationFn: async () => {
+      const payload: {
+        openAiApiKey?: string | null;
+        openAiModel?: string;
+        openAiBaseUrl?: string;
+        supportAlertEmail?: string;
+        clearOpenAiApiKey?: boolean;
+      } = {};
+
+      if (supportApiKeyInput.trim()) {
+        payload.openAiApiKey = supportApiKeyInput.trim();
+      } else if (clearSupportApiKey) {
+        payload.clearOpenAiApiKey = true;
+      }
+
+      if (supportOpenAiModel.trim()) {
+        payload.openAiModel = supportOpenAiModel.trim();
+      }
+      if (supportOpenAiBaseUrl.trim()) {
+        payload.openAiBaseUrl = supportOpenAiBaseUrl.trim();
+      }
+      if (supportAlertEmail.trim()) {
+        payload.supportAlertEmail = supportAlertEmail.trim();
+      }
+
+      if (!Object.keys(payload).length) {
+        throw new Error('Make at least one change before saving.');
+      }
+
+      const response = await fetch('/api/support/config', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error || 'Failed to save support integration settings');
+      }
+
+      return responseJson<SupportConfig>(response);
+    },
+    onSuccess: (result) => {
+      setHasSavedSupportApiKey(result.hasOpenAiApiKey);
+      setSupportApiKeyInput('');
+      setClearSupportApiKey(false);
+      toast.success('Support integration saved.');
+      void queryClient.invalidateQueries({ queryKey: ['support', 'config'] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const supportConnectionMutation = useMutation({
+    mutationFn: async () => {
+      const payload: { openAiApiKey?: string; openAiModel?: string; openAiBaseUrl?: string } = {};
+      if (supportApiKeyInput.trim()) payload.openAiApiKey = supportApiKeyInput.trim();
+      if (supportOpenAiModel.trim()) payload.openAiModel = supportOpenAiModel.trim();
+      if (supportOpenAiBaseUrl.trim()) payload.openAiBaseUrl = supportOpenAiBaseUrl.trim();
+      return responseJson<SupportConnectionResult>(await fetch('/api/support/config/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(payload),
+      }));
+    },
+    onSuccess: (result) => toast.success(result.message),
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const exportOrganization = async (organization: Organization) => {
+    if (exportLockRef.current) return;
+    exportLockRef.current = true;
+    setExporting(true);
+    setExportStatus({ state: 'pending', message: 'Preparing the complete organization data export.' });
+    try {
+      const blob = await fetchAuthenticatedBlob(fetch, `/api/organizations/${organization.id}/export`, 'application/json', getAuthHeaders());
+      downloadBlob(blob, `${organization.slug}-export.json`);
+      setExportStatus({ state: 'resolved', message: 'Organization data export download started.' });
+    } catch (error) {
+      setExportStatus({ state: 'rejected', message: error instanceof Error ? error.message : 'Organization export failed.' });
+    } finally {
+      setExporting(false);
+      exportLockRef.current = false;
+    }
+  };
 
   if (organizationsQuery.isLoading) {
     return <div className="flex min-h-[50vh] items-center justify-center"><Spinner size="lg" /></div>;
@@ -197,6 +335,7 @@ export default function OrganizationSettings() {
   }
 
   const canManageBilling = ['owner', 'admin'].includes(organization.membershipRole);
+  const canManageSupport = ['owner', 'admin'].includes(organization.membershipRole);
   const hasStripeCustomer = Boolean(organization.billingSubscription?.providerCustomerId);
   const planLabel = organization.plan.charAt(0).toUpperCase() + organization.plan.slice(1);
 
@@ -292,6 +431,15 @@ export default function OrganizationSettings() {
 
       {organization.membershipRole === 'owner' && (
         <Card className="mt-8 border-red-200 dark:border-red-900/70">
+          {exportStatus && (
+            <OperationStatus
+              className="mb-5"
+              state={exportStatus.state}
+              message={exportStatus.message}
+              actionLabel={exportStatus.state === 'rejected' ? 'Dismiss' : undefined}
+              onAction={exportStatus.state === 'rejected' ? () => setExportStatus(null) : undefined}
+            />
+          )}
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-semibold text-slate-950 dark:text-white">Data export and account closure</h2>
@@ -300,13 +448,14 @@ export default function OrganizationSettings() {
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <a
-                href={`/api/organizations/${organization.id}/export`}
-                download={`${organization.slug}-export.json`}
-                className="btn btn-secondary"
+              <Button
+                variant="secondary"
+                loading={exporting}
+                disabled={exporting}
+                onClick={() => void exportOrganization(organization)}
               >
                 <Download className="h-4 w-4" /> Export organization data
-              </a>
+              </Button>
               <Button variant="danger" onClick={() => setShowDelete(true)}>
                 <Trash2 className="h-4 w-4" /> Delete organization
               </Button>
@@ -315,6 +464,120 @@ export default function OrganizationSettings() {
         </Card>
       )}
 
+
+      {canManageSupport && (
+        <Card className="mt-8">
+          <div className="mb-5 flex items-center gap-3">
+            <KeyRound className="h-5 w-5 text-primary-500" />
+            <h2 className="font-semibold text-slate-950 dark:text-white">Support AI settings</h2>
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Configure the AI support assistant and support escalation email for this organization.
+          </p>
+          <form
+            className="mt-5 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              supportConfigMutation.mutate();
+            }}
+          >
+            <div>
+              <Label htmlFor="support-openai-model">OpenAI model</Label>
+              <Input
+                id="support-openai-model"
+                value={supportOpenAiModel}
+                autoComplete="off"
+                placeholder="gpt-4o-mini"
+                onChange={(event) => setSupportOpenAiModel(event.target.value)}
+              />
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Use the exact model identifier, for example `gpt-4o-mini`.</p>
+            </div>
+            <div>
+              <Label htmlFor="support-openai-base-url">OpenAI base URL</Label>
+              <Input
+                id="support-openai-base-url"
+                value={supportOpenAiBaseUrl}
+                autoComplete="off"
+                placeholder="https://api.openai.com/v1"
+                onChange={(event) => setSupportOpenAiBaseUrl(event.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="support-alert-email">Support alert email</Label>
+              <Input
+                id="support-alert-email"
+                value={supportAlertEmail}
+                autoComplete="off"
+                type="email"
+                placeholder="support@yourcompany.com"
+                onChange={(event) => setSupportAlertEmail(event.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="support-openai-api-key">OpenAI API key</Label>
+              <Input
+                id="support-openai-api-key"
+                value={supportApiKeyInput}
+                autoComplete="new-password"
+                type="password"
+                placeholder={hasSavedSupportApiKey ? 'Stored key is configured' : 'Paste new key to set'}
+                onChange={(event) => {
+                  setSupportApiKeyInput(event.target.value);
+                  if (event.target.value.trim()) {
+                    setClearSupportApiKey(false);
+                  }
+                }}
+              />
+              <div className="mt-2 flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={clearSupportApiKey}
+                    onChange={(event) => {
+                      setClearSupportApiKey(event.target.checked);
+                      if (event.target.checked) {
+                        setSupportApiKeyInput('');
+                      }
+                    }}
+                  />
+                  Remove organization key and use environment/default settings
+                </label>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button
+                type="submit"
+                className="w-full sm:w-auto"
+                loading={supportConfigMutation.isPending}
+                disabled={supportConfigMutation.isPending || supportConfigQuery.isLoading}
+              >
+                Save support integration
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full sm:w-auto"
+                loading={supportConnectionMutation.isPending}
+                disabled={supportConnectionMutation.isPending || supportConfigQuery.isLoading || clearSupportApiKey}
+                onClick={() => supportConnectionMutation.mutate()}
+              >
+                Test connection
+              </Button>
+            </div>
+            {supportConnectionMutation.data && (
+              <OperationStatus state="resolved" message={supportConnectionMutation.data.message} />
+            )}
+            {supportConnectionMutation.error && (
+              <OperationStatus state="rejected" message={supportConnectionMutation.error.message} />
+            )}
+            {supportConfigQuery.data?.recentChanges?.[0] && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Last changed {new Date(supportConfigQuery.data.recentChanges[0].at).toLocaleString()} ({supportConfigQuery.data.recentChanges[0].changedFields.join(', ')}).
+              </p>
+            )}
+          </form>
+        </Card>
+      )}
       <Modal
         isOpen={showDelete}
         onClose={() => !deleteMutation.isPending && setShowDelete(false)}

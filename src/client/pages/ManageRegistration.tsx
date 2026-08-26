@@ -29,26 +29,15 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Label from '../components/ui/Label';
 import Select from '../components/ui/Select';
-
-interface ManageRegistration {
-  confirmationCode: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  gender: string;
-  belt: string;
-  weight: number | null;
-  school: string | null;
-  specialNeeds: string | null;
-  competeWithOlder: boolean;
-  patterns: boolean;
-  sparring: boolean;
-  tournamentId: string;
-  tournamentName: string;
-  tournamentDate: string;
-  tournamentStatus: string;
-  checkedIn: boolean;
-}
+import { classifyWithdrawalResponse } from '../utils/registration-withdrawal';
+import { fetchJson, getApiFailure } from '../utils/api-status';
+import {
+  managedRegistrationMatchesUpdate,
+  normalizeManagedRegistrationUpdate,
+  parseManagedRegistrationResponse,
+  type ManagedRegistration as ManageRegistration,
+  type ManagedRegistrationUpdate,
+} from '../utils/manage-registration-contract';
 
 const TKD_BELT_OPTIONS = [
   'White', 'White / Single Yellow Stripe', 'White / Double Yellow Stripe',
@@ -75,6 +64,8 @@ export default function ManageRegistration() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [saveConfirmationPending, setSaveConfirmationPending] = useState(false);
+  const [pendingUpdate, setPendingUpdate] = useState<ManagedRegistrationUpdate | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawn, setWithdrawn] = useState(false);
 
@@ -93,13 +84,18 @@ export default function ManageRegistration() {
     setLookupLoading(true);
     setLookupError(null);
     try {
-      const res = await fetch(`/api/public/registrations/${encodeURIComponent(managementToken)}`);
-      if (!res.ok) throw new Error('This management link is invalid or has expired. Contact the tournament director for help.');
-      const data = await res.json();
+      const data = parseManagedRegistrationResponse(await fetchJson<unknown>(fetch, `/api/public/registrations/${encodeURIComponent(managementToken)}`));
       setRegistration(data.registration);
       setForm(data.registration);
     } catch (err) {
-      setLookupError(err instanceof Error ? err.message : 'Lookup failed. Please try again.');
+      const failure = getApiFailure(err);
+      if (failure?.kind === 'not_found') {
+        setLookupError('This management link is invalid or has expired. Contact the tournament director for help.');
+      } else if (failure?.kind === 'rate_limited') {
+        setLookupError(failure.retryAfterSeconds ? `Too many attempts. Try again in ${failure.retryAfterSeconds} seconds.` : 'Too many attempts. Please try again shortly.');
+      } else {
+        setLookupError('Registration management is unavailable right now. Please try again.');
+      }
     } finally {
       setLookupLoading(false);
     }
@@ -116,25 +112,19 @@ export default function ManageRegistration() {
 
   const handleSave = async () => {
     if (!registration) return;
+    if (saveConfirmationPending) return;
     setGlobalError(null);
+    setSavedAt(null);
     setSaving(true);
+    let patchAcknowledged = false;
+    const submitted = normalizeManagedRegistrationUpdate(form);
     try {
       const res = await fetch(
         `/api/public/registrations/${encodeURIComponent(managementToken)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            firstName: form.firstName,
-            gender: form.gender,
-            belt: form.belt,
-            school: form.school,
-            weight: form.weight,
-            specialNeeds: form.specialNeeds,
-            competeWithOlder: form.competeWithOlder,
-            patterns: form.patterns,
-            sparring: form.sparring,
-          }),
+          body: JSON.stringify(submitted),
         },
       );
       if (res.status === 404) {
@@ -151,24 +141,60 @@ export default function ManageRegistration() {
         const body = await res.json().catch(() => ({ error: 'Save failed.' }));
         throw new Error(body.error || 'Save failed.');
       }
-      // Re-fetch the registration to get the fresh state
-      const refreshed = await fetch(
+      patchAcknowledged = true;
+      setSaveConfirmationPending(true);
+      setPendingUpdate(submitted);
+      // Re-fetch and validate the authoritative state before claiming save.
+      const fresh = parseManagedRegistrationResponse(await fetchJson<unknown>(fetch,
         `/api/public/registrations/${encodeURIComponent(managementToken)}`,
-      );
-      const fresh = await refreshed.json();
+      ));
+      if (!managedRegistrationMatchesUpdate(fresh.registration, submitted)) {
+        throw new Error('Registration changes are not confirmed yet');
+      }
       setRegistration(fresh.registration);
       setForm(fresh.registration);
       setEditMode(false);
       setSavedAt(new Date());
+      setSaveConfirmationPending(false);
+      setPendingUpdate(null);
     } catch (err) {
-      setGlobalError(err instanceof Error ? err.message : 'Save failed.');
+      setGlobalError(patchAcknowledged
+        ? err instanceof Error && err.message === 'Registration changes are not confirmed yet'
+          ? 'Registration status loaded, but the submitted changes are not confirmed yet. Check status again before editing.'
+          : 'Changes may have saved, but confirmation could not be loaded. Check status before editing or submitting again.'
+        : err instanceof Error ? err.message : 'Save failed.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const checkSavedRegistration = async () => {
+    if (!pendingUpdate) return;
+    setSaving(true);
+    setGlobalError(null);
+    try {
+      const fresh = parseManagedRegistrationResponse(await fetchJson<unknown>(fetch,
+        `/api/public/registrations/${encodeURIComponent(managementToken)}`,
+      ));
+      if (!managedRegistrationMatchesUpdate(fresh.registration, pendingUpdate)) {
+        setGlobalError('Registration status loaded, but the submitted changes are not confirmed yet. Check status again before editing.');
+        return;
+      }
+      setRegistration(fresh.registration);
+      setForm(fresh.registration);
+      setEditMode(false);
+      setSaveConfirmationPending(false);
+      setPendingUpdate(null);
+      setSavedAt(new Date());
+    } catch {
+      setGlobalError('Changes may have saved, but confirmation could not be loaded. Check status again before editing or submitting.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleWithdraw = async () => {
-    if (!registration) return;
+    if (!registration || saveConfirmationPending) return;
     if (!confirm(
       `Withdraw ${registration.firstName} from ${registration.tournamentName}? This permanently removes the registration. The director will need to regenerate brackets.`
     )) return;
@@ -182,21 +208,21 @@ export default function ManageRegistration() {
           headers: { 'Content-Type': 'application/json' },
         },
       );
-      if (res.status === 404) {
-        setGlobalError('Already withdrawn or not found.');
-        setWithdrawn(true);
+      const outcome = classifyWithdrawalResponse(res.status);
+      if (outcome.outcome === 'unavailable') {
+        setGlobalError(outcome.message);
         return;
       }
-      if (res.status === 409) {
+      if (outcome.outcome === 'conflict') {
         const body = await res.json().catch(() => ({ error: 'Conflict' }));
         setGlobalError(body.error || 'Cannot withdraw.');
         return;
       }
-      if (!res.ok) {
+      if (outcome.outcome === 'failure') {
         const body = await res.json().catch(() => ({ error: 'Withdraw failed.' }));
         throw new Error(body.error || 'Withdraw failed.');
       }
-      setWithdrawn(true);
+      if (outcome.outcome === 'withdrawn') setWithdrawn(true);
     } catch (err) {
       setGlobalError(err instanceof Error ? err.message : 'Withdraw failed.');
     } finally {
@@ -205,11 +231,14 @@ export default function ManageRegistration() {
   };
 
   const reset = () => {
+    if (saveConfirmationPending) return;
     setRegistration(null);
     setEditMode(false);
     setForm({});
     setSavedAt(null);
     setGlobalError(null);
+    setSaveConfirmationPending(false);
+    setPendingUpdate(null);
     setLookupError(null);
     setWithdrawn(false);
   };
@@ -243,7 +272,8 @@ export default function ManageRegistration() {
           <button
             type="button"
             onClick={reset}
-            className="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4"
+            disabled={saveConfirmationPending}
+            className="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 disabled:opacity-50"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
             Look up another registration
@@ -302,12 +332,21 @@ export default function ManageRegistration() {
               className="mb-4 p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-start gap-2"
             >
               <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
-              <span>{globalError}</span>
+              <div>
+                <span>{globalError}</span>
+                {saveConfirmationPending && (
+                  <Button type="button" variant="secondary" size="sm" className="mt-2" loading={saving} onClick={checkSavedRegistration}>
+                    Check status
+                  </Button>
+                )}
+              </div>
             </div>
           )}
 
           <Card>
             <CardBody className="p-6 space-y-4">
+              <fieldset disabled={saveConfirmationPending} className="contents">
+                <legend className="sr-only">Registration details</legend>
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                   {registration.firstName} {registration.lastName}
@@ -319,7 +358,7 @@ export default function ManageRegistration() {
                         <Button variant="secondary" size="sm" onClick={() => { setEditMode(false); setForm(registration); }} disabled={saving}>
                           <X className="h-4 w-4 mr-1" /> Cancel
                         </Button>
-                        <Button variant="primary" size="sm" onClick={handleSave} loading={saving}>
+                        <Button variant="primary" size="sm" onClick={handleSave} loading={saving} disabled={saveConfirmationPending}>
                           <Save className="h-4 w-4 mr-1" /> Save changes
                         </Button>
                       </>
@@ -448,6 +487,7 @@ export default function ManageRegistration() {
                   )}
                 </div>
               </div>
+              </fieldset>
             </CardBody>
           </Card>
 

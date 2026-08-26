@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
+import { isDemoUser } from '../utils/demo-progress';
 import {
   LayoutDashboard,
   ArrowLeft,
@@ -22,8 +23,10 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
+import { Input } from '../components/ui';
 import { StatTile } from '../components/ui';
 import type { ApiDivision, ApiMatch, ApiTournamentSummary } from '../utils/api-types';
+import { useOfflineOperations } from '../hooks/useOfflineOperations';
 
 interface DivisionStats {
   id: string;
@@ -80,11 +83,36 @@ interface TournamentProgress {
   warnings: string[];
 }
 
+interface OperationalQueryAnswer {
+  answer: string;
+  generatedAt: string;
+  evidence: Array<{ label: string; href: string; observedAt: string }>;
+}
+
+interface AttentionAlert {
+  id: string;
+  kind: string;
+  severity: 'critical' | 'warning' | 'info';
+  title: string;
+  summary: string;
+  recommendation: string;
+  href: string;
+  affectedLabels: string[];
+}
+
+interface AttentionResponse {
+  alerts: AttentionAlert[];
+  generatedAt: string;
+}
+
 const AVERAGE_MATCH_DURATION = 5; // minutes per match
 
 export default function DirectorDashboard() {
   const { id: tournamentId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const demoReadOnly = isDemoUser(user);
+  const offlineOperations = useOfflineOperations(tournamentId);
 
   // Display mode state (M8). Three modes:
   // - 'all': auto-cycle through every ring with active matches (default)
@@ -93,6 +121,7 @@ export default function DirectorDashboard() {
   const [displayMode, setDisplayMode] = useState<'all' | 'ring' | 'featured'>('all');
   const [displayRing, setDisplayRing] = useState<number>(1);
   const [displayMatchId, setDisplayMatchId] = useState<string>('');
+  const [operationalQuestion, setOperationalQuestion] = useState('');
 
   const displaySettingsMutation = useMutation({
     mutationFn: async () => {
@@ -302,6 +331,31 @@ export default function DirectorDashboard() {
   refetchIntervalInBackground: false,
   });
 
+  const attentionQuery = useQuery<AttentionResponse>({
+    queryKey: ['tournament-attention', tournamentId],
+    enabled: Boolean(tournamentId),
+    queryFn: async () => {
+      const response = await fetch(`/api/tournaments/${tournamentId}/attention`, { headers: getAuthHeaders() });
+      if (!response.ok) throw new Error('The command centre could not load current alerts.');
+      return response.json() as Promise<AttentionResponse>;
+    },
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
+
+  const operationalQueryMutation = useMutation({
+    mutationFn: async (question: string): Promise<OperationalQueryAnswer> => {
+      const response = await fetch(`/api/tournaments/${tournamentId}/operational-query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ question }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : 'The operational question could not be answered.');
+      return body as OperationalQueryAnswer;
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -354,23 +408,117 @@ export default function DirectorDashboard() {
         </Link>
       </PageHeader>
 
-      {/* Warnings */}
-      {progress.warnings.length > 0 && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-          <div className="flex items-center mb-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2" />
-            <h3 className="font-medium text-yellow-800 dark:text-yellow-200">Attention Required</h3>
+      <section aria-label="Ask about tournament operations">
+        <Card>
+          <CardHeader title="Ask about tournament operations" description="Read-only answers use current server records. Supported: blocked divisions, the next number of minutes, a late ring, and schools needing check-in." />
+          <CardBody className="space-y-3">
+            <form
+              className="flex flex-col gap-2 sm:flex-row"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const question = operationalQuestion.trim();
+                if (question) operationalQueryMutation.mutate(question);
+              }}
+            >
+              <label htmlFor="operational-question" className="sr-only">Operational question</label>
+              <Input
+                id="operational-question"
+                value={operationalQuestion}
+                onChange={(event) => setOperationalQuestion(event.target.value)}
+                placeholder="For example: Why is Ring 3 late?"
+                aria-describedby="operational-query-help"
+                disabled={operationalQueryMutation.isPending}
+              />
+              <Button type="submit" loading={operationalQueryMutation.isPending} disabled={!operationalQuestion.trim()}>Ask</Button>
+            </form>
+            <p id="operational-query-help" className="text-sm text-gray-600 dark:text-gray-400">This never changes tournament data.</p>
+            {operationalQueryMutation.isError && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100">{operationalQueryMutation.error instanceof Error ? operationalQueryMutation.error.message : 'The operational question could not be answered.'}</div>}
+            {operationalQueryMutation.data && (
+              <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+                <p>{operationalQueryMutation.data.answer}</p>
+                <p className="mt-1 text-xs">Current as of {new Date(operationalQueryMutation.data.generatedAt).toLocaleTimeString()}.</p>
+                {operationalQueryMutation.data.evidence.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5">{operationalQueryMutation.data.evidence.map((item) => <li key={`${item.href}:${item.label}`}><Link className="underline" to={item.href}>{item.label}</Link> <span className="text-xs">({new Date(item.observedAt).toLocaleTimeString()})</span></li>)}</ul>}
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      </section>
+
+      {/* Server-backed command centre */}
+      <section aria-labelledby="attention-heading" className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 id="attention-heading" className="text-lg font-semibold text-gray-900 dark:text-white">Attention required</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Live operational risks, ordered by severity.</p>
           </div>
-          <ul className="space-y-1">
-            {progress.warnings.map((warning, i) => (
-              <li key={i} className="text-sm text-yellow-700 dark:text-yellow-300 flex items-center">
-                <span className="w-1.5 h-1.5 bg-yellow-500 dark:bg-yellow-400 rounded-full mr-2" />
-                {warning}
-              </li>
-            ))}
-          </ul>
+          {attentionQuery.isError && (
+            <Button variant="secondary" size="sm" onClick={() => void attentionQuery.refetch()}>Retry alerts</Button>
+          )}
         </div>
-      )}
+        {attentionQuery.isLoading && (
+          <div role="status" className="rounded-lg border border-gray-200 p-4 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-300">
+            Checking tournament-day risks…
+          </div>
+        )}
+        {attentionQuery.isError && (
+          <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200">
+            The command centre is unavailable. Existing tournament data is still shown; retry before relying on the alert list.
+          </div>
+        )}
+        {attentionQuery.data?.alerts.length === 0 && offlineOperations.needsReview.length === 0 && (
+          <div role="status" className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
+            <CheckCircle className="h-5 w-5" aria-hidden="true" /> No current operational alerts.
+          </div>
+        )}
+        {offlineOperations.needsReview.length > 0 && (
+          <article className="rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
+                <div>
+                  <h3 className="font-semibold text-red-900 dark:text-red-100">Offline changes need review</h3>
+                  <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
+                    {offlineOperations.needsReview.length} score or check-in change on this device was rejected or has uncertain delivery.
+                  </p>
+                  <p className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
+                    Recommended: open the affected workflow, compare server state, then retry, acknowledge, or discard the local change.
+                  </p>
+                </div>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Button as={Link} to={`/checkin/${tournamentId}`} variant="secondary" size="sm">Check-in review</Button>
+                <Button as={Link} to={`/scorekeeper/${tournamentId}`} variant="danger" size="sm">Score review</Button>
+              </div>
+            </div>
+          </article>
+        )}
+        {attentionQuery.data?.alerts.map((alert) => {
+          const critical = alert.severity === 'critical';
+          return (
+            <article
+              key={alert.id}
+              className={`rounded-lg border p-4 ${critical
+                ? 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
+                : 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'}`}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex gap-3">
+                  <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${critical ? 'text-red-600' : 'text-amber-600'}`} aria-hidden="true" />
+                  <div>
+                    <h3 className={`font-semibold ${critical ? 'text-red-900 dark:text-red-100' : 'text-amber-900 dark:text-amber-100'}`}>{alert.title}</h3>
+                    <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">{alert.summary}</p>
+                    <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">Affected: {alert.affectedLabels.join('; ')}</p>
+                    <p className="mt-2 text-sm font-medium text-gray-900 dark:text-white">Recommended: {alert.recommendation}</p>
+                  </div>
+                </div>
+                <Button as={Link} to={alert.href} variant={critical ? 'danger' : 'secondary'} size="sm" className="shrink-0">
+                  Review
+                </Button>
+              </div>
+            </article>
+          );
+        })}
+      </section>
 
       {/* Overview Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -599,6 +747,7 @@ export default function DirectorDashboard() {
               <select
                 id="display-mode"
                 value={displayMode}
+                disabled={demoReadOnly}
                 onChange={(e) => setDisplayMode(e.target.value as 'all' | 'ring' | 'featured')}
                 className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 w-full sm:w-auto"
               >
@@ -613,6 +762,7 @@ export default function DirectorDashboard() {
                 <select
                   id="display-ring"
                   value={displayRing}
+                  disabled={demoReadOnly}
                   onChange={(e) => setDisplayRing(parseInt(e.target.value, 10))}
                   className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 w-full sm:w-auto"
                 >
@@ -637,6 +787,7 @@ export default function DirectorDashboard() {
                   id="display-match"
                   type="text"
                   value={displayMatchId}
+                  disabled={demoReadOnly}
                   onChange={(e) => setDisplayMatchId(e.target.value)}
                   placeholder="e.g. 7f59a9ad-6b08-4867-96e5-d5a8a29a682b"
                   className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 font-mono w-full"
@@ -647,12 +798,13 @@ export default function DirectorDashboard() {
               variant="primary"
               onClick={() => displaySettingsMutation.mutate()}
               loading={displaySettingsMutation.isPending}
+              disabled={demoReadOnly}
             >
               <Monitor className="h-4 w-4 mr-2" /> Apply
             </Button>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            The public scoreboard at <a href={`/display/${tournamentId}`} target="_blank" rel="noopener noreferrer" className="underline">/display/{tournamentId}</a> will read this and filter its view.
+            {demoReadOnly ? 'Public display controls are read-only in the public demo.' : <>The public scoreboard at <a href={`/display/${tournamentId}`} target="_blank" rel="noopener noreferrer" className="underline">/display/{tournamentId}</a> will read this and filter its view.</>}
           </p>
         </CardBody>
       </Card>

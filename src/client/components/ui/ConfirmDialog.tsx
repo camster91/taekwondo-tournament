@@ -13,6 +13,7 @@ interface ConfirmDialogProps {
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'info';
   isLoading?: boolean;
+  closeDisabled?: boolean;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -36,6 +37,7 @@ export default function ConfirmDialog({
   cancelText = 'Cancel',
   variant = 'danger',
   isLoading = false,
+  closeDisabled = false,
 }: ConfirmDialogProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<Element | null>(null);
@@ -143,14 +145,14 @@ export default function ConfirmDialog({
                   {message}
                 </p>
               </div>
-              <CloseButton onClose={onClose} />
+              <CloseButton onClose={onClose} disabled={closeDisabled || isLoading} />
             </div>
           </div>
           <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 rounded-b-lg flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
             <Button
               variant="secondary"
               onClick={onClose}
-              disabled={isLoading}
+              disabled={isLoading || closeDisabled}
               className="w-full sm:w-auto"
             >
               {cancelText}

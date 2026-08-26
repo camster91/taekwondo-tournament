@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
@@ -44,6 +44,9 @@ import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { StatTile } from '../components/ui';
+import { Modal } from '../components/ui';
+import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
+import { readAdminOperationError } from '../utils/admin-operation-error';
 
 interface Tournament {
   id: string;
@@ -111,6 +114,7 @@ export default function TournamentDetail() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [bulkRegisterError, setBulkRegisterError] = useState<string | null>(null);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
   const [registerPatterns, setRegisterPatterns] = useState(true);
@@ -121,6 +125,23 @@ export default function TournamentDetail() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedSchoolLink, setCopiedSchoolLink] = useState(false);
   const [showCloseRegistrationConfirm, setShowCloseRegistrationConfirm] = useState(false);
+  const registrationLockRef = useRef(false);
+  const statusLockRef = useRef(false);
+  const addCompetitorsTriggerRef = useRef<HTMLElement | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [closeStatusError, setCloseStatusError] = useState<string | null>(null);
+  const [registrationNotice, setRegistrationNotice] = useState<{
+    state: OperationState;
+    message: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
+  const [statusNotice, setStatusNotice] = useState<{
+    state: OperationState;
+    message: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
 
   const { data: tournament, isLoading: tournamentLoading } = useQuery<Tournament>({
     queryKey: ['tournament', id],
@@ -161,71 +182,158 @@ export default function TournamentDetail() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error('Failed to register competitors');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to register competitors'));
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['registrations', id] });
-      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+    onMutate: () => setBulkRegisterError(null),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['registrations', id] }),
+        queryClient.invalidateQueries({ queryKey: ['tournament', id] }),
+      ]);
       setShowAddModal(false);
       setSelectedCompetitors([]);
+      setModalSearch('');
+      window.requestAnimationFrame(() => addCompetitorsTriggerRef.current?.focus());
     },
+    onError: (error) => setBulkRegisterError(error instanceof Error ? error.message : 'Failed to register competitors'),
   });
 
   const removeRegistrationMutation = useMutation({
-    mutationFn: async (regId: string) => {
+    mutationFn: async ({ regId }: { regId: string; competitorName: string }) => {
       const res = await fetch(`/api/tournaments/${id}/registrations/${regId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error || 'Failed to remove registration');
-      }
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to remove registration'));
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['registrations', id] });
-      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+    onMutate: ({ competitorName }) => {
+      setRemoveError(null);
+      setRegistrationNotice({ state: 'pending', message: `Removing ${competitorName} from this tournament.` });
     },
+    onSuccess: async (_data, { competitorName }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['registrations', id] }),
+        queryClient.invalidateQueries({ queryKey: ['tournament', id] }),
+      ]);
+      setDeleteTarget(null);
+      setRegistrationNotice({ state: 'resolved', message: `${competitorName} was removed and the registration list is up to date.` });
+    },
+    onError: (error) => {
+      setRemoveError(error instanceof Error ? error.message : 'Failed to remove registration');
+      setRegistrationNotice(null);
+    },
+    onSettled: () => { registrationLockRef.current = false; },
   });
 
+  type RegistrationUpdate = {
+    regId: string;
+    patterns: boolean;
+    sparring: boolean;
+    competitorName: string;
+    actionLabel: string;
+  };
+
   const updateRegistrationMutation = useMutation({
-    mutationFn: async ({
-      regId,
-      patterns,
-      sparring,
-    }: {
-      regId: string;
-      patterns: boolean;
-      sparring: boolean;
-    }) => {
+    mutationFn: async ({ regId, patterns, sparring }: RegistrationUpdate) => {
       const res = await fetch(`/api/tournaments/${id}/registrations/${regId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ patterns, sparring }),
       });
-      if (!res.ok) throw new Error('Failed to update registration');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to update registration'));
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['registrations', id] });
+    onMutate: ({ competitorName, actionLabel }) => setRegistrationNotice({
+      state: 'pending',
+      message: `${actionLabel} for ${competitorName}.`,
+    }),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['registrations', id] });
+      setRegistrationNotice({
+        state: 'resolved',
+        message: `${variables.actionLabel} for ${variables.competitorName}; the registration list is up to date.`,
+      });
     },
+    onError: (error, variables) => setRegistrationNotice({
+      state: 'rejected',
+      message: `${variables.competitorName}: ${error instanceof Error ? error.message : 'Failed to update registration'}`,
+      actionLabel: 'Retry',
+      onAction: () => {
+        if (registrationLockRef.current) return;
+        registrationLockRef.current = true;
+        updateRegistrationMutation.mutate(variables);
+      },
+    }),
+    onSettled: () => { registrationLockRef.current = false; },
   });
 
+  const submitRegistrationUpdate = (variables: RegistrationUpdate) => {
+    if (registrationLockRef.current) return;
+    registrationLockRef.current = true;
+    updateRegistrationMutation.mutate(variables);
+  };
+
+  const submitRegistrationRemoval = (registration: Registration) => {
+    if (registrationLockRef.current) return;
+    registrationLockRef.current = true;
+    removeRegistrationMutation.mutate({
+      regId: registration.id,
+      competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+    });
+  };
+
+  const openRegistrationRemoval = (registration: Registration) => {
+    setRemoveError(null);
+    setRegistrationNotice(null);
+    setDeleteTarget(registration);
+  };
+
   const updateStatusMutation = useMutation({
-    mutationFn: async (status: string) => {
+    mutationFn: async ({ status }: { status: string; actionLabel: string }) => {
       const res = await fetch(`/api/tournaments/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) throw new Error('Failed to update status');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to update tournament status'));
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+    onMutate: ({ actionLabel }) => {
+      setCloseStatusError(null);
+      setStatusNotice({ state: 'pending', message: `${actionLabel}.` });
     },
+    onSuccess: async (_data, { actionLabel }) => {
+      await queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+      setShowCloseRegistrationConfirm(false);
+      setStatusNotice({ state: 'resolved', message: `${actionLabel} completed and the tournament is up to date.` });
+    },
+    onError: (error, variables) => {
+      const message = error instanceof Error ? error.message : 'Failed to update tournament status';
+      if (showCloseRegistrationConfirm) {
+        setCloseStatusError(message);
+        setStatusNotice(null);
+      } else {
+        setStatusNotice({
+          state: 'rejected',
+          message,
+          actionLabel: 'Retry',
+          onAction: () => {
+            if (statusLockRef.current) return;
+            statusLockRef.current = true;
+            updateStatusMutation.mutate(variables);
+          },
+        });
+      }
+    },
+    onSettled: () => { statusLockRef.current = false; },
   });
+
+  const submitStatusUpdate = (status: string, actionLabel: string) => {
+    if (statusLockRef.current) return;
+    statusLockRef.current = true;
+    updateStatusMutation.mutate({ status, actionLabel });
+  };
 
   // Clone this tournament as a template for next year. Closes M2 from
   // the UI audit — director can roll last year's settings forward
@@ -547,6 +655,15 @@ export default function TournamentDetail() {
         <DayOfPanel tournamentId={tournament.id} />
       )}
 
+      {statusNotice && (
+        <OperationStatus
+          state={statusNotice.state}
+          message={statusNotice.message}
+          actionLabel={statusNotice.actionLabel ?? (statusNotice.state === 'pending' ? undefined : 'Dismiss')}
+          onAction={statusNotice.onAction ?? (statusNotice.state === 'pending' ? undefined : () => setStatusNotice(null))}
+        />
+      )}
+
       {/* Tournament Status Controls */}
       {tournament.status === 'registration' ? (
         <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
@@ -572,7 +689,10 @@ export default function TournamentDetail() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setShowCloseRegistrationConfirm(true)}
+                onClick={() => {
+                  setCloseStatusError(null);
+                  setShowCloseRegistrationConfirm(true);
+                }}
                 loading={updateStatusMutation.isPending}
                 className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
               >
@@ -584,7 +704,7 @@ export default function TournamentDetail() {
                 size="sm"
                 onClick={() => {
                   if (confirm('Mark this tournament as completed? Parents will no longer be able to register and the public scoreboard will show final results.')) {
-                    updateStatusMutation.mutate('completed');
+                    submitStatusUpdate('completed', 'Marking tournament completed');
                   }
                 }}
                 loading={updateStatusMutation.isPending}
@@ -603,7 +723,7 @@ export default function TournamentDetail() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => updateStatusMutation.mutate('registration')}
+              onClick={() => submitStatusUpdate('registration', 'Opening public registration')}
               loading={updateStatusMutation.isPending}
             >
               <Globe className="h-3.5 w-3.5 mr-1" />
@@ -612,7 +732,7 @@ export default function TournamentDetail() {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => updateStatusMutation.mutate('completed')}
+              onClick={() => submitStatusUpdate('completed', 'Marking tournament completed')}
               loading={updateStatusMutation.isPending}
             >
               <Flag className="h-3.5 w-3.5 mr-1" />
@@ -628,7 +748,7 @@ export default function TournamentDetail() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => updateStatusMutation.mutate('active')}
+            onClick={() => submitStatusUpdate('active', 'Reopening tournament')}
             loading={updateStatusMutation.isPending}
           >
             Reopen Tournament
@@ -642,13 +762,22 @@ export default function TournamentDetail() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => updateStatusMutation.mutate('registration')}
+            onClick={() => submitStatusUpdate('registration', 'Opening public registration')}
             loading={updateStatusMutation.isPending}
           >
             <Globe className="h-3.5 w-3.5 mr-1" />
             Open for Registration
           </Button>
         </div>
+      )}
+
+      {registrationNotice && (
+        <OperationStatus
+          state={registrationNotice.state}
+          message={registrationNotice.message}
+          actionLabel={registrationNotice.actionLabel ?? (registrationNotice.state === 'pending' ? undefined : 'Dismiss')}
+          onAction={registrationNotice.onAction ?? (registrationNotice.state === 'pending' ? undefined : () => setRegistrationNotice(null))}
+        />
       )}
 
       {/* Registrations */}
@@ -685,7 +814,7 @@ export default function TournamentDetail() {
                   Email Parents
                 </Button>
               )}
-              <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
+              <Button ref={addCompetitorsTriggerRef} variant="primary" size="sm" onClick={() => { setBulkRegisterError(null); setShowAddModal(true); }}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Competitors
               </Button>
@@ -720,7 +849,8 @@ export default function TournamentDetail() {
                         label={`Remove ${reg.competitor.firstName} ${reg.competitor.lastName} from this tournament`}
                         variant="danger"
                         size="sm"
-                        onClick={() => setDeleteTarget(reg)}
+                        disabled={updateRegistrationMutation.isPending || removeRegistrationMutation.isPending}
+                        onClick={() => openRegistrationRemoval(reg)}
                       />
                     </div>
                     <div className="text-sm text-gray-600 space-y-1">
@@ -743,11 +873,14 @@ export default function TournamentDetail() {
                     </div>
                     <div className="flex gap-4 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                       <button
+                        disabled={updateRegistrationMutation.isPending || removeRegistrationMutation.isPending}
                         onClick={() =>
-                          updateRegistrationMutation.mutate({
+                          submitRegistrationUpdate({
                             regId: reg.id,
                             patterns: !reg.patterns,
                             sparring: reg.sparring,
+                            competitorName: `${reg.competitor.firstName} ${reg.competitor.lastName}`,
+                            actionLabel: reg.patterns ? 'Removing Patterns' : 'Adding Patterns',
                           })
                         }
                         className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -759,11 +892,14 @@ export default function TournamentDetail() {
                         {reg.patterns ? '✓ ' : ''}Patterns
                       </button>
                       <button
+                        disabled={updateRegistrationMutation.isPending || removeRegistrationMutation.isPending}
                         onClick={() =>
-                          updateRegistrationMutation.mutate({
+                          submitRegistrationUpdate({
                             regId: reg.id,
                             patterns: reg.patterns,
                             sparring: !reg.sparring,
+                            competitorName: `${reg.competitor.firstName} ${reg.competitor.lastName}`,
+                            actionLabel: reg.sparring ? 'Removing Sparring' : 'Adding Sparring',
                           })
                         }
                         className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -824,11 +960,14 @@ export default function TournamentDetail() {
                             variant={reg.patterns ? 'success' : 'default'}
                             size="sm"
                             pressed={reg.patterns}
+                            disabled={updateRegistrationMutation.isPending || removeRegistrationMutation.isPending}
                             onClick={() =>
-                              updateRegistrationMutation.mutate({
+                              submitRegistrationUpdate({
                                 regId: reg.id,
                                 patterns: !reg.patterns,
                                 sparring: reg.sparring,
+                                competitorName: `${reg.competitor.firstName} ${reg.competitor.lastName}`,
+                                actionLabel: reg.patterns ? 'Removing Patterns' : 'Adding Patterns',
                               })
                             }
                           />
@@ -840,11 +979,14 @@ export default function TournamentDetail() {
                             variant={reg.sparring ? 'success' : 'default'}
                             size="sm"
                             pressed={reg.sparring}
+                            disabled={updateRegistrationMutation.isPending || removeRegistrationMutation.isPending}
                             onClick={() =>
-                              updateRegistrationMutation.mutate({
+                              submitRegistrationUpdate({
                                 regId: reg.id,
                                 patterns: reg.patterns,
                                 sparring: !reg.sparring,
+                                competitorName: `${reg.competitor.firstName} ${reg.competitor.lastName}`,
+                                actionLabel: reg.sparring ? 'Removing Sparring' : 'Adding Sparring',
                               })
                             }
                           />
@@ -855,7 +997,8 @@ export default function TournamentDetail() {
                             label={`Remove ${reg.competitor.firstName} ${reg.competitor.lastName} from this tournament`}
                             variant="danger"
                             size="sm"
-                            onClick={() => setDeleteTarget(reg)}
+                            disabled={updateRegistrationMutation.isPending || removeRegistrationMutation.isPending}
+                            onClick={() => openRegistrationRemoval(reg)}
                           />
                         </TableCell>
                       </TableRow>
@@ -876,7 +1019,7 @@ export default function TournamentDetail() {
               icon={Users}
               title="No competitors registered"
               description="Add competitors to this tournament to get started."
-              action={{ label: 'Add Competitors', onClick: () => setShowAddModal(true) }}
+              action={{ label: 'Add Competitors', onClick: () => { setBulkRegisterError(null); setShowAddModal(true); } }}
             />
           )}
         </CardBody>
@@ -885,15 +1028,21 @@ export default function TournamentDetail() {
       {/* Delete Confirmation */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => { if (!removeRegistrationMutation.isPending) setDeleteTarget(null); }}
         onConfirm={() => {
-          if (deleteTarget) {
-            removeRegistrationMutation.mutate(deleteTarget.id);
-            setDeleteTarget(null);
-          }
+          if (deleteTarget) submitRegistrationRemoval(deleteTarget);
         }}
         title="Remove Registration"
-        message={`Remove ${deleteTarget?.competitor.firstName} ${deleteTarget?.competitor.lastName} from this tournament?`}
+        message={
+          <>
+            <span className="block">Remove {deleteTarget?.competitor.firstName} {deleteTarget?.competitor.lastName} from this tournament?</span>
+            {removeError && (
+              <span role="alert" aria-live="assertive" className="mt-3 block rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                {removeError} You can try again or cancel.
+              </span>
+            )}
+          </>
+        }
         confirmText="Remove"
         isLoading={removeRegistrationMutation.isPending}
       />
@@ -901,13 +1050,19 @@ export default function TournamentDetail() {
       {/* Close Registration Confirmation */}
       <ConfirmDialog
         isOpen={showCloseRegistrationConfirm}
-        onClose={() => setShowCloseRegistrationConfirm(false)}
-        onConfirm={() => {
-          updateStatusMutation.mutate('active');
-          setShowCloseRegistrationConfirm(false);
-        }}
+        onClose={() => { if (!updateStatusMutation.isPending) setShowCloseRegistrationConfirm(false); }}
+        onConfirm={() => submitStatusUpdate('active', 'Closing public registration')}
         title="Close Registration"
-        message="Are you sure you want to close registration? No new public signups will be accepted."
+        message={
+          <>
+            <span className="block">Are you sure you want to close registration? No new public signups will be accepted.</span>
+            {closeStatusError && (
+              <span role="alert" aria-live="assertive" className="mt-3 block rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                {closeStatusError} You can try again or cancel.
+              </span>
+            )}
+          </>
+        }
         confirmText="Close Registration"
         variant="warning"
         isLoading={updateStatusMutation.isPending}
@@ -915,29 +1070,21 @@ export default function TournamentDetail() {
 
       {/* Add Competitors Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div
-            className="fixed inset-0 bg-black/50 transition-opacity"
-            onClick={() => {
-              setShowAddModal(false);
-              setSelectedCompetitors([]);
-              setModalSearch('');
-            }}
-          />
-          <div className="flex min-h-full items-center justify-center p-4">
-            <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
+        <Modal
+          isOpen={showAddModal}
+          onClose={() => {
+            if (bulkRegisterMutation.isPending) return;
+            setShowAddModal(false);
+            setSelectedCompetitors([]);
+            setModalSearch('');
+          }}
+          closeDisabled={bulkRegisterMutation.isPending}
+          title="Add Competitors"
+          size="full"
+          panelClassName="max-h-[90vh]"
+          noBodyPadding
+        >
               <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add Competitors</h2>
-                  <CloseButton
-                    onClose={() => {
-                      setShowAddModal(false);
-                      setSelectedCompetitors([]);
-                      setModalSearch('');
-                    }}
-                    label="Close add competitors"
-                  />
-                </div>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div>
                     <label htmlFor="tournament-search-add-competitors" className="sr-only">
@@ -951,6 +1098,7 @@ export default function TournamentDetail() {
                       onChange={(e) => setModalSearch(e.target.value)}
                       leftIcon={<Search className="h-4 w-4" />}
                       autoFocus
+                      disabled={bulkRegisterMutation.isPending}
                     />
                   </div>
                   <div className="flex gap-4">
@@ -958,6 +1106,7 @@ export default function TournamentDetail() {
                       <input
                         type="checkbox"
                         checked={registerPatterns}
+                        disabled={bulkRegisterMutation.isPending}
                         onChange={(e) => setRegisterPatterns(e.target.checked)}
                         className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                       />
@@ -967,6 +1116,7 @@ export default function TournamentDetail() {
                       <input
                         type="checkbox"
                         checked={registerSparring}
+                        disabled={bulkRegisterMutation.isPending}
                         onChange={(e) => setRegisterSparring(e.target.checked)}
                         className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                       />
@@ -980,6 +1130,7 @@ export default function TournamentDetail() {
                   <div className="space-y-1">
                     <div className="flex items-center justify-between mb-3">
                       <button
+                        disabled={bulkRegisterMutation.isPending}
                         onClick={() =>
                           setSelectedCompetitors(
                             selectedCompetitors.length === filteredAvailable.length
@@ -1010,6 +1161,7 @@ export default function TournamentDetail() {
                       >
                         <input
                           type="checkbox"
+                          disabled={bulkRegisterMutation.isPending}
                           checked={selectedCompetitors.includes(c.id)}
                           onChange={(e) =>
                             setSelectedCompetitors(
@@ -1053,19 +1205,27 @@ export default function TournamentDetail() {
                   />
                 )}
               </div>
-              <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  <span className="font-semibold text-gray-900 dark:text-white">{selectedCompetitors.length}</span> competitors selected
-                </span>
-                <div className="flex gap-3 w-full sm:w-auto">
+              <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 space-y-3">
+                {bulkRegisterError && (
+                  <div role="alert" aria-live="assertive" className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                    {bulkRegisterError} Your selections are preserved; you can try again or cancel.
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="font-semibold text-gray-900 dark:text-white">{selectedCompetitors.length}</span> competitors selected
+                  </span>
+                  <div className="flex gap-3 w-full sm:w-auto">
                   <Button
                     variant="secondary"
                     className="flex-1 sm:flex-none"
                     onClick={() => {
+                      if (bulkRegisterMutation.isPending) return;
                       setShowAddModal(false);
                       setSelectedCompetitors([]);
                       setModalSearch('');
                     }}
+                    disabled={bulkRegisterMutation.isPending}
                   >
                     Cancel
                   </Button>
@@ -1073,7 +1233,7 @@ export default function TournamentDetail() {
                     variant="primary"
                     className="flex-1 sm:flex-none"
                     loading={bulkRegisterMutation.isPending}
-                    disabled={selectedCompetitors.length === 0}
+                    disabled={bulkRegisterMutation.isPending || selectedCompetitors.length === 0}
                     onClick={() =>
                       bulkRegisterMutation.mutate({
                         competitorIds: selectedCompetitors,
@@ -1086,11 +1246,10 @@ export default function TournamentDetail() {
                       ? 'Adding...'
                       : `Add ${selectedCompetitors.length} Competitors`}
                   </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Broadcast Email Modal — closes M1 from the UI audit. Director

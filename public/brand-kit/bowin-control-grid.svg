@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" fill="none">
+  <rect width="1600" height="900" fill="#0B1220"/>
+  <g opacity=".16" stroke="#F8F5EC">
+    <path d="M0 100H1600M0 200H1600M0 300H1600M0 400H1600M0 500H1600M0 600H1600M0 700H1600M0 800H1600"/>
+    <path d="M100 0V900M200 0V900M300 0V900M400 0V900M500 0V900M600 0V900M700 0V900M800 0V900M900 0V900M1000 0V900M1100 0V900M1200 0V900M1300 0V900M1400 0V900M1500 0V900"/>
+  </g>
+  <path d="M965 160H1130V245H1275V330H1455" stroke="#F6B93B" stroke-width="4"/>
+  <path d="M885 310H1060V395H1205V480H1455" stroke="#52B6EC" stroke-width="4"/>
+  <path d="M1020 510H1165V595H1320V680H1510" stroke="#E11D48" stroke-width="4"/>
+  <g fill="#F6B93B"><rect x="944" y="145" width="42" height="30"/><circle cx="1457" cy="330" r="15"/></g>
+  <g fill="#52B6EC"><rect x="864" y="295" width="42" height="30"/><circle cx="1457" cy="480" r="15"/></g>
+  <g fill="#E11D48"><rect x="999" y="495" width="42" height="30"/><circle cx="1512" cy="680" r="15"/></g>
+  <path d="M1050 735L1250 635L1450 735L1380 840H1120L1050 735Z" stroke="#F8F5EC" stroke-width="18" opacity=".92"/>
+  <path d="M1120 735L1250 670L1380 735L1334 804H1166L1120 735Z" stroke="#E11D48" stroke-width="26"/>
+  <g fill="#F8F5EC" opacity=".82">
+    <rect x="120" y="716" width="8" height="34"/><rect x="146" y="728" width="8" height="22"/><rect x="172" y="704" width="8" height="46"/><rect x="198" y="722" width="8" height="28"/><rect x="224" y="712" width="8" height="38"/><rect x="250" y="732" width="8" height="18"/>
+  </g>
+</svg>
+

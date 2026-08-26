@@ -21,13 +21,20 @@ import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import CloseButton from '../components/ui/CloseButton';
 import { useToast } from '../context/ToastContext';
 import { getSportProfile } from '../../shared/constants/sport-profiles';
-import { Card, CardBody } from '../components/ui';
+import { Card, CardBody, ConfirmDialog } from '../components/ui';
 import { Button } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { activateDialogFocus } from '../utils/dialog-focus';
 import { makeScoreOperation } from '../utils/offline-operation-queue';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
 import AccessibleDialog from '../components/ui/AccessibleDialog';
+import OperationStatus from '../components/ui/OperationStatus';
+import { buildDeliveryUncertainMessage, buildOfflineOperationStatuses, buildOfflineReviewMessage, pendingOfflineTargetIds } from '../utils/offline-operation-status';
+import { readAdminOperationError } from '../utils/admin-operation-error';
+import { latestCompletedMatchId } from '../utils/scorekeeper-undo';
+import { browserVenueDataSnapshotStore, loadVenueData } from '../utils/venue-data-snapshot';
+import { isScorekeeperDivisionData } from '../utils/venue-data-contracts';
+import { shouldQueueOfflineMutation } from '../utils/offline-delivery';
 
 interface Match {
   id: string;
@@ -88,12 +95,45 @@ interface ScoreSubmission {
   notes: string;
 }
 
+function validateWinResult(
+  resultType: ResultType,
+  selectedWinner: string | null,
+  match: Match | undefined,
+  score1: string,
+  score2: string,
+): string | null {
+  if (!selectedWinner || !match || resultType !== 'win') return null;
+
+  const first = Number(score1);
+  const second = Number(score2);
+  if (
+    !/^\d{1,3}$/.test(score1) ||
+    !/^\d{1,3}$/.test(score2) ||
+    !Number.isInteger(first) ||
+    !Number.isInteger(second)
+  ) {
+    return 'Enter a whole-number score from 0 to 999 for both competitors.';
+  }
+  if (first === second) return 'A win cannot end in a tie. Choose a non-tied score or a different result type.';
+
+  const scoreWinnerId = first > second ? match.competitor1?.id : match.competitor2?.id;
+  if (!scoreWinnerId || scoreWinnerId !== selectedWinner) {
+    return 'The selected winner must have the higher score.';
+  }
+  return null;
+}
+
 export default function Scorekeeper() {
   const { tournamentId } = useParams();
   const queryClient = useQueryClient();
   const { addToast } = useToast();
-  const { user } = useAuth();
+  const { user, isOfflineSession } = useAuth();
+  const venueSnapshots = useMemo(browserVenueDataSnapshotStore, []);
+  const [cachedSnapshotAt, setCachedSnapshotAt] = useState<string | null>(null);
   const offlineOperations = useOfflineOperations(tournamentId, 'score_result');
+  const [discardOfflineId, setDiscardOfflineId] = useState<string | null>(null);
+  const [discardOfflineError, setDiscardOfflineError] = useState('');
+  const [unpersistedDeliveryWarning, setUnpersistedDeliveryWarning] = useState('');
 
   const [selectedRing, setSelectedRing] = useState<number | null>(null);
   const [selectedDivision, setSelectedDivision] = useState<string | null>(null);
@@ -121,6 +161,9 @@ export default function Scorekeeper() {
   const [incidentSeverity, setIncidentSeverity] = useState<string>('minor');
   const [incidentDescription, setIncidentDescription] = useState('');
   const [pendingUndoId, setPendingUndoId] = useState<string | null>(null);
+  const [undoError, setUndoError] = useState('');
+  const [undoAcknowledged, setUndoAcknowledged] = useState(false);
+  const [undoChecking, setUndoChecking] = useState(false);
   const [incidentAction, setIncidentAction] = useState<string>('');
   const incidentDialogRef = useRef<HTMLDivElement>(null);
   const incidentOpenerRef = useRef<HTMLButtonElement>(null);
@@ -148,10 +191,17 @@ export default function Scorekeeper() {
   const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions } = useQuery<Division[]>({
     queryKey: ['scorekeeper-divisions', tournamentId],
     queryFn: async () => {
-      const res = await fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`, { headers: getAuthHeaders() });
-      if (!res.ok) throw new Error('Failed to fetch divisions');
-      return res.json();
+      if (!user || !tournamentId) throw new Error('Authenticated tournament context is required');
+      const result = await loadVenueData<Division[]>({
+        scope: { ownerId: user.id, tournamentId, kind: 'scorekeeper' },
+        store: venueSnapshots,
+        validate: (value): value is Division[] => isScorekeeperDivisionData(value),
+        request: () => fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`, { headers: getAuthHeaders() }),
+      });
+      setCachedSnapshotAt(result.source === 'snapshot' ? result.savedAt : null);
+      return result.data;
     },
+    enabled: Boolean(user && tournamentId),
     refetchInterval: 10000,
   refetchIntervalInBackground: false,
   });
@@ -161,11 +211,10 @@ export default function Scorekeeper() {
       .map((match) => match.ringNumber)
       .filter((ring): ring is number => ring != null),
   )).sort((a, b) => a - b), [divisions]);
-  const stagedScoreIds = useMemo(() => new Set(
-    offlineOperations.operations
-      .filter((operation) => operation.kind === 'score_result')
-      .map((operation) => operation.targetId),
-  ), [offlineOperations.operations]);
+  const stagedScoreIds = useMemo(
+    () => pendingOfflineTargetIds(offlineOperations.operations, 'score_result'),
+    [offlineOperations.operations],
+  );
 
   // Get ready matches for selected division — safe with optional chaining
   const readyMatches = useMemo(() => {
@@ -191,6 +240,13 @@ export default function Scorekeeper() {
   }, [divisions, selectedDivision]);
 
   const currentMatch = readyMatches[currentMatchIndex];
+  const resultValidationError = useMemo(
+    () => validateWinResult(resultType, selectedWinner, currentMatch, score1, score2),
+    [currentMatch, resultType, score1, score2, selectedWinner],
+  );
+  const selectedDivisionMatches = useMemo(() => (
+    divisions?.find((division) => division.id === selectedDivision)?.bracket?.matches || []
+  ), [divisions, selectedDivision]);
 
   const finishResultEntry = (queued: boolean) => {
     const wasLast = currentMatchIndex >= readyMatches.length - 1;
@@ -203,17 +259,41 @@ export default function Scorekeeper() {
       : `Result ${state}. Advanced to next match.`);
   };
 
-  const stageScoreResult = (data: ScoreSubmission) => {
+  const stageScoreResult = (data: ScoreSubmission, deliveryUncertain = false) => {
     if (!tournamentId || !user) return;
-    offlineOperations.enqueue(makeScoreOperation(user.id, tournamentId, data.matchId, {
-      winnerId: data.winnerId,
-      score1: data.score1,
-      score2: data.score2,
-      status: 'completed',
-      notes: data.notes,
-    }));
-    addToast('Result saved on this device and will sync when the connection returns.', 'warning');
+    try {
+      offlineOperations.enqueue(makeScoreOperation(user.id, tournamentId, data.matchId, {
+        winnerId: data.winnerId,
+        score1: data.score1,
+        score2: data.score2,
+        status: 'completed',
+        notes: data.notes,
+      }, deliveryUncertain ? 'delivery_uncertain' : 'pending'));
+    } catch {
+      if (deliveryUncertain) {
+        const division = divisions?.find((candidate) => candidate.id === selectedDivision);
+        const match = currentMatch?.id === data.matchId ? currentMatch : undefined;
+        const name = (entry: Match['competitor1']) => entry ? `${entry.competitor.firstName} ${entry.competitor.lastName}` : 'TBD';
+        const winner = match?.competitor1?.id === data.winnerId ? name(match.competitor1) : match?.competitor2?.id === data.winnerId ? name(match.competitor2) : `Registration #${data.winnerId.slice(0, 8)}`;
+        const target = match ? `${division?.name || 'Division'}, match #${match.matchNumber} (${name(match.competitor1)} vs ${name(match.competitor2)})` : `Match #${data.matchId.slice(0, 8)}`;
+        setUnpersistedDeliveryWarning(`${target} may already be saved on the server. Attempted winner: ${winner}, score ${data.score1 || '0'}–${data.score2 || '0'}, sent ${new Date().toLocaleTimeString()}. This device could not retain the safety record. Do not resubmit it. Review the refreshed match first.`);
+        void queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
+        finishResultEntry(true);
+        setAnnounce('Result delivery is uncertain. Do not resubmit it; review the refreshed match first.');
+        return;
+      }
+      addToast('Result was not saved on this device. Keep this match open, free device storage, and try again.', 'error');
+      setAnnounce('Result was not saved on this device. The current match remains open.');
+      return;
+    }
+    if (deliveryUncertain) {
+      void queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
+      addToast('Result delivery is uncertain. The request may have reached the server; review the refreshed match before taking action.', 'error');
+    } else {
+      addToast('Result saved on this device and will sync when the connection returns.', 'warning');
+    }
     finishResultEntry(true);
+    if (deliveryUncertain) setAnnounce('Result delivery is uncertain. Review the refreshed match before taking action.');
   };
 
   const recordResult = useMutation({
@@ -240,7 +320,7 @@ export default function Scorekeeper() {
     },
     onError: (error: Error, data) => {
       if (error instanceof TypeError) {
-        stageScoreResult(data);
+        stageScoreResult(data, true);
         return;
       }
       addToast(error.message || 'Operation failed', 'error');
@@ -251,24 +331,65 @@ export default function Scorekeeper() {
   const undoMatchResult = useMutation({
     mutationFn: async (matchId: string) => {
       const res = await fetch(`/api/brackets/match/${matchId}/undo`, {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       });
-      if (!res.ok) throw new Error('Failed to undo match result');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to undo match result'));
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
-      queryClient.invalidateQueries({ queryKey: ['director-dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['divisions'] });
-      addToast('Match result undone', 'success');
-      setAnnounce('Last result undone.');
+    onMutate: () => {
+      setUndoError('');
+      setUndoAcknowledged(false);
+      setAnnounce('Undoing match result.');
+    },
+    onSuccess: async () => {
+      try {
+        await queryClient.refetchQueries({ queryKey: ['scorekeeper-divisions'] }, { throwOnError: true });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['director-dashboard'] }),
+          queryClient.invalidateQueries({ queryKey: ['divisions'] }),
+        ]);
+        setPendingUndoId(null);
+        addToast('Match result undone', 'success');
+        setAnnounce('Last result undone.');
+      } catch {
+        setUndoAcknowledged(true);
+        setUndoError('Undo may have succeeded, but server state could not be refreshed. Check status before taking another action.');
+        setAnnounce('Undo acknowledgement received, but updated match status could not be loaded.');
+      }
     },
     onError: (error: Error) => {
+      setUndoError(error.message || 'Operation failed');
       addToast(error.message || 'Operation failed', 'error');
       setAnnounce(`Undo failed: ${error.message || 'Operation failed'}`);
     },
   });
+
+  const closeUndoDialog = useCallback(() => {
+    if (undoMatchResult.isPending || undoChecking || undoAcknowledged) return;
+    setPendingUndoId(null);
+    setUndoError('');
+  }, [undoMatchResult.isPending, undoChecking, undoAcknowledged]);
+
+  const checkUndoStatus = useCallback(async () => {
+    setUndoChecking(true);
+    setUndoError('');
+    try {
+      await queryClient.refetchQueries({ queryKey: ['scorekeeper-divisions'] }, { throwOnError: true });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['director-dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['divisions'] }),
+      ]);
+      setUndoAcknowledged(false);
+      setPendingUndoId(null);
+      addToast('Match result undone', 'success');
+      setAnnounce('Last result undone.');
+    } catch {
+      setUndoError('Updated match status is still unavailable. Check status again before taking another action.');
+    } finally {
+      setUndoChecking(false);
+    }
+  }, [addToast, queryClient]);
 
   // Report incident mutation
   const reportIncident = useMutation({
@@ -327,6 +448,12 @@ export default function Scorekeeper() {
 
   const handleSubmit = () => {
     if (!currentMatch || !selectedWinner) return;
+    if (resultValidationError) {
+      setShowConfirm(false);
+      setAnnounce(resultValidationError);
+      addToast(resultValidationError, 'error');
+      return;
+    }
 
     let noteText = '';
     if (penalties1 > 0 || penalties2 > 0) {
@@ -350,7 +477,7 @@ export default function Scorekeeper() {
       score2,
       notes: noteText,
     };
-    if (!navigator.onLine) stageScoreResult(submission);
+    if (shouldQueueOfflineMutation({ isOfflineSession, navigatorOnline: navigator.onLine })) stageScoreResult(submission);
     else recordResult.mutate(submission);
   };
 
@@ -367,11 +494,21 @@ export default function Scorekeeper() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
 
-    if (showIncidentModal || showKeyboardHelp) return;
+    if (showIncidentModal || showKeyboardHelp || pendingUndoId) return;
 
     if (showConfirm) {
       if (e.key === 'Enter') { e.preventDefault(); handleSubmit(); }
       else if (e.key === 'Escape') { e.preventDefault(); setShowConfirm(false); }
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && selectedDivision) {
+      e.preventDefault();
+      const lastCompletedId = latestCompletedMatchId(selectedDivisionMatches);
+      if (lastCompletedId && !undoMatchResult.isPending) {
+        setUndoError('');
+        setPendingUndoId(lastCompletedId);
+      }
       return;
     }
 
@@ -448,22 +585,9 @@ export default function Scorekeeper() {
         // shouldn't have to scroll to find the per-match Undo button
         // after confirming the wrong winner. Skipped when typing in an
         // input field (already handled above).
-        case 'z':
-        case 'Z':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            const lastCompleted = readyMatches
-              .filter((m) => m.status === 'completed')
-              .slice(-1)[0];
-            if (lastCompleted && !undoMatchResult.isPending) {
-              undoMatchResult.mutate(lastCompleted.id);
-              setAnnounce('Undid last match result.');
-            }
-          }
-          break;
       }
     }
-  }, [showConfirm, showIncidentModal, showKeyboardHelp, selectedDivision, currentMatch, selectedWinner, readyMatches]);
+  }, [showConfirm, showIncidentModal, showKeyboardHelp, pendingUndoId, selectedDivision, currentMatch, selectedWinner, readyMatches, selectedDivisionMatches, undoMatchResult.isPending]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -503,25 +627,115 @@ export default function Scorekeeper() {
       await queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
       addToast(`${result.synced} staged result${result.synced === 1 ? '' : 's'} synced.`, 'success');
     }
-    if (result.needsReview > 0) {
+    if (result.newlyRejected > 0) {
       addToast('A staged result conflicts with server state and needs director review.', 'error');
+    }
+    if (result.persistenceFailuresBeforeSend > 0) {
+      addToast('Nothing was sent because this device could not safely prepare the sync. Free device storage and try again.', 'error');
+    }
+    if (result.persistenceFailuresAfterSend > 0) {
+      addToast('The server may have accepted a result, but this device could not clear its local copy. Refresh and review before syncing again.', 'error');
+    }
+    if (result.persistenceFailuresAfterRejection > 0) {
+      addToast('A result was rejected, but this device could not save the rejection details. It has been quarantined from retry; refresh and review it.', 'error');
     }
   };
 
-  const offlineStatus = offlineOperations.operations.length > 0 && (
-    <div role="status" className="max-w-4xl mx-auto mb-4 p-3 rounded-lg border border-amber-500/50 bg-amber-950 text-amber-100 flex flex-wrap items-center justify-between gap-3">
-      <span>
-        {offlineOperations.pending.length} result{offlineOperations.pending.length === 1 ? '' : 's'} pending sync
-        {offlineOperations.needsReview.length > 0 && ` · ${offlineOperations.needsReview.length} needs director review`}
-      </span>
-      <div className="flex gap-2">
-        <Button size="sm" variant="secondary" onClick={() => void syncStagedResults()} loading={offlineOperations.syncing}>Sync now</Button>
-        {offlineOperations.needsReview.map((operation) => (
-          <Button key={operation.id} size="sm" variant="secondary" onClick={() => offlineOperations.remove(operation.id)}>
-            Discard rejected #{operation.targetId.slice(0, 8)}
+  const retryStagedResult = async (id: string) => {
+    const result = await offlineOperations.retry(id);
+    if (!result) return;
+    if (result.outcome === 'synced') {
+      await queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
+      addToast('Staged result synced.', 'success');
+    } else if (result.outcome === 'rejected') {
+      addToast('The staged result was rejected again. Review the server message before retrying.', 'error');
+    } else if (result.outcome === 'offline') {
+      addToast('Reconnect to retry this staged result.', 'warning');
+    } else if (result.outcome === 'superseded') {
+      addToast('A newer local result replaced this retry. The newer result remains queued.', 'warning');
+    } else if (result.outcome === 'persistence_failed_after_send') {
+      addToast('The server may have accepted this result, but this device could not clear the local copy. Refresh and review the match before retrying.', 'error');
+    } else if (result.outcome === 'delivery_uncertain' || result.outcome === 'persistence_failed_after_rejection') {
+      addToast('Delivery is uncertain. Refresh and verify the server match; retry is disabled for this local copy.', 'error');
+    } else if (result.outcome === 'persistence_failed_before_send') {
+      addToast('This device could not safely prepare the retry, so nothing was sent. Free device storage and try again.', 'error');
+    }
+  };
+
+  const offlineStatus = (offlineOperations.operations.length > 0 || unpersistedDeliveryWarning) && (
+    <>
+    <div className="mx-auto mb-4 max-w-4xl space-y-2">
+      {unpersistedDeliveryWarning && <OperationStatus state="rejected" message={unpersistedDeliveryWarning} actionLabel="I verified server state" onAction={() => setUnpersistedDeliveryWarning('')} />}
+      {buildOfflineOperationStatuses('result', offlineOperations.pending.length, offlineOperations.needsReview.length, offlineOperations.syncing)
+        .map((status) => <OperationStatus key={status.state} {...status} />)}
+      {offlineOperations.pending.length > 0 && (
+        <Button size="sm" variant="secondary" onClick={() => void syncStagedResults()} loading={offlineOperations.syncing} disabled={offlineOperations.queueBusy}>Sync pending results</Button>
+      )}
+      {offlineOperations.needsReview.map((operation) => {
+        const retrying = offlineOperations.retryingIds.has(operation.id);
+        const retryable = operation.status === 'needs_review' && !retrying;
+        const division = divisions?.find((candidate) => candidate.bracket?.matches.some((match) => match.id === operation.targetId));
+        const match = division?.bracket?.matches.find((candidate) => candidate.id === operation.targetId);
+        const name = (entry: Match['competitor1']) => entry
+          ? `${entry.competitor.firstName} ${entry.competitor.lastName}`
+          : 'TBD';
+        const label = match
+          ? `${division?.name || 'Division'} · Match ${match.matchNumber} · ${name(match.competitor1)} vs ${name(match.competitor2)}`
+          : `Result #${operation.targetId.slice(0, 8)}`;
+        const winnerId = operation.payload.winnerId;
+        let winner = 'selected winner';
+        if (match) {
+          if (match.competitor1?.id === winnerId) winner = name(match.competitor1);
+          else if (match.competitor2?.id === winnerId) winner = name(match.competitor2);
+        }
+        const message = operation.status === 'delivery_uncertain'
+          ? buildDeliveryUncertainMessage('result', label)
+          : buildOfflineReviewMessage('result', operation.targetId, operation.lastError, {
+            label,
+            attempted: `${winner}, ${String(operation.payload.score1 ?? '-')}–${String(operation.payload.score2 ?? '-')}`,
+            createdAt: operation.createdAt,
+          });
+        return (
+        <OperationStatus
+          key={operation.id}
+          state={retrying ? 'retrying' : 'rejected'}
+          message={message}
+          actionLabel={retryable ? 'Retry' : undefined}
+          onAction={retryable ? () => void retryStagedResult(operation.id) : undefined}
+        >
+          <Button size="sm" variant="secondary" onClick={() => { setDiscardOfflineError(''); setDiscardOfflineId(operation.id); }} disabled={retrying}>
+            Discard local change
           </Button>
-        ))}
-      </div>
+        </OperationStatus>
+        );
+      })}
+    </div>
+    <ConfirmDialog
+      isOpen={discardOfflineId !== null}
+      onClose={() => { setDiscardOfflineError(''); setDiscardOfflineId(null); }}
+      onConfirm={() => {
+        try {
+          if (discardOfflineId) offlineOperations.remove(discardOfflineId);
+          setDiscardOfflineError('');
+          setDiscardOfflineId(null);
+        } catch {
+          setDiscardOfflineError('The local change could not be removed from this device. Free device storage and try again.');
+        }
+      }}
+      title="Discard unsynced result?"
+      message={<>
+        <span className="block">This permanently removes the local score change. The server match will remain unchanged.</span>
+        {discardOfflineError && <span role="alert" className="mt-2 block text-red-300">{discardOfflineError}</span>}
+      </>}
+      confirmText="Discard local change"
+      variant="danger"
+    />
+    </>
+  );
+
+  const cachedDataStatus = cachedSnapshotAt && (
+    <div role="status" className="mx-auto mb-4 max-w-4xl rounded border border-amber-600 bg-amber-950 px-4 py-3 text-sm text-amber-100">
+      Cached scorekeeper data from {new Date(cachedSnapshotAt).toLocaleTimeString()}. Server results may be newer; offline results remain queued until reconnection.
     </div>
   );
 
@@ -540,6 +754,7 @@ export default function Scorekeeper() {
         >
           {announce}
         </div>
+        {cachedDataStatus}
         {offlineStatus}
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-6">
@@ -699,6 +914,7 @@ export default function Scorekeeper() {
       >
         {announce}
       </div>
+      {cachedDataStatus}
       {offlineStatus}
       {/* Header */}
       <div className="bg-gray-800 p-4">
@@ -982,6 +1198,9 @@ export default function Scorekeeper() {
                   id="scorekeeper-score1"
                   type="number"
                   inputMode="numeric"
+                  min="0"
+                  max="999"
+                  step="1"
                   value={score1}
                   onChange={(e) => setScore1(e.target.value)}
                   className="w-full p-4 text-2xl text-center bg-gray-700 rounded-lg"
@@ -996,6 +1215,9 @@ export default function Scorekeeper() {
                   id="scorekeeper-score2"
                   type="number"
                   inputMode="numeric"
+                  min="0"
+                  max="999"
+                  step="1"
                   value={score2}
                   onChange={(e) => setScore2(e.target.value)}
                   className="w-full p-4 text-2xl text-center bg-gray-700 rounded-lg"
@@ -1064,11 +1286,17 @@ export default function Scorekeeper() {
             {/* Submit Button */}
             <button
               onClick={() => setShowConfirm(true)}
-              disabled={!selectedWinner}
+              disabled={!selectedWinner || Boolean(resultValidationError)}
+              aria-describedby={resultValidationError ? 'scorekeeper-result-validation' : undefined}
               className="w-full py-4 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-xl text-xl font-bold transition-colors"
             >
               Record Result
             </button>
+            {resultValidationError && (
+              <p id="scorekeeper-result-validation" role="alert" className="mt-2 text-sm text-red-300">
+                {resultValidationError}
+              </p>
+            )}
 
             {/* Report Incident Button */}
             <button
@@ -1195,7 +1423,7 @@ export default function Scorekeeper() {
               <Button variant="secondary" className="flex-1" onClick={() => setShowConfirm(false)}>
                 Cancel <span className="text-xs text-gray-600" aria-hidden="true">(Esc)</span>
               </Button>
-              <Button variant="primary" className="flex-1" loading={recordResult.isPending} onClick={handleSubmit}>
+              <Button variant="primary" className="flex-1" loading={recordResult.isPending} disabled={Boolean(resultValidationError)} onClick={handleSubmit}>
                 Confirm <span className="text-xs text-green-200" aria-hidden="true">(Enter)</span>
               </Button>
             </div>
@@ -1407,40 +1635,25 @@ export default function Scorekeeper() {
       )}
 
       {/* Undo result confirmation */}
-      {pendingUndoId && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="undo-confirm-title"
-        >
-          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full">
-            <h3 id="undo-confirm-title" className="text-xl font-bold mb-4 text-red-400">Undo this result?</h3>
-            <p className="text-gray-300 mb-2">This reverses the recorded winner for this match.</p>
-            <p className="text-sm text-amber-300 mb-4">
-              Downstream matches may now reference a competitor who no longer won. The next match in the bracket may need to be re-played.
-            </p>
-            <div className="flex gap-3">
-              <Button variant="secondary" className="flex-1" onClick={() => setPendingUndoId(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                className="flex-1"
-                loading={undoMatchResult.isPending}
-                onClick={() => {
-                  if (pendingUndoId) {
-                    undoMatchResult.mutate(pendingUndoId);
-                    setPendingUndoId(null);
-                  }
-                }}
-              >
-                Undo result
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={Boolean(pendingUndoId)}
+        onClose={closeUndoDialog}
+        onConfirm={() => {
+          if (undoAcknowledged) void checkUndoStatus();
+          else if (pendingUndoId && !undoMatchResult.isPending) undoMatchResult.mutate(pendingUndoId);
+        }}
+        title="Undo this result?"
+        message={(
+          <>
+            <span className="block">This reverses the recorded winner. Downstream matches may need review or replay.</span>
+            {undoError && <span role="alert" className="block mt-2 text-red-600 dark:text-red-300">{undoError}</span>}
+          </>
+        )}
+        confirmText={undoAcknowledged ? 'Check status' : 'Undo result'}
+        variant="danger"
+        isLoading={undoMatchResult.isPending || undoChecking}
+        closeDisabled={undoAcknowledged}
+      />
     </div>
   );
 }

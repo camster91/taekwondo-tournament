@@ -21,6 +21,8 @@ import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
+import Modal from '../components/ui/Modal';
+import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 
 interface Competitor {
   id: string;
@@ -50,8 +52,35 @@ interface Match {
 
 interface Bracket {
   id: string;
+  format: string;
   structure: string;
   matches: Match[];
+}
+
+interface BracketCorrectionImpact {
+  divisionLabel: string;
+  competitorCount: number;
+  oldFormat: string | null;
+  newFormat: string;
+  oldMatchCount: number;
+  newMatchCount: number;
+  completedMatchesRemoved: number;
+  inProgressMatchesBlocked: number;
+  scoredMatchesRemoved: number;
+  notesRemoved: number;
+  matchAuditRowsRemoved: number;
+  matchupHistoryRowsRemoved: number;
+  oldByeCount: number;
+  newByeCount: number;
+  changedFirstRoundPairings: Array<{ matchNumber: number; before: string[]; after: string[] }>;
+}
+
+interface BracketCorrectionPreview {
+  proposedConfig: { format: 'double_elim' | 'single_elim' | 'round_robin' | 'pool_play'; seedingStrategy: 'school_spread' };
+  impact: BracketCorrectionImpact;
+  expectedInputVersion: string;
+  expectedResultVersion: string;
+  operationKey: string;
 }
 
 interface Division {
@@ -77,6 +106,15 @@ export default function BracketEditor() {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [showReseedConfirm, setShowReseedConfirm] = useState(false);
+  const [correctionPreview, setCorrectionPreview] = useState<BracketCorrectionPreview | null>(null);
+  const [correctionError, setCorrectionError] = useState('');
+  const [correctionUncertain, setCorrectionUncertain] = useState(false);
+  const [lastCorrection, setLastCorrection] = useState<{ auditId: string; operationKey: string } | null>(null);
+  const [undoUncertain, setUndoUncertain] = useState(false);
+  const [correctionNotice, setCorrectionNotice] = useState<{ state: OperationState; message: string } | null>(null);
+  const previewCorrectionLockRef = useRef(false);
+  const applyCorrectionLockRef = useRef(false);
+  const undoCorrectionLockRef = useRef(false);
   const [pendingWinner, setPendingWinner] = useState<{ matchId: string; winnerId: string; name: string } | null>(null);
 
   const { data: division, isLoading } = useQuery<Division>({
@@ -104,6 +142,132 @@ export default function BracketEditor() {
     onError: (error: Error) => {
       addToast(error.message || 'Operation failed', 'error');
     },
+  });
+
+  const previewCorrectionMutation = useMutation({
+    mutationFn: async () => {
+      const config = { format: (division?.bracket?.format ?? 'double_elim') as BracketCorrectionPreview['proposedConfig']['format'], seedingStrategy: 'school_spread' as const };
+      const res = await fetch(`/api/brackets/division/${divisionId}/correction/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ config }),
+      });
+      const body = await res.json().catch(() => ({})) as BracketCorrectionPreview & { error?: string };
+      if (!res.ok) throw new Error(body.error || 'Failed to preview bracket reseed');
+      return body;
+    },
+    onMutate: () => {
+      setCorrectionError('');
+      setCorrectionNotice({ state: 'pending', message: 'Calculating the exact bracket and results affected.' });
+    },
+    onSuccess: (preview) => {
+      setCorrectionPreview(preview);
+      setShowReseedConfirm(true);
+      setCorrectionNotice(null);
+    },
+    onError: (error: Error) => setCorrectionNotice({ state: 'rejected', message: error.message }),
+    onSettled: () => { previewCorrectionLockRef.current = false; },
+  });
+
+  const applyCorrectionMutation = useMutation({
+    mutationFn: async (preview: BracketCorrectionPreview) => {
+      const res = await fetch(`/api/brackets/division/${divisionId}/correction/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          config: preview.proposedConfig,
+          expectedInputVersion: preview.expectedInputVersion,
+          expectedResultVersion: preview.expectedResultVersion,
+          operationKey: preview.operationKey,
+        }),
+      });
+      const body = await res.json().catch(() => ({})) as { auditId?: string; error?: string };
+      if (!res.ok) throw new Error(body.error || 'Failed to reseed bracket');
+      if (!body.auditId) throw new Error('Bracket reseed acknowledgement was incomplete');
+      return { auditId: body.auditId, operationKey: preview.operationKey };
+    },
+    onMutate: () => {
+      setCorrectionError('');
+      setCorrectionUncertain(false);
+    },
+    onSuccess: async (operation) => {
+      await queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
+      setLastCorrection(operation);
+      setShowReseedConfirm(false);
+      setCorrectionPreview(null);
+      setCorrectionNotice({ state: 'resolved', message: 'Bracket reseeded and reconciled with the server. Undo is available until scoring changes it.' });
+    },
+    onError: (error: Error) => {
+      if (error instanceof TypeError) {
+        setCorrectionUncertain(true);
+        setCorrectionError('The server may have applied this reseed, but the response was lost. Check server status before taking another action.');
+      } else setCorrectionError(error.message);
+    },
+    onSettled: () => { applyCorrectionLockRef.current = false; },
+  });
+
+  const correctionStatusMutation = useMutation({
+    mutationFn: async (preview: BracketCorrectionPreview) => {
+      const res = await fetch(`/api/brackets/division/${divisionId}/correction/status/${preview.operationKey}`, { headers: getAuthHeaders() });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error('Could not check bracket correction status');
+      return res.json() as Promise<{ auditId: string; applied: boolean; undone: boolean }>;
+    },
+    onSuccess: async (status) => {
+      if (!status?.applied) {
+        setCorrectionError('The reseed was not found on the server. Review the preview before trying again.');
+        setCorrectionUncertain(false);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
+      setLastCorrection({ auditId: status.auditId, operationKey: correctionPreview!.operationKey });
+      setShowReseedConfirm(false);
+      setCorrectionPreview(null);
+      setCorrectionUncertain(false);
+      setCorrectionNotice({ state: 'resolved', message: 'The server confirms the bracket reseed was applied. Undo is available until scoring changes it.' });
+    },
+    onError: (error: Error) => setCorrectionError(error.message),
+  });
+
+  const undoCorrectionMutation = useMutation({
+    mutationFn: async (operation: { auditId: string; operationKey: string }) => {
+      const res = await fetch(`/api/brackets/division/${divisionId}/correction/undo/${operation.auditId}`, { method: 'POST', headers: getAuthHeaders() });
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) throw new Error(body.error || 'Failed to undo bracket reseed');
+    },
+    onMutate: () => setUndoUncertain(false),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
+      setLastCorrection(null);
+      setCorrectionNotice({ state: 'resolved', message: 'The previous bracket, results, and correction history were restored.' });
+    },
+    onError: (error: Error) => {
+      if (error instanceof TypeError) {
+        setUndoUncertain(true);
+        setCorrectionNotice({ state: 'rejected', message: 'Undo may have succeeded, but the response was lost. Check server status before retrying.' });
+      } else setCorrectionNotice({ state: 'rejected', message: error.message });
+    },
+    onSettled: () => { undoCorrectionLockRef.current = false; },
+  });
+
+  const undoStatusMutation = useMutation({
+    mutationFn: async (operation: { auditId: string; operationKey: string }) => {
+      const res = await fetch(`/api/brackets/division/${divisionId}/correction/status/${operation.operationKey}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Could not check undo status');
+      return res.json() as Promise<{ undone: boolean }>;
+    },
+    onSuccess: async (status) => {
+      if (!status.undone) {
+        setUndoUncertain(false);
+        setCorrectionNotice({ state: 'rejected', message: 'The server confirms undo was not applied. You may review and try Undo reseed again.' });
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
+      setUndoUncertain(false);
+      setLastCorrection(null);
+      setCorrectionNotice({ state: 'resolved', message: 'The previous bracket, results, and correction history were restored.' });
+    },
+    onError: (error: Error) => setCorrectionNotice({ state: 'rejected', message: error.message }),
   });
 
   const updateMatchMutation = useMutation({
@@ -434,6 +598,20 @@ export default function BracketEditor() {
 
   return (
     <div className="space-y-6">
+      {correctionNotice && (
+        <OperationStatus
+          state={correctionNotice.state}
+          message={correctionNotice.message}
+          actionLabel={undoUncertain ? 'Check undo status' : lastCorrection && correctionNotice.state === 'resolved' ? 'Undo reseed' : undefined}
+          onAction={lastCorrection ? () => {
+            if (undoUncertain) undoStatusMutation.mutate(lastCorrection);
+            else if (!undoCorrectionLockRef.current) {
+              undoCorrectionLockRef.current = true;
+              undoCorrectionMutation.mutate(lastCorrection);
+            }
+          } : undefined}
+        />
+      )}
       {/* Page Header */}
       <PageHeader
         title={division.name}
@@ -445,8 +623,12 @@ export default function BracketEditor() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => setShowReseedConfirm(true)}
-                  loading={generateBracketMutation.isPending}
+                  onClick={() => {
+                    if (previewCorrectionLockRef.current) return;
+                    previewCorrectionLockRef.current = true;
+                    previewCorrectionMutation.mutate();
+                  }}
+                  loading={previewCorrectionMutation.isPending}
                   aria-label="Reseed bracket"
                 >
                   <Shuffle className="h-4 w-4 mr-2" aria-hidden="true" />
@@ -677,19 +859,69 @@ export default function BracketEditor() {
         </Card>
       )}
 
-      {/* Reseed Confirmation Dialog */}
-      <ConfirmDialog
+      {/* Reseed impact and correction dialog */}
+      <Modal
         isOpen={showReseedConfirm}
-        onClose={() => setShowReseedConfirm(false)}
-        onConfirm={() => {
-          generateBracketMutation.mutate();
+        onClose={() => {
+          if (applyCorrectionMutation.isPending || correctionStatusMutation.isPending || correctionUncertain) return;
           setShowReseedConfirm(false);
+          setCorrectionPreview(null);
+          setCorrectionError('');
+          setCorrectionUncertain(false);
         }}
+        closeDisabled={applyCorrectionMutation.isPending || correctionStatusMutation.isPending || correctionUncertain}
         title="Regenerate Bracket"
-        message="Are you sure you want to regenerate the bracket? This will reset all match results and reseed competitors."
-        confirmText="Reseed Bracket"
-        variant="warning"
-      />
+        subtitle="Review the exact impact before replacing the bracket."
+        footer={
+          <div className="flex w-full justify-end gap-3">
+            <Button variant="secondary" onClick={() => setShowReseedConfirm(false)} disabled={applyCorrectionMutation.isPending || correctionStatusMutation.isPending || correctionUncertain}>Cancel</Button>
+            {correctionUncertain ? (
+              <Button variant="primary" onClick={() => correctionPreview && correctionStatusMutation.mutate(correctionPreview)} loading={correctionStatusMutation.isPending}>Check server status</Button>
+            ) : (
+              <Button
+                variant="danger"
+                onClick={() => {
+                  if (!correctionPreview || applyCorrectionLockRef.current) return;
+                  applyCorrectionLockRef.current = true;
+                  applyCorrectionMutation.mutate(correctionPreview);
+                }}
+                loading={applyCorrectionMutation.isPending}
+                disabled={!correctionPreview || correctionPreview.impact.inProgressMatchesBlocked > 0}
+              >Apply reseed</Button>
+            )}
+          </div>
+        }
+      >
+        {correctionPreview && (
+          <div className="space-y-4 text-sm">
+            {correctionError && <OperationStatus state="rejected" message={correctionError} />}
+            <p>This correction replaces <strong>{correctionPreview.impact.oldMatchCount}</strong> matches with <strong>{correctionPreview.impact.newMatchCount}</strong> for {correctionPreview.impact.competitorCount} competitors.</p>
+            <dl className="grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-4 dark:bg-gray-900">
+              <div><dt className="text-gray-500">Completed results</dt><dd className="font-semibold">{correctionPreview.impact.completedMatchesRemoved}</dd></div>
+              <div><dt className="text-gray-500">Scored matches</dt><dd className="font-semibold">{correctionPreview.impact.scoredMatchesRemoved}</dd></div>
+              <div><dt className="text-gray-500">Audit entries</dt><dd className="font-semibold">{correctionPreview.impact.matchAuditRowsRemoved}</dd></div>
+              <div><dt className="text-gray-500">Match histories</dt><dd className="font-semibold">{correctionPreview.impact.matchupHistoryRowsRemoved}</dd></div>
+              <div><dt className="text-gray-500">BYEs before</dt><dd className="font-semibold">{correctionPreview.impact.oldByeCount}</dd></div>
+              <div><dt className="text-gray-500">BYEs after</dt><dd className="font-semibold">{correctionPreview.impact.newByeCount}</dd></div>
+            </dl>
+            {correctionPreview.impact.changedFirstRoundPairings.length > 0 && (
+              <div>
+                <h3 className="font-semibold">Changed first-round pairings</h3>
+                <ul className="mt-2 space-y-2">
+                  {correctionPreview.impact.changedFirstRoundPairings.map((pairing) => (
+                    <li key={pairing.matchNumber} className="rounded-lg border p-3">Match {pairing.matchNumber}: {pairing.before.join(' vs ') || 'empty'} → {pairing.after.join(' vs ') || 'empty'}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {correctionPreview.impact.inProgressMatchesBlocked > 0 ? (
+              <OperationStatus state="rejected" message="A match is currently in progress. Finish or safely correct it before reseeding." />
+            ) : (
+              <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">The current bracket, results, notes, and histories will be snapshotted. Undo remains available only until the replacement bracket is scored or otherwise changed.</p>
+            )}
+          </div>
+        )}
+      </Modal>
 
       {/* Winner Confirmation Dialog */}
       <ConfirmDialog

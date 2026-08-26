@@ -139,6 +139,33 @@ test.describe('scorekeeper (a11y)', () => {
     await expect(score1ByLabel).toHaveAttribute('id', 'scorekeeper-score1');
   });
 
+  test('blocks an incomplete, tied, or winner-mismatched win before confirmation', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
+    await page.waitForLoadState('networkidle');
+
+    await page.locator('button').filter({ has: page.locator('text=/\\d+ ready/i') }).first().click();
+    const competitors = page.locator('button[aria-pressed][aria-label*="select as winner"]');
+    await competitors.first().click();
+
+    const record = page.getByRole('button', { name: /^Record Result$/i });
+    await expect(record).toBeDisabled();
+    await expect(page.getByRole('alert')).toContainText(/Enter a whole-number score/i);
+
+    await page.locator('#scorekeeper-score1').fill('5');
+    await page.locator('#scorekeeper-score2').fill('5');
+    await expect(record).toBeDisabled();
+    await expect(page.getByRole('alert')).toContainText(/cannot end in a tie/i);
+
+    await page.locator('#scorekeeper-score1').fill('2');
+    await page.locator('#scorekeeper-score2').fill('5');
+    await expect(record).toBeDisabled();
+    await expect(page.getByRole('alert')).toContainText(/selected winner must have the higher score/i);
+
+    await page.locator('#scorekeeper-score1').fill('6');
+    await expect(record).toBeEnabled();
+  });
+
   test('result-type buttons live in a radiogroup with aria-pressed', async ({ page }) => {
     const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);
@@ -327,9 +354,206 @@ test.describe('scorekeeper (a11y)', () => {
     await expect(page.getByText(/1 result pending sync/i)).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toContain('score_result');
 
+    let rejectSync = true;
+    await page.route('**/api/brackets/match/*', async (route) => {
+      if (route.request().method() === 'PUT' && rejectSync) {
+        await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Match changed on another scorekeeper device' }) });
+        return;
+      }
+      await route.continue();
+    });
     await context.setOffline(false);
     await page.evaluate(() => window.dispatchEvent(new Event('online')));
-    await expect(page.getByText(/1 result pending sync/i)).toBeHidden({ timeout: 10_000 });
-    expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toBe('[]');
+    const review = page.getByRole('alert').filter({ hasText: /Match changed on another scorekeeper device/i });
+    await expect(review).toBeVisible();
+    await expect(review).toContainText(/Attempted: .+, 5–2/i);
+    await expect(page.getByRole('button', { name: /^Record Result$/i })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'))).toContain('needs_review');
+
+    await page.reload();
+    const persistedReview = page.getByRole('alert').filter({ hasText: /Match changed on another scorekeeper device/i });
+    await expect(persistedReview).toBeVisible();
+
+    rejectSync = false;
+    await persistedReview.getByRole('button', { name: /^Retry$/i }).click();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1')), { timeout: 10_000 }).toBe('[]');
+    await expect(persistedReview).toBeHidden();
+  });
+
+  test('keyboard undo waits for acknowledgement and keeps rejection recoverable', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+    const division = await prisma.division.findFirst({
+      where: { tournamentId, bracket: { is: { matches: { some: { status: 'completed' } } } } },
+      include: { bracket: { include: { matches: true } } },
+    });
+    expect(division?.bracket).toBeTruthy();
+    const matchSnapshots = division!.bracket!.matches;
+    const target = matchSnapshots.filter((match) => match.status === 'completed')
+      .sort((a, b) => b.matchNumber - a.matchNumber)[0];
+    expect(target).toBeTruthy();
+    const originalAuditIds = (await prisma.matchAuditLog.findMany({ where: { matchId: target.id }, select: { id: true } }))
+      .map(({ id }) => id);
+    let undoAttempts = 0;
+    let releaseUndo!: () => void;
+    let releaseRefetch!: () => void;
+    let refetchMode: 'normal' | 'fail' | 'delay' = 'normal';
+    try {
+      await prisma.matchAuditLog.create({
+        data: {
+          matchId: target.id,
+          action: 'update',
+          previousState: JSON.stringify({ winnerId: null, score1: null, score2: null, status: 'ready', notes: null }),
+          newState: JSON.stringify({ winnerId: target.winnerId, score1: target.score1, score2: target.score2, status: target.status, notes: target.notes }),
+        },
+      });
+      await page.route('**/api/brackets/match/*/undo', async (route) => {
+      undoAttempts += 1;
+      if (undoAttempts === 1) {
+        await new Promise<void>((resolve) => { releaseUndo = resolve; });
+        await route.fulfill({ status: 409, contentType: 'application/json', body: '{"error":"Downstream match already started"}' });
+        return;
+      }
+      await route.continue();
+      });
+      await page.route('**/api/divisions/tournament/*?withMatches=true', async (route) => {
+      if (refetchMode === 'fail' && undoAttempts >= 2) {
+        await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"refresh unavailable"}' });
+        return;
+      }
+      if (refetchMode === 'delay' && undoAttempts >= 2) {
+        refetchMode = 'normal';
+        await new Promise<void>((resolve) => { releaseRefetch = resolve; });
+      }
+      await route.continue();
+      });
+
+      await page.goto(`/scorekeeper/${tournamentId}`);
+      const divisionWithResults = page.getByRole('button', { name: new RegExp(division!.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+    await expect(divisionWithResults).toBeVisible();
+    const divisionLabel = await divisionWithResults.getAttribute('aria-label');
+    const readyBefore = Number(divisionLabel?.match(/(\d+) ready/i)?.[1] || 0);
+    await divisionWithResults.click();
+    await page.keyboard.press('Control+z');
+
+    const dialog = page.getByRole('dialog', { name: 'Undo this result?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Undo result' }).click();
+    await expect(page.getByRole('status')).toContainText('Undoing match result');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole('status')).not.toContainText('Last result undone');
+    await expect.poll(() => undoAttempts).toBe(1);
+    releaseUndo();
+
+    const error = dialog.getByRole('alert');
+    await expect(error).toHaveText('Downstream match already started');
+    expect(undoAttempts).toBe(1);
+
+    refetchMode = 'fail';
+    await dialog.getByRole('button', { name: 'Undo result' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('Undoing match result');
+    await expect(dialog.getByRole('alert')).toContainText('may have succeeded');
+    await expect(dialog.getByRole('button', { name: 'Check status' })).toBeVisible();
+    expect(undoAttempts).toBe(2);
+
+    refetchMode = 'delay';
+    await dialog.getByRole('button', { name: 'Check status' }).click();
+    await expect(dialog).toBeVisible();
+    await expect.poll(() => typeof releaseRefetch).toBe('function');
+    releaseRefetch();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole('status')).toContainText('Last result undone');
+    expect(undoAttempts).toBe(2);
+      await expect(page.getByText(new RegExp(`Match 1 of ${readyBefore + 1}`, 'i'))).toBeVisible();
+      await expect.poll(async () => (await prisma.match.findUnique({ where: { id: target.id }, select: { status: true } }))?.status).toBe('ready');
+    } finally {
+      await prisma.$transaction([
+        ...matchSnapshots.map((match) => prisma.match.update({
+          where: { id: match.id },
+          data: {
+            competitor1Id: match.competitor1Id,
+            competitor2Id: match.competitor2Id,
+            winnerId: match.winnerId,
+            score1: match.score1,
+            score2: match.score2,
+            status: match.status,
+            notes: match.notes,
+          },
+        })),
+        prisma.matchAuditLog.deleteMany({
+          where: { matchId: target.id, ...(originalAuditIds.length > 0 ? { id: { notIn: originalAuditIds } } : {}) },
+        }),
+      ]);
+      await prisma.$disconnect();
+    }
+  });
+
+  test('a committed result with a lost response is quarantined and never auto-resent', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: /\d+ ready/i }).first().click();
+    await page.locator('button[aria-label*="select as winner"]').first().click();
+    await page.locator('#scorekeeper-score1').fill('6');
+    await page.locator('#scorekeeper-score2').fill('3');
+
+    let putCount = 0;
+    await page.route('**/api/brackets/match/*', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      putCount += 1;
+      const committed = await route.fetch();
+      expect(committed.ok()).toBeTruthy();
+      await route.abort('failed');
+    });
+    await page.getByRole('button', { name: /^Record Result$/i }).click();
+    await page.getByRole('dialog', { name: /Confirm Result/i }).getByRole('button', { name: /^Confirm/i }).click();
+
+    await expect(page.getByText(/result delivery is uncertain/i).first()).toBeVisible();
+    const review = page.getByRole('alert').filter({ hasText: /may already be saved on the server/i });
+    await expect(review).toBeVisible();
+    await expect(review.getByRole('button', { name: /^Retry$/i })).toHaveCount(0);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await page.waitForTimeout(750);
+    expect(putCount).toBe(1);
+    const stored = await page.evaluate(() => localStorage.getItem('bowin_offline_operations_v1'));
+    expect(stored).toContain('delivery_uncertain');
+    expect(stored).toContain('acknowledgement was not received');
+  });
+
+  test('response loss plus device-storage failure blocks immediate score resubmission', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
+    await page.getByRole('button', { name: /\d+ ready/i }).first().click();
+    await page.locator('button[aria-label*="select as winner"]').first().click();
+    await page.locator('#scorekeeper-score1').fill('6');
+    await page.locator('#scorekeeper-score2').fill('3');
+    await page.evaluate(() => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function setItem(key: string, value: string) {
+        if (key === 'bowin_offline_operations_v1') throw new DOMException('quota', 'QuotaExceededError');
+        return original.call(this, key, value);
+      };
+    });
+    let putCount = 0;
+    await page.route('**/api/brackets/match/*', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      putCount += 1;
+      await route.fetch();
+      await route.abort('failed');
+    });
+    await page.getByRole('button', { name: /^Record Result$/i }).click();
+    await page.getByRole('dialog', { name: /Confirm Result/i }).getByRole('button', { name: /^Confirm/i }).click();
+    const warning = page.getByRole('alert').filter({ hasText: /could not retain the safety record/i });
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText(/match #\d+/i);
+    await expect(warning).toContainText(/score 6–3/i);
+    await expect(warning).toContainText(/Do not resubmit it/i);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await page.waitForTimeout(750);
+    expect(putCount).toBe(1);
+    await warning.getByRole('button', { name: /I verified server state/i }).click();
+    await expect(warning).toHaveCount(0);
   });
 });

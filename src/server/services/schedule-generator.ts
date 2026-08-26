@@ -23,6 +23,7 @@ export interface ScheduledDivision {
   startTime: string;
   endTime: string;
   estimatedDurationMinutes: number;
+  locked?: boolean;
 }
 
 export interface TournamentSchedule {
@@ -176,28 +177,9 @@ export async function generateSchedule(
     throw new Error('Tournament not found');
   }
 
-  // Persist the schedule config to tournament.settings so the
-  // DirectorDashboard can read the configured ring count even before
-  // any matches have been assigned a ringNumber. Closes #34 — the
-  // dashboard used to derive the rings array purely from m.ringNumber
-  // on matches, so a brand-new tournament (or one with no matches yet
-  // routed to a ring) showed "No rings assigned yet" despite rings
-  // being configured in Schedule.
-  if (configOverrides && Object.keys(configOverrides).length > 0) {
-    // `settings` is a free-form JSON blob; we only ever read it back as
-    // an object and mutate a known key, so `Record<string, unknown>` is
-    // the honest shape. The override cast below is `as` to JSON-safe.
-    let current: Record<string, unknown> = {};
-    if (tournament.settings) {
-      try { current = JSON.parse(tournament.settings) as Record<string, unknown>; } catch { current = {}; }
-    }
-    current.rings = { count: config.ringCount, startTime: config.startTime, endTime: config.endTime };
-    await prisma.tournament.update({
-      where: { id: tournamentId },
-      data: { settings: JSON.stringify(current) },
-    });
-  }
-
+  // Schedule generation is deliberately side-effect free. Preview, GET,
+  // and apply all share this deterministic calculation; persistence and
+  // audit history live in the schedule-correction service.
   const divisions = await prisma.division.findMany({
     where: { tournamentId },
     include: {

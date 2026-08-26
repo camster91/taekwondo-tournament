@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200" fill="none">
+  <rect width="1200" height="1200" fill="#F8F5EC"/>
+  <rect x="40" y="40" width="1120" height="1120" rx="36" fill="#0B1220"/>
+  <path d="M795 80H1120V405" stroke="#F6B93B" stroke-width="6"/>
+  <path d="M720 160H960V280H1120" stroke="#52B6EC" stroke-width="6"/>
+  <circle cx="1120" cy="405" r="18" fill="#F6B93B"/>
+  <circle cx="1120" cy="280" r="18" fill="#52B6EC"/>
+  <text x="110" y="170" fill="#F8F5EC" font-family="Century Gothic, Avenir Next, sans-serif" font-size="54" font-weight="700">BOWIN</text>
+  <text x="110" y="480" fill="#F8F5EC" font-family="Century Gothic, Avenir Next, sans-serif" font-size="104" font-weight="700">Run the floor,</text>
+  <text x="110" y="590" fill="#F8F5EC" font-family="Century Gothic, Avenir Next, sans-serif" font-size="104" font-weight="700">not the spreadsheet.</text>
+  <rect x="110" y="665" width="162" height="18" fill="#E11D48"/>
+  <text x="110" y="775" fill="#F8F5EC" opacity=".8" font-family="Avenir Next, Segoe UI, sans-serif" font-size="34">Tournament operations from registration</text>
+  <text x="110" y="822" fill="#F8F5EC" opacity=".8" font-family="Avenir Next, Segoe UI, sans-serif" font-size="34">through final results.</text>
+  <path d="M730 865L890 785L1050 865L994 970H786L730 865Z" stroke="#F8F5EC" stroke-width="22"/>
+  <path d="M790 865L890 815L990 865L955 930H825L790 865Z" stroke="#E11D48" stroke-width="30"/>
+  <text x="110" y="1065" fill="#F6B93B" font-family="Consolas, monospace" font-size="28" letter-spacing="5">TOURNAMENT CONTROL ROOM</text>
+</svg>
+

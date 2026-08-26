@@ -21,8 +21,10 @@ import invitesRouter from './routes/invites.js';
 import sportsRouter from './routes/sports.js';
 import rulesRouter from './routes/rules.js';
 import incidentsRouter from './routes/incidents.js';
+import recommendationsRouter from './routes/recommendations.js';
 import organizationsRouter from './routes/organizations.js';
 import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
+import supportRouter from './routes/support.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 import {
@@ -207,6 +209,12 @@ app.get('/api/internal/metrics', (req: Request, res: Response) => {
 
 // API Routes
 app.use('/api/auth', authRouter);
+// Older cached clients used this pre-auth-router endpoint. Keep the API
+// response compatible during service-worker/client asset transitions rather
+// than letting the SPA fallback return HTML to a JSON consumer.
+app.get('/api/setup-status', (_req: Request, res: Response) => {
+  res.redirect(307, '/api/auth/setup-status');
+});
 app.use('/api/public', publicRouter);
 app.use('/api/competitors', competitorsRouter);
 app.use('/api/tournaments', tournamentsRouter);
@@ -217,6 +225,8 @@ app.use('/api/invites', invitesRouter);
 app.use('/api/sports', sportsRouter);
 app.use('/api/rules', rulesRouter);
 app.use('/api/incidents', incidentsRouter);
+app.use('/api/support', supportRouter);
+app.use('/api/recommendations', recommendationsRouter);
 app.use('/api/organizations', organizationsRouter);
 app.use('/api/billing', billingRouter);
 
@@ -241,8 +251,12 @@ app.get('/api/health/ready', async (_req: Request, res: Response) => {
   }
 });
 
-// Serve static files in production
-if (isProduction) {
+// Serve the built client in production. The explicit test-only branch lets
+// Playwright exercise the real service worker over localhost without weakening
+// production's HTTPS and Secure-cookie requirements.
+const serveBuiltClient = isProduction
+  || (process.env.NODE_ENV === 'test' && process.env.ENABLE_E2E_STATIC_SERVER === '1');
+if (serveBuiltClient) {
   const distPath = path.join(__dirname, '../../dist');
   app.use(express.static(distPath, {
     setHeaders: (res: Response, filePath: string) => {
@@ -268,6 +282,9 @@ if (isProduction) {
         method: req.method,
       });
       return;
+    }
+    if (req.path === '/register' || req.path === '/check-registration') {
+      res.setHeader('X-Robots-Tag', 'noindex');
     }
     res.sendFile(path.join(distPath, 'index.html'));
   });

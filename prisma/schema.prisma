@@ -83,6 +83,9 @@ model Tournament {
   incidents           Incident[]
   competitorHistories CompetitorHistory[]
   matchupHistories    MatchupHistory[]
+  publicDisplayHeartbeat PublicDisplayHeartbeat?
+  operationAudits       TournamentOperationAudit[]
+  recommendations       Recommendation[]
   organization        Organization?          @relation(fields: [organizationId], references: [id])
   sportProfile        SportProfile?          @relation(fields: [sportProfileId], references: [id])
 
@@ -273,6 +276,7 @@ model User {
   role         String    @default("viewer") // admin, director, scorekeeper, viewer
   isActive     Boolean   @default(true)
   lastLogin    DateTime?
+  demoExpiresAt DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -286,6 +290,72 @@ model User {
   // Tournament-specific permissions
   tournamentAccess    UserTournamentAccess[]
   organizationMembers OrganizationMember[]
+
+  @@index([demoExpiresAt])
+}
+
+model PublicDisplayHeartbeat {
+  tournamentId String   @id
+  lastSeenAt   DateTime
+  updatedAt    DateTime @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([lastSeenAt])
+}
+
+model TournamentOperationAudit {
+  id            String    @id @default(uuid())
+  tournamentId  String
+  operationType String
+  operationKey  String    @unique
+  beforeState   String?
+  afterState    String
+  impactSummary String
+  reversible    Boolean   @default(false)
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  undoneAt      DateTime?
+  undoneBy      String?
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  recommendation Recommendation?
+
+  @@index([tournamentId, createdAt])
+  @@index([operationType])
+}
+
+model Recommendation {
+  id                    String   @id @default(uuid())
+  tournamentId          String
+  recommendationType    String
+  inputSnapshot         String
+  explanation           String
+  constraintsConsidered String
+  confidence            Float
+  warnings              String
+  proposedDiff          String
+  validationResult      String
+  status                String   @default("proposed")
+  createdBy             String?
+  createdAt             DateTime @default(now())
+  approvedBy            String?
+  approvedAt            DateTime?
+  rejectedBy            String?
+  rejectedAt            DateTime?
+  rejectionReason       String?
+  appliedBy             String?
+  appliedAt             DateTime?
+  appliedResult         String?
+  undoReference         String?
+  operationAuditId      String?  @unique
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  operationAudit TournamentOperationAudit? @relation(fields: [operationAuditId], references: [id], onDelete: SetNull)
+
+  @@index([tournamentId, createdAt])
+  @@index([tournamentId, status])
+  @@index([recommendationType])
 }
 
 // Magic link / code authentication
@@ -440,6 +510,7 @@ model Organization {
 
   members     OrganizationMember[]
   tournaments Tournament[]
+  supportTickets SupportTicket[]
   billingSubscription OrganizationBillingSubscription?
   planChanges         OrganizationPlanChange[]
 
@@ -552,6 +623,35 @@ model Incident {
   @@index([matchId])
   @@index([registrationId])
   @@index([deletedAt])
+}
+
+// Customer support requests created from app chat and marketing leads.
+// Supports both authenticated users and anonymous users that provide
+// a contact name/email in the support widget.
+model SupportTicket {
+  id                 String   @id @default(uuid())
+  source             String // web-chat, support-widget, api
+  status             String   @default("open") // open | in_progress | resolved | closed
+  priority           String   @default("normal") // low | normal | high
+  subject            String
+  requestedByEmail   String?
+  requestedByName    String?
+  page               String?
+  lastUserMessage    String
+  lastAssistantMessage String?
+  conversation       String // JSON array: [{role:'user'|'assistant',content:string,at:string}]
+  notes              String?
+  resolvedAt         DateTime?
+  userId             String?
+  organizationId     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@index([organizationId, createdAt])
 }
 
 // Tournament fairness rules (configurable per tournament)

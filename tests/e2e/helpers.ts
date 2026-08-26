@@ -1,4 +1,18 @@
-import type { Page } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
+
+export async function loginRequestAsEmail(request: APIRequestContext, email: string) {
+  const requested = await request.post('/api/auth/request-magic-link', { data: { email } });
+  if (!requested.ok()) throw new Error(`request-magic-link failed: ${requested.status()}`);
+  const body = await requested.json() as { code?: string };
+  if (!body.code) throw new Error('Expected an E2E verification code');
+  const verified = await request.post('/api/auth/verify-magic-link', { data: { email, code: body.code } });
+  if (!verified.ok()) throw new Error(`verify-magic-link failed: ${verified.status()}`);
+  const { token } = await verified.json() as { token: string };
+  const state = await request.storageState();
+  const csrf = state.cookies.find((cookie) => cookie.name === 'bowin_csrf')?.value;
+  if (!csrf) throw new Error('Expected a CSRF cookie after verification');
+  return { Authorization: `Bearer ${token}`, 'X-CSRF-Token': csrf };
+}
 
 /**
  * Helper: log in via the real magic-link OTP flow in dev mode.
@@ -58,7 +72,7 @@ export async function skipOnboardingTour(page: Page) {
 }
 
 /**
- * Helper: log in via the one-click "Try the demo" button. Faster than the
+ * Helper: log in via the one-click "Explore the live demo" button. Faster than the
  * OTP flow, used for tests that need an authenticated session but aren't
  * specifically about the login UX (e.g. tournament create, check-in).
  */
@@ -72,7 +86,7 @@ export async function loginAsDemo(page: Page) {
     (resp) => resp.url().includes('/api/auth/setup-status') && resp.ok(),
     { timeout: 15_000 },
   ).catch(() => undefined);
-  const demoBtn = page.getByRole('button', { name: /Try the demo/i });
+  const demoBtn = page.getByRole('button', { name: /Explore the live demo/i });
   await demoBtn.waitFor({ state: 'visible', timeout: 15_000 });
   await Promise.all([
     page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 }),

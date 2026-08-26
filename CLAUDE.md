@@ -15,7 +15,7 @@ the `tkd_*` localStorage / branding keys. See "Rebrand status" below.
 
 ```bash
 npm install            # also runs `prisma generate` via postinstall
-npm run db:push        # sync prisma/schema.prisma -> the database
+npm run db:push        # sync schema to a disposable local database only
 npm run dev            # starts both client (Vite, :5173) and server (Express, :3001)
 ```
 
@@ -23,11 +23,10 @@ The Vite dev server proxies `/api/*` to `localhost:3001`, so the SPA
 sees a single origin. `src/client/utils/api.ts` and similar hit
 `/api/...` directly in dev and prod.
 
-`npm run db:push` is idempotent — it pushes the current Prisma schema
-to whatever `DATABASE_URL` points at. **Do not use `prisma migrate`
-in this repo** — the schema is managed as a single source of truth,
-not versioned migrations. The `prisma/migrations/` directory does not
-exist on purpose.
+`npm run db:push` is for disposable local development databases. Release-bound
+schema changes must include a reviewed migration under `prisma/migrations/`;
+CI, staging, the Docker entrypoint, and the rollback-safe production deploy run
+`prisma migrate deploy`. Never point `db:push` at staging or production.
 
 ### Database
 
@@ -51,8 +50,8 @@ DATABASE_URL=postgresql://taekwondo:***@taekwondo-db:5432/taekwondo_tournament
 | Frontend | React 19 + TypeScript + Vite 7 | SPA, React Router 7 |
 | Styling | Tailwind CSS v4 | `@custom-variant dark` for dark mode |
 | State / data | TanStack Query v5 | All client mutations + queries |
-| Backend | Node 20 + Express 4 | `express-async-errors` for thrown async handling |
-| ORM | Prisma 7.8 | Driver adapter, no migrations, `db:push` only |
+| Backend | Node 22 + Express 4 | `express-async-errors` for thrown async handling |
+| ORM | Prisma 7.9 | Driver adapter; local `db:push`, checked-in production migrations |
 | Database | PostgreSQL | `markup-postgres` container in prod |
 | Auth | JWT (HS256, 7-day default) + magic-link OTP | See "Authentication" below |
 | PDF | jsPDF 4 (server-side) | `src/server/services/pdf-export.ts` |
@@ -369,8 +368,10 @@ Judo test seed would prove the multi-sport path end-to-end.
 | `Invitation` | Pending email + role for the invite flow. |
 | `SportProfile` | Unused, see "Multi-sport". |
 
-After modifying `schema.prisma`: `npm run db:push` (idempotent)
-then `npm run db:generate`. Restart the dev server.
+For local experimentation after modifying `schema.prisma`, run
+`npm run db:push` and then `npm run db:generate`. A release-bound schema change
+must also include and validate a checked-in migration before deployment.
+Restart the dev server afterward.
 
 ---
 
@@ -864,7 +865,9 @@ and `2025 NEWTONS CHAMPIONSHIP LIST.xlsm` only as reference.
   validate.ts`. Every POST/PUT body should be validated.
 - **Client mutations** always include `getAuthHeaders()` (or
   the `headers` object spread).
-- **Database changes**: edit `prisma/schema.prisma`, then
-  `npm run db:push` (idempotent). Restart dev server.
+- **Database changes**: use `npm run db:push` only for disposable local work.
+  Release changes require a checked-in migration validated with
+  `prisma migrate deploy` on a production-compatible database.
 - **Git branch**: `main` (single branch). PRs land directly.
-  No CI configured — tests are local + manual deploy verification.
+  GitHub and Ashbi CI validate pull requests; production deployment remains a
+  separately approved, rollback-guarded operation.

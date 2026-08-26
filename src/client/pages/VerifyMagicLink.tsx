@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Trophy, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -9,10 +9,12 @@ export default function VerifyMagicLink() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
-  const { verifyToken } = useAuth();
+  const { verifyToken, retrySessionHydration } = useAuth();
 
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(true);
+  const [sessionVerified, setSessionVerified] = useState(false);
+  const verificationAttempt = useRef<{ token: string; promise: ReturnType<typeof verifyToken> } | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -21,15 +23,33 @@ export default function VerifyMagicLink() {
       return;
     }
 
-    verifyToken(token).then((result) => {
+    if (verificationAttempt.current?.token !== token) {
+      verificationAttempt.current = { token, promise: verifyToken(token) };
+    }
+    let active = true;
+    verificationAttempt.current.promise.then((result) => {
+      if (!active) return;
       if (result.success) {
-        navigate('/', { replace: true });
+        navigate('/dashboard', { replace: true });
       } else {
+        setSessionVerified(result.sessionVerified === true);
         setError(result.error || 'Your sign-in link is invalid or has expired. Please request a new one.');
         setIsVerifying(false);
       }
     });
+    return () => { active = false; };
   }, [token]);
+
+  const retryHydration = async () => {
+    setIsVerifying(true);
+    const result = await retrySessionHydration();
+    if (result.success) {
+      navigate('/dashboard', { replace: true });
+      return;
+    }
+    setError(result.error || 'The session could not be loaded. Try again.');
+    setIsVerifying(false);
+  };
 
   if (isVerifying) {
     return (
@@ -50,11 +70,16 @@ export default function VerifyMagicLink() {
             <AlertCircle className="h-12 w-12 text-red-600 dark:text-red-400" />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-2xl font-bold text-gray-900 dark:text-white">
-          Sign-in link expired
-        </h2>
+        <h1 className="mt-6 text-center text-2xl font-bold text-gray-900 dark:text-white">
+          Sign-in could not be completed
+        </h1>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">{error}</p>
         <div className="mt-6 text-center">
+          {sessionVerified && (
+            <Button type="button" variant="primary" onClick={retryHydration} className="mr-3">
+              Retry session
+            </Button>
+          )}
           <Button as={Link} to="/login" variant="primary" className="inline-block">
             Back to Login
           </Button>

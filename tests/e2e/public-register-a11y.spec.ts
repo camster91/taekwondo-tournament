@@ -15,6 +15,18 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('public registration — accessibility (WCAG 2.1 AA)', () => {
+  test('empty state has a main landmark and a route home', async ({ page }) => {
+    await page.route('**/api/public/tournaments', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+
+    await page.goto('/register');
+
+    const main = page.getByRole('main');
+    await expect(main.getByRole('heading', { level: 1, name: 'No Open Tournaments' })).toBeVisible();
+    await expect(main.getByRole('link', { name: 'Return to Bowin home' })).toHaveAttribute('href', '/');
+  });
+
   test('every Label in step 1 is associated with its control via htmlFor', async ({ page }) => {
     await page.goto('/register');
     const tournamentSelect = page.locator('select[name="tournamentId"]');

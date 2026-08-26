@@ -8,17 +8,23 @@
 // finds a match or not, to avoid leaking "this kid exists in the
 // system" via timing or response-shape differences. We only show
 // the confirmation code if all three fields match a real registration.
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { Card, CardBody } from '../components/ui';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Label from '../components/ui/Label';
+import OperationStatus from '../components/ui/OperationStatus';
+import { fetchJson, getApiFailure } from '../utils/api-status';
 
 interface LookupResult {
   registered: boolean;
   confirmationCode?: string;
+}
+
+function registrationNotFoundMessage(): string {
+  return `No registration found for those exact details. Common causes: a typo in the name (e.g. "Jon" vs "John"), or a different DOB format (the form uses YYYY-MM-DD). If you have your confirmation code, try ${window.location.origin}/manage-registration instead.`;
 }
 
 export default function CheckRegistration() {
@@ -30,15 +36,27 @@ export default function CheckRegistration() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [tournaments, setTournaments] = useState<{ id: string; name: string; date: string }[]>([]);
+  const [tournamentsLoading, setTournamentsLoading] = useState(true);
+  const [tournamentsError, setTournamentsError] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
 
   // Load open tournaments so the parent doesn't have to paste a UUID
-  useEffect(() => {
-    fetch('/api/public/tournaments')
-      .then(r => r.json())
-      .then(setTournaments)
-      .catch(() => setTournaments([]));
+  const loadTournaments = useCallback(async () => {
+    setTournamentsLoading(true);
+    setTournamentsError(null);
+    try {
+      const data = await fetchJson<unknown>(fetch, '/api/public/tournaments');
+      if (!Array.isArray(data)) throw new Error('Invalid tournament response');
+      setTournaments(data as { id: string; name: string; date: string }[]);
+    } catch {
+      setTournaments([]);
+      setTournamentsError('Tournament choices are unavailable right now.');
+    } finally {
+      setTournamentsLoading(false);
+    }
   }, []);
+
+  useEffect(() => { void loadTournaments(); }, [loadTournaments]);
 
   // Focus the error region when an error appears (a11y)
   useEffect(() => {
@@ -63,20 +81,26 @@ export default function CheckRegistration() {
         lastName: lastName.trim(),
         dateOfBirth,
       });
-      const res = await fetch(`/api/public/check-registration?${params}`);
-      const data = await res.json();
+      const data = await fetchJson<LookupResult>(fetch, `/api/public/check-registration?${params}`);
       setResult(data);
       if (!data.registered) {
         // Don't leak whether the kid exists — just say "not found, check spelling / DOB"
         // and point them at the /manage-registration path which uses 3-factor
         // auth (confirmation code + lastName + DOB) so they can recover
         // even when name spelling is uncertain.
-        setError(
-          `No registration found for those exact details. Common causes: a typo in the name (e.g. "Jon" vs "John"), or a different DOB format (the form uses YYYY-MM-DD). If you have your confirmation code, try ${window.location.origin}/manage-registration instead.`
-        );
+        setError(registrationNotFoundMessage());
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Lookup failed. Please try again.');
+      const failure = getApiFailure(err);
+      if (failure?.kind === 'not_found') {
+        setError(registrationNotFoundMessage());
+      } else if (failure?.kind === 'rate_limited') {
+        setError(failure.retryAfterSeconds ? `Too many lookups. Try again in ${failure.retryAfterSeconds} seconds.` : 'Too many lookups. Please try again shortly.');
+      } else if (failure?.kind === 'unavailable') {
+        setError('Registration lookup is unavailable right now. Please try again.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Lookup failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -105,6 +129,9 @@ export default function CheckRegistration() {
             </div>
 
             <form onSubmit={handleLookup} className="space-y-4" aria-describedby={error ? 'lookup-error' : undefined}>
+              {tournamentsError && (
+                <OperationStatus state="rejected" message={tournamentsError} actionLabel="Retry" onAction={() => void loadTournaments()} />
+              )}
               <div>
                 <Label htmlFor="lookup-tournament">Tournament</Label>
                 <select
@@ -113,6 +140,7 @@ export default function CheckRegistration() {
                   onChange={(e) => setTournamentId(e.target.value)}
                   required
                   aria-required="true"
+                  disabled={tournamentsLoading || Boolean(tournamentsError)}
                   className="h-10 px-3 pr-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all appearance-none w-full"
                 >
                   <option value="">-- Select a Tournament --</option>
@@ -184,7 +212,7 @@ export default function CheckRegistration() {
                 type="submit"
                 variant="primary"
                 loading={loading}
-                disabled={loading}
+                disabled={loading || tournamentsLoading || Boolean(tournamentsError)}
                 className="w-full"
               >
                 <Search className="h-4 w-4 mr-2" />

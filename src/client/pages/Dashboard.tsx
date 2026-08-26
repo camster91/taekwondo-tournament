@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Trophy,
@@ -23,7 +24,18 @@ import {
 import { StatsSkeleton, CardSkeleton } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
+import DemoGuide from '../components/demo/DemoGuide';
+import {
+  consumeDemoEntryPending,
+  findLiveDemoTournament,
+  isDemoUser,
+  readDemoProgress,
+  restartDemoGuide,
+  shouldOpenDemoGuide,
+  updateDemoProgress,
+  type DemoPath,
+} from '../utils/demo-progress';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { PageHeader } from '../components/ui';
@@ -35,6 +47,7 @@ interface Tournament {
   date: string;
   status: string;
   location?: string;
+  publicSlug?: string | null;
   _count: { registrations: number; divisions: number };
 }
 
@@ -81,6 +94,8 @@ function compactNumber(n: number): string {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [demoGuideOpen, setDemoGuideOpen] = useState(false);
 
   const { data: tournaments, isLoading: tournamentsLoading } = useQuery<Tournament[]>({
     queryKey: ['tournaments'],
@@ -110,6 +125,34 @@ export default function Dashboard() {
   });
 
   const isLoading = tournamentsLoading || competitorsLoading || analyticsLoading;
+  const demoUser = isDemoUser(user);
+  const liveDemoTournament = findLiveDemoTournament(tournaments);
+
+  useEffect(() => {
+    if (!demoUser || tournamentsLoading) return;
+    const pending = consumeDemoEntryPending();
+    const progress = readDemoProgress();
+    if (shouldOpenDemoGuide({ isDemo: demoUser, pending, status: progress.status })) setDemoGuideOpen(true);
+  }, [demoUser, tournamentsLoading]);
+
+  const dismissDemoGuide = useCallback(() => {
+    updateDemoProgress('dismissed');
+    setDemoGuideOpen(false);
+  }, []);
+  const chooseDemoPath = useCallback((path: DemoPath, destination: string) => {
+    updateDemoProgress('started', path);
+    setDemoGuideOpen(false);
+    navigate(destination);
+  }, [navigate]);
+  const completeDemoGuide = useCallback(() => {
+    updateDemoProgress('completed');
+    setDemoGuideOpen(false);
+  }, []);
+  const reopenDemoGuide = useCallback(() => {
+    restartDemoGuide();
+    setDemoGuideOpen(true);
+  }, []);
+  const retryDemoGuide = useCallback(() => window.location.reload(), []);
 
   const upcomingTournaments = tournaments?.filter((t) => t.status !== 'completed') || [];
   const totalDivisions = tournaments?.reduce((sum, t) => sum + t._count.divisions, 0) || 0;
@@ -118,6 +161,24 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 lg:space-y-8">
+      {demoUser && (
+        <div className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-primary-900/60 dark:bg-primary-950/30">
+          <div>
+            <p className="font-semibold text-slate-950 dark:text-white">Explore the fabricated live tournament</p>
+            <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">Choose a Director, Scorekeeper, Check-in, Parent, or Venue Display journey.</p>
+          </div>
+          <Button onClick={reopenDemoGuide} variant="primary" size="sm">Open demo guide</Button>
+        </div>
+      )}
+      <DemoGuide
+        open={demoGuideOpen}
+        tournamentId={liveDemoTournament?.id ?? null}
+        publicSlug={liveDemoTournament?.publicSlug ?? null}
+        onClose={dismissDemoGuide}
+        onChoose={chooseDemoPath}
+        onComplete={completeDemoGuide}
+        onRetry={retryDemoGuide}
+      />
       {/* ── Hero greeting ── */}
       <div data-tour="dashboard-hero" className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-primary-950 p-6 lg:p-8 shadow-xl">
         <div className="absolute top-0 right-0 w-72 h-72 bg-primary-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
