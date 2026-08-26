@@ -22,6 +22,8 @@ describe('demo session capability boundary', () => {
     expect(isDemoRequestAllowed('POST', '/api/tournaments/id/broadcast')).toBe(false);
     expect(isDemoRequestAllowed('POST', '/api/billing/checkout')).toBe(false);
     expect(isDemoRequestAllowed('GET', '/api/organizations')).toBe(false);
+    expect(isDemoRequestAllowed('GET', '/api/support')).toBe(false);
+    expect(isDemoRequestAllowed('GET', '/api/support/ticket-id')).toBe(false);
     expect(isDemoRequestAllowed('GET', '/API/AUTH/USERS?limit=10')).toBe(false);
   });
 });

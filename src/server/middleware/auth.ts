@@ -174,7 +174,7 @@ type CachedUser = {
   demoExpiresAt: Date | null;
 };
 
-const demoDeniedReadPrefixes = ['/api/auth/users', '/api/invites', '/api/billing', '/api/organizations'];
+const demoDeniedReadPrefixes = ['/api/auth/users', '/api/invites', '/api/billing', '/api/organizations', '/api/support'];
 
 export function isDemoRequestAllowed(method: string, originalUrl: string): boolean {
   let path: string;

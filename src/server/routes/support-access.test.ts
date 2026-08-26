@@ -77,6 +77,34 @@ describe('support access boundaries', () => {
     expect(prisma.supportTicket.count).not.toHaveBeenCalled();
   });
 
+  it('rejects support access for authenticated demo identities', async () => {
+    const prisma: any = {
+      supportTicket: { create: vi.fn(), count: vi.fn() },
+      organizationMember: { findMany: vi.fn() },
+    };
+    const req: any = {
+      user: {
+        id: 'demo-user', email: 'demo@example.test', role: 'admin',
+        firstName: 'Demo', lastName: 'Organizer', isDemo: true,
+      },
+      body: { message: 'There is an error', createTicket: true, requestAssist: true },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/')(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({
+      error: 'This action is unavailable in the public demo.',
+      code: 'DEMO_CAPABILITY_DENIED',
+      recoverable: true,
+    });
+    expect(prisma.supportTicket.create).not.toHaveBeenCalled();
+    expect(prisma.supportTicket.count).not.toHaveBeenCalled();
+    expect(prisma.organizationMember.findMany).not.toHaveBeenCalled();
+  });
+
   it('answers an anonymous support question without creating a ticket', async () => {
     const prisma: any = { supportTicket: { create: vi.fn() } };
     const req: any = {

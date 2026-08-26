@@ -449,6 +449,13 @@ async function notifySupportTeam(
 }
 
 async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
+  if (req.user?.isDemo) {
+    return res.status(403).json({
+      error: 'This action is unavailable in the public demo.',
+      code: 'DEMO_CAPABILITY_DENIED',
+      recoverable: true,
+    });
+  }
   const prisma: PrismaClient = req.app.locals.prisma;
   const body = req.body;
   const normalizedMessage = body.message.trim();
