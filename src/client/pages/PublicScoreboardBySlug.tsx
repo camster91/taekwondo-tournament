@@ -10,6 +10,29 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { buildResolvedScoreboardPath } from '../utils/public-scoreboard-url';
 
+export function ScoreboardStatus({ error }: { error: string | null }) {
+  if (error) {
+    return (
+      <main className="min-h-screen bg-gray-900 flex items-center justify-center p-8">
+        <div className="max-w-md text-center">
+          <AlertCircle className="h-20 w-20 text-red-400 mx-auto mb-6" />
+          <h1 className="text-3xl font-bold text-white mb-3">Scoreboard not found</h1>
+          <p className="text-gray-300">{error}</p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main
+      aria-label="Loading scoreboard"
+      className="min-h-screen bg-gray-900 flex items-center justify-center"
+    >
+      <Loader2 className="h-16 w-16 text-primary-400 animate-spin" />
+    </main>
+  );
+}
+
 export default function PublicScoreboardBySlug() {
   const { publicSlug } = useParams<{ publicSlug: string }>();
   const navigate = useNavigate();
@@ -39,20 +62,5 @@ export default function PublicScoreboardBySlug() {
     return () => { cancelled = true; };
   }, [publicSlug, navigate]);
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-8">
-        <div className="max-w-md text-center">
-          <AlertCircle className="h-20 w-20 text-red-400 mx-auto mb-6" />
-          <h1 className="text-3xl font-bold text-white mb-3">Scoreboard not found</h1>
-          <p className="text-gray-600">{error}</p>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-      <Loader2 className="h-16 w-16 text-primary-400 animate-spin" />
-    </div>
-  );
+  return <ScoreboardStatus error={error} />;
 }
