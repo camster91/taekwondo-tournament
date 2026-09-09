@@ -92,6 +92,7 @@ router.get('/tournaments', async (req: Request, res: Response) => {
       date: {
         gte: new Date(), // Only future tournaments
       },
+      deletedAt: null, // Exclude soft-deleted tournaments
     },
     select: {
       id: true,
@@ -102,6 +103,17 @@ router.get('/tournaments', async (req: Request, res: Response) => {
       // Settings carries director-only config; only registrationFee
       // is safe for the public register page.
       settings: true,
+      brandName: true,
+      brandPrimaryColor: true,
+      brandLogoUrl: true,
+      organizationId: true,
+      organization: {
+        select: {
+          brandName: true,
+          brandPrimaryColor: true,
+          brandLogoUrl: true,
+        },
+      },
       _count: {
         select: { registrations: true },
       },
@@ -109,10 +121,18 @@ router.get('/tournaments', async (req: Request, res: Response) => {
     orderBy: { date: 'asc' },
   });
 
+  // Resolve branding with org fallback before sending to client
   res.json(
     tournaments.map((t) => ({
       ...t,
       settings: publicRegistrationSettings(t.settings),
+      // Resolve effective branding: tournament overrides org, org overrides defaults
+      brandName: t.brandName || t.organization?.brandName || t.name,
+      brandPrimaryColor: t.brandPrimaryColor || t.organization?.brandPrimaryColor || '#DC2626',
+      brandLogoUrl: t.brandLogoUrl || t.organization?.brandLogoUrl || null,
+      // Don't expose organization object to public API
+      organization: undefined,
+      organizationId: undefined,
     })),
   );
 });
@@ -137,6 +157,17 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
       deletedAt: true,
       settings: true,
       sportProfileSlug: true,
+      brandName: true,
+      brandPrimaryColor: true,
+      brandLogoUrl: true,
+      organizationId: true,
+      organization: {
+        select: {
+          brandName: true,
+          brandPrimaryColor: true,
+          brandLogoUrl: true,
+        },
+      },
     },
   });
 
@@ -152,6 +183,13 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
   res.json({
     ...tournament,
     settings: publicRegistrationSettings(tournament.settings),
+    // Resolve effective branding with org fallback
+    brandName: tournament.brandName || tournament.organization?.brandName || tournament.name,
+    brandPrimaryColor: tournament.brandPrimaryColor || tournament.organization?.brandPrimaryColor || '#DC2626',
+    brandLogoUrl: tournament.brandLogoUrl || tournament.organization?.brandLogoUrl || null,
+    // Don't expose organization object to public API
+    organization: undefined,
+    organizationId: undefined,
   });
 });
 

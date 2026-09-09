@@ -29,6 +29,10 @@ interface Tournament {
   // route returns the raw `settings` column; we only read the fee fields
   // (F9) and ignore the rest (most are director-only).
   settings?: string | null;
+  // Organizer branding
+  brandName?: string | null;
+  brandPrimaryColor?: string | null;
+  brandLogoUrl?: string | null;
   _count: { registrations: number };
 }
 
@@ -626,20 +630,29 @@ export default function PublicRegister() {
             There are currently no tournaments open for registration. Please check back later.
           </p>
           <Button as={Link} to="/" variant="secondary" className="mt-6">
-            Return to Bowin home
+            Return to home
           </Button>
         </div>
       </main>
     );
   }
 
+  // Compute effective branding from selected tournament (already defined via useMemo above)
+  const brandColor = selectedTournament?.brandPrimaryColor || '#DC2626';
+  const brandName = selectedTournament?.brandName || selectedTournament?.name || 'Tournament';
+  const brandLogoUrl = selectedTournament?.brandLogoUrl;
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <Trophy className="h-12 w-12 text-primary-500 dark:text-primary-400 mx-auto mb-3" />
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Tournament Registration</h1>
+          {brandLogoUrl ? (
+            <img src={brandLogoUrl} alt={`${brandName} logo`} className="h-16 w-auto mx-auto mb-3" />
+          ) : (
+            <Trophy className="h-12 w-12 mx-auto mb-3" style={{ color: brandColor }} />
+          )}
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{brandName}</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">
             Register for an upcoming tournament
           </p>

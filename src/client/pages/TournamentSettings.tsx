@@ -88,7 +88,13 @@ const DEFAULT_SETTINGS: TournamentSettings = {
   feeNotes: '',
 };
 
-type SettingsTab = 'setup' | 'rules';
+type SettingsTab = 'setup' | 'rules' | 'branding';
+
+interface BrandingSettings {
+  brandName: string;
+  brandPrimaryColor: string;
+  brandLogoUrl: string;
+}
 
 export default function TournamentSettings() {
   const { id } = useParams<{ id: string }>();
@@ -98,6 +104,15 @@ export default function TournamentSettings() {
   const setupDirtyRef = useRef(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+
+  // Branding state
+  const [branding, setBranding] = useState<BrandingSettings>({
+    brandName: '',
+    brandPrimaryColor: '#DC2626',
+    brandLogoUrl: '',
+  });
+  const [brandingDirty, setBrandingDirty] = useState(false);
+  const [brandingLoading, setBrandingLoading] = useState(false);
 
   // Share link state — cached locally so the UI updates without a refetch.
   // shareSlug is hydrated from the tournament record on first load.
@@ -121,6 +136,64 @@ export default function TournamentSettings() {
       return res.json();
     },
   });
+
+  // Fetch branding settings
+  const { data: brandingData } = useQuery({
+    queryKey: ['tournament', id, 'branding'],
+    queryFn: async () => {
+      const res = await fetch(`/api/tournaments/${id}/branding`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch branding');
+      return res.json() as Promise<{ brandName: string; brandPrimaryColor: string; brandLogoUrl: string | null; hasOrgBranding: boolean }>;
+    },
+    enabled: !!id,
+  });
+
+  // Load branding when data arrives
+  useEffect(() => {
+    if (brandingData && !brandingDirty) {
+      setBranding({
+        brandName: brandingData.brandName || '',
+        brandPrimaryColor: brandingData.brandPrimaryColor || '#DC2626',
+        brandLogoUrl: brandingData.brandLogoUrl || '',
+      });
+    }
+  }, [brandingData, brandingDirty]);
+
+  const saveBrandingMutation = useMutation({
+    mutationFn: async (data: BrandingSettings) => {
+      const res = await fetch(`/api/tournaments/${id}/branding`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          brandName: data.brandName || null,
+          brandPrimaryColor: data.brandPrimaryColor || null,
+          brandLogoUrl: data.brandLogoUrl || null,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || 'Failed to save branding');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tournament', id, 'branding'] });
+      setBrandingDirty(false);
+      addToast('Branding saved successfully', 'success');
+    },
+    onError: (err: Error) => {
+      addToast(err.message || 'Failed to save branding', 'error');
+    },
+  });
+
+  const handleSaveBranding = async () => {
+    setBrandingLoading(true);
+    try {
+      await saveBrandingMutation.mutateAsync(branding);
+    } finally {
+      setBrandingLoading(false);
+    }
+  };
 
   // Load settings from tournament
   useEffect(() => {
@@ -361,6 +434,22 @@ export default function TournamentSettings() {
             <Award className="inline h-4 w-4 mr-1.5" />
             Categorization + Brackets
             <span className="ml-2 text-xs text-gray-600">(advanced)</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="settings-tab-branding"
+            aria-selected={tab === 'branding'}
+            aria-controls="settings-panel-branding"
+            onClick={() => setTab('branding')}
+            className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              tab === 'branding'
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+            }`}
+          >
+            <Award className="inline h-4 w-4 mr-1.5" />
+            Branding
           </button>
         </nav>
       </div>
@@ -762,6 +851,162 @@ export default function TournamentSettings() {
                 tournamentId={id!}
                 tournamentSettings={tournament?.settings}
               />
+            </CardBody>
+          </Card>
+        </div>
+      )}
+
+      {/* Branding Panel */}
+      {tab === 'branding' && (
+        <div id="settings-panel-branding" role="tabpanel" aria-labelledby="settings-tab-branding">
+          <Card>
+            <CardHeader
+              title="Tournament Branding"
+              icon={Award}
+            />
+            <CardBody>
+              <div className="max-w-2xl space-y-6">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Customize how your tournament appears on public-facing pages (registration, scoreboard, results).
+                  Competitors will see your branding, not "Bowin".
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="brandName">
+                      Brand Name
+                      <span className="text-gray-600 dark:text-gray-400 font-normal ml-2">
+                        (displayed to competitors)
+                      </span>
+                    </Label>
+                    <Input
+                      id="brandName"
+                      type="text"
+                      value={branding.brandName}
+                      onChange={(e) => {
+                        setBranding({ ...branding, brandName: e.target.value });
+                        setBrandingDirty(true);
+                      }}
+                      placeholder={tournament?.name || 'Tournament name'}
+                      maxLength={200}
+                    />
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                      Leave empty to use tournament name. Example: "Master Kim's Taekwondo Academy"
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="brandPrimaryColor">
+                      Primary Color
+                      <span className="text-gray-600 dark:text-gray-400 font-normal ml-2">
+                        (accent color for buttons, icons)
+                      </span>
+                    </Label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        id="brandPrimaryColor"
+                        type="color"
+                        value={branding.brandPrimaryColor}
+                        onChange={(e) => {
+                          setBranding({ ...branding, brandPrimaryColor: e.target.value });
+                          setBrandingDirty(true);
+                        }}
+                        className="h-10 w-20 rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+                      />
+                      <Input
+                        type="text"
+                        value={branding.brandPrimaryColor}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
+                            setBranding({ ...branding, brandPrimaryColor: val });
+                            setBrandingDirty(true);
+                          }
+                        }}
+                        placeholder="#DC2626"
+                        maxLength={7}
+                        className="w-32"
+                      />
+                      <div 
+                        className="h-10 w-10 rounded border border-gray-300 dark:border-gray-600"
+                        style={{ backgroundColor: branding.brandPrimaryColor }}
+                        aria-label="Color preview"
+                      />
+                    </div>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                      Hex color code. Default: #DC2626 (Bowin red)
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="brandLogoUrl">
+                      Logo URL
+                      <span className="text-gray-600 dark:text-gray-400 font-normal ml-2">
+                        (optional)
+                      </span>
+                    </Label>
+                    <Input
+                      id="brandLogoUrl"
+                      type="url"
+                      value={branding.brandLogoUrl}
+                      onChange={(e) => {
+                        setBranding({ ...branding, brandLogoUrl: e.target.value });
+                        setBrandingDirty(true);
+                      }}
+                      placeholder="https://example.com/logo.png"
+                      maxLength={500}
+                    />
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                      Public URL to your logo image. Shown on registration and scoreboard pages.
+                      Leave empty to show a trophy icon in your brand color.
+                    </p>
+                  </div>
+
+                  {branding.brandLogoUrl && (
+                    <div>
+                      <Label>Logo Preview</Label>
+                      <div className="mt-2 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900">
+                        <img 
+                          src={branding.brandLogoUrl} 
+                          alt="Brand logo preview" 
+                          className="h-16 w-auto object-contain"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling!.classList.remove('hidden');
+                          }}
+                        />
+                        <p className="hidden text-sm text-red-600 dark:text-red-400">
+                          Failed to load logo. Check the URL is correct and publicly accessible.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <Button
+                    variant="primary"
+                    onClick={handleSaveBranding}
+                    disabled={!brandingDirty || brandingLoading}
+                    loading={brandingLoading}
+                  >
+                    {brandingLoading ? (
+                      <>
+                        <Spinner size="sm" className="mr-2" /> Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" /> Save Branding
+                      </>
+                    )}
+                  </Button>
+                  {brandingData?.hasOrgBranding && !branding.brandName && (
+                    <p className="mt-2 text-sm text-blue-600 dark:text-blue-400">
+                      Currently using organization-level branding as fallback
+                    </p>
+                  )}
+                </div>
+              </div>
             </CardBody>
           </Card>
         </div>

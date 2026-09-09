@@ -49,6 +49,9 @@ interface Tournament {
   name: string;
   date: string;
   location: string | null;
+  brandName?: string | null;
+  brandPrimaryColor?: string | null;
+  brandLogoUrl?: string | null;
 }
 
 export default function PublicScoreboard() {
@@ -271,10 +274,14 @@ export default function PublicScoreboard() {
       <div className="bg-gradient-to-r from-slate-900 via-primary-950 to-slate-900 border-b border-white/5">
         <div className="px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <BowinLogo compact inverse />
+            {tournament?.brandLogoUrl ? (
+              <img src={tournament.brandLogoUrl} alt={`${tournament.brandName || tournament.name} logo`} className="h-10 w-auto" />
+            ) : (
+              <Trophy className="h-10 w-10" style={{ color: tournament?.brandPrimaryColor || '#DC2626' }} />
+            )}
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight">{tournament?.name || 'Tournament'}</h1>
+                <h1 className="text-2xl font-bold tracking-tight">{tournament?.brandName || tournament?.name || 'Tournament'}</h1>
                 <span
                   data-testid="live-badge"
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 border border-red-500/40 text-red-200 text-xs font-bold uppercase tracking-wider"

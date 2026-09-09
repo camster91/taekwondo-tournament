@@ -195,13 +195,13 @@ export default function Login() {
             <BowinLogo />
           </Link>
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-slate-600 hidden sm:inline">Real tournament management, end-to-end.</span>
+            <span className="text-slate-600 dark:text-slate-400 hidden sm:inline">Tournament organizer sign-in</span>
             {setupStatus?.needsSetup === false ? (
               <Link
                 to="/register"
                 className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
               >
-                Public registration →
+                Competitor registration →
               </Link>
             ) : null}
           </div>
@@ -311,9 +311,12 @@ export default function Login() {
                   </div>
                 )}
 
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white mb-6">
-                  Sign in
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white mb-2">
+                  Organizer Sign In
                 </h1>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                  Access your tournament management workspace
+                </p>
 
                 {step === 'email' ? (
                   <EmailForm
