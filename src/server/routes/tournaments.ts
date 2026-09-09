@@ -28,6 +28,7 @@ import {
   getPlanEntitlements,
 } from '../services/entitlements.js';
 import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from '../services/tournament-settings.js';
+import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
 import { generateQRPoster } from '../services/qr-poster.js';
@@ -270,6 +271,21 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
       organizationId: resolvedOrgId,
     },
   });
+
+  // Audit log: tournament created (P1-3)
+  if (authReq.user) {
+    await createAuditLog(prisma, {
+      userId: authReq.user.id,
+      action: 'tournament_created',
+      details: { tournamentId: tournament.id, tournamentName: name },
+      ipAddress: getClientIp(authReq),
+      userAgent: getUserAgent(authReq),
+      organizationId: resolvedOrgId || undefined,
+      tournamentId: tournament.id,
+    }).catch((err) => {
+      console.error('[audit-log] tournament_created event failed:', err);
+    });
+  }
 
   res.status(201).json(tournament);
 });
@@ -672,18 +688,56 @@ router.post('/:id/rules/reset', authenticate, requireTournamentAccess('director'
 router.delete('/:id', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const hard = req.query.hard === 'true';
+  const authReq = req as AuthenticatedRequest;
+  const tournamentId = getParam(req.params.id);
+
+  // Fetch tournament name for audit log before deletion
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    select: { name: true, organizationId: true },
+  });
 
   if (hard) {
     await prisma.tournament.delete({
-      where: { id: getParam(req.params.id) },
+      where: { id: tournamentId },
     });
+
+    // Audit log: tournament hard-deleted (P1-3)
+    if (authReq.user && tournament) {
+      await createAuditLog(prisma, {
+        userId: authReq.user.id,
+        action: 'tournament_deleted',
+        details: { tournamentId, tournamentName: tournament.name, hardDelete: true },
+        ipAddress: getClientIp(authReq),
+        userAgent: getUserAgent(authReq),
+        organizationId: tournament.organizationId || undefined,
+      }).catch((err) => {
+        console.error('[audit-log] tournament_deleted event failed:', err);
+      });
+    }
+
     return res.status(204).send();
   }
 
   await prisma.tournament.update({
-    where: { id: getParam(req.params.id) },
+    where: { id: tournamentId },
     data: { deletedAt: new Date() },
   });
+
+  // Audit log: tournament soft-deleted (P1-3)
+  if (authReq.user && tournament) {
+    await createAuditLog(prisma, {
+      userId: authReq.user.id,
+      action: 'tournament_deleted',
+      details: { tournamentId, tournamentName: tournament.name, hardDelete: false },
+      ipAddress: getClientIp(authReq),
+      userAgent: getUserAgent(authReq),
+      organizationId: tournament.organizationId || undefined,
+      tournamentId,
+    }).catch((err) => {
+      console.error('[audit-log] tournament_deleted event failed:', err);
+    });
+  }
 
   res.status(204).send();
 });
@@ -691,11 +745,34 @@ router.delete('/:id', authenticate, requireTournamentAccess('director'), async (
 // Restore a soft-deleted tournament
 router.post('/:id/restore', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const authReq = req as AuthenticatedRequest;
+  const tournamentId = getParam(req.params.id);
+
+  // Fetch tournament info for audit log
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    select: { name: true, organizationId: true },
+  });
 
   await prisma.tournament.update({
-    where: { id: getParam(req.params.id) },
+    where: { id: tournamentId },
     data: { deletedAt: null },
   });
+
+  // Audit log: tournament restored (P1-3)
+  if (authReq.user && tournament) {
+    await createAuditLog(prisma, {
+      userId: authReq.user.id,
+      action: 'tournament_restored',
+      details: { tournamentId, tournamentName: tournament.name },
+      ipAddress: getClientIp(authReq),
+      userAgent: getUserAgent(authReq),
+      organizationId: tournament.organizationId || undefined,
+      tournamentId,
+    }).catch((err) => {
+      console.error('[audit-log] tournament_restored event failed:', err);
+    });
+  }
 
   res.status(204).send();
 });
