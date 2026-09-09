@@ -197,7 +197,7 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 | Modern web UI (React) | ✅ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | P0 |
 | Mobile tablet optimized | ✅ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | P0 |
 | Dark mode | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P1 |
-| Keyboard shortcuts | ⚠️ (P2) | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
+| Keyboard shortcuts | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
 | Multi-sport support | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
 | **Pricing & Access** | | | | | | | |
 | Freemium tier | ⚠️ (P1) | ❌ | ❌ | ❌ | ❌ | ❌ | P1 |
@@ -210,9 +210,9 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 ⚠️ = Partial / in progress (phase noted)  
 ❌ = Not available  
 
-**Bowin competitive score:** 26/35 complete (74%), 9 in-progress (P1/P2)  
-**Unique advantages:** Real-time bracket collab, video review, offline mode, parent finder, skill-based seeding, multi-sport, modern UX, no watermarks, historical competitor tracking  
-**Key gaps to close:** Payment at reg, keyboard shortcuts
+**Bowin competitive score:** 27/35 complete (77%), 8 in-progress (P1/P2)  
+**Unique advantages:** Real-time bracket collab, video review, offline mode, parent finder, skill-based seeding, multi-sport, modern UX, no watermarks, historical competitor tracking, keyboard shortcuts, competitor deduplication  
+**Key gaps to close:** Payment at reg
 
 ---
 
@@ -432,17 +432,14 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 
 Items that don't block launch but should be fixed post-GA:
 
-1. **Rebrand completion:** Finish sweeping `tkd_*` localStorage keys → `bowin_*` (SESSION_COOKIE already uses `bowin_session`); update email templates to remove "TKD Tournament Manager" branding
-2. **Multi-sport seed data:** Add Karate/Judo test seeds to prove sport-agnostic design
-3. **Bracket auto-layout:** Current PDF export is functional but not print-shop quality; needs fold marks, better spacing
-4. **React Router advisory:** Prisma tooling inherits `deepmerge-ts` advisory; track until upstream fix available
-5. **Automated migration testing:** CI should test migrations from empty DB + prod-like snapshot
-6. **Rate limit bypass for tests:** Currently gated by `RATE_LIMIT_DISABLED=1`; should use test-specific middleware
-7. **Email template design:** Current magic-link emails are plain-text-ish; needs HTML design pass
-8. **Public scoreboard auto-refresh config:** Hardcoded 10s refresh; should be per-tournament setting
-9. **Competitor merge UI:** Deduplication logic exists but no UI for human-in-the-loop merge
-10. **Keyboard shortcuts:** Power users want `Cmd+K` command palette, arrow keys for bracket navigation
-11. **Staging environment:** Current deploy flow is manual production-only (`workflow_dispatch` + `deploy-production.sh`); consider adding automated staging deploy for pre-release validation
+1. **Multi-sport seed data:** Add Karate/Judo test seeds to prove sport-agnostic design
+2. **Bracket auto-layout:** Current PDF export is functional but not print-shop quality; needs fold marks, better spacing
+3. **React Router advisory:** Prisma tooling inherits `deepmerge-ts` advisory; track until upstream fix available
+4. **Automated migration testing:** CI should test migrations from empty DB + prod-like snapshot
+5. **Rate limit bypass for tests:** Currently gated by `RATE_LIMIT_DISABLED=1`; should use test-specific middleware
+6. **Email template design:** Current magic-link emails are plain-text-ish; needs HTML design pass
+7. **Public scoreboard auto-refresh config:** Hardcoded 10s refresh; should be per-tournament setting
+8. **Staging environment:** Current deploy flow is manual production-only (`workflow_dispatch` + `deploy-production.sh`); consider adding automated staging deploy for pre-release validation
 
 ---
 
