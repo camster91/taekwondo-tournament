@@ -75,6 +75,13 @@ model Tournament {
   // this tournament. Rotated from the UI to revoke the old link.
   publicSlug String? @unique
 
+  // Organizer branding — applied to public-facing pages (register,
+  // scoreboard, results). Competitors see the organizer's tournament
+  // brand, not "Bowin" as the product face.
+  brandName       String? // Display name for public pages (e.g. "Master Kim's Academy")
+  brandPrimaryColor String? @default("#DC2626") // Hex color code for accent/CTA elements
+  brandLogoUrl    String? // Public URL to organizer's logo image
+
   registrations       Registration[]
   divisions           Division[]
   weightClasses       WeightClass[]
@@ -507,6 +514,11 @@ model Organization {
   settings  String? // JSON
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Organization-level branding (inherited by tournaments unless overridden)
+  brandName         String? // Display name for public pages
+  brandPrimaryColor String? @default("#DC2626") // Hex color code
+  brandLogoUrl      String? // Public URL to org logo
 
   members     OrganizationMember[]
   tournaments Tournament[]

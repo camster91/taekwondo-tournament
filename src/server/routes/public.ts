@@ -102,6 +102,9 @@ router.get('/tournaments', async (req: Request, res: Response) => {
       // Settings carries director-only config; only registrationFee
       // is safe for the public register page.
       settings: true,
+      brandName: true,
+      brandPrimaryColor: true,
+      brandLogoUrl: true,
       _count: {
         select: { registrations: true },
       },
@@ -137,6 +140,9 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
       deletedAt: true,
       settings: true,
       sportProfileSlug: true,
+      brandName: true,
+      brandPrimaryColor: true,
+      brandLogoUrl: true,
     },
   });
 

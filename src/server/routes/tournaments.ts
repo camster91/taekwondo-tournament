@@ -1219,4 +1219,79 @@ router.put(
   }
 );
 
+// Validation schema for branding updates
+const brandingUpdateSchema = z.object({
+  brandName: z.string().min(1).max(200).nullable().optional(),
+  brandPrimaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color code').nullable().optional(),
+  brandLogoUrl: z.string().url('Must be a valid URL').max(500).nullable().optional(),
+});
+
+// Get tournament branding
+router.get('/:id/branding', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: getParam(req.params.id) },
+    select: {
+      id: true,
+      name: true,
+      brandName: true,
+      brandPrimaryColor: true,
+      brandLogoUrl: true,
+      organizationId: true,
+      organization: {
+        select: {
+          brandName: true,
+          brandPrimaryColor: true,
+          brandLogoUrl: true,
+        },
+      },
+    },
+  });
+
+  if (!tournament || (tournament as unknown as { deletedAt?: Date | null }).deletedAt) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  // Return tournament branding with org fallback
+  const branding = {
+    brandName: tournament.brandName || tournament.organization?.brandName || tournament.name,
+    brandPrimaryColor: tournament.brandPrimaryColor || tournament.organization?.brandPrimaryColor || '#DC2626',
+    brandLogoUrl: tournament.brandLogoUrl || tournament.organization?.brandLogoUrl || null,
+    hasOrgBranding: !!tournament.organizationId && !tournament.brandName,
+  };
+
+  res.json(branding);
+});
+
+// Update tournament branding (directors only)
+router.put(
+  '/:id/branding',
+  authenticate,
+  requireTournamentAccess('director'),
+  validateRequest(brandingUpdateSchema),
+  async (req: Request, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const { brandName, brandPrimaryColor, brandLogoUrl } = req.body;
+
+    const updated = await prisma.tournament.update({
+      where: { id: getParam(req.params.id) },
+      data: {
+        brandName: brandName !== undefined ? brandName : undefined,
+        brandPrimaryColor: brandPrimaryColor !== undefined ? brandPrimaryColor : undefined,
+        brandLogoUrl: brandLogoUrl !== undefined ? brandLogoUrl : undefined,
+      },
+      select: {
+        id: true,
+        name: true,
+        brandName: true,
+        brandPrimaryColor: true,
+        brandLogoUrl: true,
+      },
+    });
+
+    res.json(updated);
+  }
+);
+
 export default router;

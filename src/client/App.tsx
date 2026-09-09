@@ -405,8 +405,20 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                   </button>
                   <div className="my-1 border-t border-white/5" />
                   <button
-                    onClick={() => { setUserMenuOpen(false); logout(); }}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-sm text-red-300 hover:bg-red-500/10 rounded-md"
+                    onClick={async () => {
+                      setUserMenuOpen(false);
+                      try {
+                        await logout();
+                        // Force navigation to login page after logout completes
+                        navigate('/login', { replace: true });
+                      } catch (err) {
+                        console.error('Logout failed:', err);
+                        // Even if logout fails server-side, clear local state and redirect
+                        navigate('/login', { replace: true });
+                      }
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-sm text-red-300 hover:bg-red-500/10 hover:text-red-200 rounded-md font-medium transition-colors"
+                    aria-label="Sign out of organizer account"
                   >
                     <LogOut className="h-3.5 w-3.5" /> Sign out
                   </button>
@@ -416,9 +428,10 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           ) : (
             <Link
               to="/login"
+              aria-label="Sign in to organizer account"
               className={classNames(
-                'flex items-center text-sm text-white/60 hover:text-white',
-                sidebarCollapsed ? 'justify-center' : 'gap-2 px-3 py-2'
+                'flex items-center text-sm text-white/60 hover:text-white hover:bg-white/5 rounded-lg transition-colors',
+                sidebarCollapsed ? 'justify-center p-2' : 'gap-2 px-3 py-2'
               )}
             >
               <LogOut className="h-4 w-4" />
@@ -464,6 +477,19 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
             </button>
 
             <div className="flex-1" />
+
+            {/* Current user indicator — desktop only, visible identity */}
+            {user && (
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/60 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 rounded-lg">
+                <div className="h-6 w-6 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-[10px] font-semibold">
+                  {initials}
+                </div>
+                <div className="text-xs">
+                  <div className="font-medium text-slate-900 dark:text-white">{userName}</div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{user.role}</div>
+                </div>
+              </div>
+            )}
 
             {/* Theme toggle — visible in the topbar so users can flip
                 between light/dark without opening the account menu. */}
