@@ -78,6 +78,10 @@ const TKD_BELT_OPTIONS = [
 export default function PublicRegister() {
   const [searchParams] = useSearchParams();
   const preselectedTournamentId = searchParams.get('tournament');
+  
+  // P2-2: Handle payment success/cancel redirects
+  const paymentStatus = searchParams.get('payment');
+  const registrationIdFromPayment = searchParams.get('registration');
 
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
@@ -280,6 +284,40 @@ export default function PublicRegister() {
     void loadRegistrationConfig();
   }, [loadRegistrationConfig]);
 
+  // P2-2: Handle payment return flow
+  useEffect(() => {
+    if (paymentStatus === 'success' && registrationIdFromPayment) {
+      // Payment succeeded; show success message
+      // We can't fetch the full registration details without the management
+      // token, so show a generic success screen
+      setResult({
+        success: true,
+        message: 'Payment complete! Your registration is confirmed.',
+        registration: {
+          id: registrationIdFromPayment,
+          confirmationCode: registrationIdFromPayment.slice(0, 8),
+          managementToken: '',
+          competitorName: '',
+          tournamentName: '',
+          tournamentDate: new Date().toISOString(),
+          events: { patterns: false, sparring: false },
+          ageGroup: '',
+          paymentStatus: 'paid',
+        },
+      });
+      setRegisteredCount((c) => c + 1);
+      
+      // Clear query params so back button doesn't re-trigger
+      window.history.replaceState({}, '', '/register');
+    } else if (paymentStatus === 'cancelled' && registrationIdFromPayment) {
+      // Payment cancelled; show error
+      setError('Payment was cancelled. Your registration is pending payment. Please contact the tournament organizer if you need assistance.');
+      
+      // Clear query params
+      window.history.replaceState({}, '', '/register');
+    }
+  }, [paymentStatus, registrationIdFromPayment]);
+
   // Map a field name from server validation errors to its DOM ref. We use a
   // regex match against the error string; if no match we fall back to focusing
   // the error region itself.
@@ -370,7 +408,15 @@ export default function PublicRegister() {
         }),
       });
 
-      setResult(parseRegistrationResult(data));
+      const parsedResult = parseRegistrationResult(data);
+      
+      // P2-2: If checkoutUrl is present, redirect to Stripe immediately
+      if (parsedResult.checkoutUrl) {
+        window.location.href = parsedResult.checkoutUrl;
+        return;
+      }
+
+      setResult(parsedResult);
       // Increment on success so the success screen can show the
       // running count and offer a fast re-entry path.
       setRegisteredCount((c) => c + 1);

@@ -19,6 +19,10 @@ const SUBSCRIPTION_EVENTS = new Set([
   'customer.subscription.deleted',
 ]);
 
+const CHECKOUT_EVENTS = new Set([
+  'checkout.session.completed',
+]);
+
 export async function stripeWebhookHandler(req: Request, res: Response): Promise<Response> {
   let config: ReturnType<typeof stripeRuntimeConfigFromEnv>;
   try {
@@ -40,24 +44,88 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
     return res.status(400).json({ error: 'Invalid Stripe webhook signature.' });
   }
 
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const payloadHash = crypto.createHash('sha256').update(req.body).digest('hex');
+
+  // P2-2: Handle checkout.session.completed for entry-fee payments
+  if (CHECKOUT_EVENTS.has(event.type)) {
+    const session = event.data.object as {
+      id: string;
+      metadata?: { registrationId?: string; type?: string };
+      payment_status?: string;
+      amount_total?: number;
+    };
+
+    if (session.metadata?.type === 'entry_fee' && session.metadata.registrationId) {
+      const registrationId = session.metadata.registrationId;
+
+      // Fast path for normal Stripe retries
+      const existingEvent = await prisma.billingWebhookEvent.findUnique({
+        where: { providerEventId: event.id },
+        select: { id: true },
+      });
+      if (existingEvent) return res.json({ processed: false, duplicate: true });
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.billingWebhookEvent.create({
+            data: { providerEventId: event.id, type: event.type, payloadHash },
+          });
+
+          const registration = await tx.registration.findUnique({
+            where: { id: registrationId },
+            select: { id: true, paymentStatus: true, paymentIntentId: true },
+          });
+
+          if (!registration) {
+            throw new Error(`Webhook references unknown registration: ${registrationId}`);
+          }
+
+          // Update payment status to 'paid' only if it was pending
+          if (
+            registration.paymentStatus === 'pending' &&
+            session.payment_status === 'paid'
+          ) {
+            await tx.registration.update({
+              where: { id: registrationId },
+              data: {
+                paymentStatus: 'paid',
+                paymentReceivedAt: new Date(),
+                paymentAmountCents: session.amount_total ?? null,
+              },
+            });
+          }
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          return res.json({ processed: false, duplicate: true });
+        }
+        throw error;
+      }
+
+      return res.json({ processed: true, type: 'entry_fee' });
+    }
+
+    // Not an entry-fee checkout; ignore
+    return res.json({ processed: false, ignored: true });
+  }
+
   if (!SUBSCRIPTION_EVENTS.has(event.type)) {
     return res.json({ processed: false, ignored: true });
   }
+
+  // Fast path for normal Stripe retries. The unique constraint below remains
+  // the authority for concurrent deliveries of the same event.
+  const existingSubEvent = await prisma.billingWebhookEvent.findUnique({
+    where: { providerEventId: event.id },
+    select: { id: true },
+  });
+  if (existingSubEvent) return res.json({ processed: false, duplicate: true });
 
   const mapped = mapStripeSubscription(
     event.data.object as unknown as Parameters<typeof mapStripeSubscription>[0],
     config.prices,
   );
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const payloadHash = crypto.createHash('sha256').update(req.body).digest('hex');
-
-  // Fast path for normal Stripe retries. The unique constraint below remains
-  // the authority for concurrent deliveries of the same event.
-  const existingEvent = await prisma.billingWebhookEvent.findUnique({
-    where: { providerEventId: event.id },
-    select: { id: true },
-  });
-  if (existingEvent) return res.json({ processed: false, duplicate: true });
 
   try {
     await prisma.$transaction(async (tx) => {

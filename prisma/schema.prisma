@@ -146,6 +146,12 @@ model Registration {
   waitlistPosition   Int? // Position in waitlist (null if not waitlisted)
   waitlistPromotedAt DateTime? // When promoted from waitlist to active
 
+  // P2-2: Payment at registration
+  paymentStatus      String?   @default("not_required") // not_required, pending, paid, waived, failed
+  paymentIntentId    String? // Stripe PaymentIntent or Checkout Session ID
+  paymentAmountCents Int? // Amount paid in cents (stored for audit; truth is Stripe)
+  paymentReceivedAt  DateTime? // When payment was confirmed via webhook
+
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   competitor  Competitor           @relation(fields: [competitorId], references: [id], onDelete: Cascade)
   assignments DivisionAssignment[]

@@ -92,6 +92,9 @@ interface Registration {
   // these for director+; the public list views omit them.
   parentEmail?: string | null;
   parentName?: string | null;
+  // P2-2: Payment tracking fields
+  paymentStatus?: string | null;
+  paymentAmountCents?: number | null;
   parentPhone?: string | null;
 }
 
@@ -437,6 +440,23 @@ export default function TournamentDetail() {
     if (lower.includes('yellow')) return 'bg-yellow-400 text-gray-900';
     if (lower.includes('white')) return 'bg-white text-gray-900 border';
     return 'bg-gray-200';
+  };
+
+  // P2-2: Payment status badge
+  const getPaymentBadge = (status: string | null | undefined) => {
+    switch (status) {
+      case 'paid':
+        return { text: 'Paid', className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' };
+      case 'pending':
+        return { text: 'Pending', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' };
+      case 'waived':
+        return { text: 'Waived', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' };
+      case 'failed':
+        return { text: 'Failed', className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' };
+      case 'not_required':
+      default:
+        return { text: '', className: '' }; // Don't show badge for not_required
+    }
   };
 
   const filteredRegistrations = registrations?.filter((r) => {
@@ -1022,6 +1042,7 @@ export default function TournamentDetail() {
                       <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Belt</th>
                       <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Weight</th>
                       <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">School</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-center">Payment</th>
                       <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-center">Patterns</th>
                       <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-center">Sparring</th>
                       <th className="px-4 py-2.5 w-10"></th>
@@ -1050,6 +1071,18 @@ export default function TournamentDetail() {
                             : '-'}
                         </TableCell>
                         <TableCell className="max-w-[150px] truncate">{reg.competitor.schoolDojang || '-'}</TableCell>
+                        <TableCell className="text-center">
+                          {(() => {
+                            const badge = getPaymentBadge(reg.paymentStatus);
+                            return badge.text ? (
+                              <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${badge.className}`}>
+                                {badge.text}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs">—</span>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell className="text-center">
                           <IconButton
                             icon={reg.patterns ? <Check className="h-4 w-4" /> : <span aria-hidden="true">—</span>}
