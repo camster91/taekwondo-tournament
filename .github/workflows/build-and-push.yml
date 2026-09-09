@@ -16,8 +16,6 @@ on:
   push:
     branches: [main, master]
     tags: ['v*']
-  pull_request:
-    branches: [main, master]
   workflow_call:
     inputs:
       image_name:
@@ -34,6 +32,22 @@ on:
         required: false
         type: string
         default: 'linux/amd64'
+  workflow_dispatch:
+    inputs:
+      image_name:
+        description: 'Override image name (default: repo name)'
+        required: false
+        type: string
+      dockerfile:
+        description: 'Path to Dockerfile (default: ./Dockerfile)'
+        required: false
+        type: string
+        default: 'Dockerfile'
+      platforms:
+        description: 'Buildx platforms (default: amd64,arm64)'
+        required: false
+        type: string
+        default: 'linux/amd64,linux/arm64'
 permissions:
   contents: read
   packages: write
@@ -65,8 +79,6 @@ jobs:
             TAG="${REF#refs/tags/}"
           elif [[ "$REF" == refs/heads/main || "$REF" == refs/heads/master ]]; then
             TAG="main"
-          elif [[ "$REF" == refs/pull/* ]]; then
-            TAG="pr-${{ github.event.pull_request.number }}"
           else
             TAG="${REF#refs/heads/}"
           fi
@@ -105,9 +117,7 @@ jobs:
           build-args: |
             VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${{ vars.OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64 }}
           platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
-          # Pull requests prove the image builds but cannot publish mutable
-          # release tags such as latest.
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}-${{ steps.meta.outputs.sha }}
@@ -123,7 +133,6 @@ jobs:
             org.opencontainers.image.created=${{ github.event.repository.updated_at }}
 
       - name: Image summary
-        if: github.event_name != 'pull_request'
         run: |
           echo "## Image published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
