@@ -4,7 +4,11 @@ import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { registerOfflineShell } from './utils/offline-shell';
+import { initSentry, ErrorBoundary as SentryErrorBoundary } from './services/sentry';
 import './index.css';
+
+// Initialize Sentry BEFORE ReactDOM.render
+initSentry();
 
 if (import.meta.env.PROD) {
   const buildAsset = new URL(import.meta.url).pathname;
@@ -82,9 +86,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <ErrorBoundary>
-          <App />
-        </ErrorBoundary>
+        <SentryErrorBoundary fallback={<ErrorBoundary><div /></ErrorBoundary>}>
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
+        </SentryErrorBoundary>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>
