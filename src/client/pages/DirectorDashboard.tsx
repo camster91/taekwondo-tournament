@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
@@ -18,6 +18,7 @@ import {
   Target,
   TrendingUp,
   Monitor,
+  RefreshCw,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { Card, CardHeader, CardBody } from '../components/ui';
@@ -122,6 +123,17 @@ export default function DirectorDashboard() {
   const [displayRing, setDisplayRing] = useState<number>(1);
   const [displayMatchId, setDisplayMatchId] = useState<string>('');
   const [operationalQuestion, setOperationalQuestion] = useState('');
+  
+  // Ring sync indicator state (P1-9)
+  const [ringUpdates, setRingUpdates] = useState<Record<string, number>>({});
+  const [currentTime, setCurrentTime] = useState(Date.now());
+  const previousDataRef = useRef<string>('');
+
+  // Update current time every second for relative timestamps
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const displaySettingsMutation = useMutation({
     mutationFn: async () => {
@@ -142,7 +154,7 @@ export default function DirectorDashboard() {
     },
   });
 
-  const { data: progress, isLoading } = useQuery<TournamentProgress>({
+  const { data: progress, isLoading, dataUpdatedAt } = useQuery<TournamentProgress>({
     queryKey: ['director-dashboard', tournamentId],
     queryFn: async () => {
       const [tournamentRes, divisionsRes] = await Promise.all([
@@ -328,7 +340,26 @@ export default function DirectorDashboard() {
       };
     },
     refetchInterval: 10000,
-  refetchIntervalInBackground: false,
+    refetchIntervalInBackground: false,
+    onSuccess: (data) => {
+      // Track ring updates for sync freshness indicator (P1-9)
+      const currentDataStr = JSON.stringify(data.rings.map(r => ({
+        ring: r.ring,
+        status: r.status,
+        currentMatch: r.currentMatch?.id,
+        upcomingMatches: r.upcomingMatches,
+      })));
+      
+      if (currentDataStr !== previousDataRef.current) {
+        const now = Date.now();
+        const updates: Record<string, number> = {};
+        data.rings.forEach(ring => {
+          updates[ring.ring] = now;
+        });
+        setRingUpdates(prev => ({ ...prev, ...updates }));
+        previousDataRef.current = currentDataStr;
+      }
+    },
   });
 
   const attentionQuery = useQuery<AttentionResponse>({
@@ -566,46 +597,67 @@ export default function DirectorDashboard() {
             </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {progress.rings.map((ring) => (
-                <div
-                  key={ring.ring}
-                  className={`p-4 rounded-lg border-2 ${
-                    ring.status === 'active'
-                      ? 'border-green-500 dark:border-green-600 bg-green-50 dark:bg-green-900/30'
-                      : ring.status === 'completed'
-                      ? 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'
-                      : 'border-yellow-400 dark:border-yellow-600 bg-yellow-50 dark:bg-yellow-900/30'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-bold text-lg text-gray-900 dark:text-white">{ring.ring}</h3>
-                    <span
-                      className={`flex items-center text-sm ${
-                        ring.status === 'active'
-                          ? 'text-green-600 dark:text-green-400'
-                          : ring.status === 'completed'
-                          ? 'text-gray-500 dark:text-gray-400'
-                          : 'text-yellow-600 dark:text-yellow-400'
-                      }`}
-                    >
-                      {ring.status === 'active' ? (
-                        <>
-                          <Play className="h-4 w-4 mr-1" />
-                          Active
-                        </>
-                      ) : ring.status === 'completed' ? (
-                        <>
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Done
-                        </>
-                      ) : (
-                        <>
-                          <Pause className="h-4 w-4 mr-1" />
-                          Idle
-                        </>
-                      )}
-                    </span>
-                  </div>
+              {progress.rings.map((ring) => {
+                const lastUpdate = ringUpdates[ring.ring];
+                const secondsAgo = lastUpdate ? Math.floor((currentTime - lastUpdate) / 1000) : null;
+                const freshnessLabel = secondsAgo === null 
+                  ? '' 
+                  : secondsAgo < 5 
+                  ? 'just now' 
+                  : secondsAgo < 60 
+                  ? `${secondsAgo}s ago` 
+                  : `${Math.floor(secondsAgo / 60)}m ago`;
+                
+                return (
+                  <div
+                    key={ring.ring}
+                    className={`p-4 rounded-lg border-2 ${
+                      ring.status === 'active'
+                        ? 'border-green-500 dark:border-green-600 bg-green-50 dark:bg-green-900/30'
+                        : ring.status === 'completed'
+                        ? 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'
+                        : 'border-yellow-400 dark:border-yellow-600 bg-yellow-50 dark:bg-yellow-900/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-lg text-gray-900 dark:text-white">{ring.ring}</h3>
+                        {secondsAgo !== null && secondsAgo < 15 && (
+                          <RefreshCw className="w-3 h-3 text-green-600 dark:text-green-400 animate-spin" aria-label="Recently updated" />
+                        )}
+                      </div>
+                      <span
+                        className={`flex items-center text-sm ${
+                          ring.status === 'active'
+                            ? 'text-green-600 dark:text-green-400'
+                            : ring.status === 'completed'
+                            ? 'text-gray-500 dark:text-gray-400'
+                            : 'text-yellow-600 dark:text-yellow-400'
+                        }`}
+                      >
+                        {ring.status === 'active' ? (
+                          <>
+                            <Play className="h-4 w-4 mr-1" />
+                            Active
+                          </>
+                        ) : ring.status === 'completed' ? (
+                          <>
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Done
+                          </>
+                        ) : (
+                          <>
+                            <Pause className="h-4 w-4 mr-1" />
+                            Idle
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    {freshnessLabel && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                        Updated {freshnessLabel}
+                      </div>
+                    )}
                   {ring.currentMatch ? (
                     <div className="text-sm">
                       <p className="text-gray-600 dark:text-gray-400 mb-1">{ring.currentMatch.divisionName}</p>
