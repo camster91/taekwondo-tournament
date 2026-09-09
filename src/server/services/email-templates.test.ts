@@ -41,8 +41,11 @@ describe('email-templates', () => {
       expect(html).toContain('Community Center');
       expect(html).toContain('Hi Jane Doe,');
       expect(html).toContain('https://example.com/manage?token=xyz');
-      // Should NOT contain Bowin watermark on public emails
+      // Should use organizer brand in header/footer, not Bowin
+      expect(html).toContain('<h1>Master Kim Academy</h1>');
+      expect(html).not.toContain('<h1>bowin</h1>');
       expect(html).not.toContain('Powered by Bowin');
+      expect(html).not.toContain('run like a black belt');
     });
 
     it('handles missing optional fields gracefully', () => {
@@ -64,6 +67,8 @@ describe('email-templates', () => {
       expect(html).toContain('Hi,');
       expect(html).not.toContain('Location:');
       expect(html).toContain('XYZ789');
+      // Without organizer brand, falls back to bowin (staff emails only)
+      expect(html).toContain('<h1>bowin</h1>');
     });
   });
 
@@ -86,6 +91,9 @@ describe('email-templates', () => {
       expect(html).toContain('Dragon Martial Arts');
       expect(html).toContain('#3');
       expect(html).toContain('added to the waitlist');
+      // Should use organizer brand in header
+      expect(html).toContain('<h1>Dragon Martial Arts</h1>');
+      expect(html).not.toContain('<h1>bowin</h1>');
     });
   });
 
@@ -109,6 +117,9 @@ describe('email-templates', () => {
       expect(html).toContain('PROMO123');
       expect(html).toContain('promoted from the waitlist');
       expect(html).toContain('Your registration is now active');
+      // Should use organizer brand in header
+      expect(html).toContain('<h1>Tiger Dojo</h1>');
+      expect(html).not.toContain('<h1>bowin</h1>');
     });
   });
 });

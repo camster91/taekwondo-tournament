@@ -791,6 +791,10 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
     return res.status(400).json({ error: 'Registration is not waitlisted' });
   }
 
+  // Generate a new management token for the promoted registration
+  const { generateManagementToken, hashManagementToken } = await import('../utils/registration-management-token.js');
+  const newManagementToken = generateManagementToken();
+
   // Promote
   await prisma.registration.update({
     where: { id: registrationId },
@@ -798,6 +802,7 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
       waitlistStatus: 'active',
       waitlistPromotedAt: new Date(),
       waitlistPosition: null,
+      managementTokenHash: hashManagementToken(newManagementToken),
     },
   });
 
@@ -822,7 +827,7 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
   if (registration.parentEmail && isEmailConfigured()) {
     const { waitlistPromotionEmail } = await import('../services/email-templates.js');
     const organizerBrandName = registration.tournament.brandName || registration.tournament.organization?.brandName || undefined;
-    const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(registration.id.slice(0, 16))}`;
+    const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(newManagementToken)}`;
 
     const { subject, html } = waitlistPromotionEmail({
       competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,

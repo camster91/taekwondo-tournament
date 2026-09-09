@@ -10,8 +10,6 @@ import { waitlistPromotionEmail } from './email-templates.js';
 export async function checkWaitlistStatus(
   prisma: PrismaClient,
   tournamentId: string,
-  patterns: boolean,
-  sparring: boolean,
 ): Promise<{ shouldWaitlist: boolean; position: number | null }> {
   // For Phase 2, we'll use a tournament-level setting for max competitors.
   // Later, division-level caps can be added.
@@ -94,6 +92,10 @@ export async function promoteNextWaitlisted(
     return; // No one is waitlisted
   }
 
+  // Generate a new management token for the promoted registration
+  const { generateManagementToken, hashManagementToken } = await import('../utils/registration-management-token.js');
+  const newManagementToken = generateManagementToken();
+
   // Promote them
   await prisma.registration.update({
     where: { id: nextWaitlisted.id },
@@ -101,6 +103,7 @@ export async function promoteNextWaitlisted(
       waitlistStatus: 'active',
       waitlistPromotedAt: new Date(),
       waitlistPosition: null,
+      managementTokenHash: hashManagementToken(newManagementToken),
     },
   });
 
@@ -129,9 +132,7 @@ export async function promoteNextWaitlisted(
       nextWaitlisted.tournament.organization?.brandName ||
       undefined;
 
-    const managementUrl = nextWaitlisted.managementTokenHash
-      ? `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(nextWaitlisted.id.slice(0, 16))}`
-      : '';
+    const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(newManagementToken)}`;
 
     const { subject, html } = waitlistPromotionEmail({
       competitorName: `${nextWaitlisted.competitor.firstName} ${nextWaitlisted.competitor.lastName}`,

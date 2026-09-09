@@ -31,9 +31,7 @@ describe('waitlist', () => {
 
       const result = await checkWaitlistStatus(
         mockPrisma as unknown as PrismaClient,
-        't1',
-        true,
-        false
+        't1'
       );
 
       expect(result).toEqual({ shouldWaitlist: false, position: null });
@@ -48,9 +46,7 @@ describe('waitlist', () => {
 
       const result = await checkWaitlistStatus(
         mockPrisma as unknown as PrismaClient,
-        't1',
-        true,
-        false
+        't1'
       );
 
       expect(result).toEqual({ shouldWaitlist: false, position: null });
@@ -68,9 +64,7 @@ describe('waitlist', () => {
 
       const result = await checkWaitlistStatus(
         mockPrisma as unknown as PrismaClient,
-        't1',
-        true,
-        false
+        't1'
       );
 
       expect(result).toEqual({ shouldWaitlist: true, position: 3 });
@@ -84,9 +78,7 @@ describe('waitlist', () => {
 
       const result = await checkWaitlistStatus(
         mockPrisma as unknown as PrismaClient,
-        't1',
-        true,
-        false
+        't1'
       );
 
       expect(result).toEqual({ shouldWaitlist: false, position: null });
@@ -138,16 +130,18 @@ describe('waitlist', () => {
         't1'
       );
 
-      // Should promote reg1
-      expect(mockPrisma.registration.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'reg1' },
-          data: expect.objectContaining({
-            waitlistStatus: 'active',
-            waitlistPosition: null,
-          }),
-        })
+      // Should promote reg1 with a new management token hash
+      const promoteCall = mockPrisma.registration.update.mock.calls.find(
+        (call: any) => call[0].where.id === 'reg1'
       );
+      expect(promoteCall).toBeDefined();
+      expect(promoteCall[0].data).toMatchObject({
+        waitlistStatus: 'active',
+        waitlistPosition: null,
+      });
+      expect(promoteCall[0].data.managementTokenHash).toBeDefined();
+      expect(typeof promoteCall[0].data.managementTokenHash).toBe('string');
+      expect(promoteCall[0].data.managementTokenHash).not.toBe('hash123'); // New token
 
       // Should renumber remaining (reg2 → 1, reg3 → 2)
       expect(mockPrisma.registration.update).toHaveBeenCalledWith({

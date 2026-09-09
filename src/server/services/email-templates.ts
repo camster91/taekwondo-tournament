@@ -19,7 +19,12 @@ const BRAND_PAPER = '#FAFAF9';
 const BRAND_SLATE = '#475569';
 const BRAND_MUTED = '#94A3B8';
 
-function layout(content: string): string {
+function layout(content: string, organizerBrandName?: string): string {
+  const displayName = organizerBrandName || 'bowin';
+  const tagline = organizerBrandName 
+    ? 'Tournament Registration Confirmation'
+    : 'Tournaments, run like a black belt.';
+  
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -43,14 +48,14 @@ function layout(content: string): string {
 <body>
   <div class="wrapper">
     <div class="header">
-      <h1>bowin</h1>
-      <span class="tag">Tournaments, run like a black belt.</span>
+      <h1>${escapeHtml(displayName)}</h1>
+      <span class="tag">${escapeHtml(tagline)}</span>
     </div>
     <div class="body">
       ${content}
     </div>
     <div class="footer">
-      <p>bowin &middot; tournament management for martial arts schools</p>
+      <p>${organizerBrandName ? escapeHtml(organizerBrandName) : 'bowin &middot; tournament management for martial arts schools'}</p>
     </div>
   </div>
 </body>
@@ -181,7 +186,7 @@ export function registrationConfirmationEmail(params: {
       </p>
       <p class="muted">You can use the link above to update details or withdraw this registration before the tournament starts.</p>
       <p class="muted">Please keep this email for your records. You may be asked to provide your confirmation code at check-in.</p>
-    `),
+    `, params.organizerBrandName),
   };
 }
 
@@ -217,7 +222,7 @@ export function waitlistNotificationEmail(params: {
         <a href="${safeManagementUrl}" class="btn">Manage Registration</a>
       </p>
       <p class="muted">You can withdraw from the waitlist anytime using the link above.</p>
-    `),
+    `, params.organizerBrandName),
   };
 }
 
@@ -254,6 +259,6 @@ export function waitlistPromotionEmail(params: {
         <a href="${safeManagementUrl}" class="btn">View Registration</a>
       </p>
       <p class="muted">Please keep this email for your records. You may be asked to provide your confirmation code at check-in.</p>
-    `),
+    `, params.organizerBrandName),
   };
 }

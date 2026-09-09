@@ -363,8 +363,6 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     const { shouldWaitlist, position } = await checkWaitlistStatus(
       prisma,
       tournamentId,
-      patterns || false,
-      sparring || false,
     );
 
     // Create registration. The raw bearer token is returned/sent once;
@@ -894,8 +892,8 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
     await tx.registration.delete({ where: { id: registration.id } });
   });
 
-  // If this was an active registration, try to promote someone from the waitlist
-  if (registration.tournament.status === 'registration') {
+  // Only promote from waitlist if this was an active registration (not itself waitlisted)
+  if (registration.tournament.status === 'registration' && registration.waitlistStatus === 'active') {
     const { promoteNextWaitlisted } = await import('../services/waitlist.js');
     await promoteNextWaitlisted(prisma, registration.tournamentId);
   }
