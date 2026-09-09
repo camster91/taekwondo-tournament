@@ -190,6 +190,45 @@ export function registrationConfirmationEmail(params: {
   };
 }
 
+// P2-14: COPPA parental consent verification email
+export function parentalConsentVerificationEmail(params: {
+  parentName?: string;
+  competitorName: string;
+  tournamentName: string;
+  tournamentDate: Date;
+  verificationUrl: string;
+  code: string;
+  organizerBrandName?: string;
+}): { subject: string; html: string } {
+  const greeting = params.parentName ? `Hi ${escapeHtml(params.parentName)},` : 'Hi,';
+  const safeCompetitorName = escapeHtml(params.competitorName);
+  const safeTournamentName = escapeHtml(params.tournamentName);
+  const safeVerificationUrl = escapeHtml(params.verificationUrl);
+  const safeCode = escapeHtml(params.code);
+  const tournamentDate = new Date(params.tournamentDate).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+
+  return {
+    subject: `Verify parental consent for ${safeTournamentName}`,
+    html: layout(`
+      <p>${greeting}</p>
+      <p>A registration has been submitted for <strong>${safeCompetitorName}</strong> (under 18) to compete in <strong>${safeTournamentName}</strong> on ${escapeHtml(tournamentDate)}.</p>
+      <p><strong>Please verify that you are the parent or legal guardian and authorize this registration by clicking the button below:</strong></p>
+      <p style="text-align:center; margin: 24px 0;">
+        <a href="${safeVerificationUrl}" class="btn">Verify Consent</a>
+      </p>
+      <p class="muted">If you cannot click the button, you can verify by entering this code on the registration page:</p>
+      <div style="text-align:center; margin: 16px 0;">
+        <span style="font-family:monospace; font-size:24px; font-weight:700; background:#F3F4F6; padding:8px 16px; border-radius:8px; display:inline-block;">${safeCode}</span>
+      </div>
+      <p class="muted">This verification link expires in 48 hours. If you did not register your child for this tournament, please disregard this email.</p>
+      <p class="muted" style="word-break:break-all;">Or copy this link: ${safeVerificationUrl}</p>
+    `, params.organizerBrandName),
+  };
+}
+
+
 export function waitlistNotificationEmail(params: {
   competitorName: string;
   tournamentName: string;

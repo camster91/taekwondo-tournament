@@ -1208,4 +1208,193 @@ if (demoLoginEnabled) {
   });
 }
 
+// P2-15: GDPR data export — authenticated user exports their own data
+router.get('/gdpr/export', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const userId = req.user!.id;
+
+  try {
+    // Fetch all user-related data
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+        lastLogin: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const organizationMembers = await prisma.organizationMember.findMany({
+      where: { userId },
+      select: {
+        role: true,
+        organization: {
+          select: { name: true, email: true },
+        },
+      },
+    });
+
+    const tournamentAccess = await prisma.userTournamentAccess.findMany({
+      where: { userId },
+      select: {
+        role: true,
+        tournament: {
+          select: { name: true, date: true },
+        },
+      },
+    });
+
+    const auditLogs = await prisma.userAuditLog.findMany({
+      where: { userId },
+      select: {
+        action: true,
+        changes: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 1000, // Last 1000 audit logs
+    });
+
+    const exportData = {
+      exportDate: new Date().toISOString(),
+      user,
+      organizationMemberships: organizationMembers,
+      tournamentAccess,
+      auditLogs,
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="bowin-data-export-${user?.email || userId}.json"`);
+    res.json(exportData);
+  } catch (error) {
+    console.error('GDPR export error:', error);
+    res.status(500).json({ error: 'Failed to export data' });
+  }
+});
+
+// P2-15: GDPR account deletion — authenticated user deletes their own account
+router.delete('/gdpr/delete-account', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const userId = req.user!.id;
+  const { confirmation } = req.body;
+
+  if (confirmation !== 'DELETE MY ACCOUNT') {
+    return res.status(400).json({ error: 'Confirmation phrase required. Type "DELETE MY ACCOUNT" to proceed.' });
+  }
+
+  try {
+    // Check if user is the sole admin
+    const adminCount = await prisma.user.count({
+      where: { role: 'admin', isActive: true },
+    });
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    if (user?.role === 'admin' && adminCount === 1) {
+      return res.status(400).json({ 
+        error: 'Cannot delete the only admin account. Assign another admin first.' 
+      });
+    }
+
+    // Hard-delete user and cascade to related rows
+    // Note: Competitor/Registration/Match data is NOT deleted — those are
+    // anonymized operational records that remain for historical tournament
+    // results. Only the user's ACCOUNT and PII are removed.
+    await prisma.$transaction(async (tx) => {
+      // Delete org memberships
+      await tx.organizationMember.deleteMany({ where: { userId } });
+      
+      // Delete tournament access grants
+      await tx.userTournamentAccess.deleteMany({ where: { userId } });
+      
+      // Delete audit logs (optional: keep anonymized versions)
+      await tx.userAuditLog.deleteMany({ where: { userId } });
+
+      // Delete onboarding checklist
+      await tx.userOnboardingChecklist.deleteMany({ where: { userId } });
+      
+      // Finally, delete the user account
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Your account has been permanently deleted.' 
+    });
+  } catch (error) {
+    console.error('GDPR delete error:', error);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
+// P2-18: Onboarding checklist endpoints
+router.get('/onboarding', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const userId = req.user!.id;
+
+  try {
+    let checklist = await prisma.userOnboardingChecklist.findUnique({
+      where: { userId },
+    });
+
+    // Create if doesn't exist
+    if (!checklist) {
+      checklist = await prisma.userOnboardingChecklist.create({
+        data: { userId },
+      });
+    }
+
+    res.json(checklist);
+  } catch (error) {
+    console.error('Get onboarding error:', error);
+    res.status(500).json({ error: 'Failed to get onboarding checklist' });
+  }
+});
+
+router.patch('/onboarding', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const userId = req.user!.id;
+  const { step, dismissed } = req.body;
+
+  try {
+    // Ensure checklist exists
+    await prisma.userOnboardingChecklist.upsert({
+      where: { userId },
+      create: { userId },
+      update: {},
+    });
+
+    // Update specific step or dismissed flag
+    const updateData: Record<string, boolean> = {};
+    if (step && typeof step === 'string') {
+      const validSteps = ['orgProfileComplete', 'importComplete', 'firstTournamentDone', 'publicPageReviewed', 'staffInvited'];
+      if (validSteps.includes(step)) {
+        updateData[step] = true;
+      }
+    }
+    if (typeof dismissed === 'boolean') {
+      updateData.dismissed = dismissed;
+    }
+
+    const checklist = await prisma.userOnboardingChecklist.update({
+      where: { userId },
+      data: updateData,
+    });
+
+    res.json(checklist);
+  } catch (error) {
+    console.error('Update onboarding error:', error);
+    res.status(500).json({ error: 'Failed to update onboarding checklist' });
+  }
+});
+
 export default router;
