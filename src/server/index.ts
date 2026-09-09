@@ -38,6 +38,12 @@ import {
   metricsTokenFromEnv,
   normalizeMetricRoute,
 } from './services/observability.js';
+import {
+  initSentry,
+  mountSentryRequestHandler,
+  mountSentryErrorHandler,
+  captureException as sentryCaptureException,
+} from './services/sentry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -82,6 +88,9 @@ if (isProduction) {
 }
 const metricsToken = metricsTokenFromEnv(process.env, false);
 
+// Initialize Sentry BEFORE any middleware or routes
+initSentry(app);
+
 // Trust proxy only in production (behind Coolify/Docker reverse proxy)
 if (isProduction) {
   app.set('trust proxy', 1);
@@ -97,6 +106,9 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 };
 app.use(cors(corsOptions));
+
+// Mount Sentry request handler AFTER cors, BEFORE routes
+mountSentryRequestHandler(app);
 
 // Correlate API errors with reverse-proxy and provider logs. An incoming ID
 // is accepted only when it is short and header-safe; otherwise generate one.
@@ -290,6 +302,9 @@ if (serveBuiltClient) {
   });
 }
 
+// Mount Sentry error handler BEFORE our error handler
+mountSentryErrorHandler(app);
+
 // Error handler with structured error responses
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   // Log error for debugging
@@ -297,6 +312,13 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
     requestId: res.locals.requestId,
     message: err.message,
     stack: isProduction ? undefined : err.stack,
+    path: req.path,
+    method: req.method,
+  });
+
+  // Capture exception in Sentry (with request context already attached)
+  sentryCaptureException(err, {
+    requestId: res.locals.requestId,
     path: req.path,
     method: req.method,
   });

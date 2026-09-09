@@ -5,6 +5,7 @@ import { bootstrapAuthenticatedIdentity, browserOfflineAuthSnapshotStore } from 
 import { browserVenueDataSnapshotStore } from '../utils/venue-data-snapshot';
 import { browserOfflineOperationQueue } from '../utils/offline-operation-queue';
 import { purgeOfflineOwnerData } from '../utils/offline-owner-data';
+import { setUser as sentrySetUser, clearUser as sentryClearUser } from '../services/sentry';
 
 interface AuthContextType {
   user: User | null;
@@ -78,6 +79,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(result.user);
           setIsOfflineSession(result.source === 'offline_snapshot');
           if (result.source === 'network') sessionEvidence.markAuthenticated();
+          
+          // Set Sentry user context
+          if (result.user) {
+            sentrySetUser({
+              id: result.user.id,
+              email: result.user.email,
+              role: result.user.role,
+            });
+          }
+          
           if (confirmedUnauthenticated) {
             // Stale / invalid cookie — clear any lingering local state and
             // notify the rest of the app (ToastContext listens for this).
@@ -265,6 +276,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsOfflineSession(false);
     offlineAuth.clear();
     sessionEvidence.clear();
+    
+    // Clear Sentry user context
+    sentryClearUser();
   };
 
   const hasRole = (roles: string[]) => {
@@ -282,10 +296,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsOfflineSession(false);
           saveOfflineCapability(userData);
         sessionEvidence.markAuthenticated();
+        
+        // Update Sentry user context
+        sentrySetUser({
+          id: userData.id,
+          email: userData.email,
+          role: userData.role,
+        });
       } else if (res.status === 401) {
         setUser(null);
         setIsOfflineSession(false);
         offlineAuth.clear();
+        sentryClearUser();
       }
     } catch {
       // Network error — leave state alone.
