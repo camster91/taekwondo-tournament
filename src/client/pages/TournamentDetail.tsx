@@ -59,6 +59,11 @@ interface Tournament {
     registrations: number;
     divisions: number;
   };
+  organization?: {
+    id: string;
+    name: string;
+    plan: string;
+  } | null;
 }
 
 interface Competitor {
@@ -106,6 +111,21 @@ function formatStatus(status: string): string {
       return 'Active';
     default:
       return status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
+  }
+}
+
+function getPlanLimits(plan: string): { competitors: number; name: string } {
+  switch (plan) {
+    case 'free':
+      return { competitors: 30, name: 'Free' };
+    case 'starter':
+      return { competitors: 100, name: 'Starter' };
+    case 'pro':
+      return { competitors: 9999, name: 'Pro' };
+    case 'pilot':
+      return { competitors: 9999, name: 'Pilot' };
+    default:
+      return { competitors: 30, name: 'Free' };
   }
 }
 
@@ -182,7 +202,13 @@ export default function TournamentDetail() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to register competitors'));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 402 && body.code === 'COMPETITOR_LIMIT_REACHED') {
+          throw Object.assign(new Error(body.error), { isLimitError: true });
+        }
+        throw new Error(await readAdminOperationError(res, 'Failed to register competitors'));
+      }
       return res.json();
     },
     onMutate: () => setBulkRegisterError(null),
@@ -570,6 +596,25 @@ export default function TournamentDetail() {
           <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-purple-600 transition-colors flex-shrink-0" />
         </a>
 
+        {tournament.publicSlug && (
+          <a
+            href={`/api/tournaments/${id}/qr-poster`}
+            target="_blank"
+            rel="noopener noreferrer"
+            download
+            className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
+          >
+            <div className="flex-shrink-0 bg-pink-500 p-3 rounded-lg">
+              <FileDown className="h-6 w-6 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-slate-900 dark:text-slate-100">QR Code Poster</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Printable venue signage with QR codes</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-pink-600 transition-colors flex-shrink-0" />
+          </a>
+        )}
+
         <Link
           to={`/display/${id}`}
           target="_blank"
@@ -637,6 +682,58 @@ export default function TournamentDetail() {
           </div>
         </div>
       </div>
+
+      {/* Usage Banner - show for free/starter plans when approaching limit */}
+      {tournament.organization && ['free', 'starter'].includes(tournament.organization.plan) && (
+        (() => {
+          const plan = tournament.organization.plan;
+          const limits = getPlanLimits(plan);
+          const current = registrations?.length || 0;
+          const percentUsed = (current / limits.competitors) * 100;
+          
+          // Show banner when 70% or more of limit is used
+          if (percentUsed >= 70) {
+            const isAtLimit = current >= limits.competitors;
+            return (
+              <div className={`p-4 rounded-lg border ${
+                isAtLimit 
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' 
+                  : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+              }`}>
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${
+                    isAtLimit ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <h4 className={`font-medium mb-1 ${
+                      isAtLimit ? 'text-red-900 dark:text-red-100' : 'text-amber-900 dark:text-amber-100'
+                    }`}>
+                      {isAtLimit ? 'Competitor Limit Reached' : 'Approaching Competitor Limit'}
+                    </h4>
+                    <p className={`text-sm ${
+                      isAtLimit ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'
+                    }`}>
+                      Your {limits.name} plan allows {limits.competitors} competitors per tournament. 
+                      You have {current} registered{isAtLimit ? ' and cannot add more until you upgrade' : ''}.
+                    </p>
+                  </div>
+                  {plan === 'free' && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="flex-shrink-0"
+                      onClick={() => navigate('/settings/billing')}
+                    >
+                      Upgrade Plan
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -1208,7 +1305,24 @@ export default function TournamentDetail() {
               <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 space-y-3">
                 {bulkRegisterError && (
                   <div role="alert" aria-live="assertive" className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-                    {bulkRegisterError} Your selections are preserved; you can try again or cancel.
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1">
+                        {bulkRegisterError} Your selections are preserved; you can try again or cancel.
+                      </div>
+                      {tournament.organization?.plan === 'free' && bulkRegisterError.includes('limit') && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => {
+                            setShowAddModal(false);
+                            navigate('/settings/billing');
+                          }}
+                          className="flex-shrink-0"
+                        >
+                          Upgrade Plan
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3">

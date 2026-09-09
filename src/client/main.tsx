@@ -82,11 +82,31 @@ const queryClient = new QueryClient({
   },
 });
 
+// Dedicated fallback for SentryErrorBoundary to avoid recursion
+const SentryFallback = ({ error }: { error: Error }) => {
+  const showDetails = !import.meta.env.PROD;
+  return (
+    <div style={{ padding: 24, fontFamily: 'system-ui, sans-serif', maxWidth: 720, margin: '40px auto' }}>
+      <h1 style={{ color: '#b91c1c', fontSize: 20, marginBottom: 12 }}>Something went wrong</h1>
+      <p style={{ color: '#64748b', fontSize: 14, marginBottom: 12 }}>
+        Please refresh the page. If this keeps happening, contact your tournament director.
+      </p>
+      {showDetails && (
+        <pre style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 12, fontSize: 12, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+          {error.name}: {error.message}
+          {'\n\n'}
+          {error.stack}
+        </pre>
+      )}
+    </div>
+  );
+};
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <SentryErrorBoundary fallback={<ErrorBoundary><div /></ErrorBoundary>}>
+        <SentryErrorBoundary fallback={SentryFallback}>
           <ErrorBoundary>
             <App />
           </ErrorBoundary>

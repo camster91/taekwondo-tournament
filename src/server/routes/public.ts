@@ -13,6 +13,7 @@ import {
   PUBLIC_REGISTRATION_LIMITS,
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
+import { canAddRegistration, getPlanEntitlements } from '../services/entitlements.js';
 import { escapeHtml } from '../services/email-templates.js';
 import {
   optionalAuthenticate,
@@ -276,6 +277,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     // Check tournament is open for registration
     const tournament = await prisma.tournament.findUnique({
       where: { id: tournamentId },
+      include: { organization: { select: { plan: true } } },
     });
 
     if (!tournament) {
@@ -284,6 +286,19 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
 
     if (tournament.status !== 'registration') {
       return res.status(400).json({ error: 'Tournament is not open for registration' });
+    }
+
+    // Check competitor limit for free plan (before checking existing competitor)
+    const plan = tournament.organization?.plan ?? 'free';
+    const existingCount = await prisma.registration.count({
+      where: { tournamentId },
+    });
+
+    if (!canAddRegistration(plan, existingCount)) {
+      const entitlements = getPlanEntitlements(plan);
+      return res.status(400).json({
+        error: `This tournament has reached its registration limit of ${entitlements.maxCompetitorsPerTournament} competitors.`,
+      });
     }
 
     // Normalize belt
