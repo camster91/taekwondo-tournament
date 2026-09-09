@@ -126,10 +126,10 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P2-1 | #227 | **✅ Waitlist management** | Auto-waitlist when division cap hit; notify on opening | M |
 | P2-2 | #TBD | **Payment at registration** | Collect entry fee via Stripe during public reg (optional, per-tournament setting) | L |
 | P2-3 | #227 | **✅ Email confirmations** | Send receipt + event details after public registration | S |
-| P2-4 | #TBD | **Competitor deduplication** | Fuzzy match on name+DOB; suggest merge; preserve history | M |
+| P2-4 | #228 | **✅ Competitor deduplication** | Fuzzy match on name+DOB; suggest merge; preserve history | M |
 | **Divisions & Brackets** | | | | |
-| P2-5 | #TBD | **Manual division override** | Drag-drop UI to move competitors between divisions before bracket generation | M |
-| P2-6 | #TBD | **Bracket print layout** | PDF export with fold marks, match numbers, ring assignments, schedule | M |
+| P2-5 | #228 | **✅ Manual division override** | Drag-drop UI to move competitors between divisions before bracket generation | M |
+| P2-6 | #228 | **✅ Bracket print layout** | PDF export with fold marks, match numbers, ring assignments, schedule | M |
 | P2-7 | #TBD | **Real-time bracket collab** | Multiple scorekeepers update same bracket; WebSocket syncs changes instantly | L |
 | **Day-of Operations** | | | | |
 | P2-8 | #227 | **✅ Announcer view** | Public display variant with "Up Next" + "On Deck" for ring announcements | M |

@@ -37,6 +37,7 @@ import {
   Search,
   Undo2,
   GripVertical,
+  ArrowRight,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -55,6 +56,7 @@ import { Select } from '../components/ui';
 import { StatTile } from '../components/ui';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
+import DivisionMoveCompetitorModal from './DivisionMoveCompetitor';
 
 interface Division {
   id: string;
@@ -209,6 +211,7 @@ export default function Divisions() {
   const [deleteTarget, setDeleteTarget] = useState<Division | null>(null);
   const [splitTarget, setSplitTarget] = useState<Division | null>(null);
   const [assignTarget, setAssignTarget] = useState<Division | null>(null);
+  const [moveTarget, setMoveTarget] = useState<{ assignment: any; division: Division } | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [regenerateConfirm, setRegenerateConfirm] = useState(false);
   const [resultMessage, setResultMessage] = useState<{ title: string; message: string } | null>(null);
@@ -1345,7 +1348,11 @@ export default function Divisions() {
                 // defined. Re-declare as a non-null const inside the
                 // JSX expression so downstream `.assignments` doesn't
                 // need its own guard.
-                <AssignedList division={assignDivision as AssignmentDivision} unassignMutation={unassignMutation} />
+                <AssignedList 
+                  division={assignDivision as AssignmentDivision} 
+                  unassignMutation={unassignMutation}
+                  onMove={(assignment) => setMoveTarget({ assignment, division: assignTarget! })}
+                />
               )}
             </div>
 
@@ -1407,6 +1414,17 @@ export default function Divisions() {
           </div>
         </Modal>
       )}
+
+      {/* Move Competitor Modal */}
+      {moveTarget && (
+        <DivisionMoveCompetitorModal
+          isOpen={!!moveTarget}
+          onClose={() => setMoveTarget(null)}
+          assignment={moveTarget.assignment}
+          currentDivision={moveTarget.division}
+          tournamentId={tournamentId as string}
+        />
+      )}
     </div>
     </DndContext>
   );
@@ -1427,9 +1445,11 @@ export default function Divisions() {
 function AssignedList({
   division,
   unassignMutation,
+  onMove,
 }: {
   division: AssignmentDivision;
   unassignMutation: { mutate: (id: string) => void; isPending: boolean };
+  onMove: (assignment: AssignmentDivision['assignments'][0]) => void;
 }) {
   return (
     <div className="space-y-1 max-h-96 overflow-y-auto">
@@ -1446,15 +1466,26 @@ function AssignedList({
                 {c.belt}{c.schoolDojang && ` · ${c.schoolDojang}`}
               </p>
             </div>
-            <button
-              onClick={() => unassignMutation.mutate(a.id)}
-              disabled={unassignMutation.isPending}
-              className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 p-1"
-              title="Remove from division"
-              aria-label={`Remove ${c.firstName} ${c.lastName}`}
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => onMove(a)}
+                disabled={unassignMutation.isPending}
+                className="text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 p-1"
+                title="Move to another division"
+                aria-label={`Move ${c.firstName} ${c.lastName} to another division`}
+              >
+                <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => unassignMutation.mutate(a.id)}
+                disabled={unassignMutation.isPending}
+                className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 p-1"
+                title="Remove from division"
+                aria-label={`Remove ${c.firstName} ${c.lastName}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         );
       })}
