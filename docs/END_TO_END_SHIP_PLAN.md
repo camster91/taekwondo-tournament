@@ -87,7 +87,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 |----|----------|------|---------------------|--------|
 | **Auth & Multi-tenancy** | | | | |
 | P1-1 | #224 | **✅ Organization invites** | Admins invite users by email; magic-link flow with role assignment — **SHIPPED** in PR #224 | M |
-| P1-2 | #TBD | **✅ Org-level access control** | Wire `requireTournamentAccess()` into all mutation routes; test isolation — **VERIFIED COMPLETE** (21 inline checks + middleware, 12 regression tests) | S |
+| P1-2 | #226 | **✅ Org-level access control** | Wire `requireTournamentAccess()` into all mutation routes; test isolation — **VERIFIED COMPLETE** (21 inline checks + middleware, 12 regression tests) | S |
 | P1-3 | #224 | **✅ User audit log** | Track login, role change, org invite, tournament create/delete — **SHIPPED** in PR #224 | S |
 | **Billing & Payments** | | | | |
 | P1-4 | #TBD | **Stripe plan selection** | `/organization` shows plan tiers; Checkout flow for annual/per-event purchase | L |
@@ -95,8 +95,8 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P1-6 | #TBD | **BLOCKED (Cameron)** | Billing portal — needs Stripe dashboard config + validation (code exists, awaiting Cameron Stripe account setup) | S (config) |
 | P1-7 | #223 | **✅ Trial enforcement** | Limit free tier to 1 event + 30 competitors; upgrade gate with clear CTA — **SHIPPED** in PR #223 | M |
 | **Operations** | | | | |
-| P1-8 | #TBD | **✅ Offline mode (scorekeeper)** | ServiceWorker caches scoring UI; queues writes; syncs on reconnect — **COMPLETE** (substantial scaffolding existed; venue path validated via E2E test) | L |
-| P1-9 | #TBD | **✅ Ring sync indicator** | Real-time freshness indicator for multi-ring updates; show "Ring 2 updated 3s ago" — **COMPLETE** (polling-based with 10s refresh interval, animated spinner for recent updates) | M |
+| P1-8 | #226 | **✅ Offline mode (scorekeeper)** | ServiceWorker caches scoring UI; queues writes; syncs on reconnect — **VERIFIED COMPLETE** (substantial scaffolding existed; venue path validated via E2E test) | L |
+| P1-9 | #226 | **✅ Ring sync indicator** | Real-time freshness indicator for multi-ring updates; show "Ring 2 updated 3s ago" — **SHIPPED** (polling-based with 10s refresh interval, animated spinner for recent updates) | M |
 | P1-10 | #224 | **✅ Undo/redo for scoring** | Match result UI shows undo button (5min window); audit log preserves history — **SHIPPED** in PR #224 | M |
 | **Public-facing** | | | | |
 | P1-11 | #224 | **✅ Organizer white-label** | Upload logo, set primary color, custom "Hosted by [Org Name]" on public pages — **SHIPPED** in PR #224 | L |
