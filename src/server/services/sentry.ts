@@ -53,19 +53,17 @@ export function initSentry(app: Express): void {
 }
 
 /**
- * Mount Sentry request handlers. Call this AFTER initSentry and BEFORE your routes.
+ * Mount Sentry request middleware. Call this AFTER initSentry and BEFORE your routes.
  * No-op when SENTRY_DSN is unset.
+ * 
+ * In Sentry v10, requestHandler/tracingHandler are deprecated. Context and tracing
+ * are handled automatically by the expressIntegration in Sentry.init().
  */
 export function mountSentryRequestHandler(app: Express): void {
   if (!SENTRY_DSN) return;
 
-  // RequestHandler creates a separate execution context for each request
-  app.use(Sentry.requestHandler());
-
-  // TracingHandler creates a transaction for each request
-  app.use(Sentry.tracingHandler());
-
   // Attach user context from req.user (set by authenticate middleware)
+  // This is the only manual middleware needed in v10 - everything else is automatic
   app.use((req: Request & { user?: { id: string; email: string; role: string } }, _res: Response, next: NextFunction) => {
     if (req.user) {
       Sentry.setUser({
@@ -81,12 +79,14 @@ export function mountSentryRequestHandler(app: Express): void {
 /**
  * Mount Sentry error handler. Call this AFTER all routes and BEFORE your own error handler.
  * No-op when SENTRY_DSN is unset.
+ * 
+ * In Sentry v10, use setupExpressErrorHandler instead of errorHandler().
  */
 export function mountSentryErrorHandler(app: Express): void {
   if (!SENTRY_DSN) return;
 
-  // The error handler must be registered before any other error middleware and after all controllers
-  app.use(Sentry.errorHandler());
+  // Sentry v10: setupExpressErrorHandler replaces errorHandler()
+  Sentry.setupExpressErrorHandler(app);
 }
 
 /**

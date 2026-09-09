@@ -32,8 +32,6 @@ export function initSentry(): void {
     integrations: [
       // Browser tracing for performance monitoring
       Sentry.browserTracingIntegration(),
-      // React-specific error tracking
-      Sentry.reactRouterV7BrowserTracingIntegration(),
       // Replay sessions for debugging (10% sample rate in production, 100% on errors)
       Sentry.replayIntegration({
         maskAllText: true,
