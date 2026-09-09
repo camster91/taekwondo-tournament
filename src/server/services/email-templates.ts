@@ -19,7 +19,12 @@ const BRAND_PAPER = '#FAFAF9';
 const BRAND_SLATE = '#475569';
 const BRAND_MUTED = '#94A3B8';
 
-function layout(content: string): string {
+function layout(content: string, organizerBrandName?: string): string {
+  const displayName = organizerBrandName || 'bowin';
+  const tagline = organizerBrandName 
+    ? 'Tournament Registration Confirmation'
+    : 'Tournaments, run like a black belt.';
+  
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -43,14 +48,14 @@ function layout(content: string): string {
 <body>
   <div class="wrapper">
     <div class="header">
-      <h1>bowin</h1>
-      <span class="tag">Tournaments, run like a black belt.</span>
+      <h1>${escapeHtml(displayName)}</h1>
+      <span class="tag">${escapeHtml(tagline)}</span>
     </div>
     <div class="body">
       ${content}
     </div>
     <div class="footer">
-      <p>bowin &middot; tournament management for martial arts schools</p>
+      <p>${organizerBrandName ? escapeHtml(organizerBrandName) : 'bowin &middot; tournament management for martial arts schools'}</p>
     </div>
   </div>
 </body>
@@ -131,5 +136,129 @@ export function welcomeEmail(params: {
       </p>
       <p class="muted">You can log in anytime using the email address this message was sent to.</p>
     `),
+  };
+}
+
+export function registrationConfirmationEmail(params: {
+  competitorName: string;
+  tournamentName: string;
+  tournamentDate: Date;
+  tournamentLocation: string | null;
+  events: string;
+  ageGroup: string;
+  parentName?: string;
+  confirmationCode: string;
+  managementUrl: string;
+  organizerBrandName?: string;
+}): { subject: string; html: string } {
+  const safeCompetitorName = escapeHtml(params.competitorName);
+  const safeTournamentName = escapeHtml(params.tournamentName);
+  const safeEvents = escapeHtml(params.events);
+  const safeAgeGroup = escapeHtml(params.ageGroup);
+  const safeConfirmationCode = escapeHtml(params.confirmationCode);
+  const safeManagementUrl = escapeHtml(params.managementUrl);
+  const safeBrandName = params.organizerBrandName ? escapeHtml(params.organizerBrandName) : safeTournamentName;
+  const greeting = params.parentName ? `Hi ${escapeHtml(params.parentName)},` : 'Hi,';
+  
+  const tournamentDate = new Date(params.tournamentDate).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+  const locationLine = params.tournamentLocation 
+    ? `<p style="margin: 4px 0;"><strong>Location:</strong> ${escapeHtml(params.tournamentLocation)}</p>` 
+    : '';
+
+  return {
+    subject: `Registration Confirmed — ${safeTournamentName}`,
+    html: layout(`
+      <p>${greeting}</p>
+      <p><strong>${safeCompetitorName}</strong> has been successfully registered for <strong>${safeTournamentName}</strong>.</p>
+      <div style="background: #F3F4F6; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <p style="margin: 4px 0;"><strong>Tournament:</strong> ${safeTournamentName}</p>
+        <p style="margin: 4px 0;"><strong>Hosted by:</strong> ${safeBrandName}</p>
+        <p style="margin: 4px 0;"><strong>Date:</strong> ${escapeHtml(tournamentDate)}</p>
+        ${locationLine}
+        <p style="margin: 4px 0;"><strong>Events:</strong> ${safeEvents}</p>
+        <p style="margin: 4px 0;"><strong>Age Group:</strong> ${safeAgeGroup}</p>
+        <p style="margin: 4px 0;"><strong>Confirmation Code:</strong> <span style="font-family:monospace; background:#fff; padding:4px 8px; border-radius:4px;">${safeConfirmationCode}</span></p>
+      </div>
+      <p style="text-align:center; margin: 24px 0;">
+        <a href="${safeManagementUrl}" class="btn">Manage Registration</a>
+      </p>
+      <p class="muted">You can use the link above to update details or withdraw this registration before the tournament starts.</p>
+      <p class="muted">Please keep this email for your records. You may be asked to provide your confirmation code at check-in.</p>
+    `, params.organizerBrandName),
+  };
+}
+
+export function waitlistNotificationEmail(params: {
+  competitorName: string;
+  tournamentName: string;
+  tournamentDate: Date;
+  waitlistPosition: number;
+  managementUrl: string;
+  organizerBrandName?: string;
+}): { subject: string; html: string } {
+  const safeCompetitorName = escapeHtml(params.competitorName);
+  const safeTournamentName = escapeHtml(params.tournamentName);
+  const safeManagementUrl = escapeHtml(params.managementUrl);
+  const safeBrandName = params.organizerBrandName ? escapeHtml(params.organizerBrandName) : safeTournamentName;
+  
+  const tournamentDate = new Date(params.tournamentDate).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+
+  return {
+    subject: `Waitlist Confirmation — ${safeTournamentName}`,
+    html: layout(`
+      <p><strong>${safeCompetitorName}</strong> has been added to the waitlist for <strong>${safeTournamentName}</strong>.</p>
+      <div style="background: #F3F4F6; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <p style="margin: 4px 0;"><strong>Tournament:</strong> ${safeTournamentName}</p>
+        <p style="margin: 4px 0;"><strong>Hosted by:</strong> ${safeBrandName}</p>
+        <p style="margin: 4px 0;"><strong>Date:</strong> ${escapeHtml(tournamentDate)}</p>
+        <p style="margin: 4px 0;"><strong>Waitlist Position:</strong> #${params.waitlistPosition}</p>
+      </div>
+      <p>One or more divisions for your selected events are currently at capacity. You'll receive an email notification if a spot opens up.</p>
+      <p style="text-align:center; margin: 24px 0;">
+        <a href="${safeManagementUrl}" class="btn">Manage Registration</a>
+      </p>
+      <p class="muted">You can withdraw from the waitlist anytime using the link above.</p>
+    `, params.organizerBrandName),
+  };
+}
+
+export function waitlistPromotionEmail(params: {
+  competitorName: string;
+  tournamentName: string;
+  tournamentDate: Date;
+  confirmationCode: string;
+  managementUrl: string;
+  organizerBrandName?: string;
+}): { subject: string; html: string } {
+  const safeCompetitorName = escapeHtml(params.competitorName);
+  const safeTournamentName = escapeHtml(params.tournamentName);
+  const safeConfirmationCode = escapeHtml(params.confirmationCode);
+  const safeManagementUrl = escapeHtml(params.managementUrl);
+  const safeBrandName = params.organizerBrandName ? escapeHtml(params.organizerBrandName) : safeTournamentName;
+  
+  const tournamentDate = new Date(params.tournamentDate).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+
+  return {
+    subject: `A Spot Opened Up! — ${safeTournamentName}`,
+    html: layout(`
+      <p>Great news! <strong>${safeCompetitorName}</strong> has been promoted from the waitlist for <strong>${safeTournamentName}</strong>.</p>
+      <div style="background: #F3F4F6; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <p style="margin: 4px 0;"><strong>Tournament:</strong> ${safeTournamentName}</p>
+        <p style="margin: 4px 0;"><strong>Hosted by:</strong> ${safeBrandName}</p>
+        <p style="margin: 4px 0;"><strong>Date:</strong> ${escapeHtml(tournamentDate)}</p>
+        <p style="margin: 4px 0;"><strong>Confirmation Code:</strong> <span style="font-family:monospace; background:#fff; padding:4px 8px; border-radius:4px;">${safeConfirmationCode}</span></p>
+      </div>
+      <p>Your registration is now active. No further action is required — you're all set!</p>
+      <p style="text-align:center; margin: 24px 0;">
+        <a href="${safeManagementUrl}" class="btn">View Registration</a>
+      </p>
+      <p class="muted">Please keep this email for your records. You may be asked to provide your confirmation code at check-in.</p>
+    `, params.organizerBrandName),
   };
 }

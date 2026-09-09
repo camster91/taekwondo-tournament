@@ -123,16 +123,16 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | ID | Issue/PR | Task | Acceptance Criteria | Effort |
 |----|----------|------|---------------------|--------|
 | **Registration** | | | | |
-| P2-1 | #TBD | **Waitlist management** | Auto-waitlist when division cap hit; notify on opening | M |
+| P2-1 | #227 | **✅ Waitlist management** | Auto-waitlist when division cap hit; notify on opening | M |
 | P2-2 | #TBD | **Payment at registration** | Collect entry fee via Stripe during public reg (optional, per-tournament setting) | L |
-| P2-3 | #TBD | **Email confirmations** | Send receipt + event details after public registration | S |
+| P2-3 | #227 | **✅ Email confirmations** | Send receipt + event details after public registration | S |
 | P2-4 | #TBD | **Competitor deduplication** | Fuzzy match on name+DOB; suggest merge; preserve history | M |
 | **Divisions & Brackets** | | | | |
 | P2-5 | #TBD | **Manual division override** | Drag-drop UI to move competitors between divisions before bracket generation | M |
 | P2-6 | #TBD | **Bracket print layout** | PDF export with fold marks, match numbers, ring assignments, schedule | M |
 | P2-7 | #TBD | **Real-time bracket collab** | Multiple scorekeepers update same bracket; WebSocket syncs changes instantly | L |
 | **Day-of Operations** | | | | |
-| P2-8 | #TBD | **Announcer view** | Public display variant with "Up Next" + "On Deck" for ring announcements | M |
+| P2-8 | #227 | **✅ Announcer view** | Public display variant with "Up Next" + "On Deck" for ring announcements | M |
 | P2-9 | #TBD | **Video review integration** | Attach video URL to match; link from results page | S |
 | P2-10 | #TBD | **Director command center** | Live dashboard: ring status, delays, divisions behind schedule, SOS alerts | L |
 | **Results & Reporting** | | | | |

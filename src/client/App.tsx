@@ -63,6 +63,8 @@ const CheckIn = lazy(() => import('./pages/CheckIn'));
 const PublicScoreboard = lazy(() => import('./pages/PublicScoreboard'));
 const PublicScoreboardBySlug = lazy(() => import('./pages/PublicScoreboardBySlug'));
 const ParentScoreboard = lazy(() => import('./pages/ParentScoreboard'));
+const AnnouncerView = lazy(() => import('./pages/AnnouncerView'));
+const Waitlist = lazy(() => import('./pages/Waitlist'));
 const Results = lazy(() => import('./pages/Results'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
 const Profile = lazy(() => import('./pages/Profile'));
@@ -581,7 +583,9 @@ function AppRoutes() {
           <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/scorekeeper/:tournamentId" element={<ProtectedRoute><Scorekeeper /></ProtectedRoute>} />
           <Route path="/checkin/:tournamentId" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
+          <Route path="/waitlist/:tournamentId" element={<ProtectedRoute><Waitlist /></ProtectedRoute>} />
           <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
+          <Route path="/announcer/:tournamentId" element={<AnnouncerView />} />
           <Route path="/scoreboard/parent/:tournamentId" element={<ParentScoreboard />} />
           <Route path="/scoreboard/:publicSlug" element={<PublicScoreboardBySlug />} />
           {/* School portal — share a read-only link with parents/directors
