@@ -1238,6 +1238,7 @@ router.get('/:id/branding', authenticate, requireTournamentAccess('viewer'), asy
       brandName: true,
       brandPrimaryColor: true,
       brandLogoUrl: true,
+      deletedAt: true,
       organizationId: true,
       organization: {
         select: {
@@ -1249,7 +1250,7 @@ router.get('/:id/branding', authenticate, requireTournamentAccess('viewer'), asy
     },
   });
 
-  if (!tournament || (tournament as unknown as { deletedAt?: Date | null }).deletedAt) {
+  if (!tournament || tournament.deletedAt) {
     return res.status(404).json({ error: 'Tournament not found' });
   }
 
