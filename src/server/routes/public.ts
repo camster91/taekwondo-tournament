@@ -373,6 +373,17 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       });
     }
 
+    // P2-2: Parse tournament fee settings
+    let tournamentFeeCents = 0;
+    let feeRequired = false;
+    try {
+      const settings = tournament.settings ? JSON.parse(tournament.settings) : {};
+      tournamentFeeCents = settings.tournamentFeeCents || 0;
+      feeRequired = tournamentFeeCents > 0;
+    } catch {
+      // Ignore parse errors; treat as no fee
+    }
+
     // Check waitlist status
     const { checkWaitlistStatus } = await import('../services/waitlist.js');
     const { shouldWaitlist, position } = await checkWaitlistStatus(
@@ -401,6 +412,9 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         // Waitlist support
         waitlistStatus: shouldWaitlist ? 'waitlisted' : 'active',
         waitlistPosition: position,
+        // P2-2: Payment status
+        paymentStatus: feeRequired ? 'pending' : 'not_required',
+        paymentAmountCents: feeRequired ? tournamentFeeCents : null,
         ...consent.data,
       },
       include: {
@@ -411,11 +425,66 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       },
     });
 
+    // P2-2: If payment is required, generate checkout URL
+    let checkoutUrl: string | undefined;
+    if (feeRequired && registration.paymentStatus === 'pending') {
+      // Inline checkout session creation to avoid extra DB round-trip
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
+      if (stripeSecretKey) {
+        try {
+          const Stripe = (await import('stripe')).default;
+          const stripe = new Stripe(stripeSecretKey);
+
+          const publicUrl = process.env.PUBLIC_APP_URL || 'http://localhost:5173';
+          const successUrl = `${publicUrl}/register?payment=success&registration=${registration.id}`;
+          const cancelUrl = `${publicUrl}/register?payment=cancelled&registration=${registration.id}`;
+
+          const session = await stripe.checkout.sessions.create({
+            mode: 'payment',
+            payment_method_types: ['card'],
+            line_items: [
+              {
+                price_data: {
+                  currency: 'usd',
+                  unit_amount: tournamentFeeCents,
+                  product_data: {
+                    name: `Entry Fee: ${registration.tournament.name}`,
+                    description: `Competitor: ${competitor.firstName} ${competitor.lastName}`,
+                  },
+                },
+                quantity: 1,
+              },
+            ],
+            metadata: {
+              registrationId: registration.id,
+              tournamentId: registration.tournamentId,
+              type: 'entry_fee',
+            },
+            success_url: successUrl,
+            cancel_url: cancelUrl,
+          });
+
+          // Update registration with payment intent ID
+          await prisma.registration.update({
+            where: { id: registration.id },
+            data: { paymentIntentId: session.id },
+          });
+
+          checkoutUrl = session.url ?? undefined;
+        } catch (error) {
+          // Log error but don't fail the registration; payment can be collected later
+          console.error('Failed to create checkout session:', error);
+        }
+      }
+    }
+
     const responseData = {
       success: true,
       message: registration.waitlistStatus === 'waitlisted' 
         ? 'Added to waitlist! You will be notified if a spot opens up.'
-        : 'Registration successful!',
+        : feeRequired && checkoutUrl
+          ? 'Registration created! Please complete payment to finalize.'
+          : 'Registration successful!',
       registration: {
         id: registration.id,
         // First 8 chars of the UUID. The /api/public/check-registration
@@ -435,7 +504,10 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         ageGroup: getAgeGroupLabel(ageAtTournament),
         waitlistStatus: registration.waitlistStatus,
         waitlistPosition: registration.waitlistPosition,
+        paymentStatus: registration.paymentStatus,
+        paymentAmountCents: registration.paymentAmountCents,
       },
+      checkoutUrl,
     };
 
     res.status(201).json(responseData);
@@ -1321,7 +1393,107 @@ router.get(
   });
 });
 
+// P2-2: Public checkout for entry-fee payments
+// Create a Stripe Checkout session for a registration's entry fee.
+// The registration must already exist (created by /api/public/register
+// with paymentStatus = 'pending'). This endpoint returns a Checkout URL
+// that redirects the parent to Stripe to complete payment.
+router.post('/checkout', registrationLimiter, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { registrationId } = req.body;
 
+  if (!registrationId || typeof registrationId !== 'string') {
+    return res.status(400).json({ error: 'registrationId is required' });
+  }
+
+  // Load the registration + tournament to check fee config
+  const registration = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    include: {
+      tournament: { select: { id: true, name: true, settings: true } },
+      competitor: { select: { firstName: true, lastName: true } },
+    },
+  });
+
+  if (!registration) {
+    return res.status(404).json({ error: 'Registration not found' });
+  }
+
+  if (registration.paymentStatus === 'paid') {
+    return res.status(409).json({ error: 'This registration has already been paid' });
+  }
+
+  // Parse tournament settings to get fee config
+  let tournamentFeeCents = 0;
+  try {
+    const settings = registration.tournament.settings
+      ? JSON.parse(registration.tournament.settings)
+      : {};
+    tournamentFeeCents = settings.tournamentFeeCents || 0;
+  } catch {
+    // Ignore parse errors; treat as no fee
+  }
+
+  if (tournamentFeeCents <= 0) {
+    return res.status(400).json({ error: 'This tournament has no entry fee configured' });
+  }
+
+  // Check if Stripe is configured
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!stripeSecretKey) {
+    // Graceful degradation: return a 503 with a clear message that
+    // payment is temporarily unavailable (not a hard error — the
+    // registration still exists, payment is just not collectible yet).
+    return res.status(503).json({
+      error: 'Payment processing is temporarily unavailable. Please contact the tournament organizer.',
+    });
+  }
+
+  // Create Stripe checkout session
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(stripeSecretKey);
+
+  const publicUrl = process.env.PUBLIC_APP_URL || 'http://localhost:5173';
+  const successUrl = `${publicUrl}/register?payment=success&registration=${registrationId}`;
+  const cancelUrl = `${publicUrl}/register?payment=cancelled&registration=${registrationId}`;
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    payment_method_types: ['card'],
+    line_items: [
+      {
+        price_data: {
+          currency: 'usd',
+          unit_amount: tournamentFeeCents,
+          product_data: {
+            name: `Entry Fee: ${registration.tournament.name}`,
+            description: `Competitor: ${registration.competitor.firstName} ${registration.competitor.lastName}`,
+          },
+        },
+        quantity: 1,
+      },
+    ],
+    metadata: {
+      registrationId: registration.id,
+      tournamentId: registration.tournament.id,
+      type: 'entry_fee',
+    },
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+  });
+
+  // Update registration with payment intent ID
+  await prisma.registration.update({
+    where: { id: registrationId },
+    data: {
+      paymentStatus: 'pending',
+      paymentIntentId: session.id,
+      paymentAmountCents: tournamentFeeCents,
+    },
+  });
+
+  return res.status(201).json({ url: session.url });
+});
 
 export default router;
 

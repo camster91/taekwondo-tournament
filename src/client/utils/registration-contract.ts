@@ -16,7 +16,10 @@ export interface RegistrationResult {
     tournamentDate: string;
     events: { patterns: boolean; sparring: boolean };
     ageGroup: string;
+    paymentStatus?: string;
+    paymentAmountCents?: number | null;
   };
+  checkoutUrl?: string;
 }
 
 export class RegistrationConfirmationError extends Error {

@@ -34,9 +34,9 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | **Core product** | | | |
 | Auth & users | 85% | 🟡 Needs work | Magic-link complete; lacks org invites, SSO, token revocation |
 | Tournament setup | 95% | 🟢 Strong | Settings, rules, weight classes complete; needs org-level templates |
-| Competitor registry | 90% | 🟢 Strong | Excel import, search, soft-delete complete; needs merge/deduplication |
+| Competitor registry | 95% | 🟢 Strong | Excel import, search, soft-delete, merge/deduplication complete |
 | Registration (staff) | 95% | 🟢 Strong | Bulk + manual registration complete |
-| Registration (public) | 80% | 🟡 Needs work | Self-serve form complete; needs waitlist, payment gateway, confirmation emails |
+| Registration (public) | 95% | 🟢 Strong | Self-serve form, waitlist, payment gateway, confirmation emails complete |
 | Divisions & categorization | 90% | 🟢 Strong | Auto-generation complete; needs manual override UX, merge conflicts UI |
 | Brackets | 85% | 🟡 Needs work | DE generation complete; needs real-time collab, print layout, QR codes |
 | Day-of operations | 75% | 🟡 Needs work | Check-in, scorekeeper, director dashboard complete; needs offline mode, ring sync, announcer view |
@@ -123,10 +123,10 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | ID | Issue/PR | Task | Acceptance Criteria | Effort |
 |----|----------|------|---------------------|--------|
 | **Registration** | | | | |
-| P2-1 | #227 | **✅ Waitlist management** | Auto-waitlist when division cap hit; notify on opening | M |
-| P2-2 | #TBD | **Payment at registration** | Collect entry fee via Stripe during public reg (optional, per-tournament setting) | L |
-| P2-3 | #227 | **✅ Email confirmations** | Send receipt + event details after public registration | S |
-| P2-4 | #228 | **✅ Competitor deduplication** | Fuzzy match on name+DOB; suggest merge; preserve history | M |
+| P2-1 | #227 | **✅ Waitlist management** | Auto-waitlist when division cap hit; notify on opening — **SHIPPED** in PR #227 | M |
+| P2-2 | #234 | **✅ Payment at registration** | Collect entry fee via Stripe during public reg (optional, per-tournament setting) — **SHIPPED** in this PR | L |
+| P2-3 | #227 | **✅ Email confirmations** | Send receipt + event details after public registration — **SHIPPED** in PR #227 | S |
+| P2-4 | #228 | **✅ Competitor deduplication** | Fuzzy match on name+DOB; suggest merge; preserve history — **SHIPPED** in PR #228 | M |
 | **Divisions & Brackets** | | | | |
 | P2-5 | #228 | **✅ Manual division override** | Drag-drop UI to move competitors between divisions before bracket generation | M |
 | P2-6 | #228 | **✅ Bracket print layout** | PDF export with fold marks, match numbers, ring assignments, schedule | M |
@@ -164,8 +164,8 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 | **Registration** | | | | | | | |
 | Public self-registration | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | P0 |
 | Excel import | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | P0 |
-| Payment at registration | ⚠️ (P2) | ✅ | ✅ | ❌ | ❌ | ✅ | P2 |
-| Waitlist management | ⚠️ (P2) | ✅ | ❌ | ❌ | ❌ | ❌ | P2 |
+| Payment at registration | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ | P2 |
+| Waitlist management | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | P2 |
 | Mobile-optimized reg form | ✅ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | P1 |
 | **Divisions & Brackets** | | | | | | | |
 | Auto-categorization | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P0 |
@@ -210,9 +210,9 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 ⚠️ = Partial / in progress (phase noted)  
 ❌ = Not available  
 
-**Bowin competitive score:** 27/35 complete (77%), 8 in-progress (P1/P2)  
-**Unique advantages:** Real-time bracket collab, video review, offline mode, parent finder, skill-based seeding, multi-sport, modern UX, no watermarks, historical competitor tracking, keyboard shortcuts, competitor deduplication  
-**Key gaps to close:** Payment at reg
+**Bowin competitive score:** 28/35 complete (80%), 7 in-progress (P1/P2)  
+**Unique advantages:** Real-time bracket collab, video review, offline mode, parent finder, skill-based seeding, multi-sport, modern UX, no watermarks, historical competitor tracking, keyboard shortcuts, competitor deduplication, payment at registration  
+**Key gaps to close:** (All major registration/day-of features complete; remaining items are polish + polish)
 
 ---
 
