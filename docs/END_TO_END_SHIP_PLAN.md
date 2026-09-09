@@ -130,10 +130,10 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | **Divisions & Brackets** | | | | |
 | P2-5 | #228 | **✅ Manual division override** | Drag-drop UI to move competitors between divisions before bracket generation | M |
 | P2-6 | #228 | **✅ Bracket print layout** | PDF export with fold marks, match numbers, ring assignments, schedule | M |
-| P2-7 | #TBD | **Real-time bracket collab** | Multiple scorekeepers update same bracket; WebSocket syncs changes instantly | L |
+| P2-7 | #231 | **✅ Real-time bracket collab** | Multiple scorekeepers update same bracket; WebSocket syncs changes instantly — **SHIPPED** in PR #231 | L |
 | **Day-of Operations** | | | | |
 | P2-8 | #227 | **✅ Announcer view** | Public display variant with "Up Next" + "On Deck" for ring announcements | M |
-| P2-9 | #230 | **✅ Video review integration** | Attach video URL to match; link from results page — **SHIPPED** in PR #230 | S |
+| P2-9 | #231 | **✅ Video review integration** | Attach video URL to match; link from results page — **SHIPPED** (video attach in PR #230, results display in PR #231) | S |
 | P2-10 | #230 | **✅ Director command center** | Live dashboard: ring status, delays, divisions behind schedule, SOS alerts — **SHIPPED** in PR #230 | L |
 | **Results & Reporting** | | | | |
 | P2-11 | #229 | **✅ Certificate generation** | PDF certificates for 1st/2nd/3rd place with org logo + tenant branding — **SHIPPED** in this PR | M |
@@ -174,13 +174,15 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 | School-spread seeding | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | P1 |
 | Skill-based seeding | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
 | Print-optimized brackets | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P2 |
+| Real-time bracket collab | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
 | **Day-of Operations** | | | | | | | |
 | Digital check-in | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | P0 |
 | Real-time scoring | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ | P0 |
-| Offline mode | ⚠️ (P1) | ❌ | ❌ | ❌ | ❌ | ❌ | P1 |
-| Multi-ring sync | ⚠️ (P1) | ✅ | ✅ | ✅ | ❌ | ⚠️ | P1 |
+| Offline mode | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P1 |
+| Multi-ring sync | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ | P1 |
 | Director dashboard | ✅ | ⚠️ | ✅ | ❌ | ❌ | ❌ | P1 |
-| Announcer view | ⚠️ (P2) | ✅ | ❌ | ❌ | ❌ | ❌ | P2 |
+| Announcer view | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | P2 |
+| Video review integration | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
 | **Public Display** | | | | | | | |
 | Live scoreboard (web) | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ | P0 |
 | TV-optimized layout | ⚠️ (P1) | ✅ | ⚠️ | ❌ | ❌ | ❌ | P1 |
@@ -208,9 +210,9 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 ⚠️ = Partial / in progress (phase noted)  
 ❌ = Not available  
 
-**Bowin competitive score:** 21/34 complete (62%), 13 in-progress (P1/P2)  
-**Unique advantages:** Offline mode, parent finder, skill-based seeding, multi-sport, modern UX, no watermarks, historical competitor tracking  
-**Key gaps to close:** Payment at reg, real-time collab, announcer view, director command center
+**Bowin competitive score:** 26/35 complete (74%), 9 in-progress (P1/P2)  
+**Unique advantages:** Real-time bracket collab, video review, offline mode, parent finder, skill-based seeding, multi-sport, modern UX, no watermarks, historical competitor tracking  
+**Key gaps to close:** Payment at reg, keyboard shortcuts
 
 ---
 
