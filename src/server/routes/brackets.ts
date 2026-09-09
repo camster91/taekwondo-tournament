@@ -33,6 +33,7 @@ import {
   undoBracketCorrection,
   type BracketCorrectionConfig,
 } from '../services/bracket-correction.js';
+import { broadcastMatchUpdate, broadcastBracketRegenerated } from '../services/websocket.js';
 
 const router = Router();
 
@@ -284,6 +285,10 @@ router.post('/division/:divisionId/generate', authenticate, async (req: Authenti
     },
   });
 
+  // Broadcast bracket generation to all connected clients
+  // (closes P2-7: real-time bracket collaboration)
+  broadcastBracketRegenerated(divisionId);
+
   res.json(completeBracket);
 });
 
@@ -494,6 +499,17 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
 
     return updated;
   });
+
+  // Broadcast real-time update to all connected clients subscribed to this division
+  // (closes P2-7: real-time bracket collaboration)
+  const divisionId = (await prisma.bracket.findUnique({
+    where: { id: match.bracketId },
+    select: { divisionId: true },
+  }))?.divisionId;
+
+  if (divisionId) {
+    broadcastMatchUpdate(divisionId, match.id, match);
+  }
 
   // Return updated match without bracket relation
   const { bracket: _, ...matchWithoutBracket } = match;

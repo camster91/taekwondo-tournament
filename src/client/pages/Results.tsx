@@ -566,37 +566,70 @@ export default function Results() {
                       {division.bracket?.placements?.length === 0 ? (
                         <p className="text-gray-600 dark:text-gray-400 text-sm">No placements recorded</p>
                       ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          {division.bracket?.placements
-                            ?.sort((a, b) => a.place - b.place)
-                            .slice(0, 3)
-                            .map((placement) => (
-                              <div
-                                key={placement.registrationId}
-                                className={`p-4 rounded-lg border-2 ${
-                                  placement.place === 1
-                                    ? 'border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/30'
-                                    : placement.place === 2
-                                    ? 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'
-                                    : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30'
-                                }`}
-                              >
-                                <div className="flex items-center mb-2">
-                                  {getMedalIcon(placement.place)}
-                                  <span className="ml-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                                    {getPlaceName(placement.place)}
-                                  </span>
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {division.bracket?.placements
+                              ?.sort((a, b) => a.place - b.place)
+                              .slice(0, 3)
+                              .map((placement) => (
+                                <div
+                                  key={placement.registrationId}
+                                  className={`p-4 rounded-lg border-2 ${
+                                    placement.place === 1
+                                      ? 'border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/30'
+                                      : placement.place === 2
+                                      ? 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'
+                                      : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30'
+                                  }`}
+                                >
+                                  <div className="flex items-center mb-2">
+                                    {getMedalIcon(placement.place)}
+                                    <span className="ml-2 text-sm font-medium text-gray-600 dark:text-gray-400">
+                                      {getPlaceName(placement.place)}
+                                    </span>
+                                  </div>
+                                  <div className="font-semibold text-gray-900 dark:text-white">
+                                    {placement.registration.competitor.firstName}{' '}
+                                    {placement.registration.competitor.lastName}
+                                  </div>
+                                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                                    {placement.registration.competitor.schoolDojang || 'Independent'}
+                                  </div>
                                 </div>
-                                <div className="font-semibold text-gray-900 dark:text-white">
-                                  {placement.registration.competitor.firstName}{' '}
-                                  {placement.registration.competitor.lastName}
-                                </div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400">
-                                  {placement.registration.competitor.schoolDojang || 'Independent'}
-                                </div>
+                              ))}
+                          </div>
+                          {/* Match Videos Section (P2-9 follow-up) */}
+                          {division.bracket?.matches?.some((m: { videoUrl?: string | null }) => m.videoUrl) && (
+                            <div className="mt-4 border-t border-gray-200 dark:border-gray-600 pt-4">
+                              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Match Videos</h4>
+                              <div className="space-y-2">
+                                {division.bracket.matches
+                                  .filter((m: { videoUrl?: string | null; status: string }) => m.videoUrl && m.status === 'completed')
+                                  .sort((a: { matchNumber: number }, b: { matchNumber: number }) => a.matchNumber - b.matchNumber)
+                                  .map((match: { id: string; matchNumber: number; videoUrl: string; competitor1?: { competitor: { firstName: string; lastName: string } } | null; competitor2?: { competitor: { firstName: string; lastName: string } } | null }) => (
+                                    <div key={match.id} className="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-700/50 p-2 rounded">
+                                      <span className="text-gray-700 dark:text-gray-300">
+                                        Match #{match.matchNumber}
+                                        {match.competitor1 && match.competitor2 && (
+                                          <span className="text-gray-500 dark:text-gray-400 ml-1">
+                                            ({match.competitor1.competitor.firstName} {match.competitor1.competitor.lastName} vs {match.competitor2.competitor.firstName} {match.competitor2.competitor.lastName})
+                                          </span>
+                                        )}
+                                      </span>
+                                      <a
+                                        href={match.videoUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium"
+                                      >
+                                        Watch Video →
+                                      </a>
+                                    </div>
+                                  ))}
                               </div>
-                            ))}
-                        </div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </CardBody>
