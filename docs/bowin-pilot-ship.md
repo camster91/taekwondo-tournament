@@ -61,11 +61,37 @@
 - `src/client/pages/PublicRegister.tsx`: Dynamic branding
 - `src/client/pages/PublicScoreboard.tsx`: Dynamic branding
 
-**Evidence:** Organizer brand (name/logo/color) now visible on public pages. Bowin no longer appears as product face.
+**Evidence:** Organizer brand (name/logo/color) now visible on public pages. Bowin no longer appears as product face. Directors have full Settings UI to customize branding.
 
 ---
 
-### 3. Organizer Shell Polish ✅
+### 3. Branding Settings UI ✅
+
+**Problem:** No UI for directors to set tournament branding.
+
+**Solution:**
+- ✅ **Branding tab** in Tournament Settings (alongside Setup and Rules)
+- ✅ **Brand name input**: Falls back to tournament name if empty
+- ✅ **Color picker**: Native HTML5 color picker + manual hex input + live preview swatch
+- ✅ **Logo URL input**: With image preview and graceful error handling
+- ✅ **Org branding indicator**: Shows when using org-level fallback
+- ✅ **World-class polish**: Save button with loading state, toast feedback, proper disabled states
+
+**UX Details:**
+- Clear placeholder hints and helper text
+- Live color preview updates as you type
+- Logo preview loads on blur, shows error if URL invalid
+- Disabled save button until changes made
+- Success toast on save
+
+**Files changed:**
+- `src/client/pages/TournamentSettings.tsx`: Complete branding tab with color picker, logo preview
+
+**Evidence:** Directors can now set brandName, brandPrimaryColor, brandLogoUrl via intuitive Settings UI. No API knowledge required.
+
+---
+
+### 4. Organizer Shell Polish ✅
 
 Dashboard and Tournaments list already have:
 - ✅ **Loading skeletons**: `CardSkeleton`, `StatsSkeleton`, `TableSkeleton` for smooth loading states
@@ -78,19 +104,14 @@ Dashboard and Tournaments list already have:
 
 ## What's NOT in This PR (Known Gaps)
 
-### Branding UI (Not Blocking Pilot)
-- No color picker / logo upload UI in Tournament Settings yet
-- Organizers must set branding via API or follow-up PR
-- **Next:** Add branding tab to `TournamentSettings.tsx` with color picker, logo upload, live preview
+### Advanced Branding (Future)
+- No custom domain per tournament (e.g. `register.myschool.com`)
+- No org-level branding settings UI (logic + API ready, UI missing)
+- **Next:** Org settings page with default brand settings that tournaments inherit
 
 ### Mobile Organizer UX
 - Desktop-first design; tablet/phone workflows need optimization
 - **Next:** Audit Scorekeeper, CheckIn, Divisions on mobile
-
-### Advanced Branding
-- No custom domain per tournament (e.g. `register.myschool.com`)
-- No org-level branding inheritance UI (logic in place, UI missing)
-- **Next:** Org settings page with default brand settings
 
 ### External Dependencies (Must Be Configured)
 - PostgreSQL provisioning + encrypted backups
