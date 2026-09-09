@@ -46,6 +46,7 @@ import {
   mountSentryErrorHandler,
   captureException as sentryCaptureException,
 } from './services/sentry.js';
+import { initializeWebSocket } from './services/websocket.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -376,6 +377,9 @@ const server = app.listen(Number(PORT), '0.0.0.0', async () => {
     console.log('SMTP not configured — email features disabled');
   }
 });
+
+// Initialize WebSocket server after HTTP server is listening
+initializeWebSocket(server);
 
 const shutdown = async (signal: string) => {
   console.log(`[shutdown] received ${signal}, draining...`);
