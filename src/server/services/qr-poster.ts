@@ -126,11 +126,6 @@ export async function generateQRPoster(options: PosterOptions): Promise<Buffer> 
   doc.setFontSize(8);
   doc.text(options.scoreboardUrl, 4.25, 13.75, { align: 'center', maxWidth: 7.5 });
 
-  // Footer
-  doc.setFontSize(10);
-  doc.setTextColor(128, 128, 128);
-  doc.text('Powered by Bowin Tournament OS', 4.25, 10.5, { align: 'center' });
-
   // Return PDF as buffer
   return Buffer.from(doc.output('arraybuffer'));
 }
