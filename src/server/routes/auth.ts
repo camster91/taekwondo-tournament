@@ -11,6 +11,7 @@ import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
 import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
 import { maybeIssueOfflineCapability } from '../services/offline-capability.js';
+import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 
 const router = Router();
 
@@ -360,6 +361,16 @@ router.post('/verify-magic-link', authLimiter, async (req: Request, res: Respons
       data: { lastLogin: new Date() },
     });
 
+    // Audit log: successful login (P1-3)
+    await createAuditLog(prisma, {
+      userId: user.id,
+      action: 'login',
+      ipAddress: getClientIp(req),
+      userAgent: getUserAgent(req),
+    }).catch((err) => {
+      console.error('[audit-log] login event failed:', err);
+    });
+
     // Create JWT with the user's current tokenVersion embedded. Bumping
     // the tokenVersion in the DB later (logout, role change, isActive
     // flip) invalidates this token without needing a denylist.
@@ -693,6 +704,11 @@ router.put('/users/:userId/role', authenticate, requireRole('admin'), validateRe
   }
 
   try {
+    const oldUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
     const user = await prisma.user.update({
       where: { id: userId },
       // Role change invalidates all outstanding JWTs for this user —
@@ -708,6 +724,17 @@ router.put('/users/:userId/role', authenticate, requireRole('admin'), validateRe
       },
     });
     invalidateAuthCache(userId);
+
+    // Audit log: role change (P1-3)
+    await createAuditLog(prisma, {
+      userId: req.user!.id,
+      action: 'role_change',
+      details: { targetUserId: userId, oldRole: oldUser?.role, newRole: role },
+      ipAddress: getClientIp(req),
+      userAgent: getUserAgent(req),
+    }).catch((err) => {
+      console.error('[audit-log] role_change event failed:', err);
+    });
 
     res.json(user);
   } catch (error) {
@@ -743,6 +770,17 @@ router.put('/users/:userId/status', authenticate, requireRole('admin'), validate
         role: true,
         isActive: true,
       },
+    });
+
+    // Audit log: user status change (P1-3)
+    await createAuditLog(prisma, {
+      userId: req.user!.id,
+      action: 'user_status_changed',
+      details: { targetUserId: userId, isActive },
+      ipAddress: getClientIp(req),
+      userAgent: getUserAgent(req),
+    }).catch((err) => {
+      console.error('[audit-log] user_status_changed event failed:', err);
     });
 
     res.json(user);
@@ -891,29 +929,47 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
-    const user = await prisma.user.create({
-      data: {
-        email: invitation.email,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        role: invitation.role,
-      },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        createdAt: true,
-        tokenVersion: true,
-      },
+    // Create user and optionally add to organization in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: invitation.email,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          role: invitation.role,
+        },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          createdAt: true,
+          tokenVersion: true,
+        },
+      });
+
+      // If invitation is org-scoped, add user to organization
+      if (invitation.organizationId) {
+        await tx.organizationMember.create({
+          data: {
+            organizationId: invitation.organizationId,
+            userId: user.id,
+            role: invitation.role,
+          },
+        });
+      }
+
+      // Mark invitation as accepted
+      await tx.invitation.update({
+        where: { id: invitation.id },
+        data: { status: 'accepted' },
+      });
+
+      return { user, organizationId: invitation.organizationId };
     });
 
-    // Mark invitation as accepted
-    await prisma.invitation.update({
-      where: { id: invitation.id },
-      data: { status: 'accepted' },
-    });
+    const { user, organizationId } = result;
 
     const jwtToken = createToken({
       userId: user.id,
@@ -924,6 +980,18 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
 
     res.cookie(SESSION_COOKIE, jwtToken, SESSION_COOKIE_OPTIONS);
     setCsrfCookie(res);
+
+    // Audit log: org invite accepted (P1-3)
+    await createAuditLog(prisma, {
+      userId: user.id,
+      action: 'org_invite_accepted',
+      details: { invitationId: invitation.id, organizationId },
+      ipAddress: getClientIp(req),
+      userAgent: getUserAgent(req),
+      organizationId: organizationId || undefined,
+    }).catch((err) => {
+      console.error('[audit-log] org_invite_accepted event failed:', err);
+    });
 
     // Send welcome email (non-blocking)
     const baseUrl = publicAppUrlFromEnv(process.env);
@@ -938,6 +1006,7 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
 
     res.status(201).json({
       user,
+      organizationId,
       ...maybeTokenField(jwtToken),
       message: 'Account created successfully',
     });

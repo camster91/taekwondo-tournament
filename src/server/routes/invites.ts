@@ -14,6 +14,7 @@ import {
 } from './field-validation.js';
 import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
+import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 
 const router = Router();
 
@@ -43,7 +44,7 @@ router.post('/send', authenticate, async (req: AuthenticatedRequest, res: Respon
   }
 
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { email, firstName, lastName, role } = req.body;
+  const { email, firstName, lastName, role, organizationId } = req.body;
 
   // Field-level validation via the shared helpers (field-validation.ts).
   // The same regex + length caps apply to public.ts POST /register.
@@ -62,6 +63,14 @@ router.post('/send', authenticate, async (req: AuthenticatedRequest, res: Respon
   }
 
   try {
+    // If organizationId is provided, verify it exists
+    if (organizationId) {
+      const org = await prisma.organization.findUnique({ where: { id: organizationId } });
+      if (!org) {
+        return res.status(404).json({ error: 'Organization not found' });
+      }
+    }
+
     // Check if user already exists. Prisma's case-insensitive
     // matching was added in 4.x — use it here so an existing user
     // with "User@Example.com" can't be duplicated by an invite
@@ -96,6 +105,7 @@ router.post('/send', authenticate, async (req: AuthenticatedRequest, res: Respon
         token: hashSecret(token),
         tokenExpiry,
         invitedBy: req.user!.id,
+        organizationId: organizationId || null,
       },
     });
 
@@ -112,6 +122,18 @@ router.post('/send', authenticate, async (req: AuthenticatedRequest, res: Respon
 
     const emailResult = await sendEmail(email.toLowerCase(), subject, html);
 
+    // Audit log: org invite sent (P1-3)
+    await createAuditLog(prisma, {
+      userId: req.user!.id,
+      action: 'org_invite_sent',
+      details: { inviteeEmail: email.toLowerCase(), role, organizationId },
+      ipAddress: getClientIp(req),
+      userAgent: getUserAgent(req),
+      organizationId: organizationId || undefined,
+    }).catch((err) => {
+      console.error('[audit-log] org_invite_sent event failed:', err);
+    });
+
     res.status(201).json({
       invitation: {
         id: invitation.id,
@@ -120,6 +142,7 @@ router.post('/send', authenticate, async (req: AuthenticatedRequest, res: Respon
         lastName: invitation.lastName,
         role: invitation.role,
         status: invitation.status,
+        organizationId: invitation.organizationId,
         createdAt: invitation.createdAt,
       },
       emailSent: emailResult.success,
@@ -157,6 +180,7 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
         lastName: true,
         role: true,
         status: true,
+        organizationId: true,
         createdAt: true,
         tokenExpiry: true,
       },
