@@ -637,9 +637,7 @@ export default function PublicRegister() {
     );
   }
 
-  const selectedTournament = tournaments.find((t) => t.id === formData.tournamentId) || null;
-  
-  // Compute effective branding from selected tournament
+  // Compute effective branding from selected tournament (already defined via useMemo above)
   const brandColor = selectedTournament?.brandPrimaryColor || '#DC2626';
   const brandName = selectedTournament?.brandName || selectedTournament?.name || 'Tournament';
   const brandLogoUrl = selectedTournament?.brandLogoUrl;
