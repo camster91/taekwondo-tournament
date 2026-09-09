@@ -596,6 +596,25 @@ export default function TournamentDetail() {
           <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-purple-600 transition-colors flex-shrink-0" />
         </a>
 
+        {tournament.publicSlug && (
+          <a
+            href={`/api/tournaments/${id}/qr-poster`}
+            target="_blank"
+            rel="noopener noreferrer"
+            download
+            className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
+          >
+            <div className="flex-shrink-0 bg-pink-500 p-3 rounded-lg">
+              <FileDown className="h-6 w-6 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-slate-900 dark:text-slate-100">QR Code Poster</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Printable venue signage with QR codes</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-pink-600 transition-colors flex-shrink-0" />
+          </a>
+        )}
+
         <Link
           to={`/display/${id}`}
           target="_blank"

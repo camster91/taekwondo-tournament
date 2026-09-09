@@ -30,6 +30,8 @@ import {
 import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from '../services/tournament-settings.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
+import { generateQRPoster } from '../services/qr-poster.js';
+import { publicAppUrlFromEnv } from '../services/production-config.js';
 import {
   applyScheduleCorrection,
   buildScheduleImpact,
@@ -312,6 +314,51 @@ router.delete('/:id/public-slug', authenticate, requireTournamentAccess('directo
   });
 
   res.json({ ok: true });
+});
+
+// Generate QR code poster PDF for venue signage.
+// GET /api/tournaments/:id/qr-poster — downloads a PDF with QR codes
+// for public registration and live scoreboard.
+router.get('/:id/qr-poster', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      date: true,
+      location: true,
+      publicSlug: true,
+      brandName: true,
+      brandPrimaryColor: true,
+    },
+  });
+
+  if (!tournament || !tournament.publicSlug) {
+    return res.status(400).json({
+      error: 'Tournament must have a public scoreboard slug enabled to generate a poster. Enable it in Tournament Settings.',
+    });
+  }
+
+  const publicUrl = publicAppUrlFromEnv(process.env);
+  const registrationUrl = `${publicUrl}/register/${tournament.id}`;
+  const scoreboardUrl = `${publicUrl}/display/${tournament.id}?key=${encodeURIComponent(tournament.publicSlug)}`;
+
+  const pdfBuffer = await generateQRPoster({
+    tournamentName: tournament.name,
+    tournamentDate: tournament.date.toISOString(),
+    location: tournament.location,
+    registrationUrl,
+    scoreboardUrl,
+    brandName: tournament.brandName,
+    brandPrimaryColor: tournament.brandPrimaryColor ?? undefined,
+  });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${tournament.name.replace(/[^a-z0-9]/gi, '_')}_QR_Poster.pdf"`);
+  res.send(pdfBuffer);
 });
 
 // Clone a tournament as a template for next year. Deep-copies settings
