@@ -219,7 +219,7 @@ export default function PublicScoreboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0e1a] text-white overflow-hidden">
+    <div className="min-h-screen bg-[#0a0e1a] text-white overflow-hidden antialiased">
       {/* Error / not-found state. Replaces the old behavior of rendering an
           empty scoreboard template (NOW COMPETING / UP NEXT headings with
           no body) when the tournament ID is invalid. Closes #35.
@@ -281,26 +281,26 @@ export default function PublicScoreboard() {
             )}
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight">{tournament?.brandName || tournament?.name || 'Tournament'}</h1>
+                <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight">{tournament?.brandName || tournament?.name || 'Tournament'}</h1>
                 <span
                   data-testid="live-badge"
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 border border-red-500/40 text-red-200 text-xs font-bold uppercase tracking-wider"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 border border-red-500/40 text-red-200 text-xs md:text-sm font-bold uppercase tracking-wider"
                 >
                   <span className="h-2 w-2 rounded-full bg-red-400 animate-pulse" /> Live
                 </span>
               </div>
-              <p className="text-slate-300 text-sm flex items-center gap-1.5">
-                {tournament?.location && <><MapPin className="h-3 w-3" /> {tournament.location} ·</>}
+              <p className="text-slate-300 text-sm md:text-base lg:text-lg flex items-center gap-1.5">
+                {tournament?.location && <><MapPin className="h-3 w-3 md:h-4 md:w-4" /> {tournament.location} ·</>}
                 {tournament?.date && new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-6">
             <div className="text-right">
-              <div className="text-3xl font-mono font-bold text-white tabular-nums">
+              <div className="text-3xl md:text-4xl lg:text-5xl font-mono font-bold text-white tabular-nums">
                 {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
-              <div className="text-slate-300 text-xs">
+              <div className="text-slate-300 text-xs md:text-sm lg:text-base">
                 {stats.completed} / {stats.totalMatches} matches complete
               </div>
             </div>
@@ -397,14 +397,14 @@ export default function PublicScoreboard() {
         <div className="w-full md:w-1/2 p-4 md:p-6 border-r border-white/5 overflow-hidden">
           <div className="flex items-center mb-6">
             <Zap className="h-6 w-6 text-amber-400 mr-2" />
-            <h2 className="text-2xl font-bold text-amber-400 uppercase tracking-wider">Now competing</h2>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-amber-400 uppercase tracking-wider">Now competing</h2>
           </div>
 
           {inProgressMatches.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-300">
               <Clock className="h-20 w-20 mb-4 opacity-50" />
-              <p className="text-2xl">No matches in progress</p>
-              <p className="text-sm text-slate-300 mt-2">Stand by for the next match</p>
+              <p className="text-2xl md:text-3xl lg:text-4xl">No matches in progress</p>
+              <p className="text-sm md:text-base lg:text-lg text-slate-300 mt-2">Stand by for the next match</p>
             </div>
           ) : (
             <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-280px)] pr-2">
@@ -417,10 +417,10 @@ export default function PublicScoreboard() {
                         <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
                         <div className="relative">
                           <div className="flex items-center justify-between mb-4">
-                            <div className="text-sm text-amber-300 font-semibold uppercase tracking-wider">
+                            <div className="text-sm md:text-base lg:text-lg text-amber-300 font-semibold uppercase tracking-wider">
                               {division?.name} · Match #{match.matchNumber}
                             </div>
-                            <div className="flex items-center gap-1.5 text-xs text-amber-300">
+                            <div className="flex items-center gap-1.5 text-xs md:text-sm lg:text-base text-amber-300">
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" /> LIVE
                             </div>
                           </div>
@@ -429,16 +429,16 @@ export default function PublicScoreboard() {
                               <div className="text-xl md:text-3xl lg:text-4xl font-bold tracking-tight">
                                 {getCompetitorName(match.competitor1)}
                               </div>
-                              <div className="text-slate-300 text-sm mt-0.5">
+                              <div className="text-slate-300 text-sm md:text-base lg:text-lg mt-0.5">
                                 {getCompetitorSchool(match.competitor1) || '—'}
                               </div>
                             </div>
-                            <div className="px-2 md:px-4 text-xl md:text-2xl font-black text-slate-300 tracking-widest">VS</div>
+                            <div className="px-2 md:px-4 text-xl md:text-2xl lg:text-3xl font-black text-slate-300 tracking-widest">VS</div>
                             <div className="min-w-0 text-right">
                               <div className="text-xl md:text-3xl lg:text-4xl font-bold tracking-tight">
                                 {getCompetitorName(match.competitor2)}
                               </div>
-                              <div className="text-slate-300 text-sm mt-0.5">
+                              <div className="text-slate-300 text-sm md:text-base lg:text-lg mt-0.5">
                                 {getCompetitorSchool(match.competitor2) || '—'}
                               </div>
                             </div>
@@ -495,7 +495,7 @@ export default function PublicScoreboard() {
         <div className="w-full md:w-1/2 p-4 md:p-6">
           <div className="flex items-center mb-6">
             <Award className="h-6 w-6 text-green-400 mr-2" />
-            <h2 className="text-2xl font-bold text-green-400">RECENT RESULTS</h2>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-green-400 uppercase tracking-wider">Recent Results</h2>
           </div>
 
           {recentResults.length === 0 ? (
