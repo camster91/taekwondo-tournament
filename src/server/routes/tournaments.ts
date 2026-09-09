@@ -23,6 +23,8 @@ import { Errors } from '../utils/errors.js';
 import {
   canCreateTournament,
   canOpenPublicRegistration,
+  canAddRegistration,
+  canAddBulkRegistrations,
   getPlanEntitlements,
 } from '../services/entitlements.js';
 import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from '../services/tournament-settings.js';
@@ -728,10 +730,27 @@ router.post('/:id/registrations', authenticate, requireTournamentAccess('directo
   // Get tournament date for age calculation
   const tournament = await prisma.tournament.findUnique({
     where: { id: getParam(req.params.id) },
+    include: { organization: { select: { plan: true } } },
   });
 
   if (!tournament) {
     return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  // Check competitor limit for free plan
+  const plan = tournament.organization?.plan ?? 'free';
+  const existingCount = await prisma.registration.count({
+    where: { tournamentId: getParam(req.params.id) },
+  });
+
+  if (!canAddRegistration(plan, existingCount)) {
+    const entitlements = getPlanEntitlements(plan);
+    return res.status(402).json({
+      error: `Your ${plan} plan is limited to ${entitlements.maxCompetitorsPerTournament} competitors per tournament. Upgrade to add more competitors.`,
+      code: 'COMPETITOR_LIMIT_REACHED',
+      limit: entitlements.maxCompetitorsPerTournament,
+      current: existingCount,
+    });
   }
 
   // Get competitor for age calculation
@@ -769,10 +788,28 @@ router.post('/:id/registrations/bulk', authenticate, requireTournamentAccess('di
 
   const tournament = await prisma.tournament.findUnique({
     where: { id: getParam(req.params.id) },
+    include: { organization: { select: { plan: true } } },
   });
 
   if (!tournament) {
     return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  // Check competitor limit for free plan
+  const plan = tournament.organization?.plan ?? 'free';
+  const existingCount = await prisma.registration.count({
+    where: { tournamentId: getParam(req.params.id) },
+  });
+
+  if (!canAddBulkRegistrations(plan, existingCount, competitorIds.length)) {
+    const entitlements = getPlanEntitlements(plan);
+    return res.status(402).json({
+      error: `Your ${plan} plan is limited to ${entitlements.maxCompetitorsPerTournament} competitors per tournament. You have ${existingCount} registered and are trying to add ${competitorIds.length} more. Upgrade to add more competitors.`,
+      code: 'COMPETITOR_LIMIT_REACHED',
+      limit: entitlements.maxCompetitorsPerTournament,
+      current: existingCount,
+      requested: competitorIds.length,
+    });
   }
 
   const competitors = await prisma.competitor.findMany({
