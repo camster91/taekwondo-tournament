@@ -3,6 +3,7 @@ export type PlanName = (typeof PLAN_NAMES)[number];
 
 export type PlanEntitlements = {
   maxTournaments: number;
+  maxCompetitorsPerTournament: number;
   maxMembers: number;
   maxRings: number;
   publicRegistration: boolean;
@@ -12,6 +13,7 @@ export type PlanEntitlements = {
 const PLANS: Record<PlanName, PlanEntitlements> = {
   free: {
     maxTournaments: 1,
+    maxCompetitorsPerTournament: 30,
     maxMembers: 1,
     maxRings: 1,
     publicRegistration: false,
@@ -19,6 +21,7 @@ const PLANS: Record<PlanName, PlanEntitlements> = {
   },
   pilot: {
     maxTournaments: 5,
+    maxCompetitorsPerTournament: 9999, // No limit for pilot customers
     maxMembers: 10,
     maxRings: 6,
     publicRegistration: true,
@@ -26,6 +29,7 @@ const PLANS: Record<PlanName, PlanEntitlements> = {
   },
   starter: {
     maxTournaments: 10,
+    maxCompetitorsPerTournament: 100,
     maxMembers: 15,
     maxRings: 8,
     publicRegistration: true,
@@ -33,6 +37,7 @@ const PLANS: Record<PlanName, PlanEntitlements> = {
   },
   pro: {
     maxTournaments: 100,
+    maxCompetitorsPerTournament: 9999, // Effectively unlimited
     maxMembers: 100,
     maxRings: 32,
     publicRegistration: true,
@@ -56,4 +61,12 @@ export function canCreateTournament(plan: unknown, existingTournamentCount: numb
 
 export function canOpenPublicRegistration(plan: unknown): boolean {
   return getPlanEntitlements(plan).publicRegistration;
+}
+
+export function canAddRegistration(plan: unknown, existingCompetitorCount: number): boolean {
+  return existingCompetitorCount < getPlanEntitlements(plan).maxCompetitorsPerTournament;
+}
+
+export function canAddBulkRegistrations(plan: unknown, existingCompetitorCount: number, addingCount: number): boolean {
+  return existingCompetitorCount + addingCount <= getPlanEntitlements(plan).maxCompetitorsPerTournament;
 }

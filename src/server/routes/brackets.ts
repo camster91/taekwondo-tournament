@@ -652,6 +652,16 @@ router.post('/match/:matchId/undo', authenticate, async (req: AuthenticatedReque
     return res.status(404).json({ error: 'No changes to undo' });
   }
 
+  // P1-10: Enforce 5-minute undo window for safety
+  const UNDO_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+  const timeSinceChange = Date.now() - lastLog.createdAt.getTime();
+  if (timeSinceChange > UNDO_WINDOW_MS) {
+    return res.status(400).json({
+      error: 'Undo window expired. Changes older than 5 minutes cannot be undone.',
+      code: 'UNDO_WINDOW_EXPIRED',
+    });
+  }
+
   const previousState = JSON.parse(lastLog.previousState);
 
   // Restore previous state. Pull the bracket structure too — we

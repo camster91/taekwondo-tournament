@@ -23,11 +23,16 @@ import { Errors } from '../utils/errors.js';
 import {
   canCreateTournament,
   canOpenPublicRegistration,
+  canAddRegistration,
+  canAddBulkRegistrations,
   getPlanEntitlements,
 } from '../services/entitlements.js';
 import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from '../services/tournament-settings.js';
+import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
+import { generateQRPoster } from '../services/qr-poster.js';
+import { publicAppUrlFromEnv } from '../services/production-config.js';
 import {
   applyScheduleCorrection,
   buildScheduleImpact,
@@ -185,6 +190,13 @@ router.get('/:id', authenticate, requireTournamentAccess('viewer'), async (req: 
         },
       },
       weightClasses: true,
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          plan: true,
+        },
+      },
     },
   });
 
@@ -260,6 +272,21 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
     },
   });
 
+  // Audit log: tournament created (P1-3)
+  if (authReq.user) {
+    await createAuditLog(prisma, {
+      userId: authReq.user.id,
+      action: 'tournament_created',
+      details: { tournamentId: tournament.id, tournamentName: name },
+      ipAddress: getClientIp(authReq),
+      userAgent: getUserAgent(authReq),
+      organizationId: resolvedOrgId || undefined,
+      tournamentId: tournament.id,
+    }).catch((err) => {
+      console.error('[audit-log] tournament_created event failed:', err);
+    });
+  }
+
   res.status(201).json(tournament);
 });
 
@@ -303,6 +330,51 @@ router.delete('/:id/public-slug', authenticate, requireTournamentAccess('directo
   });
 
   res.json({ ok: true });
+});
+
+// Generate QR code poster PDF for venue signage.
+// GET /api/tournaments/:id/qr-poster — downloads a PDF with QR codes
+// for public registration and live scoreboard.
+router.get('/:id/qr-poster', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      date: true,
+      location: true,
+      publicSlug: true,
+      brandName: true,
+      brandPrimaryColor: true,
+    },
+  });
+
+  if (!tournament || !tournament.publicSlug) {
+    return res.status(400).json({
+      error: 'Tournament must have a public scoreboard slug enabled to generate a poster. Enable it in Tournament Settings.',
+    });
+  }
+
+  const publicUrl = publicAppUrlFromEnv(process.env);
+  const registrationUrl = `${publicUrl}/register/${tournament.id}`;
+  const scoreboardUrl = `${publicUrl}/display/${tournament.id}?key=${encodeURIComponent(tournament.publicSlug)}`;
+
+  const pdfBuffer = await generateQRPoster({
+    tournamentName: tournament.name,
+    tournamentDate: tournament.date.toISOString(),
+    location: tournament.location,
+    registrationUrl,
+    scoreboardUrl,
+    brandName: tournament.brandName,
+    brandPrimaryColor: tournament.brandPrimaryColor ?? undefined,
+  });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${tournament.name.replace(/[^a-z0-9]/gi, '_')}_QR_Poster.pdf"`);
+  res.send(pdfBuffer);
 });
 
 // Clone a tournament as a template for next year. Deep-copies settings
@@ -616,18 +688,56 @@ router.post('/:id/rules/reset', authenticate, requireTournamentAccess('director'
 router.delete('/:id', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const hard = req.query.hard === 'true';
+  const authReq = req as AuthenticatedRequest;
+  const tournamentId = getParam(req.params.id);
+
+  // Fetch tournament name for audit log before deletion
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    select: { name: true, organizationId: true },
+  });
 
   if (hard) {
     await prisma.tournament.delete({
-      where: { id: getParam(req.params.id) },
+      where: { id: tournamentId },
     });
+
+    // Audit log: tournament hard-deleted (P1-3)
+    if (authReq.user && tournament) {
+      await createAuditLog(prisma, {
+        userId: authReq.user.id,
+        action: 'tournament_deleted',
+        details: { tournamentId, tournamentName: tournament.name, hardDelete: true },
+        ipAddress: getClientIp(authReq),
+        userAgent: getUserAgent(authReq),
+        organizationId: tournament.organizationId || undefined,
+      }).catch((err) => {
+        console.error('[audit-log] tournament_deleted event failed:', err);
+      });
+    }
+
     return res.status(204).send();
   }
 
   await prisma.tournament.update({
-    where: { id: getParam(req.params.id) },
+    where: { id: tournamentId },
     data: { deletedAt: new Date() },
   });
+
+  // Audit log: tournament soft-deleted (P1-3)
+  if (authReq.user && tournament) {
+    await createAuditLog(prisma, {
+      userId: authReq.user.id,
+      action: 'tournament_deleted',
+      details: { tournamentId, tournamentName: tournament.name, hardDelete: false },
+      ipAddress: getClientIp(authReq),
+      userAgent: getUserAgent(authReq),
+      organizationId: tournament.organizationId || undefined,
+      tournamentId,
+    }).catch((err) => {
+      console.error('[audit-log] tournament_deleted event failed:', err);
+    });
+  }
 
   res.status(204).send();
 });
@@ -635,11 +745,34 @@ router.delete('/:id', authenticate, requireTournamentAccess('director'), async (
 // Restore a soft-deleted tournament
 router.post('/:id/restore', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const authReq = req as AuthenticatedRequest;
+  const tournamentId = getParam(req.params.id);
+
+  // Fetch tournament info for audit log
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    select: { name: true, organizationId: true },
+  });
 
   await prisma.tournament.update({
-    where: { id: getParam(req.params.id) },
+    where: { id: tournamentId },
     data: { deletedAt: null },
   });
+
+  // Audit log: tournament restored (P1-3)
+  if (authReq.user && tournament) {
+    await createAuditLog(prisma, {
+      userId: authReq.user.id,
+      action: 'tournament_restored',
+      details: { tournamentId, tournamentName: tournament.name },
+      ipAddress: getClientIp(authReq),
+      userAgent: getUserAgent(authReq),
+      organizationId: tournament.organizationId || undefined,
+      tournamentId,
+    }).catch((err) => {
+      console.error('[audit-log] tournament_restored event failed:', err);
+    });
+  }
 
   res.status(204).send();
 });
@@ -728,10 +861,27 @@ router.post('/:id/registrations', authenticate, requireTournamentAccess('directo
   // Get tournament date for age calculation
   const tournament = await prisma.tournament.findUnique({
     where: { id: getParam(req.params.id) },
+    include: { organization: { select: { plan: true } } },
   });
 
   if (!tournament) {
     return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  // Check competitor limit for free plan
+  const plan = tournament.organization?.plan ?? 'free';
+  const existingCount = await prisma.registration.count({
+    where: { tournamentId: getParam(req.params.id) },
+  });
+
+  if (!canAddRegistration(plan, existingCount)) {
+    const entitlements = getPlanEntitlements(plan);
+    return res.status(402).json({
+      error: `Your ${plan} plan is limited to ${entitlements.maxCompetitorsPerTournament} competitors per tournament. Upgrade to add more competitors.`,
+      code: 'COMPETITOR_LIMIT_REACHED',
+      limit: entitlements.maxCompetitorsPerTournament,
+      current: existingCount,
+    });
   }
 
   // Get competitor for age calculation
@@ -769,10 +919,28 @@ router.post('/:id/registrations/bulk', authenticate, requireTournamentAccess('di
 
   const tournament = await prisma.tournament.findUnique({
     where: { id: getParam(req.params.id) },
+    include: { organization: { select: { plan: true } } },
   });
 
   if (!tournament) {
     return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  // Check competitor limit for free plan
+  const plan = tournament.organization?.plan ?? 'free';
+  const existingCount = await prisma.registration.count({
+    where: { tournamentId: getParam(req.params.id) },
+  });
+
+  if (!canAddBulkRegistrations(plan, existingCount, competitorIds.length)) {
+    const entitlements = getPlanEntitlements(plan);
+    return res.status(402).json({
+      error: `Your ${plan} plan is limited to ${entitlements.maxCompetitorsPerTournament} competitors per tournament. You have ${existingCount} registered and are trying to add ${competitorIds.length} more. Upgrade to add more competitors.`,
+      code: 'COMPETITOR_LIMIT_REACHED',
+      limit: entitlements.maxCompetitorsPerTournament,
+      current: existingCount,
+      requested: competitorIds.length,
+    });
   }
 
   const competitors = await prisma.competitor.findMany({
