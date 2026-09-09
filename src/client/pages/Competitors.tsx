@@ -935,6 +935,14 @@ export default function Competitors() {
                         <TableCell className="px-2 py-2 text-sm text-slate-600 dark:text-slate-300 tabular-nums text-right">{c.weightLbs ? `${c.weightLbs}` : <span className="text-slate-300">—</span>}</TableCell>
                         <TableCell className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
+                            <Link to={`/competitors/${c.id}/profile`} title="View Profile">
+                              <IconButton
+                                icon={<Users className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />}
+                                label={`View profile for ${c.firstName} ${c.lastName}`}
+                                variant="secondary"
+                                size="sm"
+                              />
+                            </Link>
                             <IconButton
                               icon={<Edit className="h-3.5 w-3.5" />}
                               label={`Edit ${c.firstName} ${c.lastName}`}

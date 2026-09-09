@@ -1356,6 +1356,11 @@ router.get('/division/:divisionId/certificate/:place', authenticate, async (req:
     divisionName: division.name,
     eventType: division.eventType,
     tournament: tournamentInfo,
+    branding: {
+      organizationName: division.tournament.brandName,
+      logoUrl: division.tournament.brandLogoUrl,
+      primaryColor: division.tournament.brandPrimaryColor,
+    },
   });
 
   const pdfBuffer = pdf.output('arraybuffer');
@@ -1458,7 +1463,11 @@ router.get('/tournament/:tournamentId/certificates', authenticate, requireTourna
     return a.place - b.place;
   });
 
-  const pdf = generateBatchCertificatesPDF(tournamentInfo, winners);
+  const pdf = generateBatchCertificatesPDF(tournamentInfo, winners, {
+    organizationName: tournament.brandName,
+    logoUrl: tournament.brandLogoUrl,
+    primaryColor: tournament.brandPrimaryColor,
+  });
 
   const pdfBuffer = pdf.output('arraybuffer');
 
@@ -1559,6 +1568,11 @@ router.get('/tournament/:tournamentId/school-report', authenticate, requireTourn
       silver,
       bronze,
       total: gold + silver + bronze,
+    },
+    branding: {
+      organizationName: tournament.brandName,
+      logoUrl: tournament.brandLogoUrl,
+      primaryColor: tournament.brandPrimaryColor,
     },
   });
 

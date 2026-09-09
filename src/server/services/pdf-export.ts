@@ -1,6 +1,17 @@
 // PDF Export service for tournament brackets
 import { jsPDF } from 'jspdf';
 
+/**
+ * Convert hex color to RGB array for jsPDF
+ */
+function hexToRgb(hex: string): [number, number, number] {
+  const cleaned = hex.replace('#', '');
+  const r = parseInt(cleaned.substring(0, 2), 16);
+  const g = parseInt(cleaned.substring(2, 4), 16);
+  const b = parseInt(cleaned.substring(4, 6), 16);
+  return [r, g, b];
+}
+
 export interface BracketCompetitor {
   id: string;
   name: string;
@@ -513,6 +524,11 @@ export interface CertificateData {
   divisionName: string;
   eventType: string;
   tournament: TournamentInfo;
+  branding?: {
+    organizationName?: string | null;
+    logoUrl?: string | null;
+    primaryColor?: string | null;
+  };
 }
 
 /**
@@ -529,15 +545,20 @@ export function generateCertificatePDF(data: CertificateData): jsPDF {
   const pageHeight = 612;
   const centerX = pageWidth / 2;
 
+  // Use branding primary color if available, else default to gold
+  const borderColor = data.branding?.primaryColor 
+    ? hexToRgb(data.branding.primaryColor) 
+    : [180, 140, 80];
+
   // Decorative border
-  doc.setDrawColor(180, 140, 80); // Gold-ish color
+  doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
   doc.setLineWidth(3);
   doc.rect(30, 30, pageWidth - 60, pageHeight - 60);
   doc.setLineWidth(1.5);
   doc.rect(40, 40, pageWidth - 80, pageHeight - 80);
 
   // Inner decorative corners
-  doc.setDrawColor(180, 140, 80);
+  doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
   const cornerSize = 30;
   // Top-left
   doc.line(50, 55, 50 + cornerSize, 55);
@@ -558,43 +579,60 @@ export function generateCertificatePDF(data: CertificateData): jsPDF {
   doc.setFont('helvetica', 'normal');
   doc.text('CERTIFICATE OF ACHIEVEMENT', centerX, 90, { align: 'center' });
 
+  // Organization name if provided (tenant branding)
+  let currentY = 110;
+  if (data.branding?.organizationName) {
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Presented by ${data.branding.organizationName}`, centerX, currentY, { align: 'center' });
+    currentY += 20;
+  } else {
+    currentY = 130;
+  }
+
   // Tournament name
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
-  doc.text(data.tournament.name, centerX, 130, { align: 'center' });
+  doc.text(data.tournament.name, centerX, currentY, { align: 'center' });
 
   // Date and location
+  currentY += 25;
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   let subLine = data.tournament.date;
   if (data.tournament.location) {
     subLine += ` • ${data.tournament.location}`;
   }
-  doc.text(subLine, centerX, 155, { align: 'center' });
+  doc.text(subLine, centerX, currentY, { align: 'center' });
 
   // "This certifies that"
+  currentY += 45;
   doc.setFontSize(14);
-  doc.text('This certifies that', centerX, 200, { align: 'center' });
+  doc.text('This certifies that', centerX, currentY, { align: 'center' });
 
   // Competitor name (large and prominent)
+  currentY += 50;
   doc.setFontSize(36);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0, 0, 0);
-  doc.text(data.competitorName, centerX, 250, { align: 'center' });
+  doc.text(data.competitorName, centerX, currentY, { align: 'center' });
 
   // Decorative line under name
-  doc.setDrawColor(180, 140, 80);
+  currentY += 15;
+  doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
   doc.setLineWidth(1);
   const nameWidth = doc.getTextWidth(data.competitorName);
-  doc.line(centerX - nameWidth / 2 - 20, 265, centerX + nameWidth / 2 + 20, 265);
+  doc.line(centerX - nameWidth / 2 - 20, currentY, centerX + nameWidth / 2 + 20, currentY);
 
   // "has been awarded"
+  currentY += 35;
   doc.setTextColor(80, 60, 40);
   doc.setFontSize(14);
   doc.setFont('helvetica', 'normal');
-  doc.text('has been awarded', centerX, 300, { align: 'center' });
+  doc.text('has been awarded', centerX, currentY, { align: 'center' });
 
   // Place (with medal color)
+  currentY += 65;
   const placeText = data.place === 1 ? '1ST PLACE' :
                     data.place === 2 ? '2ND PLACE' :
                     data.place === 3 ? '3RD PLACE' : `${data.place}TH PLACE`;
@@ -607,7 +645,7 @@ export function generateCertificatePDF(data: CertificateData): jsPDF {
   doc.setFontSize(48);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(medalColor[0], medalColor[1], medalColor[2]);
-  doc.text(placeText, centerX, 365, { align: 'center' });
+  doc.text(placeText, centerX, currentY, { align: 'center' });
 
   // Medal symbol
   const medalSymbol = data.place === 1 ? '★' :
@@ -616,20 +654,22 @@ export function generateCertificatePDF(data: CertificateData): jsPDF {
   if (medalSymbol) {
     doc.setFontSize(24);
     const placeWidth = doc.getTextWidth(placeText);
-    doc.text(medalSymbol, centerX - placeWidth / 2 - 30, 365, { align: 'center' });
-    doc.text(medalSymbol, centerX + placeWidth / 2 + 30, 365, { align: 'center' });
+    doc.text(medalSymbol, centerX - placeWidth / 2 - 30, currentY, { align: 'center' });
+    doc.text(medalSymbol, centerX + placeWidth / 2 + 30, currentY, { align: 'center' });
   }
 
   // Division name
+  currentY += 55;
   doc.setTextColor(80, 60, 40);
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(data.divisionName, centerX, 420, { align: 'center' });
+  doc.text(data.divisionName, centerX, currentY, { align: 'center' });
 
   // Event type
+  currentY += 25;
   doc.setFontSize(14);
   doc.setFont('helvetica', 'normal');
-  doc.text(data.eventType.charAt(0).toUpperCase() + data.eventType.slice(1), centerX, 445, { align: 'center' });
+  doc.text(data.eventType.charAt(0).toUpperCase() + data.eventType.slice(1), centerX, currentY, { align: 'center' });
 
   // Signature lines at bottom
   const sigY = pageHeight - 100;
@@ -664,7 +704,12 @@ export function generateBatchCertificatesPDF(
     place: number;
     divisionName: string;
     eventType: string;
-  }>
+  }>,
+  branding?: {
+    organizationName?: string | null;
+    logoUrl?: string | null;
+    primaryColor?: string | null;
+  }
 ): jsPDF {
   if (winners.length === 0) {
     const doc = new jsPDF();
@@ -676,6 +721,7 @@ export function generateBatchCertificatesPDF(
   let doc = generateCertificatePDF({
     ...winners[0],
     tournament,
+    branding,
   });
 
   // Add remaining certificates on new pages
@@ -805,6 +851,11 @@ export interface SchoolReportData {
     bronze: number;
     total: number;
   };
+  branding?: {
+    organizationName?: string | null;
+    logoUrl?: string | null;
+    primaryColor?: string | null;
+  };
 }
 
 /**
@@ -824,7 +875,16 @@ export function generateSchoolReportPDF(data: SchoolReportData): jsPDF {
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100);
   doc.text('SCHOOL RESULTS REPORT', PAGE_WIDTH / 2, currentY, { align: 'center' });
-  currentY += 25;
+  currentY += 15;
+
+  // Organization name if provided (tenant branding)
+  if (data.branding?.organizationName) {
+    doc.setFontSize(10);
+    doc.text(`Hosted by ${data.branding.organizationName}`, PAGE_WIDTH / 2, currentY, { align: 'center' });
+    currentY += 20;
+  } else {
+    currentY += 10;
+  }
 
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');

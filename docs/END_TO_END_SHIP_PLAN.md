@@ -136,9 +136,9 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P2-9 | #TBD | **Video review integration** | Attach video URL to match; link from results page | S |
 | P2-10 | #TBD | **Director command center** | Live dashboard: ring status, delays, divisions behind schedule, SOS alerts | L |
 | **Results & Reporting** | | | | |
-| P2-11 | #TBD | **Certificate generation** | PDF certificates for 1st/2nd/3rd place with org logo + signatures | M |
-| P2-12 | #TBD | **School reports** | Per-school results export (medals, placements, competitor list) | S |
-| P2-13 | #TBD | **Historical trends** | Competitor profile: past tournaments, W/L record, skill rating over time | M |
+| P2-11 | #229 | **✅ Certificate generation** | PDF certificates for 1st/2nd/3rd place with org logo + tenant branding — **SHIPPED** in this PR | M |
+| P2-12 | #229 | **✅ School reports** | Per-school results export (medals, placements, competitor list) with tenant branding — **SHIPPED** in this PR | S |
+| P2-13 | #229 | **✅ Historical trends** | Competitor profile: past tournaments, W/L record, skill rating over time — **SHIPPED** in this PR | M |
 | **Legal & Compliance** | | | | |
 | P2-14 | #TBD | **COPPA compliance** | Verify parental consent flow; add parent email verification step | M |
 | P2-15 | #TBD | **GDPR export/delete** | Self-service data export (JSON); hard-delete account + all PII | M |
@@ -169,11 +169,11 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 | Mobile-optimized reg form | ✅ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | P1 |
 | **Divisions & Brackets** | | | | | | | |
 | Auto-categorization | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P0 |
-| Manual division adjustments | ⚠️ (P2) | ✅ | ✅ | ✅ | ✅ | ✅ | P2 |
+| Manual division adjustments | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P2 |
 | Double-elimination brackets | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P0 |
 | School-spread seeding | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | P1 |
 | Skill-based seeding | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
-| Print-optimized brackets | ⚠️ (P2) | ✅ | ✅ | ✅ | ✅ | ✅ | P2 |
+| Print-optimized brackets | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P2 |
 | **Day-of Operations** | | | | | | | |
 | Digital check-in | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | P0 |
 | Real-time scoring | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ | P0 |
@@ -187,10 +187,10 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 | Parent finder (by name) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P1 |
 | QR code posters | ⚠️ (P1) | ❌ | ✅ | ❌ | ❌ | ❌ | P1 |
 | **Results & Reporting** | | | | | | | |
-| PDF certificates | ⚠️ (P2) | ✅ | ✅ | ✅ | ✅ | ✅ | P2 |
-| School reports | ⚠️ (P2) | ✅ | ✅ | ✅ | ✅ | ✅ | P2 |
+| PDF certificates | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P2 |
+| School reports | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P2 |
 | Excel export | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P1 |
-| Historical competitor records | ⚠️ (P2) | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
+| Historical competitor records | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
 | **Tech & UX** | | | | | | | |
 | Modern web UI (React) | ✅ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | P0 |
 | Mobile tablet optimized | ✅ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | P0 |
@@ -208,9 +208,9 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 ⚠️ = Partial / in progress (phase noted)  
 ❌ = Not available  
 
-**Bowin competitive score:** 18/34 complete (53%), 16 in-progress (P1/P2)  
-**Unique advantages:** Offline mode, parent finder, skill-based seeding, multi-sport, modern UX, no watermarks  
-**Key gaps to close:** Payment at reg, print layouts, announcer view, certificates
+**Bowin competitive score:** 21/34 complete (62%), 13 in-progress (P1/P2)  
+**Unique advantages:** Offline mode, parent finder, skill-based seeding, multi-sport, modern UX, no watermarks, historical competitor tracking  
+**Key gaps to close:** Payment at reg, real-time collab, announcer view, director command center
 
 ---
 
