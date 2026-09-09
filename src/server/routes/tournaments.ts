@@ -187,6 +187,13 @@ router.get('/:id', authenticate, requireTournamentAccess('viewer'), async (req: 
         },
       },
       weightClasses: true,
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          plan: true,
+        },
+      },
     },
   });
 
