@@ -686,10 +686,7 @@ export function generateCertificatePDF(data: CertificateData): jsPDF {
   doc.line(pageWidth - 100 - sigWidth, sigY, pageWidth - 100, sigY);
   doc.text('Date', pageWidth - 100 - sigWidth / 2, sigY + 15, { align: 'center' });
 
-  // Footer
-  doc.setFontSize(8);
-  doc.setTextColor(150);
-  doc.text('Martial Arts Tournament Management System', centerX, pageHeight - 45, { align: 'center' });
+  // No footer watermark - certificates are fully tenant-branded
 
   return doc;
 }
@@ -828,9 +825,7 @@ export function generateBatchCertificatesPDF(
     doc.line(pageWidth - 100 - sigWidth, sigY, pageWidth - 100, sigY);
     doc.text('Date', pageWidth - 100 - sigWidth / 2, sigY + 15, { align: 'center' });
 
-    doc.setFontSize(8);
-    doc.setTextColor(150);
-    doc.text('Martial Arts Tournament Management System', centerX, pageHeight - 45, { align: 'center' });
+    // No footer watermark - certificates are fully tenant-branded
   }
 
   return doc;
