@@ -94,6 +94,7 @@ model Tournament {
   operationAudits       TournamentOperationAudit[]
   recommendations       Recommendation[]
   auditLogs             UserAuditLog[]
+  sosAlerts             SOSAlert[]
   organization        Organization?          @relation(fields: [organizationId], references: [id])
   sportProfile        SportProfile?          @relation(fields: [sportProfileId], references: [id])
 
@@ -244,6 +245,7 @@ model Match {
   scheduledTime DateTime?
   ringNumber    Int?
   notes         String?
+  videoUrl      String? // P2-9: Video review link (YouTube, Vimeo, etc.)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -727,6 +729,30 @@ model TournamentRule {
   @@index([tournamentId])
   @@index([tournamentId, category])
   @@index([ruleType])
+}
+
+// P2-10: SOS alerts for director command center
+// Staff can raise urgent alerts (e.g. "Ring 2 delayed", "Division X needs attention")
+model SOSAlert {
+  id           String   @id @default(uuid())
+  tournamentId String
+  severity     String   @default("warning") // info, warning, critical
+  category     String   // ring, division, equipment, medical, other
+  title        String
+  description  String?
+  ringNumber   Int?
+  divisionId   String?
+  resolved     Boolean  @default(false)
+  resolvedAt   DateTime?
+  raisedBy     String? // User ID
+  raisedByName String? // Cached name for display
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, resolved])
+  @@index([createdAt])
 }
 
 // Snapshot of tournament division state for rollback if a bracket
