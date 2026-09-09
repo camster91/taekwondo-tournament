@@ -63,8 +63,8 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 
 | ID | Issue/PR | Task | Acceptance Criteria | Effort |
 |----|----------|------|---------------------|--------|
-| P0-1 | #TBD | **JWT token revocation** | Logout invalidates tokens server-side via `tokenVersion` bump; isActive flip kills all sessions | M |
-| P0-2 | #TBD | **Auth: HttpOnly cookies** | Move JWT from localStorage to HttpOnly cookie; add CSRF protection | M |
+| P0-1 | #TBD | **✅ VERIFY: JWT token revocation** | Confirm logout invalidates tokens via `tokenVersion` bump (ALREADY IMPLEMENTED in auth.ts); test isActive flip kills sessions | S (verify) |
+| P0-2 | #TBD | **✅ VERIFY: HttpOnly cookies** | Confirm SESSION_COOKIE with httpOnly:true + CSRF protection (ALREADY IMPLEMENTED in auth.ts); test auth flow end-to-end | S (verify) |
 | P0-3 | #TBD | **Uptime monitoring** | Add UptimeRobot/Pingdom for /api/health/ready; 5xx rate alerts to email/Slack | S |
 | P0-4 | #TBD | **Error tracking** | Integrate Sentry (server + client); capture user context, breadcrumbs | S |
 | P0-5 | #TBD | **Database backups** | Automate daily encrypted backups to off-host storage; test restore drill | M |
@@ -92,7 +92,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | **Billing & Payments** | | | | |
 | P1-4 | #TBD | **Stripe plan selection** | `/organization` shows plan tiers; Checkout flow for annual/per-event purchase | L |
 | P1-5 | #TBD | **Usage metering** | Track competitors/event for per-event pricing; show usage in org settings | M |
-| P1-6 | #TBD | **Billing portal** | Link to Stripe Customer Portal for invoices, payment method, cancel subscription | S |
+| P1-6 | #TBD | **✅ VERIFY: Billing portal** | Confirm Stripe Customer Portal link works (CODE EXISTS in billing.ts + OrganizationSettings.tsx); needs Stripe dashboard config + test | S (config) |
 | P1-7 | #TBD | **Trial enforcement** | Limit free tier to 1 event + 30 competitors; upgrade gate with clear CTA | M |
 | **Operations** | | | | |
 | P1-8 | #TBD | **Offline mode (scorekeeper)** | ServiceWorker caches scoring UI; queues writes; syncs on reconnect | L |
@@ -109,9 +109,10 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 
 **Exit criteria:**  
 - 5 pilot tournaments run successfully with zero payment failures.
-- At least 3 organizers complete checkout and run a paid event.
+- At least 3 organizers complete Stripe checkout and run a paid event.
 - Offline mode tested in real venue (no WiFi for 10min; data syncs on reconnect).
 - Public scoreboard renders correctly on 4K TV at real event.
+- Billing portal validated: customer can view invoices, update payment method, cancel subscription.
 
 ---
 
@@ -147,7 +148,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P2-18 | #TBD | **Onboarding checklist** | First-time user sees 5-step setup guide: org profile, import, first tournament | M |
 
 **Exit criteria:**  
-- Competitive feature matrix shows Bowin ≥ Tower/TaeMaster on 15/20 core features.
+- Competitive feature matrix shows Bowin ≥ Tower/TaeMaster on 25/34 core features (74%).
 - 3 case studies published on marketing site.
 - Onboarding completion rate ≥ 60% (5/5 steps).
 - Zero legal blockers for paid GA launch.
@@ -207,7 +208,7 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 ⚠️ = Partial / in progress (phase noted)  
 ❌ = Not available  
 
-**Bowin competitive score:** 18/32 complete (56%), 14 in-progress (P1/P2)  
+**Bowin competitive score:** 18/34 complete (53%), 16 in-progress (P1/P2)  
 **Unique advantages:** Offline mode, parent finder, skill-based seeding, multi-sport, modern UX, no watermarks  
 **Key gaps to close:** Payment at reg, print layouts, announcer view, certificates
 
@@ -237,13 +238,13 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Product/Price config | ⚠️ Needs setup | Create 6 products in Stripe dashboard (test + live) |
-| Checkout Session API | ⚠️ In progress | `POST /api/billing/checkout` creates session, redirects to Stripe |
-| Webhook handler | ⚠️ In progress | `POST /api/billing/webhook` validates signature, updates `OrganizationBillingSubscription` |
-| Customer Portal | ❌ Not started | Link to Stripe portal from `/organization` |
+| Checkout Session API | ✅ Implemented | `POST /api/billing/checkout` creates session, redirects to Stripe (code complete) |
+| Webhook handler | ✅ Implemented | `POST /api/billing/webhook` validates signature, updates `OrganizationBillingSubscription` (code complete) |
+| Customer Portal | ✅ Implemented | Code exists in billing.ts + OrganizationSettings.tsx; needs Stripe dashboard config + validation |
 | Usage metering | ❌ Not started | Report competitor count to Stripe on tournament completion |
 | Failed payment handling | ❌ Not started | Email notification + grace period (7 days) before downgrade |
 
-**Blocker:** Cameron must create Stripe account, configure products/prices, deploy webhook endpoint with signing secret.
+**Blocker:** Cameron must create Stripe account, configure products/prices in Stripe dashboard, validate checkout + webhook + portal flows end-to-end.
 
 ---
 
@@ -322,43 +323,70 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 
 ## Ship Gate: VPS/Coolify Verification Plan
 
-**Rule:** GitHub Actions CI is NOT the ship gate. VPS/Coolify must verify every release.
+**Rule:** GitHub Actions CI is NOT the ship gate. VPS production deploy must verify every release.
+
+### Actual Deploy Flow (Manual `workflow_dispatch` Only)
+
+**Reality check:** There is NO automated staging → production pipeline. The `.github/workflows/deploy-coolify.yml` workflow is `workflow_dispatch` only (manual trigger). Production deployment uses `scripts/deploy-production.sh` with explicit approval at action time.
 
 ### Verification Steps
 
-1. **CI passes** (GitHub Actions):
+1. **CI passes** (GitHub Actions, automatic on push):
    - Unit tests (vitest)
    - E2E tests (Playwright)
    - Type checks (tsc)
    - Lint (eslint)
    - Production build succeeds
 
-2. **Deploy to staging** (Coolify):
-   - Automated deploy to `staging.bowin.io` on push to `main`
-   - Smoke test: `/api/health/ready` returns 200
-   - Manual smoke test: Login, create competitor, generate bracket, score match
+2. **Manual trigger** (Cameron):
+   - Cameron runs `scripts/deploy-production.sh` from local machine
+   - Script requires clean worktree (no uncommitted changes)
+   - Uploads immutable source archive to VPS at `/opt/bowin-production-releases/{SHA}.tar.gz`
 
-3. **Staging approval** (human gate):
-   - Cameron clicks "Approve" in Coolify UI after testing
-   - Blocks production deploy until approval
+3. **VPS build & candidate validation** (automatic):
+   - Builds Docker image `bowin-release:{SHA}` on VPS from verified source
+   - Starts private candidate container (`taekwondo-tournament-candidate`)
+   - Validates health check passes on candidate
+   - Removes candidate (pre-flight complete)
 
-4. **Deploy to production** (Coolify):
-   - Automated deploy to `app.bowin.io` after staging approval
-   - Database migrations run via `prisma migrate deploy`
-   - Rollback container tagged as `bowin-rollback-{timestamp}`
+4. **Stopped-write cutover** (automatic, rollback-safe):
+   - Stops live container (`taekwondo-tournament`)
+   - Renames live → `taekwondo-tournament-rollback`
+   - Takes encrypted backup to `/var/backups/taekwondo/pre-{timestamp}-{SHA}.dump`
+   - Runs `prisma migrate deploy` with new image
+   - Starts new live container (`taekwondo-tournament`) on same port
+   - Validates health checks (internal + public URL)
+   - **Automatic rollback** if health checks fail:
+     - Restores database from backup
+     - Renames rollback → live
+     - Restarts previous container
+     - Exits with status 90 (CRITICAL failure)
 
-5. **Production verification**:
-   - Automated: `/api/health/ready` returns 200
-   - Automated: Sentry reports no errors in first 5min
+5. **Production verification** (automatic + manual):
+   - Automated: `/api/health/ready` returns 200 (internal + public)
    - Manual: Cameron confirms login + critical path works
+   - Sentry monitoring (when configured): No errors in first 5min
 
-6. **Rollback procedure** (if verification fails):
-   - Stop new container: `docker stop bowin-production`
-   - Start rollback: `docker start bowin-rollback-{timestamp}`
-   - Revert DB migrations if needed (manual, from backup)
+6. **Rollback procedure** (if post-deploy issues found):
+   - Manual rollback uses same container naming:
+     ```bash
+     docker stop taekwondo-tournament
+     docker rename taekwondo-tournament-rollback taekwondo-tournament
+     docker start taekwondo-tournament
+     # Restore DB from backup if migrations were applied:
+     docker exec -i markup-postgres pg_restore -U markup -d postgres --clean --create < /var/backups/taekwondo/pre-{timestamp}.dump
+     ```
    - Post-mortem: Document failure, fix, re-deploy
 
-**Rollback time target:** < 5 minutes (container swap is instant; DB rollback adds 2–4min).
+**Rollback time target:** < 5 minutes  
+- Container swap: ~10 seconds (stop + rename + start)  
+- DB restore: 2–4 minutes (depends on backup size)  
+- Automatic rollback (during deploy): ~2 minutes total
+
+**Key container names (from deploy-production.sh):**
+- Live: `taekwondo-tournament`
+- Rollback: `taekwondo-tournament-rollback`
+- Candidate (pre-flight only): `taekwondo-tournament-candidate`
 
 ---
 
@@ -368,8 +396,8 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 
 1. **Cameron:** Review this plan; approve phasing + priorities
 2. **Cameron:** Create Stripe account (test mode); configure 6 products/prices
-3. **Agent:** Implement P0-1 (JWT token revocation via `tokenVersion`)
-4. **Agent:** Implement P0-2 (HttpOnly cookies for auth)
+3. **Agent:** Verify P0-1 (JWT token revocation — already implemented, needs test)
+4. **Agent:** Verify P0-2 (HttpOnly cookies — already implemented, needs test)
 5. **Cameron:** Sign up for UptimeRobot + Sentry (free tiers OK for pilot)
 
 ### Week 2
@@ -382,11 +410,11 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 
 ### Week 3–4 (Start P1)
 
-11. **Agent:** Implement P1-4 (Stripe checkout flow)
-12. **Agent:** Implement P1-11 (organizer white-label: logo upload + primary color)
-13. **Agent:** Implement P1-8 (offline mode for scorekeeper)
-14. **Cameron:** Reach out to 5 pilot candidates (Newton's contacts)
-15. **Cameron:** Record demo video (2min walkthrough)
+11. **Agent:** Implement P1-4 (Stripe plan selection UI in /organization)
+12. **Agent:** Verify P1-6 (billing portal — code exists, validate with real Stripe account)
+13. **Agent:** Implement P1-11 (organizer white-label: logo upload + primary color)
+14. **Agent:** Implement P1-8 (offline mode for scorekeeper)
+15. **Cameron:** Reach out to 5 pilot candidates (Newton's contacts)
 
 ### Week 5–6 (Pilot Launch)
 
@@ -402,7 +430,7 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 
 Items that don't block launch but should be fixed post-GA:
 
-1. **Rebrand completion:** Finish sweeping `tkd_*` localStorage keys → `bowin_*`; update email templates to remove "TKD Tournament Manager" branding
+1. **Rebrand completion:** Finish sweeping `tkd_*` localStorage keys → `bowin_*` (SESSION_COOKIE already uses `bowin_session`); update email templates to remove "TKD Tournament Manager" branding
 2. **Multi-sport seed data:** Add Karate/Judo test seeds to prove sport-agnostic design
 3. **Bracket auto-layout:** Current PDF export is functional but not print-shop quality; needs fold marks, better spacing
 4. **React Router advisory:** Prisma tooling inherits `deepmerge-ts` advisory; track until upstream fix available
@@ -412,6 +440,7 @@ Items that don't block launch but should be fixed post-GA:
 8. **Public scoreboard auto-refresh config:** Hardcoded 10s refresh; should be per-tournament setting
 9. **Competitor merge UI:** Deduplication logic exists but no UI for human-in-the-loop merge
 10. **Keyboard shortcuts:** Power users want `Cmd+K` command palette, arrow keys for bracket navigation
+11. **Staging environment:** Current deploy flow is manual production-only (`workflow_dispatch` + `deploy-production.sh`); consider adding automated staging deploy for pre-release validation
 
 ---
 
