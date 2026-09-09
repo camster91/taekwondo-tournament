@@ -314,6 +314,96 @@ router.get('/meta/belts', authenticate, async (req: Request, res: Response) => {
   res.json(belts.map((b) => b.belt));
 });
 
+// Get competitor history and statistics (requires authentication)
+// NOTE: Must be defined BEFORE /:id route to avoid being matched as an ID
+router.get('/:id/history', authenticate, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const competitorId = getParam(req.params.id);
+
+  const competitor = await prisma.competitor.findUnique({
+    where: { id: competitorId },
+  });
+
+  if (!competitor) {
+    return res.status(404).json({ error: 'Competitor not found' });
+  }
+
+  // Get tournament history with placements
+  const history = await prisma.competitorHistory.findMany({
+    where: { competitorId },
+    include: {
+      tournament: {
+        select: {
+          id: true,
+          name: true,
+          date: true,
+          location: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  // Get current ratings (patterns and sparring)
+  const ratings = await prisma.competitorRating.findMany({
+    where: { competitorId },
+  });
+
+  // Calculate aggregate stats
+  const totalMatches = history.reduce((sum, h) => sum + h.matchesWon + h.matchesLost, 0);
+  const totalWins = history.reduce((sum, h) => sum + h.matchesWon, 0);
+  const totalLosses = history.reduce((sum, h) => sum + h.matchesLost, 0);
+  
+  const medals = {
+    gold: history.filter(h => h.placement === 1).length,
+    silver: history.filter(h => h.placement === 2).length,
+    bronze: history.filter(h => h.placement === 3).length,
+  };
+
+  // Group by event type for more detailed stats
+  const patternHistory = history.filter(h => h.eventType === 'patterns');
+  const sparringHistory = history.filter(h => h.eventType === 'sparring');
+
+  const stats = {
+    overall: {
+      matches: totalMatches,
+      wins: totalWins,
+      losses: totalLosses,
+      winRate: totalMatches > 0 ? (totalWins / totalMatches) * 100 : 0,
+      medals,
+      tournaments: history.length,
+    },
+    patterns: {
+      matches: patternHistory.reduce((sum, h) => sum + h.matchesWon + h.matchesLost, 0),
+      wins: patternHistory.reduce((sum, h) => sum + h.matchesWon, 0),
+      losses: patternHistory.reduce((sum, h) => sum + h.matchesLost, 0),
+      medals: {
+        gold: patternHistory.filter(h => h.placement === 1).length,
+        silver: patternHistory.filter(h => h.placement === 2).length,
+        bronze: patternHistory.filter(h => h.placement === 3).length,
+      },
+      rating: ratings.find(r => r.eventType === 'patterns'),
+    },
+    sparring: {
+      matches: sparringHistory.reduce((sum, h) => sum + h.matchesWon + h.matchesLost, 0),
+      wins: sparringHistory.reduce((sum, h) => sum + h.matchesWon, 0),
+      losses: sparringHistory.reduce((sum, h) => sum + h.matchesLost, 0),
+      medals: {
+        gold: sparringHistory.filter(h => h.placement === 1).length,
+        silver: sparringHistory.filter(h => h.placement === 2).length,
+        bronze: sparringHistory.filter(h => h.placement === 3).length,
+      },
+      rating: ratings.find(r => r.eventType === 'sparring'),
+    },
+  };
+
+  res.json({
+    competitor,
+    history,
+    stats,
+  });
+});
+
 // Get single competitor (requires authentication). Closes S17 + IDOR:
 // list is scoped via buildTournamentAccessFilter; get-by-id must use
 // the same scope so a viewer can't fetch arbitrary competitor PII

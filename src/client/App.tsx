@@ -45,6 +45,7 @@ import { BowinLogo } from './components/brand/BowinLogo';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Competitors = lazy(() => import('./pages/Competitors'));
 const CompetitorDuplicates = lazy(() => import('./pages/CompetitorDuplicates'));
+const CompetitorProfile = lazy(() => import('./pages/CompetitorProfile'));
 const Trash = lazy(() => import('./pages/Trash'));
 const Tournaments = lazy(() => import('./pages/Tournaments'));
 const TournamentDetail = lazy(() => import('./pages/TournamentDetail'));
@@ -615,6 +616,7 @@ function AppRoutes() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/competitors" element={<Competitors />} />
             <Route path="/competitors/duplicates" element={<CompetitorDuplicates />} />
+            <Route path="/competitors/:id/profile" element={<CompetitorProfile />} />
             <Route path="/trash" element={<Trash />} />
             <Route path="/tournaments" element={<Tournaments />} />
             <Route path="/tournaments/:id" element={<TournamentDetail />} />
