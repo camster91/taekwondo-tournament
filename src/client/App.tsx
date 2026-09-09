@@ -56,6 +56,7 @@ const BracketEditor = lazy(() => import('./pages/BracketEditor'));
 const PublicRegister = lazy(() => import('./pages/PublicRegister'));
 const CheckRegistration = lazy(() => import('./pages/CheckRegistration'));
 const ManageRegistration = lazy(() => import('./pages/ManageRegistration'));
+const VerifyParentConsent = lazy(() => import('./pages/VerifyParentConsent'));
 const Marketing = lazy(() => import('./pages/Marketing'));
 const Legal = lazy(() => import('./pages/Legal'));
 const Login = lazy(() => import('./pages/Login'));
@@ -580,6 +581,7 @@ function AppRoutes() {
           <Route path="/register" element={<PublicRegister />} />
           <Route path="/check-registration" element={<CheckRegistration />} />
           <Route path="/manage-registration" element={<ManageRegistration />} />
+          <Route path="/verify-parent-consent" element={<VerifyParentConsent />} />
           <Route path="/login" element={<Login />} />
           <Route path="/verify" element={<VerifyMagicLink />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />

@@ -26,6 +26,7 @@ import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import DemoGuide from '../components/demo/DemoGuide';
+import OnboardingChecklist from '../components/OnboardingChecklist';
 import {
   consumeDemoEntryPending,
   findLiveDemoTournament,
@@ -427,6 +428,9 @@ export default function Dashboard() {
           })()}
         </div>
       </div>
+
+      {/* P2-18: Onboarding checklist */}
+      <OnboardingChecklist />
     </div>
   );
 }

@@ -58,7 +58,7 @@ export default function Profile() {
 
   const deleteAccountMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/auth/account', {
+      const response = await fetch('/api/auth/gdpr/delete-account', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ confirmation: deleteConfirmation }),
@@ -200,6 +200,44 @@ export default function Profile() {
         </CardBody>
       </Card>
 
+      {/* P2-15: GDPR Data Export */}
+      <Card className="mt-6">
+        <CardHeader title="Data Export" />
+        <CardBody>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="max-w-lg text-sm text-gray-600 dark:text-gray-400">
+              Download all your personal data in JSON format. This includes your profile, organization memberships, tournament access, and audit logs (GDPR compliance).
+            </p>
+            <Button 
+              variant="secondary" 
+              onClick={async () => {
+                try {
+                  const response = await fetch('/api/auth/gdpr/export', {
+                    method: 'GET',
+                    headers: getAuthHeaders(),
+                  });
+                  if (!response.ok) throw new Error('Export failed');
+                  const blob = await response.blob();
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `bowin-data-export-${user.email}.json`;
+                  document.body.appendChild(a);
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                  document.body.removeChild(a);
+                  toast.success('Data exported successfully');
+                } catch (err) {
+                  toast.error('Failed to export data');
+                }
+              }}
+            >
+              Download My Data
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+
       <Card className="mt-6 border-red-200 dark:border-red-900/70">
         <CardHeader title="Delete account" />
         <CardBody>
@@ -225,7 +263,7 @@ export default function Profile() {
             <Button
               variant="danger"
               loading={deleteAccountMutation.isPending}
-              disabled={deleteConfirmation !== user.email}
+              disabled={deleteConfirmation !== 'DELETE MY ACCOUNT'}
               onClick={() => deleteAccountMutation.mutate()}
             >
               Permanently delete account
@@ -234,13 +272,14 @@ export default function Profile() {
         )}
       >
         <p className="mb-4 text-sm text-gray-700 dark:text-gray-300">
-          Enter <strong>{user.email}</strong> to confirm.
+          Type <strong className="font-mono">DELETE MY ACCOUNT</strong> to confirm.
         </p>
-        <Label htmlFor="account-delete-confirmation">Account email confirmation</Label>
+        <Label htmlFor="account-delete-confirmation">Confirmation phrase</Label>
         <Input
           id="account-delete-confirmation"
-          type="email"
+          type="text"
           autoComplete="off"
+          placeholder="DELETE MY ACCOUNT"
           value={deleteConfirmation}
           onChange={(event) => setDeleteConfirmation(event.target.value)}
         />

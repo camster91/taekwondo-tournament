@@ -414,7 +414,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     const responseData = {
       success: true,
       message: registration.waitlistStatus === 'waitlisted' 
-        ? 'Added to waitlist! You'll be notified if a spot opens up.'
+        ? 'Added to waitlist! You will be notified if a spot opens up.'
         : 'Registration successful!',
       registration: {
         id: registration.id,
@@ -466,38 +466,66 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       const organizerBrandName = tournamentForEmail?.brandName || tournamentForEmail?.organization?.brandName || undefined;
       const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`;
       
-      if (registration.waitlistStatus === 'waitlisted') {
-        // Waitlist notification email
-        const { registrationConfirmationEmail, waitlistNotificationEmail } = await import('../services/email-templates.js');
-        const { subject, html } = waitlistNotificationEmail({
+      // P2-14: For minors, send parental consent verification email INSTEAD of confirmation
+      if (isMinor) {
+        const { createParentalConsentVerification } = await import('../services/parental-consent-verification.js');
+        const { parentalConsentVerificationEmail } = await import('../services/email-templates.js');
+        
+        const { token: verificationToken, code: verificationCode } = await createParentalConsentVerification(
+          prisma,
+          registration.id,
+          parentEmail,
+        );
+        
+        const verificationUrl = `${process.env.PUBLIC_APP_URL || ''}/verify-parent-consent?token=${encodeURIComponent(verificationToken)}`;
+        const { subject, html } = parentalConsentVerificationEmail({
+          parentName,
           competitorName: `${competitor.firstName} ${competitor.lastName}`,
           tournamentName: tournamentForEmail?.name || registration.tournament.name,
           tournamentDate: tournamentForEmail?.date || registration.tournament.date,
-          waitlistPosition: registration.waitlistPosition!,
-          managementUrl,
+          verificationUrl,
+          code: verificationCode,
           organizerBrandName,
         });
+        
         sendEmail(parentEmail, subject, html).catch((err) => {
-          console.error('[public/register] waitlist email failed:', err);
+          console.error('[public/register] parental consent verification email failed:', err);
         });
       } else {
-        // Active registration confirmation email
-        const { registrationConfirmationEmail } = await import('../services/email-templates.js');
-        const { subject, html } = registrationConfirmationEmail({
-          competitorName: `${competitor.firstName} ${competitor.lastName}`,
-          tournamentName: tournamentForEmail?.name || registration.tournament.name,
-          tournamentDate: tournamentForEmail?.date || registration.tournament.date,
-          tournamentLocation: tournamentForEmail?.location || registration.tournament.location,
-          events: eventList,
-          ageGroup: getAgeGroupLabel(ageAtTournament),
-          parentName,
-          confirmationCode: registration.id.slice(0, 8),
-          managementUrl,
-          organizerBrandName,
-        });
-        sendEmail(parentEmail, subject, html).catch((err) => {
-          console.error('[public/register] confirmation email failed:', err);
-        });
+        // Adult registration — send standard confirmation email
+        if (registration.waitlistStatus === 'waitlisted') {
+          // Waitlist notification email
+          const { registrationConfirmationEmail, waitlistNotificationEmail } = await import('../services/email-templates.js');
+          const { subject, html } = waitlistNotificationEmail({
+            competitorName: `${competitor.firstName} ${competitor.lastName}`,
+            tournamentName: tournamentForEmail?.name || registration.tournament.name,
+            tournamentDate: tournamentForEmail?.date || registration.tournament.date,
+            waitlistPosition: registration.waitlistPosition!,
+            managementUrl,
+            organizerBrandName,
+          });
+          sendEmail(parentEmail, subject, html).catch((err) => {
+            console.error('[public/register] waitlist email failed:', err);
+          });
+        } else {
+          // Active registration confirmation email
+          const { registrationConfirmationEmail } = await import('../services/email-templates.js');
+          const { subject, html } = registrationConfirmationEmail({
+            competitorName: `${competitor.firstName} ${competitor.lastName}`,
+            tournamentName: tournamentForEmail?.name || registration.tournament.name,
+            tournamentDate: tournamentForEmail?.date || registration.tournament.date,
+            tournamentLocation: tournamentForEmail?.location || registration.tournament.location,
+            events: eventList,
+            ageGroup: getAgeGroupLabel(ageAtTournament),
+            parentName,
+            confirmationCode: registration.id.slice(0, 8),
+            managementUrl,
+            organizerBrandName,
+          });
+          sendEmail(parentEmail, subject, html).catch((err) => {
+            console.error('[public/register] confirmation email failed:', err);
+          });
+        }
       }
     }
   } catch (error) {
@@ -915,6 +943,30 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
 
   res.json({ success: true, message: 'Registration withdrawn.' });
 });
+
+// P2-14: Verify parental consent for minor registration
+router.get('/verify-parent-consent', registrationLimiter, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { token } = req.query;
+
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'Verification token is required' });
+  }
+
+  const { verifyParentalConsent } = await import('../services/parental-consent-verification.js');
+  const result = await verifyParentalConsent(prisma, token);
+
+  if (!result.ok) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  res.json({
+    success: true,
+    message: 'Parental consent verified successfully!',
+    registration: result.registration,
+  });
+});
+
 
 function getAgeGroupLabel(age: number): string {
   if (age <= 5) return '4-5';

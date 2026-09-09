@@ -126,6 +126,9 @@ model Registration {
   privacyAccepted      Boolean   @default(false)
   rulesAccepted        Boolean   @default(false)
   guardianAttested     Boolean   @default(false)
+  // P2-14: COPPA parental consent verification status
+  parentEmailVerified  Boolean   @default(false) // True after parent clicks verification link
+  parentEmailVerifiedAt DateTime? // When parent email was verified
   createdAt            DateTime  @default(now())
 
   // Enhanced attributes for fair matching
@@ -148,6 +151,7 @@ model Registration {
   assignments DivisionAssignment[]
   matches1    Match[]              @relation("Competitor1")
   matches2    Match[]              @relation("Competitor2")
+  parentalConsentVerification ParentalConsentVerification?
   matchWins   Match[]              @relation("Winner")
 
   @@unique([tournamentId, competitorId])
@@ -310,8 +314,27 @@ model User {
   tournamentAccess    UserTournamentAccess[]
   organizationMembers OrganizationMember[]
   auditLogs           UserAuditLog[]
+  onboardingChecklist UserOnboardingChecklist?
 
   @@index([demoExpiresAt])
+}
+
+// P2-18: First-time onboarding checklist
+// Tracks completion of the 5 setup steps for new users/orgs.
+// One row per user; UI shows the checklist until all 5 are true.
+model UserOnboardingChecklist {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  orgProfileComplete   Boolean  @default(false) // Step 1: Set org name/logo/branding
+  importComplete       Boolean  @default(false) // Step 2: Import competitors or run first event
+  firstTournamentDone  Boolean  @default(false) // Step 3: Create first tournament
+  publicPageReviewed   Boolean  @default(false) // Step 4: Review public registration page
+  staffInvited         Boolean  @default(false) // Step 5: Invite staff (if applicable)
+  dismissed            Boolean  @default(false) // User explicitly dismissed the checklist
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model PublicDisplayHeartbeat {
@@ -398,6 +421,26 @@ model MagicLink {
   @@index([email])
   @@index([token])
   @@index([email, code])
+}
+
+// P2-14: COPPA parental consent verification
+// When a minor registers, we send a verification email to the parent.
+// The registration is in 'pending_verification' state until the parent
+// clicks the link. TTL: 48 hours (more generous than magic-link auth).
+model ParentalConsentVerification {
+  id             String    @id @default(uuid())
+  registrationId String    @unique
+  parentEmail    String
+  token          String    @unique // 32-byte hex
+  code           String // 6-digit numeric code (for SMS fallback, if needed)
+  expiresAt      DateTime
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([parentEmail])
+  @@index([token])
 }
 
 // Tournament-specific user access

@@ -140,12 +140,12 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P2-12 | #229 | **✅ School reports** | Per-school results export (medals, placements, competitor list) with tenant branding — **SHIPPED** in this PR | S |
 | P2-13 | #229 | **✅ Historical trends** | Competitor profile: past tournaments, W/L record, skill rating over time — **SHIPPED** in this PR | M |
 | **Legal & Compliance** | | | | |
-| P2-14 | #TBD | **COPPA compliance** | Verify parental consent flow; add parent email verification step | M |
-| P2-15 | #TBD | **GDPR export/delete** | Self-service data export (JSON); hard-delete account + all PII | M |
+| P2-14 | #232 | **✅ COPPA compliance** | Verify parental consent flow; add parent email verification step — **SHIPPED** in PR #232 | M |
+| P2-15 | #232 | **✅ GDPR export/delete** | Self-service data export (JSON); hard-delete account + all PII — **SHIPPED** in PR #232 | M |
 | **Marketing** | | | | |
 | P2-16 | #TBD | **Case studies (3x)** | Interview 3 pilot customers; publish written + video testimonials | L |
 | P2-17 | #TBD | **Demo video (2min)** | Screen recording with voiceover: setup → event day → results | M |
-| P2-18 | #TBD | **Onboarding checklist** | First-time user sees 5-step setup guide: org profile, import, first tournament | M |
+| P2-18 | #232 | **✅ Onboarding checklist** | First-time user sees 5-step setup guide: org profile, import, first tournament, public pages, invite staff — **SHIPPED** in PR #232 | M |
 
 **Exit criteria:**  
 - Competitive feature matrix shows Bowin ≥ Tower/TaeMaster on 25/34 core features (74%).
