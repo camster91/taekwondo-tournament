@@ -33,12 +33,12 @@ export function initSentry(app: Express): void {
     integrations: [
       // Enable HTTP instrumentation
       Sentry.httpIntegration(),
-      // Enable Express instrumentation
-      Sentry.expressIntegration({ app }),
+      // Enable Express instrumentation (v10 signature: no options)
+      Sentry.expressIntegration(),
     ],
     // Performance monitoring — sample 10% of transactions in production, 100% in dev
     tracesSampleRate: SENTRY_ENVIRONMENT === 'production' ? 0.1 : 1.0,
-    // Don't send PII (emails, names, etc.) in breadcrumbs by default
+    // Don't send PII (emails, names, etc.) in breadcrumbs or transactions
     beforeBreadcrumb(breadcrumb, hint) {
       // Strip sensitive headers
       if (breadcrumb.category === 'http' && breadcrumb.data?.headers) {
@@ -46,6 +46,58 @@ export function initSentry(app: Express): void {
         delete breadcrumb.data.headers.cookie;
       }
       return breadcrumb;
+    },
+    beforeSendTransaction(event) {
+      // Scrub URLs that may contain PII or capability tokens
+      if (event.transaction) {
+        // Redact query params from public child-lookup endpoints
+        event.transaction = event.transaction.replace(
+          /\/api\/public\/check-registration\?.*$/,
+          '/api/public/check-registration?[REDACTED]'
+        );
+        // Redact magic-link tokens
+        event.transaction = event.transaction.replace(
+          /\/verify\?token=[^&\s]+/g,
+          '/verify?token=[REDACTED]'
+        );
+        // Redact invite tokens
+        event.transaction = event.transaction.replace(
+          /\/accept-invite\?token=[^&\s]+/g,
+          '/accept-invite?token=[REDACTED]'
+        );
+        // Redact public scoreboard slugs (capability tokens)
+        event.transaction = event.transaction.replace(
+          /\/api\/public\/scoreboard\/[a-zA-Z0-9_-]{16,}/,
+          '/api/public/scoreboard/[SLUG]'
+        );
+        event.transaction = event.transaction.replace(
+          /\/display\/[a-zA-Z0-9_-]{16,}/,
+          '/display/[SLUG]'
+        );
+      }
+      // Scrub request.url if present
+      if (event.request?.url) {
+        const url = new URL(event.request.url);
+        // Redact all query params from public check-registration
+        if (url.pathname === '/api/public/check-registration') {
+          url.search = '';
+          event.request.url = url.toString();
+          event.request.query_string = '[REDACTED]';
+        }
+        // Redact token query params
+        if (url.searchParams.has('token')) {
+          url.searchParams.set('token', '[REDACTED]');
+          event.request.url = url.toString();
+        }
+        // Redact public scoreboard slugs in path
+        if (url.pathname.match(/\/api\/public\/scoreboard\/[a-zA-Z0-9_-]{16,}/)) {
+          event.request.url = event.request.url.replace(
+            /\/api\/public\/scoreboard\/[a-zA-Z0-9_-]{16,}/,
+            '/api/public/scoreboard/[SLUG]'
+          );
+        }
+      }
+      return event;
     },
   });
 
