@@ -136,6 +136,11 @@ model Registration {
   manualDivisionId     String? // Manager override — pin to a specific Division ID
   seeding              Int? // Manual seeding 1..N (null = auto-seed by rating)
 
+  // Waitlist support (P2-1)
+  waitlistStatus     String?   @default("active") // active, waitlisted, promoted, withdrawn
+  waitlistPosition   Int? // Position in waitlist (null if not waitlisted)
+  waitlistPromotedAt DateTime? // When promoted from waitlist to active
+
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   competitor  Competitor           @relation(fields: [competitorId], references: [id], onDelete: Cascade)
   assignments DivisionAssignment[]
@@ -148,6 +153,7 @@ model Registration {
   @@index([competitorId])
   // Closes P13: day-of panel queries filter on checkedIn.
   @@index([tournamentId, checkedIn])
+  @@index([tournamentId, waitlistStatus])
 }
 
 // Auto-generated or manually created divisions/categories
@@ -176,6 +182,9 @@ model Division {
   bracketDifficulty Float? // Calculated bracket difficulty score
   matchupQuality    Float? // Overall matchup fairness score
   avgSkillRating    Float? // Average skill rating of competitors
+
+  // Waitlist support (P2-1)
+  maxCompetitors Int? // Optional cap per division; null = no cap
 
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   assignments DivisionAssignment[]

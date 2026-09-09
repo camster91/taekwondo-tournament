@@ -358,6 +358,15 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       });
     }
 
+    // Check waitlist status
+    const { checkWaitlistStatus } = await import('../services/waitlist.js');
+    const { shouldWaitlist, position } = await checkWaitlistStatus(
+      prisma,
+      tournamentId,
+      patterns || false,
+      sparring || false,
+    );
+
     // Create registration. The raw bearer token is returned/sent once;
     // only its digest is persisted.
     const managementToken = generateManagementToken();
@@ -376,6 +385,9 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         competeWithOlder: competeWithOlder === true,
         specialNeeds: specialNeeds?.trim() || null,
         managementTokenHash: hashManagementToken(managementToken),
+        // Waitlist support
+        waitlistStatus: shouldWaitlist ? 'waitlisted' : 'active',
+        waitlistPosition: position,
         ...consent.data,
       },
       include: {
@@ -388,7 +400,9 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
 
     const responseData = {
       success: true,
-      message: 'Registration successful!',
+      message: registration.waitlistStatus === 'waitlisted' 
+        ? 'Added to waitlist! You'll be notified if a spot opens up.'
+        : 'Registration successful!',
       registration: {
         id: registration.id,
         // First 8 chars of the UUID. The /api/public/check-registration
@@ -406,6 +420,8 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
           sparring: registration.sparring,
         },
         ageGroup: getAgeGroupLabel(ageAtTournament),
+        waitlistStatus: registration.waitlistStatus,
+        waitlistPosition: registration.waitlistPosition,
       },
     };
 
@@ -417,28 +433,59 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         patterns && 'Patterns',
         sparring && 'Sparring',
       ].filter(Boolean).join(' & ');
-      const tournamentDate = new Date(registration.tournament.date).toLocaleDateString('en-US', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      
+      // Resolve tournament branding for email
+      const tournamentForEmail = await prisma.tournament.findUnique({
+        where: { id: tournamentId },
+        select: {
+          name: true,
+          date: true,
+          location: true,
+          brandName: true,
+          organization: {
+            select: {
+              brandName: true,
+            },
+          },
+        },
       });
-      const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #E11D48;">Registration Confirmed!</h2>
-          <p>Hello${parentName ? ` ${escapeHtml(parentName)}` : ''},</p>
-          <p><strong>${escapeHtml(competitor.firstName)} ${escapeHtml(competitor.lastName)}</strong> has been successfully registered for:</p>
-          <div style="background: #F3F4F6; border-radius: 8px; padding: 16px; margin: 16px 0;">
-            <p style="margin: 4px 0;"><strong>Tournament:</strong> ${escapeHtml(registration.tournament.name)}</p>
-            <p style="margin: 4px 0;"><strong>Date:</strong> ${escapeHtml(tournamentDate)}</p>
-            ${registration.tournament.location ? `<p style="margin: 4px 0;"><strong>Location:</strong> ${escapeHtml(registration.tournament.location)}</p>` : ''}
-            <p style="margin: 4px 0;"><strong>Events:</strong> ${escapeHtml(eventList)}</p>
-            <p style="margin: 4px 0;"><strong>Age Group:</strong> ${escapeHtml(getAgeGroupLabel(ageAtTournament))}</p>
-          </div>
-          <p><a href="${escapeHtml(`${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`)}">Edit or withdraw this registration</a></p>
-          <p style="color: #6B7280; font-size: 14px;">Please keep this email for your records. You may be asked to provide registration confirmation at check-in.</p>
-        </div>
-      `;
-      sendEmail(parentEmail, `Registration Confirmed - ${escapeHtml(registration.tournament.name)}`, html).catch((err) => {
-        console.error('[public/register] confirmation email failed:', err);
-      });
+      
+      const organizerBrandName = tournamentForEmail?.brandName || tournamentForEmail?.organization?.brandName || undefined;
+      const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`;
+      
+      if (registration.waitlistStatus === 'waitlisted') {
+        // Waitlist notification email
+        const { registrationConfirmationEmail, waitlistNotificationEmail } = await import('../services/email-templates.js');
+        const { subject, html } = waitlistNotificationEmail({
+          competitorName: `${competitor.firstName} ${competitor.lastName}`,
+          tournamentName: tournamentForEmail?.name || registration.tournament.name,
+          tournamentDate: tournamentForEmail?.date || registration.tournament.date,
+          waitlistPosition: registration.waitlistPosition!,
+          managementUrl,
+          organizerBrandName,
+        });
+        sendEmail(parentEmail, subject, html).catch((err) => {
+          console.error('[public/register] waitlist email failed:', err);
+        });
+      } else {
+        // Active registration confirmation email
+        const { registrationConfirmationEmail } = await import('../services/email-templates.js');
+        const { subject, html } = registrationConfirmationEmail({
+          competitorName: `${competitor.firstName} ${competitor.lastName}`,
+          tournamentName: tournamentForEmail?.name || registration.tournament.name,
+          tournamentDate: tournamentForEmail?.date || registration.tournament.date,
+          tournamentLocation: tournamentForEmail?.location || registration.tournament.location,
+          events: eventList,
+          ageGroup: getAgeGroupLabel(ageAtTournament),
+          parentName,
+          confirmationCode: registration.id.slice(0, 8),
+          managementUrl,
+          organizerBrandName,
+        });
+        sendEmail(parentEmail, subject, html).catch((err) => {
+          console.error('[public/register] confirmation email failed:', err);
+        });
+      }
     }
   } catch (error) {
     console.error('Registration error:', error);
@@ -846,6 +893,12 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
     await tx.match.deleteMany({ where: { OR: [{ competitor1Id: registration.id }, { competitor2Id: registration.id }] } });
     await tx.registration.delete({ where: { id: registration.id } });
   });
+
+  // If this was an active registration, try to promote someone from the waitlist
+  if (registration.tournament.status === 'registration') {
+    const { promoteNextWaitlisted } = await import('../services/waitlist.js');
+    await promoteNextWaitlisted(prisma, registration.tournamentId);
+  }
 
   res.json({ success: true, message: 'Registration withdrawn.' });
 });

@@ -720,6 +720,127 @@ router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer')
   res.json(registrations);
 });
 
+// Get waitlisted registrations for a tournament
+router.get('/:id/registrations/waitlist', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+
+  const waitlisted = await prisma.registration.findMany({
+    where: {
+      tournamentId: getParam(req.params.id),
+      waitlistStatus: 'waitlisted',
+    },
+    select: {
+      id: true,
+      waitlistPosition: true,
+      waitlistPromotedAt: true,
+      patterns: true,
+      sparring: true,
+      parentName: true,
+      parentEmail: true,
+      parentPhone: true,
+      createdAt: true,
+      competitor: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          gender: true,
+          belt: true,
+          danRank: true,
+          weightLbs: true,
+          dateOfBirth: true,
+          schoolDojang: true,
+        },
+      },
+    },
+    orderBy: {
+      waitlistPosition: 'asc',
+    },
+  });
+
+  res.json(waitlisted);
+});
+
+// Promote a waitlisted registration to active
+router.post('/:id/registrations/:regId/promote', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const registrationId = getParam(req.params.regId);
+
+  const registration = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    include: {
+      competitor: true,
+      tournament: {
+        select: {
+          name: true,
+          date: true,
+          brandName: true,
+          organization: {
+            select: { brandName: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!registration) {
+    return res.status(404).json({ error: 'Registration not found' });
+  }
+
+  if (registration.waitlistStatus !== 'waitlisted') {
+    return res.status(400).json({ error: 'Registration is not waitlisted' });
+  }
+
+  // Promote
+  await prisma.registration.update({
+    where: { id: registrationId },
+    data: {
+      waitlistStatus: 'active',
+      waitlistPromotedAt: new Date(),
+      waitlistPosition: null,
+    },
+  });
+
+  // Renumber remaining waitlist
+  const remaining = await prisma.registration.findMany({
+    where: {
+      tournamentId: registration.tournamentId,
+      waitlistStatus: 'waitlisted',
+    },
+    orderBy: { waitlistPosition: 'asc' },
+  });
+
+  for (let i = 0; i < remaining.length; i++) {
+    await prisma.registration.update({
+      where: { id: remaining[i].id },
+      data: { waitlistPosition: i + 1 },
+    });
+  }
+
+  // Send promotion email
+  const { sendEmail, isEmailConfigured } = await import('../services/email.js');
+  if (registration.parentEmail && isEmailConfigured()) {
+    const { waitlistPromotionEmail } = await import('../services/email-templates.js');
+    const organizerBrandName = registration.tournament.brandName || registration.tournament.organization?.brandName || undefined;
+    const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(registration.id.slice(0, 16))}`;
+
+    const { subject, html } = waitlistPromotionEmail({
+      competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+      tournamentName: registration.tournament.name,
+      tournamentDate: registration.tournament.date,
+      confirmationCode: registration.id.slice(0, 8),
+      managementUrl,
+      organizerBrandName,
+    });
+
+    sendEmail(registration.parentEmail, subject, html).catch((err) => {
+      console.error('[waitlist/promote] email failed:', err);
+    });
+  }
+
+  res.json({ success: true, message: 'Registration promoted from waitlist' });
+});
+
 // Register competitor to tournament (requires authentication + admin/director role)
 router.post('/:id/registrations', authenticate, requireTournamentAccess('director'), validateRequest(registrationSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;

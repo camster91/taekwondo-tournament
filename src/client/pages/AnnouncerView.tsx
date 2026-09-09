@@ -1,0 +1,325 @@
+import { useParams, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
+import Spinner from '../components/ui/Spinner';
+
+interface Match {
+  id: string;
+  matchNumber: number;
+  status: string;
+  competitor1Name: string | null;
+  competitor2Name: string | null;
+  competitor1School: string | null;
+  competitor2School: string | null;
+  ringNumber: number | null;
+}
+
+interface Division {
+  id: string;
+  name: string;
+  eventType: string;
+  bracket?: {
+    matches: Array<{
+      id: string;
+      matchNumber: number;
+      status: string;
+      ringNumber: number | null;
+      competitor1?: {
+        competitor: {
+          firstName: string;
+          lastName: string;
+          schoolDojang: string | null;
+        };
+      } | null;
+      competitor2?: {
+        competitor: {
+          firstName: string;
+          lastName: string;
+          schoolDojang: string | null;
+        };
+      } | null;
+    }>;
+  };
+}
+
+interface ScoreboardData {
+  divisions: Division[];
+  displaySettings?: {
+    mode?: string;
+    ringNumber?: number;
+  };
+}
+
+function AnnouncerView() {
+  const { tournamentId } = useParams<{ tournamentId: string }>();
+  const [searchParams] = useSearchParams();
+  const publicKey = searchParams.get('key') || '';
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Auto-refresh time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch tournament info
+  const { data: tournament, isLoading: tournamentLoading } = useQuery<{
+    name: string;
+    date: string;
+    brandName?: string;
+    brandPrimaryColor?: string;
+  }>({
+    queryKey: ['announcer-tournament', tournamentId],
+    queryFn: async () => {
+      const res = await fetch(`/api/public/tournaments/${tournamentId}`);
+      if (!res.ok) throw new Error('Tournament not found');
+      return res.json();
+    },
+    refetchInterval: 30000, // 30s
+  });
+
+  // Fetch scoreboard data
+  const { data: scoreboardData, isLoading: scoreboardLoading } = useQuery<ScoreboardData>({
+    queryKey: ['announcer-data', tournamentId, publicKey],
+    queryFn: async () => {
+      const url = buildScoreboardApiUrl(tournamentId!, publicKey);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Scoreboard not found');
+      return res.json();
+    },
+    refetchInterval: 10000, // 10s auto-refresh
+  });
+
+  if (tournamentLoading || scoreboardLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (!tournament || !scoreboardData) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold mb-4">Announcer View Unavailable</h1>
+          <p className="text-slate-300">Could not load tournament data.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Extract all matches and categorize them
+  const allMatches: Array<Match & { divisionName: string }> = [];
+  
+  scoreboardData.divisions.forEach((division) => {
+    if (!division.bracket?.matches) return;
+    division.bracket.matches.forEach((match) => {
+      allMatches.push({
+        id: match.id,
+        matchNumber: match.matchNumber,
+        status: match.status,
+        competitor1Name: match.competitor1
+          ? `${match.competitor1.competitor.firstName} ${match.competitor1.competitor.lastName}`
+          : null,
+        competitor2Name: match.competitor2
+          ? `${match.competitor2.competitor.firstName} ${match.competitor2.competitor.lastName}`
+          : null,
+        competitor1School: match.competitor1?.competitor.schoolDojang || null,
+        competitor2School: match.competitor2?.competitor.schoolDojang || null,
+        ringNumber: match.ringNumber,
+        divisionName: division.name,
+      });
+    });
+  });
+
+  // Filter for display
+  const displayMode = scoreboardData.displaySettings?.mode || 'all';
+  const displayRingNumber = scoreboardData.displaySettings?.ringNumber;
+  
+  let filteredMatches = allMatches;
+  if (displayMode === 'single-ring' && displayRingNumber) {
+    filteredMatches = allMatches.filter((m) => m.ringNumber === displayRingNumber);
+  }
+
+  // NOW COMPETING (in_progress)
+  const nowCompeting = filteredMatches
+    .filter((m) => m.status === 'in_progress')
+    .sort((a, b) => {
+      if (a.ringNumber !== b.ringNumber) return (a.ringNumber || 999) - (b.ringNumber || 999);
+      return a.matchNumber - b.matchNumber;
+    });
+
+  // UP NEXT (ready, lowest match number per ring)
+  const readyMatches = filteredMatches.filter((m) => m.status === 'ready');
+  const upNextByRing = new Map<number, typeof filteredMatches[0]>();
+  readyMatches.forEach((m) => {
+    const ring = m.ringNumber || 0;
+    const existing = upNextByRing.get(ring);
+    if (!existing || m.matchNumber < existing.matchNumber) {
+      upNextByRing.set(ring, m);
+    }
+  });
+  const upNext = Array.from(upNextByRing.values()).sort((a, b) => (a.ringNumber || 0) - (b.ringNumber || 0));
+
+  // ON DECK (ready, second-lowest match number per ring, excluding upNext)
+  const upNextIds = new Set(upNext.map((m) => m.id));
+  const onDeckByRing = new Map<number, typeof filteredMatches[0]>();
+  readyMatches.forEach((m) => {
+    if (upNextIds.has(m.id)) return;
+    const ring = m.ringNumber || 0;
+    const existing = onDeckByRing.get(ring);
+    if (!existing || m.matchNumber < existing.matchNumber) {
+      onDeckByRing.set(ring, m);
+    }
+  });
+  const onDeck = Array.from(onDeckByRing.values()).sort((a, b) => (a.ringNumber || 0) - (b.ringNumber || 0));
+
+  const brandColor = tournament.brandPrimaryColor || '#DC2626';
+
+  return (
+    <div className="min-h-screen bg-slate-900 text-white">
+      {/* Header */}
+      <div className="border-b border-slate-700" style={{ borderBottomColor: brandColor, borderBottomWidth: '4px' }}>
+        <div className="container mx-auto px-6 py-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-4xl font-bold mb-2">{tournament.name}</h1>
+              <p className="text-slate-300 text-xl">
+                {tournament.brandName || 'Tournament Announcer'}
+              </p>
+            </div>
+            <div className="text-right text-slate-300">
+              <div className="text-3xl font-mono font-bold">
+                {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </div>
+              <div className="text-sm mt-1">
+                {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="container mx-auto px-6 py-8 space-y-8">
+        {/* NOW COMPETING */}
+        <section>
+          <h2 className="text-3xl font-bold mb-6 uppercase tracking-wide" style={{ color: brandColor }}>
+            Now Competing
+          </h2>
+          {nowCompeting.length === 0 ? (
+            <div className="bg-slate-800 rounded-lg p-12 text-center">
+              <p className="text-slate-400 text-2xl">No matches currently in progress</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {nowCompeting.map((match) => (
+                <div key={match.id} className="bg-slate-800 rounded-lg p-8 border-2" style={{ borderColor: brandColor }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-slate-400 text-lg font-semibold">Ring {match.ringNumber || '?'}</span>
+                    <span className="text-slate-400 text-sm">Match {match.matchNumber}</span>
+                  </div>
+                  <div className="mb-2">
+                    <h3 className="text-xl font-bold text-white truncate">{match.divisionName}</h3>
+                  </div>
+                  <div className="space-y-3 mt-4">
+                    <div className="bg-slate-700 rounded p-4">
+                      <p className="text-2xl font-semibold truncate">{match.competitor1Name || 'TBD'}</p>
+                      {match.competitor1School && <p className="text-slate-400 text-sm truncate">{match.competitor1School}</p>}
+                    </div>
+                    <div className="text-center text-slate-500 font-bold text-lg">VS</div>
+                    <div className="bg-slate-700 rounded p-4">
+                      <p className="text-2xl font-semibold truncate">{match.competitor2Name || 'TBD'}</p>
+                      {match.competitor2School && <p className="text-slate-400 text-sm truncate">{match.competitor2School}</p>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* UP NEXT */}
+        <section>
+          <h2 className="text-3xl font-bold mb-6 uppercase tracking-wide text-amber-400">Up Next</h2>
+          {upNext.length === 0 ? (
+            <div className="bg-slate-800 rounded-lg p-12 text-center">
+              <p className="text-slate-400 text-2xl">No matches ready</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {upNext.map((match) => (
+                <div key={match.id} className="bg-slate-800 rounded-lg p-8 border-2 border-amber-500">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-slate-400 text-lg font-semibold">Ring {match.ringNumber || '?'}</span>
+                    <span className="text-slate-400 text-sm">Match {match.matchNumber}</span>
+                  </div>
+                  <div className="mb-2">
+                    <h3 className="text-xl font-bold text-white truncate">{match.divisionName}</h3>
+                  </div>
+                  <div className="space-y-3 mt-4">
+                    <div className="bg-slate-700 rounded p-4">
+                      <p className="text-2xl font-semibold truncate">{match.competitor1Name || 'TBD'}</p>
+                      {match.competitor1School && <p className="text-slate-400 text-sm truncate">{match.competitor1School}</p>}
+                    </div>
+                    <div className="text-center text-slate-500 font-bold text-lg">VS</div>
+                    <div className="bg-slate-700 rounded p-4">
+                      <p className="text-2xl font-semibold truncate">{match.competitor2Name || 'TBD'}</p>
+                      {match.competitor2School && <p className="text-slate-400 text-sm truncate">{match.competitor2School}</p>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ON DECK */}
+        <section>
+          <h2 className="text-3xl font-bold mb-6 uppercase tracking-wide text-blue-400">On Deck</h2>
+          {onDeck.length === 0 ? (
+            <div className="bg-slate-800 rounded-lg p-12 text-center">
+              <p className="text-slate-400 text-2xl">No matches on deck</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {onDeck.map((match) => (
+                <div key={match.id} className="bg-slate-800 rounded-lg p-6 border border-blue-500">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-slate-400 text-base font-semibold">Ring {match.ringNumber || '?'}</span>
+                    <span className="text-slate-400 text-sm">Match {match.matchNumber}</span>
+                  </div>
+                  <div className="mb-2">
+                    <h3 className="text-lg font-bold text-white truncate">{match.divisionName}</h3>
+                  </div>
+                  <div className="space-y-2 mt-3">
+                    <div className="bg-slate-700 rounded p-3">
+                      <p className="text-lg font-semibold truncate">{match.competitor1Name || 'TBD'}</p>
+                      {match.competitor1School && <p className="text-slate-400 text-xs truncate">{match.competitor1School}</p>}
+                    </div>
+                    <div className="text-center text-slate-500 text-sm">VS</div>
+                    <div className="bg-slate-700 rounded p-3">
+                      <p className="text-lg font-semibold truncate">{match.competitor2Name || 'TBD'}</p>
+                      {match.competitor2School && <p className="text-slate-400 text-xs truncate">{match.competitor2School}</p>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Footer */}
+      <div className="text-center py-6 text-slate-500 text-sm">
+        Auto-refreshes every 10 seconds
+      </div>
+    </div>
+  );
+}
+
+export default AnnouncerView;
