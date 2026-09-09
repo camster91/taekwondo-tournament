@@ -8,7 +8,6 @@ import { StatTile } from '../components/ui';
 import { Button } from '../components/ui';
 import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 import { resolveDisplayRing } from '../utils/scoreboard-display';
-import { BowinLogo } from '../components/brand/BowinLogo';
 import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availability';
 import { fetchJson } from '../utils/api-status';
 import { resolveParentScoreboardState } from '../utils/parent-scoreboard-state';
@@ -267,11 +266,12 @@ export default function PublicScoreboard() {
           <button type="button" onClick={() => { if (tournamentError) void retryTournament(); if (scoreboardError) void retryScoreboard(); }} className="mt-2 min-h-11 rounded-lg border border-amber-300/60 px-4 py-2 text-sm font-semibold">Try again</button>
         </div>
       )}
-      {/* Header */}
+      {/* Header - Show tournament organizer brand, not Bowin */}
       <div className="bg-gradient-to-r from-slate-900 via-primary-950 to-slate-900 border-b border-white/5">
         <div className="px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <BowinLogo compact inverse />
+            {/* Organizer brand space - showing tournament name as primary identity */}
+            <Trophy className="h-8 w-8 text-white" />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold tracking-tight">{tournament?.name || 'Tournament'}</h1>

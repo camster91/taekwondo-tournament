@@ -420,6 +420,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                 'flex items-center text-sm text-white/60 hover:text-white',
                 sidebarCollapsed ? 'justify-center' : 'gap-2 px-3 py-2'
               )}
+              aria-label="Sign in to organizer account"
             >
               <LogOut className="h-4 w-4" />
               {!sidebarCollapsed && 'Sign in'}

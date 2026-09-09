@@ -1,21 +1,29 @@
 # Bowin Pilot Ship Status
 
 **Last updated:** 2026-09-09  
-**Commit:** Ready for PR  
+**Commit:** Ready for PR (expanded)  
 **Status:** Ship-ready for managed pilot
 
 This document provides a snapshot of what an organizer can do today with Bowin, known gaps for the pilot, and how to run/deploy the system.
+
+## Product Positioning
+
+**Bowin is SaaS for tournament organizers only.** Organizers pay for and use Bowin to run their tournaments. Competitors and the public interact with the organizer's branded tournament experience — not "Bowin" as the product face. 
+
+Public-facing surfaces (registration, scoreboard, results) prioritize the **organizer's tournament brand** (event name, location, school/org colors and logo). Bowin remains invisible or shows a minimal "powered by" credit on public pages.
 
 ---
 
 ## What Works Today (Pilot-Ready)
 
-### Authentication & Onboarding
-- **Magic-link email auth** with 6-digit OTP fallback
-- **Demo login** (gated by `ENABLE_DEMO_LOGIN=1`) for prospects
+### Authentication & Onboarding (Organizer-Only)
+- **Clear Sign in / Sign out** UI with explicit session state in sidebar
+- **Magic-link email auth** with 6-digit OTP fallback for organizers
+- **Demo login** (gated by `ENABLE_DEMO_LOGIN=1`) for prospects evaluating the product
 - **Invitation system** for staff onboarding (director/scorekeeper/viewer roles)
 - **Setup flow** (`POST /api/auth/setup`) creates the first admin with `ADMIN_SETUP_KEY`
 - **JWT sessions** (7-day default, httpOnly cookies in production)
+- **No public sign-in confusion**: competitors never see Bowin login prompts on public pages
 
 ### Multi-Tenant Isolation
 - **Tenant boundaries** via `requireTournamentAccess` middleware
@@ -37,7 +45,12 @@ This document provides a snapshot of what an organizer can do today with Bowin, 
 - **Results export** (PDF, CSV, Excel) plus school reports and certificates
 - **Schedule generator** with ring assignment and time estimation
 
-### Data Safety & Integrity
+### Tenant-Branded Public Experience (First Slice)
+- **Public registration** shows tournament name and event details prominently, not "Bowin" branding
+- **Public scoreboard** displays organizer's tournament as primary identity (event name + location in header)
+- **Bowin logo removed** from public-facing pages (registration, scoreboard, parent finder)
+- **Tournament context** preserved across all public surfaces (name, date, location visible)
+- **Ready for organizer logo/colors**: architecture supports tenant branding expansion (see "Known Gaps")
 - **Atomic bracket operations** in transactions (generate, match update, advancement)
 - **Match audit log** for every score/winner change
 - **Offline operation support** with local queue + server reconciliation
@@ -91,6 +104,8 @@ This document provides a snapshot of what an organizer can do today with Bowin, 
 5. **Rollback** procedure rehearsal (see `docs/RELEASE-RUNBOOK.md`)
 
 ### Product Enhancements (Nice-to-Have, Not Blocking)
+- **Full tenant branding** with custom organizer logos, colors, favicon on public pages
+- **Custom domain per tournament** (e.g. `register.myschool.com` instead of `bowin.app/register/abc123`)
 - **Multi-sport** expansion beyond Taekwondo (partial support exists via `sport-profiles.ts`)
 - **Federation certification** claims
 - **Native mobile apps**

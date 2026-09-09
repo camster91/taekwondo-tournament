@@ -626,7 +626,7 @@ export default function PublicRegister() {
             There are currently no tournaments open for registration. Please check back later.
           </p>
           <Button as={Link} to="/" variant="secondary" className="mt-6">
-            Return to Bowin home
+            Return to home
           </Button>
         </div>
       </main>
