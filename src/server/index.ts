@@ -26,6 +26,7 @@ import organizationsRouter from './routes/organizations.js';
 import organizationLogoRouter from './routes/organization-logo.js';
 import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import supportRouter from './routes/support.js';
+import sosAlertsRouter from './routes/sos-alerts.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 import {
@@ -243,6 +244,7 @@ app.use('/api/recommendations', recommendationsRouter);
 app.use('/api/organizations', organizationsRouter);
 app.use('/api/organizations', organizationLogoRouter);
 app.use('/api/billing', billingRouter);
+app.use('/api/sos-alerts', sosAlertsRouter);
 
 // Serve uploaded organization logos (P1-11)
 app.use('/logos', express.static('/opt/cursor/logos', {

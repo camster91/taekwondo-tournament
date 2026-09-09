@@ -133,8 +133,8 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P2-7 | #TBD | **Real-time bracket collab** | Multiple scorekeepers update same bracket; WebSocket syncs changes instantly | L |
 | **Day-of Operations** | | | | |
 | P2-8 | #227 | **✅ Announcer view** | Public display variant with "Up Next" + "On Deck" for ring announcements | M |
-| P2-9 | #TBD | **Video review integration** | Attach video URL to match; link from results page | S |
-| P2-10 | #TBD | **Director command center** | Live dashboard: ring status, delays, divisions behind schedule, SOS alerts | L |
+| P2-9 | #230 | **✅ Video review integration** | Attach video URL to match; link from results page — **SHIPPED** in PR #230 | S |
+| P2-10 | #230 | **✅ Director command center** | Live dashboard: ring status, delays, divisions behind schedule, SOS alerts — **SHIPPED** in PR #230 | L |
 | **Results & Reporting** | | | | |
 | P2-11 | #229 | **✅ Certificate generation** | PDF certificates for 1st/2nd/3rd place with org logo + tenant branding — **SHIPPED** in this PR | M |
 | P2-12 | #229 | **✅ School reports** | Per-school results export (medals, placements, competitor list) with tenant branding — **SHIPPED** in this PR | S |

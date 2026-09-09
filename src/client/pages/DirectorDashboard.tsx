@@ -19,6 +19,8 @@ import {
   TrendingUp,
   Monitor,
   RefreshCw,
+  AlertCircle,
+  Bell,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { Card, CardHeader, CardBody } from '../components/ui';
@@ -106,6 +108,22 @@ interface AttentionResponse {
   generatedAt: string;
 }
 
+// P2-10: SOS Alert interface
+interface SOSAlert {
+  id: string;
+  severity: 'info' | 'warning' | 'critical';
+  category: string;
+  title: string;
+  description: string | null;
+  ringNumber: number | null;
+  divisionId: string | null;
+  resolved: boolean;
+  resolvedAt: string | null;
+  raisedBy: string | null;
+  raisedByName: string | null;
+  createdAt: string;
+}
+
 const AVERAGE_MATCH_DURATION = 5; // minutes per match
 
 export default function DirectorDashboard() {
@@ -123,6 +141,14 @@ export default function DirectorDashboard() {
   const [displayRing, setDisplayRing] = useState<number>(1);
   const [displayMatchId, setDisplayMatchId] = useState<string>('');
   const [operationalQuestion, setOperationalQuestion] = useState('');
+  
+  // P2-10: SOS alert state
+  const [showNewAlert, setShowNewAlert] = useState(false);
+  const [alertCategory, setAlertCategory] = useState('ring');
+  const [alertSeverity, setAlertSeverity] = useState<'info' | 'warning' | 'critical'>('warning');
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertDescription, setAlertDescription] = useState('');
+  const [alertRingNumber, setAlertRingNumber] = useState<number | null>(null);
   
   // Ring sync indicator state (P1-9)
   const [ringUpdates, setRingUpdates] = useState<Record<string, number>>({});
@@ -374,6 +400,55 @@ export default function DirectorDashboard() {
     refetchIntervalInBackground: false,
   });
 
+  // P2-10: SOS alerts query
+  const sosAlertsQuery = useQuery<{ alerts: SOSAlert[] }>({
+    queryKey: ['sos-alerts', tournamentId],
+    enabled: Boolean(tournamentId),
+    queryFn: async () => {
+      const response = await fetch(`/api/sos-alerts/tournament/${tournamentId}`, { headers: getAuthHeaders() });
+      if (!response.ok) throw new Error('Failed to load SOS alerts');
+      return response.json() as Promise<{ alerts: SOSAlert[] }>;
+    },
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
+
+  // P2-10: Create SOS alert mutation
+  const createSOSAlert = useMutation({
+    mutationFn: async (data: { severity: string; category: string; title: string; description?: string; ringNumber?: number }) => {
+      const response = await fetch(`/api/sos-alerts/tournament/${tournamentId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error('Failed to create alert');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sos-alerts'] });
+      setShowNewAlert(false);
+      setAlertTitle('');
+      setAlertDescription('');
+      setAlertRingNumber(null);
+    },
+  });
+
+  // P2-10: Resolve SOS alert mutation
+  const resolveSOSAlert = useMutation({
+    mutationFn: async (alertId: string) => {
+      const response = await fetch(`/api/sos-alerts/${alertId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ resolved: true }),
+      });
+      if (!response.ok) throw new Error('Failed to resolve alert');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sos-alerts'] });
+    },
+  });
+
   const operationalQueryMutation = useMutation({
     mutationFn: async (question: string): Promise<OperationalQueryAnswer> => {
       const response = await fetch(`/api/tournaments/${tournamentId}/operational-query`, {
@@ -549,6 +624,188 @@ export default function DirectorDashboard() {
             </article>
           );
         })}
+      </section>
+
+      {/* P2-10: SOS Alerts Section */}
+      <section aria-labelledby="sos-alerts-heading" className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 id="sos-alerts-heading" className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <Bell className="h-5 w-5" />
+              SOS Alerts
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Staff-raised urgent issues requiring immediate attention</p>
+          </div>
+          <Button variant="primary" size="sm" onClick={() => setShowNewAlert(true)}>
+            <AlertCircle className="h-4 w-4 mr-1" />
+            Raise Alert
+          </Button>
+        </div>
+
+        {sosAlertsQuery.isLoading && (
+          <div role="status" className="rounded-lg border border-gray-200 p-4 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-300">
+            Loading alerts…
+          </div>
+        )}
+
+        {sosAlertsQuery.data?.alerts.filter(a => !a.resolved).length === 0 && !sosAlertsQuery.isLoading && (
+          <div role="status" className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
+            <CheckCircle className="h-5 w-5" aria-hidden="true" /> No active SOS alerts.
+          </div>
+        )}
+
+        {sosAlertsQuery.data?.alerts.filter(a => !a.resolved).map((alert) => {
+          const critical = alert.severity === 'critical';
+          const warning = alert.severity === 'warning';
+          return (
+            <article
+              key={alert.id}
+              className={`rounded-lg border p-4 ${
+                critical
+                  ? 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
+                  : warning
+                  ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'
+                  : 'border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30'
+              }`}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex gap-3">
+                  <AlertCircle
+                    className={`mt-0.5 h-5 w-5 shrink-0 ${
+                      critical ? 'text-red-600' : warning ? 'text-amber-600' : 'text-blue-600'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <h3
+                      className={`font-semibold ${
+                        critical
+                          ? 'text-red-900 dark:text-red-100'
+                          : warning
+                          ? 'text-amber-900 dark:text-amber-100'
+                          : 'text-blue-900 dark:text-blue-100'
+                      }`}
+                    >
+                      {alert.title}
+                      {alert.ringNumber && ` (Ring ${alert.ringNumber})`}
+                    </h3>
+                    {alert.description && (
+                      <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">{alert.description}</p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                      Raised {new Date(alert.createdAt).toLocaleTimeString()}
+                      {alert.raisedByName && ` by ${alert.raisedByName}`}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => resolveSOSAlert.mutate(alert.id)}
+                  variant="secondary"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={resolveSOSAlert.isPending}
+                >
+                  Resolve
+                </Button>
+              </div>
+            </article>
+          );
+        })}
+
+        {/* New Alert Modal */}
+        {showNewAlert && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={() => setShowNewAlert(false)}>
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Raise SOS Alert</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Severity</label>
+                  <select
+                    value={alertSeverity}
+                    onChange={(e) => setAlertSeverity(e.target.value as 'info' | 'warning' | 'critical')}
+                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  >
+                    <option value="info">Info</option>
+                    <option value="warning">Warning</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                  <select
+                    value={alertCategory}
+                    onChange={(e) => setAlertCategory(e.target.value)}
+                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  >
+                    <option value="ring">Ring Issue</option>
+                    <option value="division">Division Issue</option>
+                    <option value="equipment">Equipment</option>
+                    <option value="medical">Medical</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                {alertCategory === 'ring' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ring Number</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={alertRingNumber || ''}
+                      onChange={(e) => setAlertRingNumber(e.target.value ? parseInt(e.target.value) : null)}
+                      className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      placeholder="e.g. 1, 2, 3"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title *</label>
+                  <input
+                    type="text"
+                    value={alertTitle}
+                    onChange={(e) => setAlertTitle(e.target.value)}
+                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="Brief description"
+                    maxLength={200}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                  <textarea
+                    value={alertDescription}
+                    onChange={(e) => setAlertDescription(e.target.value)}
+                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    rows={3}
+                    placeholder="Additional details (optional)"
+                    maxLength={1000}
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      if (alertTitle.trim()) {
+                        createSOSAlert.mutate({
+                          severity: alertSeverity,
+                          category: alertCategory,
+                          title: alertTitle.trim(),
+                          description: alertDescription.trim() || undefined,
+                          ringNumber: alertCategory === 'ring' ? alertRingNumber || undefined : undefined,
+                        });
+                      }
+                    }}
+                    disabled={!alertTitle.trim() || createSOSAlert.isPending}
+                    className="flex-1"
+                  >
+                    {createSOSAlert.isPending ? 'Creating...' : 'Create Alert'}
+                  </Button>
+                  <Button variant="secondary" onClick={() => setShowNewAlert(false)} className="flex-1">
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Overview Stats */}

@@ -58,6 +58,11 @@ const matchResultSchema = z.object({
   notes: z.string().max(500, 'Notes must be 500 characters or fewer').optional(),
 });
 
+// P2-9: Video URL validation schema
+const videoUrlSchema = z.object({
+  videoUrl: z.string().url('Must be a valid URL').max(2048, 'URL too long').nullable(),
+});
+
 const bracketCorrectionConfigSchema = z.object({
   format: z.enum(['double_elim', 'single_elim', 'round_robin', 'pool_play']),
   seedingStrategy: z.enum(['school_spread', 'manual', 'skill_based', 'balanced']),
@@ -546,6 +551,40 @@ router.get('/division/:divisionId/placements', authenticate, async (req: Request
   });
 
   res.json(placementsWithDetails);
+});
+
+// P2-9: Update match video URL (requires authentication + admin/director/scorekeeper role)
+router.patch('/match/:matchId/video', authenticate, validateRequest(videoUrlSchema), async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const matchId = getParam(req.params.matchId);
+  const { videoUrl } = req.body as { videoUrl: string | null };
+
+  // Per-tournament access: resolve match → bracket → division → tournamentId
+  const matchMeta = await prisma.match.findUnique({
+    where: { id: matchId },
+    select: { bracket: { select: { division: { select: { tournamentId: true } } } } },
+  });
+  if (!matchMeta) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+  const tournamentId = matchMeta.bracket.division.tournamentId;
+
+  // Require scorekeeper+ access
+  const access = await checkTournamentAccess(req, prisma, tournamentId, 'scorekeeper');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error || 'Forbidden' });
+  }
+
+  try {
+    await prisma.match.update({
+      where: { id: matchId },
+      data: { videoUrl },
+    });
+    res.json({ success: true, videoUrl });
+  } catch (error) {
+    console.error('[match-video] update failed:', error);
+    res.status(500).json({ error: 'Failed to update video URL' });
+  }
 });
 
 // Swap competitors in a match (requires authentication)

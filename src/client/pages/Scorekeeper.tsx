@@ -46,6 +46,7 @@ interface Match {
   score1: string | null;
   score2: string | null;
   winnerId: string | null;
+  videoUrl?: string | null; // P2-9
   competitor1: {
     id: string;
     specialNeeds?: string | null;
@@ -143,6 +144,7 @@ export default function Scorekeeper() {
   const [selectedWinner, setSelectedWinner] = useState<string | null>(null);
   const [resultType, setResultType] = useState<ResultType>('win');
   const [notes, setNotes] = useState('');
+  const [videoUrl, setVideoUrl] = useState(''); // P2-9
   const [showConfirm, setShowConfirm] = useState(false);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [showTimer, setShowTimer] = useState(true);
@@ -312,7 +314,23 @@ export default function Scorekeeper() {
       if (!res.ok) throw new Error('Failed to record match result');
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: async (_result, data) => {
+      // P2-9: Save video URL if provided (separate endpoint)
+      if (videoUrl.trim()) {
+        try {
+          const videoRes = await fetch(`/api/brackets/match/${data.matchId}/video`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({ videoUrl: videoUrl.trim() }),
+          });
+          if (!videoRes.ok) {
+            console.warn('Failed to save video URL:', videoRes.statusText);
+          }
+        } catch (error) {
+          console.warn('Failed to save video URL:', error);
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
       queryClient.invalidateQueries({ queryKey: ['director-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['divisions'] });
@@ -442,6 +460,7 @@ export default function Scorekeeper() {
     setSelectedWinner(null);
     setResultType('win');
     setNotes('');
+    setVideoUrl(''); // P2-9
     setPenalties1(0);
     setPenalties2(0);
   };
@@ -1282,6 +1301,21 @@ export default function Scorekeeper() {
                 />
               </div>
             )}
+
+            {/* P2-9: Video URL */}
+            <div>
+              <label htmlFor="scorekeeper-video-url" className="sr-only">
+                Video Review URL
+              </label>
+              <input
+                id="scorekeeper-video-url"
+                type="url"
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+                placeholder="Video URL (optional, e.g. YouTube)"
+                className="w-full p-3 bg-gray-700 rounded-lg mb-4"
+              />
+            </div>
 
             {/* Submit Button */}
             <button
