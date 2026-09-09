@@ -618,9 +618,25 @@ export default function Scorekeeper() {
         // shouldn't have to scroll to find the per-match Undo button
         // after confirming the wrong winner. Skipped when typing in an
         // input field (already handled above).
+        case 'ArrowLeft':
+          // Navigate to previous match (if not in an input field)
+          if (selectedDivision && currentMatchIndex > 0) {
+            e.preventDefault();
+            setCurrentMatchIndex((prev) => Math.max(0, prev - 1));
+            userNavigatedRef.current = 'keyboard';
+          }
+          break;
+        case 'ArrowRight':
+          // Navigate to next match (if not in an input field)
+          if (selectedDivision && currentMatchIndex < readyMatches.length - 1) {
+            e.preventDefault();
+            setCurrentMatchIndex((prev) => Math.min(readyMatches.length - 1, prev + 1));
+            userNavigatedRef.current = 'keyboard';
+          }
+          break;
       }
     }
-  }, [showConfirm, showIncidentModal, showKeyboardHelp, pendingUndoId, selectedDivision, currentMatch, selectedWinner, readyMatches, selectedDivisionMatches, undoMatchResult.isPending]);
+  }, [showConfirm, showIncidentModal, showKeyboardHelp, pendingUndoId, selectedDivision, currentMatch, selectedWinner, readyMatches, selectedDivisionMatches, undoMatchResult.isPending, currentMatchIndex]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);

@@ -37,6 +37,7 @@ import Tour from './components/Tour';
 import CloseButton from './components/ui/CloseButton';
 import Spinner from './components/ui/Spinner';
 import { BowinLogo } from './components/brand/BowinLogo';
+import { CommandPalette, useCommandPalette } from './components/CommandPalette';
 
 // All page components are loaded lazily so the initial bundle ships
 // only the App shell + chrome. A director who only opens Scorekeeper
@@ -168,6 +169,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
   const { theme, toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const commandPalette = useCommandPalette();
 
   // Collapsed state persisted in localStorage for desktop
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -529,6 +531,9 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           Public pages and unauthenticated viewers never see this because
           AdminLayout only wraps admin routes. */}
       {!isDemoUser(user) && <Tour />}
+      
+      {/* Command palette — power user navigation via Cmd/Ctrl+K */}
+      <CommandPalette isOpen={commandPalette.isOpen} onClose={commandPalette.close} />
     </div>
   );
 }
