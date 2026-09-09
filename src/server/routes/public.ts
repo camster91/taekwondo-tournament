@@ -414,7 +414,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     const responseData = {
       success: true,
       message: registration.waitlistStatus === 'waitlisted' 
-        ? 'Added to waitlist! You'll be notified if a spot opens up.'
+        ? 'Added to waitlist! You will be notified if a spot opens up.'
         : 'Registration successful!',
       registration: {
         id: registration.id,

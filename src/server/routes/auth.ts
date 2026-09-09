@@ -1235,7 +1235,7 @@ router.get('/gdpr/export', authenticate, async (req: AuthenticatedRequest, res: 
       select: {
         role: true,
         organization: {
-          select: { name: true, email: true },
+          select: { name: true },
         },
       },
     });
@@ -1254,7 +1254,6 @@ router.get('/gdpr/export', authenticate, async (req: AuthenticatedRequest, res: 
       where: { userId },
       select: {
         action: true,
-        changes: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
