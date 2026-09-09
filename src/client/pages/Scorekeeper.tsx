@@ -314,7 +314,23 @@ export default function Scorekeeper() {
       if (!res.ok) throw new Error('Failed to record match result');
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: async (_result, data) => {
+      // P2-9: Save video URL if provided (separate endpoint)
+      if (videoUrl.trim()) {
+        try {
+          const videoRes = await fetch(`/api/brackets/match/${data.matchId}/video`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({ videoUrl: videoUrl.trim() }),
+          });
+          if (!videoRes.ok) {
+            console.warn('Failed to save video URL:', videoRes.statusText);
+          }
+        } catch (error) {
+          console.warn('Failed to save video URL:', error);
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
       queryClient.invalidateQueries({ queryKey: ['director-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['divisions'] });
