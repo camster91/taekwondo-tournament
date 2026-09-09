@@ -93,6 +93,7 @@ model Tournament {
   publicDisplayHeartbeat PublicDisplayHeartbeat?
   operationAudits       TournamentOperationAudit[]
   recommendations       Recommendation[]
+  auditLogs             UserAuditLog[]
   organization        Organization?          @relation(fields: [organizationId], references: [id])
   sportProfile        SportProfile?          @relation(fields: [sportProfileId], references: [id])
 
@@ -297,6 +298,7 @@ model User {
   // Tournament-specific permissions
   tournamentAccess    UserTournamentAccess[]
   organizationMembers OrganizationMember[]
+  auditLogs           UserAuditLog[]
 
   @@index([demoExpiresAt])
 }
@@ -470,23 +472,27 @@ model CompetitorRating {
 
 // Email invitations
 model Invitation {
-  id          String   @id @default(uuid())
-  email       String
-  firstName   String?
-  lastName    String?
-  role        String   @default("viewer")
+  id             String   @id @default(uuid())
+  email          String
+  firstName      String?
+  lastName       String?
+  role           String   @default("viewer")
   // SHA-256 of the raw invite token (emailed once). Dual-read
   // accepts legacy plaintext until tokenExpiry.
-  token       String   @unique
-  tokenExpiry DateTime
-  invitedBy   String
-  status      String   @default("pending") // pending, accepted, expired
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  token          String   @unique
+  tokenExpiry    DateTime
+  invitedBy      String
+  status         String   @default("pending") // pending, accepted, expired
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organizationId String?
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([email])
   @@index([token])
   @@index([status])
+  @@index([organizationId])
 }
 
 // Match audit log for undo functionality
@@ -525,6 +531,8 @@ model Organization {
   supportTickets SupportTicket[]
   billingSubscription OrganizationBillingSubscription?
   planChanges         OrganizationPlanChange[]
+  invitations         Invitation[]
+  auditLogs           UserAuditLog[]
 
   @@index([slug])
 }
@@ -589,6 +597,28 @@ model OrganizationMember {
   @@unique([organizationId, userId])
   @@index([organizationId])
   @@index([userId])
+}
+
+// User audit log for security tracking (P1-3)
+model UserAuditLog {
+  id             String   @id @default(uuid())
+  userId         String
+  action         String // login, logout, role_change, org_invite_sent, org_invite_accepted, tournament_created, tournament_deleted, etc.
+  details        String? // JSON with contextual info (e.g., {oldRole, newRole}, {tournamentId, tournamentName}, {inviteeEmail})
+  ipAddress      String?
+  userAgent      String?
+  organizationId String?
+  tournamentId   String?
+  createdAt      DateTime @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tournament   Tournament?   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([action])
+  @@index([organizationId])
+  @@index([tournamentId])
 }
 
 // Sport configuration profile

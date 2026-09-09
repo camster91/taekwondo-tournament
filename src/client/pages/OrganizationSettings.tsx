@@ -389,6 +389,103 @@ export default function OrganizationSettings() {
         </Card>
       </div>
 
+      {/* Organization branding section (P1-11) */}
+      <Card className="mb-8">
+        <div className="mb-5 flex items-center gap-3">
+          <Sparkles className="h-5 w-5 text-primary-500" />
+          <h2 className="font-semibold text-slate-950 dark:text-white">Organization branding</h2>
+        </div>
+        <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+          Upload a logo that will appear on public-facing tournament pages (registration, scoreboard).
+        </p>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="org-logo">Organization logo</Label>
+            {organization.brandLogoUrl && (
+              <div className="mt-2 mb-3 flex items-center gap-4">
+                <img 
+                  src={organization.brandLogoUrl} 
+                  alt={organization.name}
+                  className="h-16 w-auto max-w-xs object-contain rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2"
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`/api/organizations/${organization.id}/logo`, {
+                        method: 'DELETE',
+                        headers: getAuthHeaders(),
+                      });
+                      if (!res.ok) throw new Error('Failed to remove logo');
+                      toast.success('Logo removed successfully');
+                      await queryClient.invalidateQueries({ queryKey: ['organizations', 'current'] });
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : 'Failed to remove logo');
+                    }
+                  }}
+                >
+                  Remove logo
+                </Button>
+              </div>
+            )}
+            <input
+              id="org-logo"
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
+              className="block w-full text-sm text-slate-500 dark:text-slate-400
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-md file:border-0
+                file:text-sm file:font-semibold
+                file:bg-primary-50 file:text-primary-700
+                hover:file:bg-primary-100
+                dark:file:bg-primary-500/10 dark:file:text-primary-400
+                dark:hover:file:bg-primary-500/20"
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                
+                // Validate file size (2MB)
+                if (file.size > 2 * 1024 * 1024) {
+                  toast.error('File too large. Maximum size is 2MB.');
+                  return;
+                }
+
+                try {
+                  // Convert to base64
+                  const reader = new FileReader();
+                  reader.onload = async () => {
+                    const base64 = reader.result as string;
+                    const res = await fetch(`/api/organizations/${organization.id}/logo-base64`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                      body: JSON.stringify({ data: base64, mimeType: file.type }),
+                    });
+                    if (!res.ok) {
+                      const data = await res.json();
+                      throw new Error(data.error || 'Failed to upload logo');
+                    }
+                    toast.success('Logo uploaded successfully');
+                    await queryClient.invalidateQueries({ queryKey: ['organizations', 'current'] });
+                    // Clear the file input
+                    event.target.value = '';
+                  };
+                  reader.onerror = () => {
+                    toast.error('Failed to read file');
+                  };
+                  reader.readAsDataURL(file);
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : 'Failed to upload logo');
+                }
+              }}
+            />
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              PNG, JPG, GIF, WebP, or SVG. Maximum 2MB.
+            </p>
+          </div>
+        </div>
+      </Card>
+
       <div className="mb-4">
         <h2 className="text-xl font-bold text-slate-950 dark:text-white">Plans built for tournament day</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Plan changes take effect only after Stripe confirms the subscription.</p>

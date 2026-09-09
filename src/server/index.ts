@@ -23,6 +23,7 @@ import rulesRouter from './routes/rules.js';
 import incidentsRouter from './routes/incidents.js';
 import recommendationsRouter from './routes/recommendations.js';
 import organizationsRouter from './routes/organizations.js';
+import organizationLogoRouter from './routes/organization-logo.js';
 import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import supportRouter from './routes/support.js';
 import { isAppError, toApiError } from './utils/errors.js';
@@ -240,7 +241,15 @@ app.use('/api/incidents', incidentsRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/recommendations', recommendationsRouter);
 app.use('/api/organizations', organizationsRouter);
+app.use('/api/organizations', organizationLogoRouter);
 app.use('/api/billing', billingRouter);
+
+// Serve uploaded organization logos (P1-11)
+app.use('/logos', express.static('/opt/cursor/logos', {
+  maxAge: '1d',
+  etag: true,
+  lastModified: true,
+}));
 
 // Health check (liveness — the process is up and the HTTP server
 // is bound). This is the cheap probe for the load balancer.
