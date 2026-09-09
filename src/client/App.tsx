@@ -44,6 +44,7 @@ import { BowinLogo } from './components/brand/BowinLogo';
 // of otherwise-dead JS). Suspense wrapping lives at each <Routes> block.
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Competitors = lazy(() => import('./pages/Competitors'));
+const CompetitorDuplicates = lazy(() => import('./pages/CompetitorDuplicates'));
 const Trash = lazy(() => import('./pages/Trash'));
 const Tournaments = lazy(() => import('./pages/Tournaments'));
 const TournamentDetail = lazy(() => import('./pages/TournamentDetail'));
@@ -613,6 +614,7 @@ function AppRoutes() {
             {/* General pages - any authenticated user */}
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/competitors" element={<Competitors />} />
+            <Route path="/competitors/duplicates" element={<CompetitorDuplicates />} />
             <Route path="/trash" element={<Trash />} />
             <Route path="/tournaments" element={<Tournaments />} />
             <Route path="/tournaments/:id" element={<TournamentDetail />} />

@@ -1012,6 +1012,9 @@ router.get('/division/:divisionId/pdf', authenticate, async (req: AuthenticatedR
     name: division.tournament.name,
     date: division.tournament.date.toLocaleDateString(),
     location: division.tournament.location,
+    brandName: division.tournament.brandName,
+    brandLogoUrl: division.tournament.brandLogoUrl,
+    brandPrimaryColor: division.tournament.brandPrimaryColor,
   };
 
   const divisionInfo: DivisionInfo = {
@@ -1070,6 +1073,8 @@ router.get('/division/:divisionId/pdf', authenticate, async (req: AuthenticatedR
     matches,
     showResults,
     positions: bracketPositions,
+    // Ring and schedule info can be added here if available
+    // For now, these are optional and will be added when ring assignments are tracked
   });
 
   const pdfBuffer = pdf.output('arraybuffer');

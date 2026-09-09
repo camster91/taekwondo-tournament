@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import {
   Plus,
   Upload,
@@ -12,6 +13,7 @@ import {
   Users,
   Filter,
   MoreHorizontal,
+  UserPlus,
 } from 'lucide-react';
 import { TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -610,6 +612,13 @@ export default function Competitors() {
                     >
                       <Download className="h-4 w-4" /> Template
                     </button>
+                    <Link
+                      to="/competitors/duplicates"
+                      onClick={() => setMoreMenuOpen(false)}
+                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                    >
+                      <UserPlus className="h-4 w-4" /> Find Duplicates
+                    </Link>
                   </div>
                 </>
               )}

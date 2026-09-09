@@ -10,6 +10,7 @@ import { validateRequest } from '../middleware/validate.js';
 import { jsonBodyParser } from '../index.js';
 import { authenticate, requireRole, buildTournamentAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
 import { parseBoundedInt, parseOptionalInt } from './query-parsing.js';
+import { findPotentialDuplicates, mergeCompetitors } from '../services/competitor-deduplication.js';
 
 const router = Router();
 
@@ -596,6 +597,46 @@ router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin'
   }
   const result = await importFromExcel(prisma, body.data, body.columnMapping);
   res.json(result);
+});
+
+// Find potential duplicate competitors
+router.get('/duplicates', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { threshold } = req.query;
+  
+  const thresholdValue = threshold ? parseFloat(threshold as string) : 0.75;
+  if (isNaN(thresholdValue) || thresholdValue < 0 || thresholdValue > 1) {
+    return res.status(400).json({ error: 'threshold must be a number between 0 and 1' });
+  }
+
+  const duplicates = await findPotentialDuplicates(prisma, thresholdValue);
+  res.json({ duplicates, count: duplicates.length });
+});
+
+// Merge two competitors
+const mergeCompetitorsSchema = z.object({
+  primaryId: z.string().uuid(),
+  secondaryId: z.string().uuid(),
+  mergeOptions: z.object({
+    takeSecondaryBelt: z.boolean().optional(),
+    takeSecondaryWeight: z.boolean().optional(),
+    takeSecondaryHeight: z.boolean().optional(),
+    takeSecondarySchool: z.boolean().optional(),
+  }).optional(),
+});
+
+router.post('/merge', authenticate, requireRole('admin', 'director'), validateRequest(mergeCompetitorsSchema), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { primaryId, secondaryId, mergeOptions } = req.body;
+
+  try {
+    const result = await mergeCompetitors(prisma, primaryId, secondaryId, mergeOptions);
+    res.json({ success: true, result });
+  } catch (err: unknown) {
+    console.error('[competitors/merge] merge failed:', err);
+    const message = err instanceof Error ? err.message : 'Failed to merge competitors';
+    res.status(400).json({ error: message });
+  }
 });
 
 export default router;

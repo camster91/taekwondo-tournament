@@ -33,6 +33,9 @@ export interface TournamentInfo {
   name: string;
   date: string;
   location?: string | null;
+  brandName?: string | null;
+  brandLogoUrl?: string | null;
+  brandPrimaryColor?: string | null;
 }
 
 export interface BracketPDFOptions {
@@ -51,6 +54,11 @@ export interface BracketPDFOptions {
     grandFinals?: number | null;
     reset?: number | null;
   };
+  ringNumber?: number | null;
+  scheduleInfo?: {
+    startTime?: string | null;
+    estimatedDuration?: string | null;
+  };
 }
 
 const PAGE_WIDTH = 612; // Letter size in points
@@ -59,10 +67,43 @@ const MARGIN = 40;
 const CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN;
 
 /**
- * Generates a PDF for a single bracket
+ * Draw fold marks at the edges of the page for cutting/folding guides
+ */
+function drawFoldMarks(doc: jsPDF, pageWidth: number, pageHeight: number): void {
+  doc.setDrawColor(200);
+  doc.setLineWidth(0.5);
+  
+  const markLength = 10;
+  const markOffset = 5;
+  
+  // Top edge marks (at 1/3 and 2/3)
+  const third = pageWidth / 3;
+  doc.line(third, markOffset, third, markOffset + markLength);
+  doc.line(third * 2, markOffset, third * 2, markOffset + markLength);
+  
+  // Bottom edge marks
+  doc.line(third, pageHeight - markOffset - markLength, third, pageHeight - markOffset);
+  doc.line(third * 2, pageHeight - markOffset - markLength, third * 2, pageHeight - markOffset);
+  
+  // Left edge marks (at 1/3 and 2/3)
+  const thirdHeight = pageHeight / 3;
+  doc.line(markOffset, thirdHeight, markOffset + markLength, thirdHeight);
+  doc.line(markOffset, thirdHeight * 2, markOffset + markLength, thirdHeight * 2);
+  
+  // Right edge marks
+  doc.line(pageWidth - markOffset - markLength, thirdHeight, pageWidth - markOffset, thirdHeight);
+  doc.line(pageWidth - markOffset - markLength, thirdHeight * 2, pageWidth - markOffset, thirdHeight * 2);
+}
+
+/**
+ * Generates a PDF for a single bracket with print-ready features:
+ * - Fold marks for easy cutting/folding
+ * - Ring assignments
+ * - Schedule context (start time, duration)
+ * - Tenant branding (organizer name/logo, NO Bowin watermark)
  */
 export function generateBracketPDF(options: BracketPDFOptions): jsPDF {
-  const { tournament, division, matches, showResults = false, positions } = options;
+  const { tournament, division, matches, showResults = false, positions, ringNumber, scheduleInfo } = options;
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'pt',
@@ -73,10 +114,14 @@ export function generateBracketPDF(options: BracketPDFOptions): jsPDF {
   const pageHeight = PAGE_WIDTH;
   const margin = 30;
 
-  // Header
+  // Draw fold marks (small lines at edges for cutting/folding guides)
+  drawFoldMarks(doc, pageWidth, pageHeight);
+
+  // Header with tenant branding
+  const organizer = tournament.brandName || tournament.name;
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(tournament.name, pageWidth / 2, margin, { align: 'center' });
+  doc.text(organizer, pageWidth / 2, margin, { align: 'center' });
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -85,18 +130,35 @@ export function generateBracketPDF(options: BracketPDFOptions): jsPDF {
     doc.text(tournament.location, pageWidth / 2, margin + 28, { align: 'center' });
   }
 
-  // Division name
+  // Division name with ring and schedule info
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text(division.name, pageWidth / 2, margin + 50, { align: 'center' });
+  let divisionLine = division.name;
+  if (ringNumber) {
+    divisionLine += ` — Ring ${ringNumber}`;
+  }
+  doc.text(divisionLine, pageWidth / 2, margin + 50, { align: 'center' });
+
+  // Schedule info if provided
+  if (scheduleInfo?.startTime || scheduleInfo?.estimatedDuration) {
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    let scheduleLine = '';
+    if (scheduleInfo.startTime) scheduleLine += `Start: ${scheduleInfo.startTime}`;
+    if (scheduleInfo.estimatedDuration) {
+      if (scheduleLine) scheduleLine += ' • ';
+      scheduleLine += `Duration: ${scheduleInfo.estimatedDuration}`;
+    }
+    doc.text(scheduleLine, pageWidth / 2, margin + 65, { align: 'center' });
+  }
 
   // Separate matches by bracket type
   const winnersMatches = matches.filter(m => m.bracketType === 'winners');
   const losersMatches = matches.filter(m => m.bracketType === 'losers');
   const finalsMatches = matches.filter(m => m.bracketType === 'finals');
 
-  // Draw bracket structure
-  const bracketStartY = margin + 70;
+  // Draw bracket structure (adjust start based on whether schedule info was shown)
+  const bracketStartY = margin + (scheduleInfo?.startTime || scheduleInfo?.estimatedDuration ? 80 : 70);
   const bracketHeight = pageHeight - bracketStartY - margin;
 
   // Draw winners bracket on left side
@@ -108,15 +170,13 @@ export function generateBracketPDF(options: BracketPDFOptions): jsPDF {
   // Draw finals on right
   drawFinals(doc, finalsMatches, 680, bracketStartY + bracketHeight / 3, showResults, positions);
 
-  // Footer
+  // Footer with tenant branding (NO Bowin watermark)
   doc.setFontSize(8);
   doc.setFont('helvetica', 'italic');
-  doc.text(
-    `Generated: ${new Date().toLocaleDateString()}`,
-    pageWidth - margin,
-    pageHeight - 15,
-    { align: 'right' }
-  );
+  const footerText = tournament.brandName 
+    ? `${tournament.brandName} • Generated: ${new Date().toLocaleDateString()}`
+    : `Generated: ${new Date().toLocaleDateString()}`;
+  doc.text(footerText, pageWidth / 2, pageHeight - 15, { align: 'center' });
 
   return doc;
 }
@@ -964,19 +1024,25 @@ export function generateBatchBracketsPDF(
     doc.addPage('letter', 'landscape');
     const { division, matches, positions } = brackets[i];
 
-    // Header. The full generateBracketPDF also renders a footer
-    // ("Generated: ...") — we mirror that here for parity.
+    // Header with tenant branding (consistent with single-bracket export)
     const pageWidth = 792; // Landscape Letter
     const pageHeight = 612;
     const margin = 30;
 
+    // Draw fold marks on each page
+    drawFoldMarks(doc, pageWidth, pageHeight);
+
+    const organizer = tournament.brandName || tournament.name;
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text(tournament.name, pageWidth / 2, margin, { align: 'center' });
+    doc.text(organizer, pageWidth / 2, margin, { align: 'center' });
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(tournament.date, pageWidth / 2, margin + 15, { align: 'center' });
+    if (tournament.location) {
+      doc.text(tournament.location, pageWidth / 2, margin + 28, { align: 'center' });
+    }
 
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
@@ -997,16 +1063,13 @@ export function generateBatchBracketsPDF(
     // PR #96 for the single-bracket PDF).
     drawFinals(doc, finalsMatches, 680, bracketStartY + bracketHeight / 3, showResults, positions);
 
-    // Footer (mirror of the single-bracket PDF's footer).
+    // Footer with tenant branding (NO Bowin watermark)
     doc.setFontSize(8);
-    doc.setTextColor(150);
-    doc.text(
-      `Generated: ${new Date().toLocaleDateString()}`,
-      pageWidth - margin,
-      pageHeight - 20,
-      { align: 'right' }
-    );
-    doc.setTextColor(0);
+    doc.setFont('helvetica', 'italic');
+    const footerText = tournament.brandName 
+      ? `${tournament.brandName} • Generated: ${new Date().toLocaleDateString()}`
+      : `Generated: ${new Date().toLocaleDateString()}`;
+    doc.text(footerText, pageWidth / 2, pageHeight - 15, { align: 'center' });
   }
 
   return doc;
