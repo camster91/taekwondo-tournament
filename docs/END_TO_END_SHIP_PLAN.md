@@ -13,7 +13,8 @@
 - ✅ PR #240: Portal registration tenant-scoped operations (#213) — connect public portal registrations to org operations, fail-closed cross-tenant protection, portal-aware registration flow
 - ✅ PR #241: VPS-first ops — remove hard SaaS dependencies (GlitchTip/Uptime Kuma/manual payment docs, env-gated Crisp/Sentry/Stripe)
 - ✅ PR #242: Tenant isolation proof & release readiness (#214) — two-org isolation matrix tests, portal health monitoring docs, migration/rollback rehearsal steps
-- 🔄 **This PR (#TBD)**: P0-5 database backups — fresh-DB migration proof (CI job + script), backup/restore automation with encryption, restore-drill template, destructive migration policy
+- ✅ PR #243: GlitchTip error-tracking wiring for VPS (P0-4) — VPS-hosted error tracking, user context capture, breadcrumbs, env-gated integration
+- 🔄 **This PR (#244)**: P0-5 database backups — fresh-DB migration proof (CI job + script), backup/restore automation with encryption, restore-drill template, destructive migration policy
 
 ---
 
@@ -75,7 +76,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P0-1 | #237 | **✅ VERIFIED: JWT token revocation** | Logout invalidates tokens via `tokenVersion` bump; isActive flip kills sessions — **FULLY TESTED** (auth-session-invalidation.test.ts + auth-token-version.test.ts, 8 regression tests) | S (verify) |
 | P0-2 | #237 | **✅ VERIFIED: HttpOnly cookies + CSRF** | SESSION_COOKIE with httpOnly:true + double-submit CSRF protection on mutations; Bearer tokens exempt — **FULLY TESTED** (auth-csrf-protection.test.ts, 11 tests covering cookie attributes, CSRF gates, Bearer exemption) | S (verify) |
 | P0-3 | #TBD | **Uptime monitoring** | Add **Uptime Kuma** (self-hosted on Ashbi VPS) for /api/health/ready; 5xx rate alerts to email/Slack — **VPS-first: no third-party SaaS required** | S |
-| P0-4 | #TBD | **Error tracking** | Integrate **GlitchTip** (self-hosted Sentry-compatible on Ashbi VPS); capture user context, breadcrumbs — **VPS-first: no third-party SaaS required** | S |
+| P0-4 | #243 | **✅ VERIFIED: Error tracking** | Integrate **GlitchTip** (self-hosted Sentry-compatible on Ashbi VPS); capture user context, breadcrumbs — **SHIPPED** in PR #243 (env-gated, VPS-hosted) | S |
 | P0-5 | #120 (partial) | **✅ AGENT-SHIPABLE COMPLETE: Database backups** | Fresh-DB migrate proof (CI job + script); backup/restore automation with encryption tested in ephemeral DB; restore-drill evidence template with RPO/RTO; destructive migration gate docs. **Cameron VPS install remains:** daily cron + off-host sync to S3/rsync, baseline production restore drill, rotation of `BACKUP_ENCRYPTION_KEY` env var. | M |
 | P0-6 | #232 | **✅ Privacy policy v1** | Legal.tsx published at /legal/privacy; linked from footer + public registration — **SHIPPED** in PR #232 (pending counsel approval of copy) | M (legal review) |
 | P0-7 | #232 | **✅ Terms of service v1** | Legal.tsx published at /legal/terms; linked from footer + public registration — **SHIPPED** in PR #232 (pending counsel approval of copy) | M (legal review) |

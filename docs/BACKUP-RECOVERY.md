@@ -30,7 +30,13 @@ Location: `scripts/backup-database.sh`
 **Required Environment Variables:**
 ```bash
 DATABASE_URL          # PostgreSQL connection string
+```
+
+**Recommended Environment Variables:**
+```bash
 BACKUP_ENCRYPTION_KEY # GPG passphrase (generate with: openssl rand -base64 32)
+                      # Optional: if not set, backup is created WITHOUT encryption
+                      # (dev mode acceptable, production must encrypt)
 ```
 
 **Optional (for off-host sync):**
@@ -260,6 +266,47 @@ aws s3 cp backup.sql.gpg s3://my-bowin-backups/ \
 2. Encryption/decryption works
 3. Restore procedure is up-to-date
 4. Recovery time objective (RTO) is acceptable
+
+---
+
+## Testing & Validation
+
+### Automated Testing
+
+**Fresh Migration Test:**
+```bash
+# Validates that fresh database reaches exact schema via migrate deploy
+./scripts/test-fresh-migration.sh
+
+# Runs in CI on every build
+# Catches schema drift between prisma/schema.prisma and migrations
+```
+
+**Backup/Restore Integration Test:**
+```bash
+# End-to-end test: backup → encrypt → restore → verify
+./scripts/test-backup-restore.sh
+
+# Creates ephemeral test database
+# Tests AES256 encryption/decryption
+# Verifies data integrity after restore
+```
+
+**Integration Tests:**
+```bash
+# Regression tests for atomic restore rollback
+BACKUP_RECOVERY_DATABASE_URL=postgresql://...test_db npm test -- backup-recovery.integration.test.ts
+
+# 6 tests covering:
+# - Rollback on division creation failure
+# - Artifact retention on failure
+# - Assignment/bracket recovery
+# - Cleanup after success
+```
+
+### Manual Restore Drill
+
+Use the comprehensive template at `docs/RESTORE-DRILL-TEMPLATE.md`:
 
 **Restore Drill Checklist:**
 1. [ ] Download most recent backup from off-host storage
