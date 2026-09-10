@@ -78,6 +78,7 @@ const TKD_BELT_OPTIONS = [
 export default function PublicRegister() {
   const [searchParams] = useSearchParams();
   const preselectedTournamentId = searchParams.get('tournament');
+  const portalPath = searchParams.get('portal'); // Format: "orgSlug/eventSlug"
   
   // P2-2: Handle payment success/cancel redirects
   const paymentStatus = searchParams.get('payment');
@@ -92,6 +93,9 @@ export default function PublicRegister() {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [legalConfig, setLegalConfig] = useState<RegistrationLegalConfig | null>(null);
   const [confirmationUncertain, setConfirmationUncertain] = useState(false);
+  
+  // Portal context: when coming from /events/:orgSlug/:eventSlug, we have the portal path
+  const [portalOrgSlug, portalEventSlug] = portalPath ? portalPath.split('/') : [null, null];
 
   // Refs for a11y: focus the error region on submit failure, focus the first
   // invalid field if we can identify one from the server response.
@@ -246,6 +250,59 @@ export default function PublicRegister() {
   const loadRegistrationConfig = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    
+    // Portal mode: fetch event from portal API
+    if (portalOrgSlug && portalEventSlug) {
+      const [eventResult, legalResult] = await Promise.allSettled([
+        fetchJson<{ event: { id: string; name: string; date: string; location: string | null; status: string; registrationFee: string | null; brandName?: string; brandPrimaryColor?: string; brandLogoUrl?: string | null; sportProfileSlug?: string | null; } }>(
+          fetch,
+          `/api/public/portal/${portalOrgSlug}/${portalEventSlug}`
+        ).then((data) => {
+          if (!data.event) throw new Error('Invalid event response');
+          // Convert portal event to Tournament format
+          return [{
+            id: data.event.id,
+            name: data.event.name,
+            date: data.event.date,
+            location: data.event.location,
+            sportProfileSlug: data.event.sportProfileSlug || 'taekwondo',
+            settings: data.event.registrationFee ? JSON.stringify({ registrationFee: data.event.registrationFee }) : null,
+            brandName: data.event.brandName,
+            brandPrimaryColor: data.event.brandPrimaryColor,
+            brandLogoUrl: data.event.brandLogoUrl,
+            _count: { registrations: 0 },
+          }] as Tournament[];
+        }),
+        fetchJson<unknown>(fetch, '/api/public/legal-config').then(parseRegistrationLegalConfig),
+      ]);
+
+      if (eventResult.status === 'rejected') {
+        const failure = getApiFailure(eventResult.reason);
+        setLoadError(failure?.kind === 'rate_limited' && failure.retryAfterSeconds
+          ? `Event details are temporarily unavailable. Try again in ${failure.retryAfterSeconds} seconds.`
+          : 'Event not found or unavailable. Please check your link and try again.');
+        setLoading(false);
+        return;
+      }
+      if (legalResult.status === 'rejected') {
+        const failure = getApiFailure(legalResult.reason);
+        setLoadError(failure?.kind === 'rate_limited' && failure.retryAfterSeconds
+          ? `Required registration terms are temporarily unavailable. Try again in ${failure.retryAfterSeconds} seconds.`
+          : 'Required registration terms are temporarily unavailable. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      const data = eventResult.value;
+      setTournaments(data);
+      setLegalConfig(legalResult.value);
+      // Auto-select the portal event
+      setFormData((prev) => ({ ...prev, tournamentId: data[0].id }));
+      setLoading(false);
+      return;
+    }
+
+    // Legacy mode: fetch all open tournaments
     const [tournamentResult, legalResult] = await Promise.allSettled([
       fetchJson<Tournament[]>(fetch, '/api/public/tournaments').then((data) => {
         if (!Array.isArray(data)) throw new Error('Invalid tournament response');
@@ -278,7 +335,7 @@ export default function PublicRegister() {
       setFormData((prev) => prev.tournamentId ? prev : { ...prev, tournamentId: data[0].id });
     }
     setLoading(false);
-  }, []);
+  }, [portalOrgSlug, portalEventSlug]);
 
   useEffect(() => {
     void loadRegistrationConfig();
@@ -395,7 +452,12 @@ export default function PublicRegister() {
     }
 
     try {
-      const data = await fetchJson<unknown>(fetch, '/api/public/register', {
+      // Portal mode: use portal-scoped registration API
+      const apiUrl = (portalOrgSlug && portalEventSlug)
+        ? `/api/public/portal/${portalOrgSlug}/${portalEventSlug}/register`
+        : '/api/public/register';
+      
+      const data = await fetchJson<unknown>(fetch, apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -11,13 +11,42 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import rateLimit from 'express-rate-limit';
+import { calculateAge } from '../../shared/constants/age-groups.js';
+import { normalizeBelt } from '../../shared/constants/belts.js';
+import {
+  buildRegistrationPatch,
+  buildRegistrationConsent,
+  registrationLegalConfigFromEnv,
+  type RegistrationConsentData,
+} from './public-validation.js';
+import { sendEmail, isEmailConfigured } from '../services/email.js';
+import { canAddRegistration, getPlanEntitlements } from '../services/entitlements.js';
+import {
+  generateManagementToken,
+  hashManagementToken,
+} from '../utils/registration-management-token.js';
 
 const router = Router();
+
+const legalConfig = () => registrationLegalConfigFromEnv(
+  process.env,
+  process.env.NODE_ENV === 'production',
+);
 
 // Rate limit portal routes to prevent enumeration attacks and scraping
 const portalLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 60,             // 60 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.RATE_LIMIT_DISABLED === '1' && process.env.NODE_ENV !== 'production',
+});
+
+// Stricter rate limit for registration submissions (same as public.ts registrationLimiter)
+const registrationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,                  // 10 submissions per 15 min per IP
+  message: { error: 'Too many registration attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => process.env.RATE_LIMIT_DISABLED === '1' && process.env.NODE_ENV !== 'production',
@@ -215,5 +244,436 @@ router.get('/:orgSlug/:eventSlug', portalLimiter, async (req: Request, res: Resp
     },
   });
 });
+
+/**
+ * POST /api/public/portal/:orgSlug/:eventSlug/register
+ * 
+ * Portal-scoped registration endpoint (#213).
+ * Validates that the event belongs to the specified organization before allowing registration.
+ * 
+ * Security:
+ * - Fail-closed: wrong slugs return 404 (not 403, prevents enumeration)
+ * - Tenant-isolated: cannot register for org B's event through org A's portal
+ * - Rate-limited: 10 submissions per 15min per IP
+ * 
+ * Returns same response format as /api/public/register for consistency.
+ */
+router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { orgSlug, eventSlug } = req.params;
+
+  // Validate slug formats
+  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug)) {
+    return res.status(404).json({ error: 'Event not found' });
+  }
+  if (!eventSlug || !/^[a-z0-9-]{3,63}$/.test(eventSlug)) {
+    return res.status(404).json({ error: 'Event not found' });
+  }
+
+  // Find organization + event (tenant-scoped lookup)
+  const organization = await prisma.organization.findUnique({
+    where: { slug: orgSlug },
+    select: {
+      id: true,
+      plan: true,
+      tournaments: {
+        where: {
+          eventSlug,
+          portalPublished: true,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          name: true,
+          date: true,
+          location: true,
+          status: true,
+          settings: true,
+          brandName: true,
+          organizationId: true,
+        },
+        take: 1,
+      },
+    },
+  });
+
+  if (!organization || organization.tournaments.length === 0) {
+    // Fail closed: wrong slug or unpublished event returns 404
+    return res.status(404).json({ error: 'Event not found' });
+  }
+
+  const tournament = organization.tournaments[0];
+
+  // Security: double-check that the tournament belongs to this org
+  if (tournament.organizationId !== organization.id) {
+    // This should never happen (the query already filters by org), but
+    // defense-in-depth: if somehow a cross-tenant event leaked through,
+    // fail closed with the same 404.
+    return res.status(404).json({ error: 'Event not found' });
+  }
+
+  if (tournament.status !== 'registration') {
+    return res.status(400).json({ error: 'Registration is not open for this event' });
+  }
+
+  // Parse registration body (same validation as public.ts /register)
+  const {
+    firstName,
+    lastName,
+    gender,
+    dateOfBirth,
+    belt,
+    danRank,
+    heightInches,
+    weightLbs,
+    schoolDojang,
+    specialNeeds,
+    patterns,
+    sparring,
+    parentName,
+    parentEmail,
+    parentPhone,
+    competeWithOlder,
+    privacyAccepted,
+    rulesAccepted,
+    guardianAttested,
+  } = req.body;
+
+  // Validation (same logic as public.ts)
+  const errors: string[] = [];
+  if (!firstName?.trim()) errors.push('First name is required');
+  else if (firstName.length > 100) errors.push('First name must be 100 characters or fewer');
+  if (!lastName?.trim()) errors.push('Last name is required');
+  else if (lastName.length > 100) errors.push('Last name must be 100 characters or fewer');
+  if (!gender || !['M', 'F'].includes(gender)) errors.push('Gender is required (M or F)');
+  if (!dateOfBirth) errors.push('Date of birth is required');
+  if (!belt?.trim()) errors.push('Belt level is required');
+  if (!patterns && !sparring) errors.push('Please select at least one event (Patterns or Sparring)');
+  if (schoolDojang && schoolDojang.length > 200) errors.push('School/dojang name must be 200 characters or fewer');
+  if (specialNeeds && specialNeeds.length > 2000) errors.push('Special needs must be 2000 characters or fewer');
+  if (parentName && parentName.length > 200) errors.push('Parent name must be 200 characters or fewer');
+  if (parentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)) errors.push('Parent email is not a valid email');
+  if (parentEmail && parentEmail.length > 200) errors.push('Parent email must be 200 characters or fewer');
+  if (parentPhone && parentPhone.length > 50) errors.push('Parent phone must be 50 characters or fewer');
+
+  if (sparring && !weightLbs) {
+    errors.push('Weight is required for sparring registration');
+  }
+  if (weightLbs != null) {
+    const w = Number(weightLbs);
+    if (!Number.isFinite(w) || w < 0 || w > 500) {
+      errors.push('Weight must be a number between 0 and 500');
+    }
+  }
+  if (heightInches != null) {
+    const h = Number(heightInches);
+    if (!Number.isFinite(h) || h < 0 || h > 108) {
+      errors.push('Height must be a number between 0 and 108 inches');
+    }
+  }
+  if (danRank != null) {
+    const d = Number(danRank);
+    if (!Number.isInteger(d) || d < 0 || d > 9) {
+      errors.push('Dan rank must be an integer between 0 and 9');
+    }
+  }
+
+  if (errors.length > 0) {
+    return res.status(400).json({ error: 'Validation failed', details: errors });
+  }
+
+  try {
+    // Check competitor limit for plan
+    const plan = organization.plan ?? 'free';
+    const existingCount = await prisma.registration.count({
+      where: { tournamentId: tournament.id },
+    });
+
+    if (!canAddRegistration(plan, existingCount)) {
+      const entitlements = getPlanEntitlements(plan);
+      return res.status(400).json({
+        error: `This event has reached its registration limit of ${entitlements.maxCompetitorsPerTournament} competitors.`,
+      });
+    }
+
+    // Normalize belt
+    const normalizedBelt = normalizeBelt(belt);
+
+    // Calculate age at tournament
+    const dob = new Date(dateOfBirth);
+    const ageAtTournament = calculateAge(dob, tournament.date);
+    const isMinor = calculateAge(dob, new Date()) < 18;
+
+    const consent = buildRegistrationConsent(
+      { privacyAccepted, rulesAccepted, guardianAttested },
+      isMinor,
+      legalConfig().consentVersion,
+      new Date(),
+    );
+    if (!consent.ok) {
+      return res.status(400).json({ error: 'Validation failed', details: [consent.error] });
+    }
+
+    if (ageAtTournament < 4) {
+      return res.status(400).json({ error: 'Competitors must be at least 4 years old' });
+    }
+
+    // Check for existing competitor (case-insensitive)
+    let competitor = await prisma.competitor.findFirst({
+      where: {
+        firstName: { equals: firstName.trim(), mode: 'insensitive' },
+        lastName: { equals: lastName.trim(), mode: 'insensitive' },
+        dateOfBirth: dob,
+      },
+    });
+
+    if (competitor) {
+      // Existing competitor found — reuse
+    } else {
+      // Create new competitor
+      competitor = await prisma.competitor.create({
+        data: {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          gender,
+          dateOfBirth: dob,
+          belt: normalizedBelt,
+          danRank: normalizedBelt === 'Black' ? (danRank || 1) : null,
+          heightInches: heightInches || null,
+          weightLbs: weightLbs || null,
+          schoolDojang: schoolDojang?.trim() || null,
+          specialNeeds: specialNeeds?.trim() || null,
+        },
+      });
+    }
+
+    // Check for existing registration
+    const existingRegistration = await prisma.registration.findUnique({
+      where: {
+        tournamentId_competitorId: {
+          tournamentId: tournament.id,
+          competitorId: competitor.id,
+        },
+      },
+    });
+
+    if (existingRegistration) {
+      return res.status(409).json({
+        error: 'Already registered',
+        message: `${firstName} ${lastName} is already registered for this event`,
+      });
+    }
+
+    // Parse tournament fee settings
+    let tournamentFeeCents = 0;
+    let feeRequired = false;
+    try {
+      const settings = tournament.settings ? JSON.parse(tournament.settings) : {};
+      tournamentFeeCents = settings.tournamentFeeCents || 0;
+      feeRequired = tournamentFeeCents > 0;
+    } catch {
+      // Ignore parse errors; treat as no fee
+    }
+
+    // Check waitlist status
+    const { checkWaitlistStatus } = await import('../services/waitlist.js');
+    const { shouldWaitlist, position } = await checkWaitlistStatus(
+      prisma,
+      tournament.id,
+    );
+
+    // Create registration
+    const managementToken = generateManagementToken();
+    const registration = await prisma.registration.create({
+      data: {
+        tournamentId: tournament.id,
+        competitorId: competitor.id,
+        patterns: patterns || false,
+        sparring: sparring || false,
+        weightAtRegistration: weightLbs || null,
+        ageAtTournament,
+        parentName: parentName?.trim() || null,
+        parentEmail: parentEmail?.trim() || null,
+        parentPhone: parentPhone?.trim() || null,
+        competeWithOlder: competeWithOlder === true,
+        specialNeeds: specialNeeds?.trim() || null,
+        managementTokenHash: hashManagementToken(managementToken),
+        waitlistStatus: shouldWaitlist ? 'waitlisted' : 'active',
+        waitlistPosition: position,
+        paymentStatus: feeRequired ? 'pending' : 'not_required',
+        paymentAmountCents: feeRequired ? tournamentFeeCents : null,
+        ...(consent.data as RegistrationConsentData),
+      },
+      include: {
+        competitor: true,
+        tournament: {
+          select: { name: true, date: true, location: true },
+        },
+      },
+    });
+
+    // Generate checkout URL if payment is required
+    let checkoutUrl: string | undefined;
+    if (feeRequired && registration.paymentStatus === 'pending') {
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
+      if (stripeSecretKey) {
+        try {
+          const Stripe = (await import('stripe')).default;
+          const stripe = new Stripe(stripeSecretKey);
+
+          const publicUrl = process.env.PUBLIC_APP_URL || 'http://localhost:5173';
+          const successUrl = `${publicUrl}/events/${orgSlug}/${eventSlug}?payment=success&registration=${registration.id}`;
+          const cancelUrl = `${publicUrl}/events/${orgSlug}/${eventSlug}?payment=cancelled&registration=${registration.id}`;
+
+          const session = await stripe.checkout.sessions.create({
+            mode: 'payment',
+            payment_method_types: ['card'],
+            line_items: [
+              {
+                price_data: {
+                  currency: 'usd',
+                  unit_amount: tournamentFeeCents,
+                  product_data: {
+                    name: `Entry Fee: ${registration.tournament.name}`,
+                    description: `Competitor: ${competitor.firstName} ${competitor.lastName}`,
+                  },
+                },
+                quantity: 1,
+              },
+            ],
+            metadata: {
+              registrationId: registration.id,
+              tournamentId: registration.tournamentId,
+              type: 'entry_fee',
+            },
+            success_url: successUrl,
+            cancel_url: cancelUrl,
+          });
+
+          await prisma.registration.update({
+            where: { id: registration.id },
+            data: { paymentIntentId: session.id },
+          });
+
+          checkoutUrl = session.url ?? undefined;
+        } catch (error) {
+          console.error('[portal/register] Failed to create checkout session:', error);
+        }
+      }
+    }
+
+    const responseData = {
+      success: true,
+      message: registration.waitlistStatus === 'waitlisted' 
+        ? 'Added to waitlist! You will be notified if a spot opens up.'
+        : feeRequired && checkoutUrl
+          ? 'Registration created! Please complete payment to finalize.'
+          : 'Registration successful!',
+      registration: {
+        id: registration.id,
+        confirmationCode: registration.id.slice(0, 8),
+        managementToken,
+        competitorName: `${competitor.firstName} ${competitor.lastName}`,
+        tournamentName: registration.tournament.name,
+        tournamentDate: registration.tournament.date,
+        events: {
+          patterns: registration.patterns,
+          sparring: registration.sparring,
+        },
+        ageGroup: getAgeGroupLabel(ageAtTournament),
+        waitlistStatus: registration.waitlistStatus,
+        waitlistPosition: registration.waitlistPosition,
+        paymentStatus: registration.paymentStatus,
+        paymentAmountCents: registration.paymentAmountCents,
+      },
+      checkoutUrl,
+    };
+
+    res.status(201).json(responseData);
+
+    // Send confirmation email if parent email is provided and email is configured
+    if (parentEmail && isEmailConfigured()) {
+      const eventList = [
+        patterns && 'Patterns',
+        sparring && 'Sparring',
+      ].filter(Boolean).join(' & ');
+      
+      const organizerBrandName = tournament.brandName || organization.id || undefined;
+      const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`;
+      
+      if (isMinor) {
+        const { createParentalConsentVerification } = await import('../services/parental-consent-verification.js');
+        const { parentalConsentVerificationEmail } = await import('../services/email-templates.js');
+        
+        const { token: verificationToken, code: verificationCode } = await createParentalConsentVerification(
+          prisma,
+          registration.id,
+          parentEmail,
+        );
+        
+        const verificationUrl = `${process.env.PUBLIC_APP_URL || ''}/verify-parent-consent?token=${encodeURIComponent(verificationToken)}`;
+        const { subject, html } = parentalConsentVerificationEmail({
+          parentName,
+          competitorName: `${competitor.firstName} ${competitor.lastName}`,
+          tournamentName: tournament.name,
+          tournamentDate: tournament.date,
+          verificationUrl,
+          code: verificationCode,
+          organizerBrandName,
+        });
+        
+        sendEmail(parentEmail, subject, html).catch((err) => {
+          console.error('[portal/register] parental consent verification email failed:', err);
+        });
+      } else {
+        if (registration.waitlistStatus === 'waitlisted') {
+          const { waitlistNotificationEmail } = await import('../services/email-templates.js');
+          const { subject, html } = waitlistNotificationEmail({
+            competitorName: `${competitor.firstName} ${competitor.lastName}`,
+            tournamentName: tournament.name,
+            tournamentDate: tournament.date,
+            waitlistPosition: registration.waitlistPosition!,
+            managementUrl,
+            organizerBrandName,
+          });
+          sendEmail(parentEmail, subject, html).catch((err) => {
+            console.error('[portal/register] waitlist email failed:', err);
+          });
+        } else {
+          const { registrationConfirmationEmail } = await import('../services/email-templates.js');
+          const { subject, html } = registrationConfirmationEmail({
+            competitorName: `${competitor.firstName} ${competitor.lastName}`,
+            tournamentName: tournament.name,
+            tournamentDate: tournament.date,
+            tournamentLocation: tournament.location,
+            events: eventList,
+            ageGroup: getAgeGroupLabel(ageAtTournament),
+            parentName,
+            confirmationCode: registration.id.slice(0, 8),
+            managementUrl,
+            organizerBrandName,
+          });
+          sendEmail(parentEmail, subject, html).catch((err) => {
+            console.error('[portal/register] confirmation email failed:', err);
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[portal/register] Registration error:', error);
+    res.status(500).json({ error: 'Registration failed. Please try again.' });
+  }
+});
+
+function getAgeGroupLabel(age: number): string {
+  if (age <= 5) return '4-5';
+  if (age <= 7) return '6-7';
+  if (age <= 9) return '8-9';
+  if (age <= 11) return '10-11';
+  if (age <= 14) return '12-14';
+  if (age <= 17) return '15-17';
+  if (age <= 35) return '18-35';
+  return '36+';
+}
 
 export default router;
