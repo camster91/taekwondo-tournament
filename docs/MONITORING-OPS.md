@@ -140,7 +140,7 @@ Expected Status Code: 200
 
 ## Error Tracking with GlitchTip (Recommended, Self-Hosted)
 
-**GlitchTip** is a self-hosted, Sentry-compatible error tracking platform. It uses the same SDK and environment variables as Sentry SaaS, so switching is zero-code-change. Host it on the Ashbi VPS.
+**GlitchTip** is a self-hosted, Sentry-compatible error tracking platform. It uses the same SDK (`@sentry/node` and `@sentry/react`) and environment variables as Sentry SaaS, so switching is zero-code-change. The VPS deployment uses a self-hosted GlitchTip instance (real DSN is VPS-env-only, never committed to git).
 
 ### Installation on Ashbi VPS
 ```bash
@@ -162,22 +162,34 @@ docker run -d \
 ```
 
 ### Server Setup
-Set these environment variables (same as Sentry):
+Set these environment variables (same format as Sentry):
 ```bash
-SENTRY_DSN=https://your-glitchtip-dsn@glitchtip.ashbi.ca/project-id
+# For GlitchTip (self-hosted):
+SENTRY_DSN=https://00000000-0000-0000-0000-000000000002@glitchtip.example.test/2
+SENTRY_ENVIRONMENT=production
+
+# For Sentry.io (SaaS alternative):
+SENTRY_DSN=https://<key>@o0.ingest.sentry.io/<project-id>
 SENTRY_ENVIRONMENT=production
 ```
 
 ### Client Setup
-Set these at build time (same as Sentry):
+Set these at build time (same format as Sentry):
 ```bash
-VITE_SENTRY_DSN=https://your-glitchtip-dsn@glitchtip.ashbi.ca/project-id
+# For GlitchTip (self-hosted):
+VITE_SENTRY_DSN=https://00000000-0000-0000-0000-000000000002@glitchtip.example.test/2
+VITE_SENTRY_ENVIRONMENT=production
+
+# For Sentry.io (SaaS alternative):
+VITE_SENTRY_DSN=https://<key>@o0.ingest.sentry.io/<project-id>
 VITE_SENTRY_ENVIRONMENT=production
 ```
 
+**NEVER commit the real DSN to git.** Set these only in the deployment environment (e.g., `.env` on the VPS, Coolify secrets, or environment variables).
+
 **The existing Sentry SDK in the codebase is fully compatible with GlitchTip.** Just point the DSN at your GlitchTip instance instead of sentry.io.
 
-### What GlitchTip/Sentry Captures
+### What Gets Captured
 - Uncaught exceptions (server + client)
 - Unhandled promise rejections
 - React component errors (via ErrorBoundary)
@@ -185,10 +197,15 @@ VITE_SENTRY_ENVIRONMENT=production
 - Breadcrumbs (user actions, API calls, console logs)
 - Performance monitoring (10% sample rate in production)
 
-### GlitchTip Alerts (recommended)
+### Recommended Alerts
+Configure these in your GlitchTip or Sentry dashboard:
+
 1. **Critical:** New issue affecting > 10 users
 2. **Critical:** Issue spike (> 2x baseline in 1 hour)
 3. **Warning:** Issue regression (previously resolved issue returns)
+
+### GlitchTip vs Sentry.io
+Both use the same SDK (`@sentry/node` and `@sentry/react`), so switching between them only requires changing the DSN URL. GlitchTip is fully open-source and can be self-hosted for free, while Sentry.io is a paid SaaS service with more advanced features.
 
 **Alternative (third-party SaaS):** If you prefer not to self-host, Sentry SaaS works the same way (just point the DSN at sentry.io)
 
@@ -229,7 +246,7 @@ If using Prometheus + Grafana:
 5. Confirm `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` are set correctly
 
 ### High Error Rates (5xx)
-1. Check Sentry for recent errors
+1. Check GlitchTip for recent errors
 2. Review application logs: `docker logs taekwondo-tournament`
 3. Check database connectivity
 4. Verify disk space: `df -h`
@@ -285,6 +302,8 @@ See `docs/BACKUP-RECOVERY.md` for detailed backup procedures.
 - [Uptime Kuma](https://github.com/louislam/uptime-kuma) — Self-hosted uptime monitoring (recommended)
 - [GlitchTip Documentation](https://glitchtip.com/documentation) — Self-hosted Sentry-compatible error tracking (recommended)
 - [Sentry Documentation](https://docs.sentry.io/) — Third-party SaaS alternative
+- [Sentry SDK for Node.js](https://docs.sentry.io/platforms/node/)
+- [Sentry SDK for React](https://docs.sentry.io/platforms/javascript/guides/react/)
 - [UptimeRobot Documentation](https://uptimerobot.com/kb/) — Third-party SaaS alternative
 - [Prometheus Metrics](https://prometheus.io/docs/concepts/metric_types/)
 - [Mailgun Webhooks](https://documentation.mailgun.com/en/latest/api-webhooks.html)

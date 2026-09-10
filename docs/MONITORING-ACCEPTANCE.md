@@ -2,6 +2,8 @@
 
 **Current state (2026-08-07):** the live Uptime Kuma v2 database contains zero monitors and zero notification routes. Configuration and test delivery require approval and a named recipient.
 
+**Error tracking:** GlitchTip (self-hosted Sentry-compatible) is deployed on the VPS. The Bowin server and client code is already wired with the Sentry SDK and will send errors when `SENTRY_DSN` and `VITE_SENTRY_DSN` environment variables are set to the GlitchTip project DSN. The real DSN is VPS-env-only (never committed to git). See `docs/MONITORING-OPS.md` for configuration details.
+
 ## Required monitors
 
 | Signal | Check / threshold | Routing expectation | Test evidence |
