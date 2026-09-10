@@ -797,6 +797,51 @@ export default function Divisions() {
                   Deterministic means reproducible, not automatically correct. Review every proposed placement before approval.
                 </p>
               </div>
+              
+              {/* Merge Conflicts UI - show conflicts between auto-categorization and manual overrides */}
+              {recommendationImpact && (recommendationImpact.replacedDivisions.length > 0 || latestRecommendation.proposedDiff.excluded.length > 0) && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 rounded">
+                  <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-300 mb-2 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    Conflicts & Manual Review Required
+                  </h4>
+                  <div className="space-y-2 text-xs text-amber-800 dark:text-amber-200">
+                    {recommendationImpact.replacedDivisions.length > 0 && (
+                      <div>
+                        <p className="font-medium">
+                          {recommendationImpact.replacedDivisions.length} non-pinned division{recommendationImpact.replacedDivisions.length === 1 ? '' : 's'} will be replaced:
+                        </p>
+                        <ul className="list-disc pl-5 mt-1">
+                          {recommendationImpact.replacedDivisions.map((division) => (
+                            <li key={division.id}>{division.name} ({division.assignments.length} competitor{division.assignments.length === 1 ? '' : 's'})</li>
+                          ))}
+                        </ul>
+                        <p className="mt-1 italic">
+                          To preserve a division, manually pin competitors before applying.
+                        </p>
+                      </div>
+                    )}
+                    {latestRecommendation.proposedDiff.excluded.length > 0 && (
+                      <div>
+                        <p className="font-medium">
+                          {latestRecommendation.proposedDiff.excluded.length} registration{latestRecommendation.proposedDiff.excluded.length === 1 ? '' : 's'} cannot be auto-assigned:
+                        </p>
+                        <ul className="list-disc pl-5 mt-1">
+                          {latestRecommendation.proposedDiff.excluded.map((excluded) => (
+                            <li key={excluded.registrationId}>
+                              {excluded.competitorName} — {excluded.reasons.join(', ')}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-1 italic">
+                          Review these competitors after applying and assign manually.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Proposed divisions and placements</h3>
                 <div className="mt-2 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-gray-200 p-3 dark:border-gray-700">
