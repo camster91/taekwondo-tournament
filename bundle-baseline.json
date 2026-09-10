@@ -1,0 +1,98 @@
+{
+  "timestamp": "2026-09-10T11:19:35.074Z",
+  "chunks": {
+    "initialEntry": {
+      "file": "assets/index-CYoUVJZC.js",
+      "raw": 74.287109375,
+      "gzip": 22.7109375,
+      "brotli": 19.37109375
+    },
+    "vendorCore": {
+      "file": "assets/vendor-core-CqylKvmW.js",
+      "raw": 472.044921875,
+      "gzip": 139.392578125,
+      "brotli": 117.6533203125
+    },
+    "vendorJsPDF": {
+      "file": "assets/vendor-jspdf-7cxa1-O4.js",
+      "raw": 331.0478515625,
+      "gzip": 108.146484375,
+      "brotli": 90.2626953125
+    },
+    "vendorReact": {
+      "file": "assets/vendor-react-LLHw0qZq.js",
+      "raw": 272.91796875,
+      "gzip": 88.845703125,
+      "brotli": 76.6259765625
+    },
+    "vendorXLSX": {
+      "file": "assets/vendor-xlsx-CKwrMZHi.js",
+      "raw": 487.8408203125,
+      "gzip": 159.1435546875,
+      "brotli": 132.1005859375
+    },
+    "competitors": {
+      "file": "assets/Competitors-Bl5DLvd2.js",
+      "raw": 32.2587890625,
+      "gzip": 8.6142578125,
+      "brotli": 7.5400390625
+    },
+    "dashboard": {
+      "file": "assets/Dashboard-BislEqwO.js",
+      "raw": 24.6474609375,
+      "gzip": 7.2646484375,
+      "brotli": 6.2919921875
+    },
+    "divisions": {
+      "file": "assets/Divisions-fZKtsaiY.js",
+      "raw": 52.484375,
+      "gzip": 13.328125,
+      "brotli": 11.8037109375
+    },
+    "publicRegistration": {
+      "file": "assets/PublicRegister-CJ0nRk2U.js",
+      "raw": 34.5263671875,
+      "gzip": 8.7080078125,
+      "brotli": 7.5693359375
+    },
+    "publicScoreboard": {
+      "file": "assets/PublicScoreboard-SIcm7SZi.js",
+      "raw": 17.3173828125,
+      "gzip": 5.1171875,
+      "brotli": 4.49609375
+    },
+    "results": {
+      "file": "assets/Results-BDKwt6zU.js",
+      "raw": 25.916015625,
+      "gzip": 6.00390625,
+      "brotli": 5.353515625
+    },
+    "schedule": {
+      "file": "assets/Schedule-B1R-VCJ-.js",
+      "raw": 44.1533203125,
+      "gzip": 11.0361328125,
+      "brotli": 9.7158203125
+    },
+    "scorekeeper": {
+      "file": "assets/Scorekeeper-C0deMjUD.js",
+      "raw": 50.8837890625,
+      "gzip": 13.4541015625,
+      "brotli": 11.83984375
+    }
+  },
+  "budgets": {
+    "initialEntry": 150,
+    "publicRegistration": 60,
+    "publicScoreboard": 60,
+    "scorekeeper": 70,
+    "divisions": 80,
+    "dashboard": 60,
+    "results": 40,
+    "competitors": 40,
+    "schedule": 50,
+    "vendorReact": 200,
+    "vendorCore": 150,
+    "vendorXLSX": 170,
+    "vendorJsPDF": 130
+  }
+}
