@@ -10,7 +10,9 @@
 **Recent Progress:**  
 - ✅ PR #238: Support diagnostics auth (#195) + public registrations visible in check-in (#187)
 - ✅ PR #239: Tenant-branded event portals (#212) — canonical organizer portal URLs, event slug management, publish/unpublish controls, fail-closed security
-- ✅ This PR: Portal registration tenant-scoped operations (#213) — connect public portal registrations to org operations, fail-closed cross-tenant protection, portal-aware registration flow
+- ✅ PR #240: Portal registration tenant-scoped operations (#213) — connect public portal registrations to org operations, fail-closed cross-tenant protection, portal-aware registration flow
+- ✅ PR #241: VPS-first ops — remove hard SaaS dependencies (GlitchTip/Uptime Kuma/manual payment docs, env-gated Crisp/Sentry/Stripe)
+- 🔄 **This PR (#242)**: Tenant isolation proof & release readiness (#214) — two-org isolation matrix tests, portal health monitoring docs, migration/rollback rehearsal steps
 
 ---
 
