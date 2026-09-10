@@ -2,6 +2,7 @@ import type { Server as HTTPServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'http';
 import { verifyToken, SESSION_COOKIE } from '../middleware/auth.js';
+import { WsPubSub } from './ws-pubsub.js';
 
 interface BracketClient {
   ws: WebSocket;
@@ -18,10 +19,60 @@ interface BracketMessage {
   data?: unknown;
 }
 
-// Map of divisionId -> Set of connected clients
+/**
+ * Local-only connection set. Each instance keeps its own map of
+ * divisionId -> WebSocket clients connected to THIS process. The
+ * publish path goes through Postgres LISTEN/NOTIFY (see WsPubSub)
+ * so a second instance still receives broadcasts.
+ */
 const divisionSubscriptions = new Map<string, Set<BracketClient>>();
 
-export function initializeWebSocket(server: HTTPServer): WebSocketServer {
+/**
+ * Refcount of active local subscribers per topic. We LISTEN on a
+ * Postgres channel only while at least one local connection cares
+ * about it, and UNLISTEN when the count drops back to zero. This
+ * keeps the LISTEN client's channel set bounded by the number of
+ * divisions a single instance has open, not the global count.
+ */
+const pubsubRefcount = new Map<string, number>();
+
+/**
+ * Module-level pubsub + wss + fanout state. Created lazily on the
+ * first `initializeWebSocket` call so importing this module in a
+ * test doesn't open a Postgres connection. Tests can inject a
+ * pre-started WsPubSub via `InitializeWebSocketOptions.pubsub`.
+ */
+let activePubSub: WsPubSub | null = null;
+let activeWss: WebSocketServer | null = null;
+let activeFanout: ((topic: string, payload: string) => void) | null = null;
+
+function getPubSub(): WsPubSub {
+  if (!activePubSub) {
+    throw new Error(
+      '[websocket] WsPubSub is not initialized. Call initializeWebSocket() at server startup.',
+    );
+  }
+  return activePubSub;
+}
+
+export interface InitializeWebSocketOptions {
+  /**
+   * Override the pubsub. Defaults to a new WsPubSub bound to
+   * `process.env.DATABASE_URL`. Tests pass a pre-started instance
+   * so the cross-instance contract is exercised end-to-end.
+   */
+  pubsub?: WsPubSub;
+}
+
+export async function initializeWebSocket(
+  server: HTTPServer,
+  options: InitializeWebSocketOptions = {},
+): Promise<WebSocketServer> {
+  const pubsub = options.pubsub ?? new WsPubSub({ connectionString: process.env.DATABASE_URL ?? '' });
+  if (!options.pubsub) {
+    await pubsub.start();
+  }
+  activePubSub = pubsub;
   const wss = new WebSocketServer({
     server,
     path: '/ws/brackets',
@@ -89,6 +140,22 @@ export function initializeWebSocket(server: HTTPServer): WebSocketServer {
           }
           divisionSubscriptions.get(msg.divisionId)!.add(client);
 
+          // Bump the refcount and LISTEN on the Postgres channel
+          // when this instance's first local subscriber appears for
+          // the topic. Done asynchronously — even if LISTEN fails,
+          // the local subscription is still recorded so the local
+          // fanout path keeps working.
+          const prev = pubsubRefcount.get(msg.divisionId) ?? 0;
+          pubsubRefcount.set(msg.divisionId, prev + 1);
+          if (prev === 0) {
+            void pubsub.subscribe(msg.divisionId).catch((err: unknown) => {
+              console.error(
+                `[websocket] pubsub.subscribe(${msg.divisionId}) failed:`,
+                err,
+              );
+            });
+          }
+
           // Send confirmation
           ws.send(JSON.stringify({
             type: 'subscribed',
@@ -103,6 +170,7 @@ export function initializeWebSocket(server: HTTPServer): WebSocketServer {
               divisionSubscriptions.delete(client.divisionId);
             }
           }
+          decrementPubsubRefcount(client.divisionId, pubsub);
           client = null;
         }
       } catch (error) {
@@ -120,6 +188,7 @@ export function initializeWebSocket(server: HTTPServer): WebSocketServer {
             divisionSubscriptions.delete(client.divisionId);
           }
         }
+        decrementPubsubRefcount(client.divisionId, pubsub);
       }
     });
 
@@ -128,28 +197,108 @@ export function initializeWebSocket(server: HTTPServer): WebSocketServer {
     });
   });
 
+  /**
+   * Local fanout: when Postgres delivers a NOTIFY for a topic, push
+   * the JSON payload to every local connection subscribed to that
+   * topic. The payload is the exact JSON the publish path wrote, so
+   * cross-instance traffic looks identical to local-loopback traffic
+   * to the client.
+   */
+  const fanout = (topic: string, payload: string): void => {
+    const subs = divisionSubscriptions.get(topic);
+    if (!subs || subs.size === 0) return;
+    subs.forEach((c) => {
+      if (c.ws.readyState === WebSocket.OPEN) {
+        c.ws.send(payload);
+      }
+    });
+  };
+  activeWss = wss;
+  activeFanout = fanout;
+  pubsub.on('message', fanout);
+
   console.log('[websocket] WebSocket server initialized at /ws/brackets');
   return wss;
 }
 
 /**
+ * Drop the pubsub refcount for a topic and UNLISTEN when the last
+ * local subscriber leaves. Best-effort: an UNLISTEN failure just
+ * means the channel lingers in this instance's LISTEN set until
+ * the process restarts, which is harmless.
+ */
+function decrementPubsubRefcount(topic: string, pubsub: WsPubSub): void {
+  const current = pubsubRefcount.get(topic) ?? 0;
+  if (current <= 1) {
+    pubsubRefcount.delete(topic);
+    void pubsub.unsubscribe(topic).catch((err: unknown) => {
+      console.error(`[websocket] pubsub.unsubscribe(${topic}) failed:`, err);
+    });
+  } else {
+    pubsubRefcount.set(topic, current - 1);
+  }
+}
+
+/**
+ * Close the WebSocket server and the underlying pubsub. Used during
+ * graceful shutdown. Idempotent.
+ */
+export async function closeWebSocket(): Promise<void> {
+  const wss = activeWss;
+  const pubsub = activePubSub;
+  const fanout = activeFanout;
+
+  if (fanout && pubsub) {
+    pubsub.off('message', fanout);
+  }
+  activeFanout = null;
+
+  if (wss) {
+    // Close all live client connections so the shutdown timer in
+    // server.js isn't blocked on a hung WebSocket. ws.close() stops
+    // accepting upgrades; iterating wss.clients actively closes the
+    // existing ones.
+    for (const client of wss.clients) {
+      try {
+        client.close(1001, 'Server shutting down');
+      } catch (err) {
+        console.error('[websocket] error closing client:', err);
+      }
+    }
+    await new Promise<void>((resolve) => {
+      wss.close(() => resolve());
+    });
+    activeWss = null;
+  }
+
+  if (pubsub) {
+    await pubsub.close();
+    activePubSub = null;
+  }
+
+  divisionSubscriptions.clear();
+  pubsubRefcount.clear();
+}
+
+/**
  * Broadcast a match update to all clients subscribed to the division.
+ *
+ * The publish goes through Postgres LISTEN/NOTIFY so subscribers on
+ * other app instances receive the same payload.
  */
 export function broadcastMatchUpdate(divisionId: string, matchId: string, matchData: unknown): void {
-  const subs = divisionSubscriptions.get(divisionId);
-  if (!subs || subs.size === 0) return;
-
-  const message = JSON.stringify({
+  const payload = JSON.stringify({
     type: 'match_updated',
     divisionId,
     matchId,
     data: matchData,
   });
 
-  subs.forEach((client) => {
-    if (client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(message);
-    }
+  // Fire-and-forget; the publish is async but the broadcast contract
+  // is best-effort. Surface errors so an operator notices if Postgres
+  // is rejecting NOTIFYs.
+  void getPubSub().publish(divisionId, payload).catch((err: unknown) => {
+    console.error(`[websocket] broadcastMatchUpdate(${divisionId}) failed:`, err);
   });
 }
 
@@ -157,18 +306,12 @@ export function broadcastMatchUpdate(divisionId: string, matchId: string, matchD
  * Broadcast a bracket regeneration event to all clients subscribed to the division.
  */
 export function broadcastBracketRegenerated(divisionId: string): void {
-  const subs = divisionSubscriptions.get(divisionId);
-  if (!subs || subs.size === 0) return;
-
-  const message = JSON.stringify({
+  const payload = JSON.stringify({
     type: 'bracket_regenerated',
     divisionId,
   });
-
-  subs.forEach((client) => {
-    if (client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(message);
-    }
+  void getPubSub().publish(divisionId, payload).catch((err: unknown) => {
+    console.error(`[websocket] broadcastBracketRegenerated(${divisionId}) failed:`, err);
   });
 }
 
