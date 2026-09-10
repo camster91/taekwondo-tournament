@@ -81,7 +81,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Brackets | 90% | 🟢 Strong | DE generation, real-time collab, print layout complete; QR poster service exists |
 | Day-of operations | 97% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view (TV-optimized with larger fonts and ring badges), live schedule delay propagation (#125/#259) complete; offline mode, ring sync shipped; offline resilience improvements (#138) + director override UI (#139) in review |
 | Scoring & results | 90% | 🟢 Strong | Match scoring, audit trail, undo/redo UI, video review integration (labeled, with help text) complete |
-| Public display | 90% | 🟢 Strong | Public scoreboard by slug complete; auto-refresh config shipped; TV-optimized layout polish complete (4K-safe fonts, improved contrast, better spacing); QR poster service exists |
+| Public display | 95% | 🟢 Strong | Public scoreboard by slug complete; auto-refresh config shipped; TV-optimized layout polish complete (4K-safe fonts, improved contrast, better spacing); truthful failures/freshness state machine shipped (#33/#179 via PR #276); QR poster service exists |
 | **Non-product** | | | |
 | Branding | 100% | 🟢 Strong | Bowin identity complete; organizer white-label shipped (logo upload, primary color); custom domains API+UI complete (#256, #257); remaining work is Cameron/ops (Traefik dynamic config + cert resolver + live hostname E2E) |
 | Billing & subscriptions | 80% | 🟢 Strong | Stripe integrated; plan selection, usage metering, billing portal code complete; needs Cameron Stripe dashboard setup |
