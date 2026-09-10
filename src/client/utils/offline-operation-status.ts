@@ -19,7 +19,7 @@ export function buildOfflineReviewMessage(
   const label = kind === 'result' ? 'Result' : 'Check-in';
   const target = kind === 'result' ? 'match' : 'registration';
   const staged = kind === 'result' ? 'result' : 'check-in';
-  const reason = lastError?.trim() || 'The server did not provide a reason';
+  const reason = lastError?.trim() || 'Server did not accept the change';
   const subject = detail?.label || `${label} #${targetId.slice(0, 8)}`;
   const attempted = detail?.attempted ? ` Attempted: ${detail.attempted}.` : '';
   const stagedAt = detail?.createdAt
@@ -27,12 +27,12 @@ export function buildOfflineReviewMessage(
       month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Toronto',
     }).format(new Date(detail.createdAt))}.`
     : '';
-  return `${subject} was rejected: ${reason}.${attempted}${stagedAt} Review the current ${target}, then retry or discard this staged ${staged}.`;
+  return `${subject} was rejected by server: ${reason}.${attempted}${stagedAt} Review the current ${target} state, then retry or discard this local ${staged}.`;
 }
 
 export function buildDeliveryUncertainMessage(kind: 'result' | 'check-in', label: string): string {
   const target = kind === 'result' ? 'match' : 'registration';
-  return `${label} may already be saved on the server. Refresh and verify the current ${target} before discarding this local copy. Automatic and manual retry are disabled.`;
+  return `${label} may already be saved on the server (network timeout). Refresh to verify the current ${target} state before discarding this local copy. Retry is disabled to prevent duplicates.`;
 }
 
 export function buildOfflineOperationStatuses(

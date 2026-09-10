@@ -34,6 +34,7 @@ import {
   serializeCheckInFilters,
   updateSearchParams,
 } from '../utils/url-state';
+import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner';
 
 interface Registration {
   id: string;
@@ -423,6 +424,8 @@ export default function CheckIn() {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+      {/* Connection status banner (#138 offline resilience) */}
+      <ConnectionStatusBanner pendingCount={offlineOperations.pending.length} />
       {cachedSnapshotAt && (
         <div role="status" className="border-b border-amber-300 bg-amber-50 px-4 py-3 text-center text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
           Cached check-in list from {new Date(cachedSnapshotAt).toLocaleTimeString()}. Server changes may be newer; offline actions remain queued until reconnection.
