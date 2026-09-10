@@ -302,7 +302,7 @@ function AnnouncerView() {
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {onDeck.map((match) => (
-                <div key={match.id} className="bg-slate-800 rounded-xl p-8 border-3 border-blue-500 shadow-lg">
+                <div key={match.id} className="bg-slate-800 rounded-xl p-8 border-4 border-blue-500 shadow-lg">
                   <div className="flex items-center justify-between mb-5">
                     <span className="text-xl font-bold px-3 py-1 rounded-lg bg-blue-500 text-white">
                       RING {match.ringNumber || '?'}
