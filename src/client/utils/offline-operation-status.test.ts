@@ -19,10 +19,10 @@ describe('offline operation status presentation', () => {
       attempted: 'Alex Kim, 8–5',
       createdAt: '2026-08-09T14:30:00.000Z',
     })).toBe(
-      'Match 7 · Alex Kim vs Jordan Lee was rejected: 409 Match changed on the server. Attempted: Alex Kim, 8–5. Staged Aug 9, 10:30 AM. Review the current match, then retry or discard this staged result.',
+      'Match 7 · Alex Kim vs Jordan Lee was rejected by server: 409 Match changed on the server. Attempted: Alex Kim, 8–5. Staged Aug 9, 10:30 AM. Review the current match state, then retry or discard this local result.',
     );
     expect(buildOfflineReviewMessage('check-in', '87654321-abcd')).toBe(
-      'Check-in #87654321 was rejected: The server did not provide a reason. Review the current registration, then retry or discard this staged check-in.',
+      'Check-in #87654321 was rejected by server: Server did not accept the change. Review the current registration state, then retry or discard this local check-in.',
     );
   });
 
@@ -40,7 +40,7 @@ describe('offline operation status presentation', () => {
 
   it('warns that delivery-uncertain work must be reconciled instead of retried', () => {
     expect(buildDeliveryUncertainMessage('result', 'Match 7 · Alex Kim vs Jordan Lee')).toBe(
-      'Match 7 · Alex Kim vs Jordan Lee may already be saved on the server. Refresh and verify the current match before discarding this local copy. Automatic and manual retry are disabled.',
+      'Match 7 · Alex Kim vs Jordan Lee may already be saved on the server (network timeout). Refresh to verify the current match state before discarding this local copy. Retry is disabled to prevent duplicates.',
     );
   });
 });
