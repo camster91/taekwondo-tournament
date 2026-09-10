@@ -61,4 +61,91 @@ test.describe('organization settings', () => {
     await page.getByRole('button', { name: 'Permanently delete organization' }).click();
     await expect(page.getByText('Set up your organization')).toBeVisible();
   });
+
+  test('custom domain UI shows empty state and attach flow', async ({ page }) => {
+    await skipOnboardingTour(page);
+    await loginAsEmail(page, email);
+    await page.goto('/organization');
+
+    // Create an organization first
+    const orgName = `E2E Custom Domain ${Date.now()}`;
+    await page.getByLabel('Organization name').fill(orgName);
+    await page.getByRole('button', { name: 'Create organization' }).click();
+    await expect(page.getByRole('heading', { name: orgName })).toBeVisible();
+
+    // Check custom domains section exists
+    await expect(page.getByRole('heading', { name: 'Custom domains' })).toBeVisible();
+    await expect(page.getByText('Serve public registration and scoreboard pages on your own domain')).toBeVisible();
+    
+    // Empty state
+    await expect(page.getByText('No custom domains attached')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add custom domain' })).toBeVisible();
+
+    // Open attach modal
+    await page.getByRole('button', { name: 'Add custom domain' }).click();
+    await expect(page.getByRole('dialog', { name: 'Attach custom domain' })).toBeVisible();
+    
+    // Check validation requirements displayed
+    await expect(page.getByText('You must control DNS for this domain')).toBeVisible();
+    await expect(page.getByText('Bowin-owned domains (bowin.app, ashbi.ca) are rejected')).toBeVisible();
+
+    // Try to attach a Bowin-owned domain (should fail)
+    await page.getByLabel('Domain hostname').fill('test.bowin.app');
+    await page.getByRole('button', { name: 'Attach domain' }).click();
+    await expect(page.getByText(/cannot attach Bowin-owned/i)).toBeVisible({ timeout: 5000 });
+
+    // Close error toast and modal
+    await page.getByRole('button', { name: 'Cancel' }).click();
+
+    // Screenshot of custom domain empty state
+    await page.screenshot({ path: 'test-results/visual-qa/custom-domain-empty.png', fullPage: true });
+
+    // Clean up
+    await page.getByRole('button', { name: 'Delete organization' }).click();
+    await page.getByLabel('Organization URL confirmation').fill(orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+    await page.getByLabel('I have exported the organization data').check();
+    await page.getByRole('button', { name: 'Permanently delete organization' }).click();
+  });
+
+  test('custom domain shows pending state and DNS instructions', async ({ page }) => {
+    await skipOnboardingTour(page);
+    await loginAsEmail(page, email);
+    await page.goto('/organization');
+
+    // Create an organization first
+    const orgName = `E2E Domain Pending ${Date.now()}`;
+    await page.getByLabel('Organization name').fill(orgName);
+    await page.getByRole('button', { name: 'Create organization' }).click();
+    await expect(page.getByRole('heading', { name: orgName })).toBeVisible();
+
+    // Attach a valid test domain
+    await page.getByRole('button', { name: 'Add custom domain' }).click();
+    const testDomain = `e2e-test-${Date.now()}.example.com`;
+    await page.getByLabel('Domain hostname').fill(testDomain);
+    await page.getByRole('button', { name: 'Attach domain' }).click();
+
+    // Should show DNS instructions modal
+    await expect(page.getByRole('dialog', { name: 'DNS verification instructions' })).toBeVisible();
+    await expect(page.getByText(`Add the following DNS record to verify ownership of ${testDomain}`)).toBeVisible();
+    await expect(page.getByText('TXT record for verification')).toBeVisible();
+    await expect(page.getByText('_bowin-verify.')).toBeVisible();
+
+    // Close DNS instructions
+    await page.getByRole('button', { name: 'Close' }).click();
+
+    // Domain should appear in list with pending status
+    await expect(page.getByText(testDomain)).toBeVisible();
+    await expect(page.getByText('Pending verification')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'View DNS instructions' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Verify' })).toBeVisible();
+
+    // Screenshot of pending domain state
+    await page.screenshot({ path: 'test-results/visual-qa/custom-domain-pending.png', fullPage: true });
+
+    // Clean up
+    await page.getByRole('button', { name: 'Delete organization' }).click();
+    await page.getByLabel('Organization URL confirmation').fill(orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+    await page.getByLabel('I have exported the organization data').check();
+    await page.getByRole('button', { name: 'Permanently delete organization' }).click();
+  });
 });
