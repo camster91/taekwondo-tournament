@@ -242,13 +242,13 @@ export default function UserManagement() {
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
       case 'admin':
-        return 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300';
+        return 'bg-accent-50 dark:bg-accent-900/30 text-accent-800 dark:text-accent-300';
       case 'director':
-        return 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300';
+        return 'bg-primary-50 dark:bg-primary-900/30 text-primary-800 dark:text-primary-300';
       case 'scorekeeper':
-        return 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300';
+        return 'bg-success/10 dark:bg-success/20 text-success';
       default:
-        return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
+        return 'bg-surface-100 dark:bg-surface-700 text-surface-800 dark:text-surface-300';
     }
   };
 
@@ -261,9 +261,9 @@ export default function UserManagement() {
   if (currentUser?.role !== 'admin') {
     return (
       <div className="text-center py-12">
-        <ShieldX className="mx-auto h-12 w-12 text-red-400 dark:text-red-500" />
-        <h2 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Access Denied</h2>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">You need admin privileges to access this page.</p>
+        <ShieldX className="mx-auto h-12 w-12 text-danger" />
+        <h2 className="mt-4 text-lg font-medium text-surface-900 dark:text-white">Access Denied</h2>
+        <p className="mt-2 text-surface-600 dark:text-surface-400">You need admin privileges to access this page.</p>
         <Button as={Link} to="/dashboard" variant="primary" className="mt-4">
           Go to Dashboard
         </Button>
@@ -286,7 +286,7 @@ export default function UserManagement() {
       >
         <Link
           to="/dashboard"
-          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to Dashboard
         </Link>
@@ -334,7 +334,7 @@ export default function UserManagement() {
                 <TableBody>
                   {users?.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-gray-600 dark:text-gray-400">
+                      <td colSpan={5} className="px-6 py-8 text-center text-surface-600 dark:text-surface-400">
                         <EmptyState
                           icon={Users}
                           title="No users found"
@@ -348,7 +348,7 @@ export default function UserManagement() {
                     </tr>
                   ) : (
                     users?.map((user) => (
-                      <tr key={user.id} className={`${!user.isActive ? 'bg-gray-50 dark:bg-gray-900/50' : ''} hover:bg-gray-50 dark:hover:bg-gray-700/50`}>
+                      <tr key={user.id} className={`${!user.isActive ? 'bg-surface-50 dark:bg-surface-900/50' : ''} hover:bg-surface-50 dark:hover:bg-surface-700/50`}>
                         <td className="whitespace-nowrap">
                           <div className="flex items-center">
                             <div className="h-10 w-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
@@ -358,13 +358,13 @@ export default function UserManagement() {
                               </span>
                             </div>
                             <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              <div className="text-sm font-medium text-surface-900 dark:text-white">
                                 {user.firstName} {user.lastName}
                                 {user.id === currentUser?.id && (
-                                  <span className="ml-2 text-xs text-gray-600 dark:text-gray-400">(you)</span>
+                                  <span className="ml-2 text-xs text-surface-600 dark:text-surface-400">(you)</span>
                                 )}
                               </div>
-                              <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center">
+                              <div className="text-sm text-surface-600 dark:text-surface-400 flex items-center">
                                 <Mail className="h-3 w-3 mr-1" />
                                 {user.email}
                               </div>
@@ -418,8 +418,8 @@ export default function UserManagement() {
                             disabled={user.id === currentUser?.id}
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                               user.isActive
-                                ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-                                : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+                                ? 'bg-success/10 dark:bg-success/20 text-success'
+                                : 'bg-danger/10 dark:bg-danger/20 text-danger'
                             } ${user.id !== currentUser?.id ? 'cursor-pointer hover:opacity-80' : ''}`}
                           >
                             {user.isActive ? (
@@ -435,17 +435,17 @@ export default function UserManagement() {
                             )}
                           </Button>
                         </td>
-                        <td className="whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                        <td className="whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">
                           {user.lastLogin ? (
                             <div className="flex items-center">
                               <Calendar className="h-3 w-3 mr-1" />
                               {new Date(user.lastLogin).toLocaleDateString()}
                             </div>
                           ) : (
-                            <span className="text-gray-600 dark:text-gray-500">Never</span>
+                            <span className="text-surface-600 dark:text-surface-500">Never</span>
                           )}
                         </td>
-                        <td className="whitespace-nowrap text-sm text-gray-600 dark:text-gray-500">
+                        <td className="whitespace-nowrap text-sm text-surface-600 dark:text-surface-500">
                           {new Date(user.createdAt).toLocaleDateString()}
                         </td>
                       </tr>
@@ -472,7 +472,7 @@ export default function UserManagement() {
                 >
                   {role.label}
                 </span>
-                <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">{role.description}</span>
+                <span className="ml-2 text-sm text-surface-600 dark:text-surface-400">{role.description}</span>
               </div>
             ))}
           </div>
@@ -484,7 +484,7 @@ export default function UserManagement() {
         <Card className="mt-6">
           <CardHeader
             title="Invitations"
-            action={<Mail className="h-4 w-4 text-gray-600" />}
+            action={<Mail className="h-4 w-4 text-surface-600" />}
           />
           <CardBody className="p-0">
             <div className="overflow-x-auto">
@@ -498,16 +498,16 @@ export default function UserManagement() {
                 </TableHead>
                 <TableBody>
                   {invitations.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <tr key={inv.id} className="hover:bg-surface-50 dark:hover:bg-surface-700/50">
                       <td className="whitespace-nowrap">
                         <div>
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          <div className="text-sm font-medium text-surface-900 dark:text-white">
                             {inv.firstName || inv.lastName
                               ? `${inv.firstName || ''} ${inv.lastName || ''}`.trim()
                               : inv.email}
                           </div>
                           {(inv.firstName || inv.lastName) && (
-                            <div className="text-sm text-gray-600 dark:text-gray-400">{inv.email}</div>
+                            <div className="text-sm text-surface-600 dark:text-surface-400">{inv.email}</div>
                           )}
                         </div>
                       </td>
@@ -520,17 +520,17 @@ export default function UserManagement() {
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             inv.status === 'pending'
-                              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300'
+                              ? 'bg-warning/10 dark:bg-warning/20 text-warning'
                               : inv.status === 'accepted'
-                              ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
-                              : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
+                              ? 'bg-success/10 dark:bg-success/20 text-success'
+                              : 'bg-surface-100 dark:bg-surface-700 text-surface-800 dark:text-surface-300'
                           }`}
                         >
                           <Clock className="h-3 w-3 mr-1" />
                           {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+                      <td className="whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">
                         {new Date(inv.createdAt).toLocaleDateString()}
                       </td>
                       <td className="whitespace-nowrap">
@@ -558,7 +558,7 @@ export default function UserManagement() {
                           <button
                             onClick={() => cancelInviteMutation.mutate(inv.id)}
                             disabled={cancelInviteMutation.isPending}
-                            className="text-gray-600 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400"
+                            className="text-surface-600 dark:text-surface-500 hover:text-danger"
                             title="Remove"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -686,7 +686,7 @@ export default function UserManagement() {
                 ))}
               </Select>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-surface-600 dark:text-surface-400">
               An email will be sent with a link to set up their account. The invitation expires in 72 hours.
             </p>
           </form>

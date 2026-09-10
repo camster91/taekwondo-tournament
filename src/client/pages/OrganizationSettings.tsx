@@ -85,12 +85,12 @@ function UsageBar({ label, value, limit, icon: Icon }: {
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-4 text-sm">
-        <span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
+        <span className="flex items-center gap-2 font-medium text-surface-700 dark:text-surface-100">
           <Icon className="h-4 w-4 text-primary-500" /> {label}
         </span>
-        <span className="text-slate-500 dark:text-slate-400">{value} of {limit}</span>
+        <span className="text-surface-500 dark:text-surface-400">{value} of {limit}</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+      <div className="h-2 overflow-hidden rounded-full bg-surface-100 dark:bg-surface-800">
         <div className="h-full rounded-full bg-primary-500 transition-all" style={{ width: `${percent}%` }} />
       </div>
     </div>
@@ -329,8 +329,8 @@ export default function OrganizationSettings() {
   if (organizationsQuery.isError) {
     return (
       <Card className="mx-auto max-w-xl text-center">
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Organization settings unavailable</h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{organizationsQuery.error.message}</p>
+        <h1 className="text-xl font-semibold text-surface-900 dark:text-white">Organization settings unavailable</h1>
+        <p className="mt-2 text-sm text-surface-600 dark:text-surface-400">{organizationsQuery.error.message}</p>
         <Button className="mt-5" onClick={() => organizationsQuery.refetch()}>Try again</Button>
       </Card>
     );
@@ -368,7 +368,7 @@ export default function OrganizationSettings() {
                   maxLength={100}
                   required
                 />
-                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Use the school or tournament company name customers recognize.</p>
+                <p className="mt-2 text-xs text-surface-500 dark:text-surface-400">Use the school or tournament company name customers recognize.</p>
               </div>
               <Button type="submit" size="lg" loading={createMutation.isPending} disabled={name.trim().length < 2}>
                 Create organization
@@ -419,8 +419,8 @@ export default function OrganizationSettings() {
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary-50 dark:bg-primary-500/10">
                 <Building2 className="h-5 w-5 text-primary-600 dark:text-primary-400" />
               </div>
-              <h1 className="text-2xl font-bold text-slate-950 dark:text-white">{organization.name}</h1>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">/{organization.slug} · {organization.membershipRole}</p>
+              <h1 className="text-2xl font-bold text-surface-900 dark:text-white">{organization.name}</h1>
+              <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">/{organization.slug} · {organization.membershipRole}</p>
             </div>
             <span className="self-start rounded-full bg-primary-50 px-3 py-1.5 text-sm font-semibold text-primary-700 dark:bg-primary-500/10 dark:text-primary-300">
               {planLabel} plan
@@ -435,9 +435,9 @@ export default function OrganizationSettings() {
         <Card>
           <div className="flex items-center gap-3">
             <CreditCard className="h-5 w-5 text-primary-500" />
-            <h2 className="font-semibold text-slate-950 dark:text-white">Billing status</h2>
+            <h2 className="font-semibold text-surface-900 dark:text-white">Billing status</h2>
           </div>
-          <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+          <p className="mt-4 text-sm text-surface-600 dark:text-surface-300">
             {organization.billingSubscription
               ? `${organization.billingSubscription.status.replace(/_/g, ' ')} via ${organization.billingSubscription.provider}`
               : 'No payment method or subscription is attached.'}
@@ -468,9 +468,9 @@ export default function OrganizationSettings() {
       <Card className="mb-8">
         <div className="mb-5 flex items-center gap-3">
           <Sparkles className="h-5 w-5 text-primary-500" />
-          <h2 className="font-semibold text-slate-950 dark:text-white">Organization branding</h2>
+          <h2 className="font-semibold text-surface-900 dark:text-white">Organization branding</h2>
         </div>
-        <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+        <p className="text-sm text-surface-600 dark:text-surface-300 mb-4">
           Upload a logo that will appear on public-facing tournament pages (registration, scoreboard).
         </p>
         <div className="space-y-4">
@@ -481,7 +481,7 @@ export default function OrganizationSettings() {
                 <img 
                   src={organization.brandLogoUrl} 
                   alt={organization.name}
-                  className="h-16 w-auto max-w-xs object-contain rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2"
+                  className="h-16 w-auto max-w-xs object-contain rounded border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 p-2"
                 />
                 <Button
                   variant="secondary"
@@ -508,7 +508,7 @@ export default function OrganizationSettings() {
               id="org-logo"
               type="file"
               accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
-              className="block w-full text-sm text-slate-500 dark:text-slate-400
+              className="block w-full text-sm text-surface-500 dark:text-surface-400
                 file:mr-4 file:py-2 file:px-4
                 file:rounded-md file:border-0
                 file:text-sm file:font-semibold
@@ -554,7 +554,7 @@ export default function OrganizationSettings() {
                 }
               }}
             />
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            <p className="mt-2 text-xs text-surface-500 dark:text-surface-400">
               PNG, JPG, GIF, WebP, or SVG. Maximum 2MB.
             </p>
           </div>
@@ -566,33 +566,33 @@ export default function OrganizationSettings() {
         <Card className="mb-6">
           <div className="mb-5 flex items-center gap-3">
             <Trophy className="h-5 w-5 text-primary-500" />
-            <h2 className="font-semibold text-slate-950 dark:text-white">Usage history</h2>
+            <h2 className="font-semibold text-surface-900 dark:text-white">Usage history</h2>
           </div>
           <div className="mb-4 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-800">
-              <p className="text-sm text-slate-600 dark:text-slate-400">Total tournaments completed</p>
-              <p className="mt-1 text-2xl font-bold text-slate-950 dark:text-white">{usageQuery.data.totalTournaments}</p>
+            <div className="rounded-lg bg-surface-50 p-4 dark:bg-surface-800">
+              <p className="text-sm text-surface-600 dark:text-surface-400">Total tournaments completed</p>
+              <p className="mt-1 text-2xl font-bold text-surface-900 dark:text-white">{usageQuery.data.totalTournaments}</p>
             </div>
-            <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-800">
-              <p className="text-sm text-slate-600 dark:text-slate-400">Total competitors served</p>
-              <p className="mt-1 text-2xl font-bold text-slate-950 dark:text-white">{usageQuery.data.totalCompetitors.toLocaleString()}</p>
+            <div className="rounded-lg bg-surface-50 p-4 dark:bg-surface-800">
+              <p className="text-sm text-surface-600 dark:text-surface-400">Total competitors served</p>
+              <p className="mt-1 text-2xl font-bold text-surface-900 dark:text-white">{usageQuery.data.totalCompetitors.toLocaleString()}</p>
             </div>
           </div>
           {usageQuery.data.recentUsage.length > 0 && (
             <div className="mt-5">
-              <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Recent activity</h3>
+              <h3 className="mb-3 text-sm font-semibold text-surface-700 dark:text-surface-300">Recent activity</h3>
               <div className="space-y-2">
                 {usageQuery.data.recentUsage.slice(0, 5).map((usage) => (
-                  <div key={usage.tournamentId} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                  <div key={usage.tournamentId} className="flex items-center justify-between rounded-lg border border-surface-200 p-3 dark:border-surface-700">
                     <div>
-                      <p className="font-medium text-slate-950 dark:text-white">{usage.tournamentName}</p>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                      <p className="font-medium text-surface-900 dark:text-white">{usage.tournamentName}</p>
+                      <p className="text-sm text-surface-600 dark:text-surface-400">
                         {new Date(usage.recordedAt).toLocaleDateString()}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-primary-600 dark:text-primary-400">{usage.competitorCount}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">competitors</p>
+                      <p className="text-xs text-surface-500 dark:text-surface-400">competitors</p>
                     </div>
                   </div>
                 ))}
@@ -603,13 +603,13 @@ export default function OrganizationSettings() {
       )}
 
       <div className="mb-4">
-        <h2 className="text-xl font-bold text-slate-950 dark:text-white">Plans built for tournament day</h2>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Choose annual subscriptions for unlimited events, or pay per-event for one-off tournaments.</p>
+        <h2 className="text-xl font-bold text-surface-900 dark:text-white">Plans built for tournament day</h2>
+        <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">Choose annual subscriptions for unlimited events, or pay per-event for one-off tournaments.</p>
       </div>
 
       {/* Annual Plans */}
       <div className="mb-6">
-        <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Annual Subscriptions</h3>
+        <h3 className="mb-3 text-sm font-semibold text-surface-700 dark:text-surface-300">Annual Subscriptions</h3>
         <div className="grid gap-5 lg:grid-cols-3">
           {([
             { plan: 'free' as const, label: 'Free Trial', tournaments: 1, competitors: 30, members: 1, rings: 1, icon: ShieldCheck, price: null },
@@ -621,14 +621,14 @@ export default function OrganizationSettings() {
             return (
               <Card key={item.plan} className={item.plan === 'starter' ? 'border-primary-300 dark:border-primary-700' : ''}>
                 <Icon className="h-6 w-6 text-primary-500" />
-                <h3 className="mt-4 text-lg font-bold text-slate-950 dark:text-white">{item.label}</h3>
+                <h3 className="mt-4 text-lg font-bold text-surface-900 dark:text-white">{item.label}</h3>
                 {item.price && <p className="mt-1 text-sm font-semibold text-primary-600 dark:text-primary-400">{item.price}</p>}
-                <ul className="mt-5 space-y-3 text-sm text-slate-600 dark:text-slate-300">
-                  <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Up to {item.tournaments} tournament{item.tournaments === 1 ? '' : 's'}</li>
-                  <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.competitors === 9999 ? 'Unlimited' : `Up to ${item.competitors}`} competitors</li>
-                  <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.members} team member{item.members === 1 ? '' : 's'}</li>
-                  <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Up to {item.rings} ring{item.rings === 1 ? '' : 's'}</li>
-                  <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.plan === 'free' ? 'Draft evaluation' : 'Public registration + event operations'}</li>
+                <ul className="mt-5 space-y-3 text-sm text-surface-600 dark:text-surface-300">
+                  <li className="flex gap-2"><Check className="h-4 w-4 text-success" /> Up to {item.tournaments} tournament{item.tournaments === 1 ? '' : 's'}</li>
+                  <li className="flex gap-2"><Check className="h-4 w-4 text-success" /> {item.competitors === 9999 ? 'Unlimited' : `Up to ${item.competitors}`} competitors</li>
+                  <li className="flex gap-2"><Check className="h-4 w-4 text-success" /> {item.members} team member{item.members === 1 ? '' : 's'}</li>
+                  <li className="flex gap-2"><Check className="h-4 w-4 text-success" /> Up to {item.rings} ring{item.rings === 1 ? '' : 's'}</li>
+                  <li className="flex gap-2"><Check className="h-4 w-4 text-success" /> {item.plan === 'free' ? 'Draft evaluation' : 'Public registration + event operations'}</li>
                 </ul>
                 {item.plan === 'free' ? (
                   <Button className="mt-6 w-full" variant="secondary" disabled>{current ? 'Current plan' : 'Free evaluation'}</Button>
@@ -651,8 +651,8 @@ export default function OrganizationSettings() {
 
       {/* Per-Event Plans */}
       <div className="mb-8">
-        <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Per-Event Pricing</h3>
-        <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">One-time purchase for a single tournament. Perfect for occasional events.</p>
+        <h3 className="mb-3 text-sm font-semibold text-surface-700 dark:text-surface-300">Per-Event Pricing</h3>
+        <p className="mb-4 text-sm text-surface-600 dark:text-surface-400">One-time purchase for a single tournament. Perfect for occasional events.</p>
         <div className="grid gap-5 lg:grid-cols-3">
           {([
             { plan: 'per_event_small' as const, label: 'Small Event', competitors: 100, price: '$99', description: 'Up to 100 competitors' },
@@ -661,14 +661,14 @@ export default function OrganizationSettings() {
           ]).map((item) => (
             <Card key={item.plan}>
               <CreditCard className="h-6 w-6 text-primary-500" />
-              <h3 className="mt-4 text-lg font-bold text-slate-950 dark:text-white">{item.label}</h3>
+              <h3 className="mt-4 text-lg font-bold text-surface-900 dark:text-white">{item.label}</h3>
               <p className="mt-1 text-2xl font-bold text-primary-600 dark:text-primary-400">{item.price}</p>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{item.description}</p>
-              <ul className="mt-5 space-y-3 text-sm text-slate-600 dark:text-slate-300">
-                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Single tournament access</li>
-                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.competitors} competitor limit</li>
-                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Public registration</li>
-                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Full event operations</li>
+              <p className="mt-2 text-sm text-surface-600 dark:text-surface-300">{item.description}</p>
+              <ul className="mt-5 space-y-3 text-sm text-surface-600 dark:text-surface-300">
+                <li className="flex gap-2"><Check className="h-4 w-4 text-success" /> Single tournament access</li>
+                <li className="flex gap-2"><Check className="h-4 w-4 text-success" /> {item.competitors} competitor limit</li>
+                <li className="flex gap-2"><Check className="h-4 w-4 text-success" /> Public registration</li>
+                <li className="flex gap-2"><Check className="h-4 w-4 text-success" /> Full event operations</li>
               </ul>
               <Button
                 className="mt-6 w-full"
@@ -697,8 +697,8 @@ export default function OrganizationSettings() {
           )}
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="font-semibold text-slate-950 dark:text-white">Data export and account closure</h2>
-              <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
+              <h2 className="font-semibold text-surface-900 dark:text-white">Data export and account closure</h2>
+              <p className="mt-1 max-w-2xl text-sm text-surface-600 dark:text-surface-400">
                 Export a complete copy first. Deletion permanently removes the organization and its tournaments and cannot be undone.
               </p>
             </div>
@@ -724,9 +724,9 @@ export default function OrganizationSettings() {
         <Card className="mt-8">
           <div className="mb-5 flex items-center gap-3">
             <KeyRound className="h-5 w-5 text-primary-500" />
-            <h2 className="font-semibold text-slate-950 dark:text-white">Support AI settings</h2>
+            <h2 className="font-semibold text-surface-900 dark:text-white">Support AI settings</h2>
           </div>
-          <p className="text-sm text-slate-600 dark:text-slate-300">
+          <p className="text-sm text-surface-600 dark:text-surface-300">
             Configure the AI support assistant and support escalation email for this organization.
           </p>
           <form
@@ -745,7 +745,7 @@ export default function OrganizationSettings() {
                 placeholder="gpt-4o-mini"
                 onChange={(event) => setSupportOpenAiModel(event.target.value)}
               />
-              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Use the exact model identifier, for example `gpt-4o-mini`.</p>
+              <p className="mt-2 text-xs text-surface-500 dark:text-surface-400">Use the exact model identifier, for example `gpt-4o-mini`.</p>
             </div>
             <div>
               <Label htmlFor="support-openai-base-url">OpenAI base URL</Label>
@@ -783,7 +783,7 @@ export default function OrganizationSettings() {
                   }
                 }}
               />
-              <div className="mt-2 flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
+              <div className="mt-2 flex items-center gap-3 text-sm text-surface-700 dark:text-surface-300">
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -826,7 +826,7 @@ export default function OrganizationSettings() {
               <OperationStatus state="rejected" message={supportConnectionMutation.error.message} />
             )}
             {supportConfigQuery.data?.recentChanges?.[0] && (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-surface-500 dark:text-surface-400">
                 Last changed {new Date(supportConfigQuery.data.recentChanges[0].at).toLocaleString()} ({supportConfigQuery.data.recentChanges[0].changedFields.join(', ')}).
               </p>
             )}
@@ -853,7 +853,7 @@ export default function OrganizationSettings() {
         )}
       >
         <div className="space-y-5">
-          <p className="text-sm text-slate-700 dark:text-slate-300">
+          <p className="text-sm text-surface-700 dark:text-surface-300">
             Enter <strong>{organization.slug}</strong> to confirm.
           </p>
           <div>
@@ -865,7 +865,7 @@ export default function OrganizationSettings() {
               onChange={(event) => setDeleteConfirmation(event.target.value)}
             />
           </div>
-          <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
+          <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm text-surface-700 dark:text-surface-300">
             <input
               type="checkbox"
               className="mt-1 h-5 w-5"
