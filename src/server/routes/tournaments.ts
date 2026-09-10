@@ -487,8 +487,16 @@ router.get('/:id/qr-poster', authenticate, requireTournamentAccess('viewer'), as
       date: true,
       location: true,
       publicSlug: true,
+      eventSlug: true,
+      portalPublished: true,
       brandName: true,
       brandPrimaryColor: true,
+      organizationId: true,
+      organization: {
+        select: {
+          slug: true,
+        },
+      },
     },
   });
 
@@ -499,8 +507,20 @@ router.get('/:id/qr-poster', authenticate, requireTournamentAccess('viewer'), as
   }
 
   const publicUrl = publicAppUrlFromEnv(process.env);
-  const registrationUrl = `${publicUrl}/register/${tournament.id}`;
-  const scoreboardUrl = `${publicUrl}/display/${tournament.id}?key=${encodeURIComponent(tournament.publicSlug)}`;
+  
+  // Prefer portal URLs if event is published to portal
+  let registrationUrl: string;
+  let scoreboardUrl: string;
+  
+  if (tournament.portalPublished && tournament.eventSlug && tournament.organization?.slug) {
+    // Portal-scoped URLs (tenant-branded)
+    registrationUrl = `${publicUrl}/events/${tournament.organization.slug}/${tournament.eventSlug}`;
+    scoreboardUrl = `${publicUrl}/events/${tournament.organization.slug}/${tournament.eventSlug}?scoreboard=true`;
+  } else {
+    // Legacy UUID-based URLs (backward compatible)
+    registrationUrl = `${publicUrl}/register/${tournament.id}`;
+    scoreboardUrl = `${publicUrl}/display/${tournament.id}?key=${encodeURIComponent(tournament.publicSlug)}`;
+  }
 
   const pdfBuffer = await generateQRPoster({
     tournamentName: tournament.name,
