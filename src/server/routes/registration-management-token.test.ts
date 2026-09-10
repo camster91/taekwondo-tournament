@@ -396,5 +396,107 @@ describe('Registration Management Token Security (#118)', () => {
       // Clean up
       await prisma.registration.delete({ where: { id: noTokenReg.id } });
     });
+
+    it('first-time token issuance for staff-created registration (null hash)', async () => {
+      // Create registration without token (staff-created, no parent email initially)
+      const noTokenReg = await prisma.registration.create({
+        data: {
+          tournamentId,
+          competitorId,
+          patterns: true,
+          sparring: false,
+          ageAtTournament: 17,
+          managementTokenHash: null, // no token
+          managementTokenExpiresAt: null,
+          managementTokenRevokedAt: null,
+          privacyAccepted: true,
+          rulesAccepted: true,
+          guardianAttested: true,
+          consentVersion: 'v1',
+          consentAcceptedAt: new Date(),
+        },
+      });
+
+      // Director issues first token via revoke-token endpoint (reissue:true)
+      const newToken = generateManagementToken();
+      const newExpiry = getManagementTokenExpiry();
+      await prisma.registration.update({
+        where: { id: noTokenReg.id },
+        data: {
+          managementTokenHash: hashManagementToken(newToken),
+          managementTokenExpiresAt: newExpiry,
+          managementTokenRevokedAt: null,
+        },
+      });
+
+      // Verify token works
+      const updated = await prisma.registration.findFirst({
+        where: { managementTokenHash: hashManagementToken(newToken) },
+      });
+      expect(updated).not.toBeNull();
+      const result = validateManagementTokenStatus(
+        updated!.managementTokenExpiresAt,
+        updated!.managementTokenRevokedAt,
+      );
+      expect(result.valid).toBe(true);
+
+      // Clean up
+      await prisma.registration.delete({ where: { id: noTokenReg.id } });
+    });
+
+    it('waitlist promote generates token with expiry and clears revocation', async () => {
+      // Create a waitlisted registration
+      const waitlistReg = await prisma.registration.create({
+        data: {
+          tournamentId,
+          competitorId,
+          patterns: true,
+          sparring: true,
+          ageAtTournament: 17,
+          waitlistStatus: 'waitlisted',
+          waitlistPosition: 1,
+          managementTokenHash: null, // no token yet
+          managementTokenExpiresAt: null,
+          managementTokenRevokedAt: null,
+          privacyAccepted: true,
+          rulesAccepted: true,
+          guardianAttested: true,
+          consentVersion: 'v1',
+          consentAcceptedAt: new Date(),
+        },
+      });
+
+      // Promote (simulates POST /api/tournaments/:id/registrations/:regId/promote)
+      const promoteToken = generateManagementToken();
+      const promoteExpiry = getManagementTokenExpiry();
+      await prisma.registration.update({
+        where: { id: waitlistReg.id },
+        data: {
+          waitlistStatus: 'active',
+          waitlistPromotedAt: new Date(),
+          waitlistPosition: null,
+          managementTokenHash: hashManagementToken(promoteToken),
+          managementTokenExpiresAt: promoteExpiry,
+          managementTokenRevokedAt: null, // clear any prior revocation
+        },
+      });
+
+      // Verify token has expiry and is valid
+      const promoted = await prisma.registration.findFirst({
+        where: { id: waitlistReg.id },
+      });
+      expect(promoted!.managementTokenHash).not.toBeNull();
+      expect(promoted!.managementTokenExpiresAt).not.toBeNull();
+      expect(promoted!.managementTokenRevokedAt).toBeNull();
+
+      const result = validateManagementTokenStatus(
+        promoted!.managementTokenExpiresAt,
+        promoted!.managementTokenRevokedAt,
+      );
+      expect(result.valid).toBe(true);
+
+      // Clean up
+      await prisma.registration.delete({ where: { id: waitlistReg.id } });
+    });
   });
 });

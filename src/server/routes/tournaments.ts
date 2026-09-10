@@ -1104,8 +1104,9 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
   }
 
   // Generate a new management token for the promoted registration
-  const { generateManagementToken, hashManagementToken } = await import('../utils/registration-management-token.js');
+  const { generateManagementToken, getManagementTokenExpiry, hashManagementToken } = await import('../utils/registration-management-token.js');
   const newManagementToken = generateManagementToken();
+  const newExpiry = getManagementTokenExpiry(); // 30 days
 
   // Promote
   await prisma.registration.update({
@@ -1115,6 +1116,8 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
       waitlistPromotedAt: new Date(),
       waitlistPosition: null,
       managementTokenHash: hashManagementToken(newManagementToken),
+      managementTokenExpiresAt: newExpiry,
+      managementTokenRevokedAt: null, // clear any prior revocation
     },
   });
 
@@ -1376,20 +1379,23 @@ router.post('/:id/registrations/:regId/revoke-token', authenticate, requireTourn
     return res.status(404).json({ error: 'Registration not found in this tournament' });
   }
 
-  if (!registration.managementTokenHash) {
-    return res.status(400).json({ error: 'This registration has no management token to revoke (legacy registration or no parent email)' });
+  // If no token exists and reissue=false, cannot revoke nothing
+  if (!registration.managementTokenHash && !reissue) {
+    return res.status(400).json({ error: 'This registration has no management token to revoke (legacy registration or no parent email). Use reissue:true to issue a first token.' });
   }
 
-  // Revoke the existing token (mark as revoked so it stops working)
-  await prisma.registration.update({
-    where: { id: registration.id },
-    data: { managementTokenRevokedAt: new Date() },
-  });
+  // If token exists, revoke it first (mark as revoked so it stops working)
+  if (registration.managementTokenHash) {
+    await prisma.registration.update({
+      where: { id: registration.id },
+      data: { managementTokenRevokedAt: new Date() },
+    });
 
-  // #118 acceptance: audit logging (non-sensitive)
-  console.log(`[registration-token-revoke] Registration ${registration.id} (${registration.competitor.firstName} ${registration.competitor.lastName}, tournament: ${registration.tournament.name}) token revoked by director`);
+    // #118 acceptance: audit logging (non-sensitive)
+    console.log(`[registration-token-revoke] Registration ${registration.id.slice(0, 8)} (tournament: ${registration.tournament.name}) token revoked by director`);
+  }
 
-  // If reissue=true, generate a new token and return it
+  // If reissue=true, generate a new token and return it (works for both rotation and first-time issuance)
   if (reissue) {
     const { generateManagementToken, getManagementTokenExpiry, hashManagementToken } = await import('../utils/registration-management-token.js');
     const newToken = generateManagementToken();
@@ -1405,11 +1411,12 @@ router.post('/:id/registrations/:regId/revoke-token', authenticate, requireTourn
     });
 
     // #118 acceptance: audit logging (non-sensitive)
-    console.log(`[registration-token-rotate] Registration ${registration.id} issued new management token, expires ${newExpiry.toISOString()}`);
+    const action = registration.managementTokenHash ? 'rotate' : 'issue';
+    console.log(`[registration-token-${action}] Registration ${registration.id.slice(0, 8)} issued new management token, expires ${newExpiry.toISOString()}`);
 
     return res.json({
       success: true,
-      message: 'Old token revoked and new token generated',
+      message: registration.managementTokenHash ? 'Old token revoked and new token generated' : 'New management token generated',
       managementToken: newToken,
       expiresAt: newExpiry,
       managementUrl: `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(newToken)}`,
