@@ -10,6 +10,7 @@ import Badge from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { SPORT_PROFILES } from '../../shared/constants/sport-profiles';
+import { saveDraft, loadDraft, clearDraft, type DraftTournament } from '../utils/draft-storage';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { isTestData } from '../utils/test-data';
 import {
@@ -69,6 +70,8 @@ export default function Tournaments() {
     }
   };
   const [deleteTarget, setDeleteTarget] = useState<Tournament | null>(null);
+  const [showDraftDialog, setShowDraftDialog] = useState(false);
+  const [draftTournament, setDraftTournament] = useState<DraftTournament | null>(null);
   
   // Read filters from URL
   const urlFilters = parseTournamentListFilters(searchParams);
@@ -81,6 +84,29 @@ export default function Tournaments() {
     location: '',
     sportProfileSlug: 'taekwondo',
   });
+
+  // Load draft when modal opens
+  useEffect(() => {
+    if (showCreateModal) {
+      const draft = loadDraft<DraftTournament>('tournament');
+      if (draft) {
+        setDraftTournament(draft);
+        setShowDraftDialog(true);
+      }
+    }
+  }, [showCreateModal]);
+
+  // Save draft on meaningful changes (when modal is open)
+  useEffect(() => {
+    if (showCreateModal && (formData.name.trim().length >= 2 || formData.date || formData.location.trim())) {
+      saveDraft<DraftTournament>('tournament', {
+        name: formData.name.trim(),
+        date: formData.date,
+        location: formData.location.trim(),
+        sportProfileSlug: formData.sportProfileSlug,
+      });
+    }
+  }, [showCreateModal, formData]);
 
   // Sync filters to URL when they change
   useEffect(() => {
@@ -130,7 +156,9 @@ export default function Tournaments() {
       return res.json();
     },
     onSuccess: () => {
+      clearDraft('tournament'); // Clear draft on successful create
       queryClient.invalidateQueries({ queryKey: ['tournaments'] });
+      queryClient.invalidateQueries({ queryKey: ['onboarding'] });
       closeCreateModal();
       setFormData({ name: '', date: '', location: '', sportProfileSlug: 'taekwondo' });
       setSelectedTemplateId('');
@@ -440,6 +468,34 @@ export default function Tournaments() {
         message={`Are you sure you want to delete "${deleteTarget?.name}"? This will also delete all registrations, divisions, and brackets. This action cannot be undone.`}
         confirmText="Delete Tournament"
         isLoading={deleteMutation.isPending}
+      />
+
+      {/* Draft Recovery Dialog */}
+      <ConfirmDialog
+        isOpen={showDraftDialog}
+        onClose={() => {
+          // Cancel = Discard draft
+          clearDraft('tournament');
+          setDraftTournament(null);
+          setShowDraftDialog(false);
+        }}
+        onConfirm={() => {
+          // Confirm = Resume (pre-fill form)
+          if (draftTournament) {
+            setFormData({
+              name: draftTournament.name,
+              date: draftTournament.date,
+              location: draftTournament.location,
+              sportProfileSlug: draftTournament.sportProfileSlug,
+            });
+          }
+          setShowDraftDialog(false);
+        }}
+        title="Resume draft?"
+        message={draftTournament ? `You have an unfinished tournament "${draftTournament.name}". Resume or start fresh?` : ''}
+        confirmText="Resume"
+        cancelText="Discard"
+        variant="warning"
       />
     </div>
   );
