@@ -121,7 +121,7 @@ export default function CompetitorProfile() {
 
   const getMedalBadge = (placement: number) => {
     if (placement === 1) return <Badge variant="success">🥇 1st</Badge>;
-    if (placement === 2) return <Badge variant="secondary">🥈 2nd</Badge>;
+    if (placement === 2) return <Badge variant="info">🥈 2nd</Badge>;
     if (placement === 3) return <Badge variant="warning">🥉 3rd</Badge>;
     return <Badge>{placement}th</Badge>;
   };
@@ -176,26 +176,26 @@ export default function CompetitorProfile() {
           icon={Trophy}
           label="Tournaments"
           value={stats.overall.tournaments}
-          color="blue"
+          accent="blue"
         />
         <StatTile
           icon={Activity}
           label="Overall Record"
           value={`${stats.overall.wins}-${stats.overall.losses}`}
-          color="purple"
-          subtitle={`${stats.overall.winRate.toFixed(1)}% Win Rate`}
+          accent="purple"
+          trend={`${stats.overall.winRate.toFixed(1)}% Win Rate`}
         />
         <StatTile
           icon={Medal}
           label="Gold Medals"
           value={stats.overall.medals.gold}
-          color="yellow"
+          accent="yellow"
         />
         <StatTile
           icon={Award}
           label="Total Medals"
           value={stats.overall.medals.gold + stats.overall.medals.silver + stats.overall.medals.bronze}
-          color="green"
+          accent="green"
         />
       </div>
 
@@ -329,7 +329,7 @@ export default function CompetitorProfile() {
                     </td>
                     <td className="text-sm">{entry.divisionName}</td>
                     <td>
-                      <Badge variant={entry.eventType === 'patterns' ? 'primary' : 'secondary'}>
+                      <Badge variant={entry.eventType === 'patterns' ? 'purple' : 'info'}>
                         {entry.eventType.charAt(0).toUpperCase() + entry.eventType.slice(1)}
                       </Badge>
                     </td>

@@ -58,7 +58,7 @@ interface DuplicatesResponse {
 }
 
 export default function CompetitorDuplicates() {
-  const { showToast } = useToast();
+  const { success: showSuccess, error: showError } = useToast();
   const queryClient = useQueryClient();
   const [threshold, setThreshold] = useState(0.75);
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
@@ -96,7 +96,7 @@ export default function CompetitorDuplicates() {
       return res.json();
     },
     onSuccess: (result) => {
-      showToast(`Successfully merged competitors. Transferred ${result.result.transferredRegistrations} registrations.`, 'success');
+      showSuccess(`Successfully merged competitors. Transferred ${result.result.transferredRegistrations} registrations.`);
       queryClient.invalidateQueries({ queryKey: ['competitor-duplicates'] });
       queryClient.invalidateQueries({ queryKey: ['competitors'] });
       setMergeModalOpen(false);
@@ -110,7 +110,7 @@ export default function CompetitorDuplicates() {
       });
     },
     onError: (error: Error) => {
-      showToast(error.message, 'error');
+      showError(error.message);
     },
   });
 
