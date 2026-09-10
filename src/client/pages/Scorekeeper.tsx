@@ -24,6 +24,8 @@ import { getSportProfile } from '../../shared/constants/sport-profiles';
 import { Card, CardBody, ConfirmDialog } from '../components/ui';
 import { Button } from '../components/ui';
 import { StatTile } from '../components/ui';
+import Spinner from '../components/ui/Spinner';
+import EmptyState from '../components/ui/EmptyState';
 import { activateDialogFocus } from '../utils/dialog-focus';
 import { makeScoreOperation } from '../utils/offline-operation-queue';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
@@ -917,12 +919,17 @@ export default function Scorekeeper() {
           </div>
 
           {isLoading ? (
-            <div className="text-center py-12 text-gray-600">Loading divisions...</div>
-          ) : divisionsError ? (
-            <div role="alert" className="text-center py-12 text-red-300">
-              <p className="mb-4">Could not load divisions. Check the venue connection and try again.</p>
-              <Button onClick={() => void retryDivisions()}>Retry</Button>
+            <div className="text-center py-12" role="status" aria-live="polite">
+              <Spinner size="lg" />
+              <span className="sr-only">Loading divisions</span>
             </div>
+          ) : divisionsError ? (
+            <OperationStatus
+              state="rejected"
+              message="Could not load divisions. Check the venue connection and try again."
+              actionLabel="Retry"
+              onAction={() => void retryDivisions()}
+            />
           ) : (
             <>
               <h2 className="text-lg font-semibold mb-4 text-gray-300">Select Division</h2>
@@ -950,28 +957,22 @@ export default function Scorekeeper() {
               </div>
               <div className="grid gap-3">
                 {divisions && divisions.length === 0 && (
-                  <div className="text-center py-12 text-gray-600">
-                    <Trophy className="h-12 w-12 mx-auto mb-3 text-gray-600" aria-hidden="true" />
-                    <p className="text-base font-medium mb-1">No divisions to score yet</p>
-                    <p className="text-sm text-gray-600 mb-4">
-                      Divisions need to be created before matches can be scored.
-                    </p>
-                  </div>
+                  <EmptyState
+                    icon={<Trophy className="h-12 w-12 text-gray-400" />}
+                    title="No divisions to score yet"
+                    description="Divisions need to be created before matches can be scored."
+                  />
                 )}
                 {divisions && divisions.length > 0 && divisions.every((d) => !d.bracket) && (
-                  <div className="text-center py-12 text-gray-600">
-                    <Trophy className="h-12 w-12 mx-auto mb-3 text-gray-600" aria-hidden="true" />
-                    <p className="text-base font-medium mb-1">No brackets generated yet</p>
-                    <p className="text-sm text-gray-600 mb-4">
-                      {divisions.length} {divisions.length === 1 ? 'division exists' : 'divisions exist'} but no brackets have been generated. Go to the Divisions page to generate a bracket for each one.
-                    </p>
-                    <Link
-                      to={`/tournaments/${tournamentId}/divisions`}
-                      className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
-                    >
-                      Go to Divisions →
-                    </Link>
-                  </div>
+                  <EmptyState
+                    icon={<Trophy className="h-12 w-12 text-gray-400" />}
+                    title="No brackets generated yet"
+                    description={`${divisions.length} ${divisions.length === 1 ? 'division exists' : 'divisions exist'} but no brackets have been generated.`}
+                    action={{
+                      label: 'Go to Divisions',
+                      onClick: () => window.location.href = `/tournaments/${tournamentId}/divisions`,
+                    }}
+                  />
                 )}
                 {divisions
                   ?.filter((d) => d.bracket
