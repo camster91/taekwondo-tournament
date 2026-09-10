@@ -750,9 +750,10 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
     }
     const tournamentId = getParam(req.params.id);
     const tournament = await prisma.$transaction(async (tx) => {
-      const current = settings
-        ? await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { settings: true, status: true, organizationId: true } })
-        : await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { status: true, organizationId: true } });
+      const current = await tx.tournament.findUniqueOrThrow({
+        where: { id: tournamentId },
+        select: { settings: true, status: true, organizationId: true }
+      });
       
       const updatedTournament = await tx.tournament.update({
         where: { id: tournamentId },
@@ -761,7 +762,7 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
           date: date ? new Date(date) : undefined,
           location,
           status,
-          settings: settings ? JSON.stringify(mergeGeneralSettings(current!.settings, settings)) : undefined,
+          settings: settings ? JSON.stringify(mergeGeneralSettings(current.settings, settings)) : undefined,
         },
       });
 

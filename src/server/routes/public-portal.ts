@@ -17,7 +17,7 @@ import {
   buildRegistrationPatch,
   buildRegistrationConsent,
   registrationLegalConfigFromEnv,
-  type RegistrationConsentData,
+  type RegistrationConsentResult,
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { canAddRegistration, getPlanEntitlements } from '../services/entitlements.js';
@@ -502,7 +502,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
         waitlistPosition: position,
         paymentStatus: feeRequired ? 'pending' : 'not_required',
         paymentAmountCents: feeRequired ? tournamentFeeCents : null,
-        ...(consent.data as RegistrationConsentData),
+        ...consent.data,
       },
       include: {
         competitor: true,
