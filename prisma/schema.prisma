@@ -134,6 +134,8 @@ model Registration {
   parentEmail          String?
   parentPhone          String?
   managementTokenHash String?   @unique
+  managementTokenExpiresAt DateTime? // Token expires 30 days after generation
+  managementTokenRevokedAt DateTime? // Director revoked; old token no longer valid
   consentVersion       String?
   consentAcceptedAt    DateTime?
   privacyAccepted      Boolean   @default(false)

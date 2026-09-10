@@ -1104,8 +1104,9 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
   }
 
   // Generate a new management token for the promoted registration
-  const { generateManagementToken, hashManagementToken } = await import('../utils/registration-management-token.js');
+  const { generateManagementToken, getManagementTokenExpiry, hashManagementToken } = await import('../utils/registration-management-token.js');
   const newManagementToken = generateManagementToken();
+  const newExpiry = getManagementTokenExpiry(); // 30 days
 
   // Promote
   await prisma.registration.update({
@@ -1115,6 +1116,8 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
       waitlistPromotedAt: new Date(),
       waitlistPosition: null,
       managementTokenHash: hashManagementToken(newManagementToken),
+      managementTokenExpiresAt: newExpiry,
+      managementTokenRevokedAt: null, // clear any prior revocation
     },
   });
 
@@ -1353,6 +1356,78 @@ router.delete('/:id/registrations/:regId', authenticate, requireTournamentAccess
   });
 
   res.status(204).send();
+});
+
+// Revoke or rotate a registration management token.
+// POST /api/tournaments/:id/registrations/:regId/revoke-token
+// Directors can revoke a leaked/lost token and optionally re-issue a fresh one.
+// Closes #118 acceptance: revocation + rotation support.
+router.post('/:id/registrations/:regId/revoke-token', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { reissue } = req.body; // boolean: rotate (generate new token) or just revoke?
+
+  // Verify registration belongs to this tournament
+  const registration = await prisma.registration.findFirst({
+    where: { id: getParam(req.params.regId), tournamentId: getParam(req.params.id) },
+    include: {
+      competitor: { select: { firstName: true, lastName: true } },
+      tournament: { select: { name: true } },
+    },
+  });
+
+  if (!registration) {
+    return res.status(404).json({ error: 'Registration not found in this tournament' });
+  }
+
+  // If no token exists and reissue=false, cannot revoke nothing
+  if (!registration.managementTokenHash && !reissue) {
+    return res.status(400).json({ error: 'This registration has no management token to revoke (legacy registration or no parent email). Use reissue:true to issue a first token.' });
+  }
+
+  // If token exists, revoke it first (mark as revoked so it stops working)
+  if (registration.managementTokenHash) {
+    await prisma.registration.update({
+      where: { id: registration.id },
+      data: { managementTokenRevokedAt: new Date() },
+    });
+
+    // #118 acceptance: audit logging (non-sensitive)
+    console.log(`[registration-token-revoke] Registration ${registration.id.slice(0, 8)} (tournament: ${registration.tournament.name}) token revoked by director`);
+  }
+
+  // If reissue=true, generate a new token and return it (works for both rotation and first-time issuance)
+  if (reissue) {
+    const { generateManagementToken, getManagementTokenExpiry, hashManagementToken } = await import('../utils/registration-management-token.js');
+    const newToken = generateManagementToken();
+    const newExpiry = getManagementTokenExpiry();
+
+    await prisma.registration.update({
+      where: { id: registration.id },
+      data: {
+        managementTokenHash: hashManagementToken(newToken),
+        managementTokenExpiresAt: newExpiry,
+        managementTokenRevokedAt: null, // clear revocation flag for new token
+      },
+    });
+
+    // #118 acceptance: audit logging (non-sensitive)
+    const action = registration.managementTokenHash ? 'rotate' : 'issue';
+    console.log(`[registration-token-${action}] Registration ${registration.id.slice(0, 8)} issued new management token, expires ${newExpiry.toISOString()}`);
+
+    return res.json({
+      success: true,
+      message: registration.managementTokenHash ? 'Old token revoked and new token generated' : 'New management token generated',
+      managementToken: newToken,
+      expiresAt: newExpiry,
+      managementUrl: `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(newToken)}`,
+    });
+  }
+
+  // Just revoked, no re-issue
+  res.json({
+    success: true,
+    message: 'Management token revoked',
+  });
 });
 
 // Get weight classes for tournament (requires authentication)
