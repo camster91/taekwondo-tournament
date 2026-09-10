@@ -9,7 +9,12 @@ import { Button } from '../components/ui';
 import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
 import { resolveDisplayRing } from '../utils/scoreboard-display';
 import { BowinLogo } from '../components/brand/BowinLogo';
-import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availability';
+import {
+  SCOREBOARD_POLL_INTERVAL_MS,
+  STALE_AFTER_SECONDS,
+  getScoreboardState,
+  getStaleBannerMessage,
+} from '../utils/scoreboard-availability';
 import { fetchJson } from '../utils/api-status';
 import { resolveParentScoreboardState } from '../utils/parent-scoreboard-state';
 
@@ -91,7 +96,7 @@ export default function PublicScoreboard() {
     },
     refetchInterval: (query) => {
       const data = query.state.data as Tournament | undefined;
-      return data?.publicScoreboardRefreshMs ?? 10_000;
+      return data?.publicScoreboardRefreshMs ?? SCOREBOARD_POLL_INTERVAL_MS;
     },
     refetchIntervalInBackground: false,
     retry: false,
