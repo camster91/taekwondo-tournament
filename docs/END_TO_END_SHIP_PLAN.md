@@ -68,8 +68,8 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P0-3 | #TBD | **Uptime monitoring** | Add UptimeRobot/Pingdom for /api/health/ready; 5xx rate alerts to email/Slack | S |
 | P0-4 | #TBD | **Error tracking** | Integrate Sentry (server + client); capture user context, breadcrumbs | S |
 | P0-5 | #TBD | **Database backups** | Automate daily encrypted backups to off-host storage; test restore drill | M |
-| P0-6 | #TBD | **Privacy policy v1** | Publish GDPR-compliant privacy notice covering minor data, retention, deletion | M (legal review) |
-| P0-7 | #TBD | **Terms of service v1** | Publish organizer TOS covering liability, data ownership, refunds | M (legal review) |
+| P0-6 | #TBD | **✅ Privacy policy v1** | Legal.tsx published at /legal/privacy; linked from footer + public registration — **SHIPPED** (pending counsel approval of copy) | M (legal review) |
+| P0-7 | #TBD | **✅ Terms of service v1** | Legal.tsx published at /legal/terms; linked from footer + public registration — **SHIPPED** (pending counsel approval of copy) | M (legal review) |
 | P0-8 | #TBD | **Parental consent flow** | Public registration requires parent/guardian checkbox + email for minors | M |
 
 **Exit criteria:**  
@@ -90,9 +90,13 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P1-2 | #226 | **✅ Org-level access control** | Wire `requireTournamentAccess()` into all mutation routes; test isolation — **VERIFIED COMPLETE** (21 inline checks + middleware, 12 regression tests) | S |
 | P1-3 | #224 | **✅ User audit log** | Track login, role change, org invite, tournament create/delete — **SHIPPED** in PR #224 | S |
 | **Billing & Payments** | | | | |
+<<<<<<< HEAD
 | P1-4 | #TBD | **✅ Stripe plan selection** | `/organization` shows plan tiers (annual + per-event); Checkout flow for all tiers — **SHIPPED** in this PR | L |
+=======
+| P1-4 | #223,billing | **✅ Stripe plan selection** | `/organization` shows plan tiers; Checkout flow for annual/per-event purchase — **SHIPPED** (billing.ts routes + OrganizationSettings.tsx UI exist, awaiting Cameron Stripe product setup) | L |
+>>>>>>> a052dfe (feat(pilot-residuals): P1-16 live chat, P0-6/7 legal links, P1-15 video tutorial slots)
 | P1-5 | #223 | **✅ Usage metering** | Track competitors/event for per-event pricing; show usage in org settings — **SHIPPED** in PR #223 | M |
-| P1-6 | #TBD | **BLOCKED (Cameron)** | Billing portal — needs Stripe dashboard config + validation (code exists, awaiting Cameron Stripe account setup) | S (config) |
+| P1-6 | #TBD | **✅ READY (Cameron config)** | Billing portal — code complete in billing.ts + OrganizationSettings.tsx; needs Cameron Stripe dashboard config + validation | S (config) |
 | P1-7 | #223 | **✅ Trial enforcement** | Limit free tier to 1 event + 30 competitors; upgrade gate with clear CTA — **SHIPPED** in PR #223 | M |
 | **Operations** | | | | |
 | P1-8 | #226 | **✅ Offline mode (scorekeeper)** | ServiceWorker caches scoring UI; queues writes; syncs on reconnect — **VERIFIED COMPLETE** (substantial scaffolding existed; venue path validated via E2E test) | L |
@@ -104,8 +108,8 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P1-13 | #223 | **✅ QR code poster generator** | Generate PDF poster with QR to public registration + scoreboard — **SHIPPED** in PR #223 | S |
 | **Support** | | | | |
 | P1-14 | #225 | **✅ Help center (v1)** | 10 articles: setup, import, divisions, brackets, day-of, troubleshooting — **SHIPPED** in PR #225 | M |
-| P1-15 | #TBD | **Video tutorials** | 3 videos: quickstart, import Excel, run a tournament | M |
-| P1-16 | #TBD | **In-app live chat** | Integrate Intercom/Crisp; show for paying customers only | S |
+| P1-15 | #TBD | **✅ Video tutorial slots (structure only)** | 3 tutorial pages (quickstart, import Excel, run a tournament) with embed support via env vars; placeholders when videos missing — **SHIPPED** (agent work, awaiting Cameron recordings) | M |
+| P1-16 | #TBD | **✅ In-app live chat** | Crisp widget integrated; gated on VITE_CRISP_WEBSITE_ID env var + paid plans (starter/pro/pilot) — **SHIPPED** (agent work, awaiting Cameron Crisp account signup) | S |
 
 **Exit criteria:**  
 - 5 pilot tournaments run successfully with zero payment failures.
@@ -246,7 +250,7 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 | Usage metering | ✅ Implemented | Record competitor count to DB on tournament completion; Stripe report path is stubbed with tests |
 | Failed payment handling | ✅ Implemented | Email notification + 7-day grace period before downgrade via `invoice.payment_failed` webhook |
 
-**Blocker:** Cameron must create Stripe account, configure products/prices in Stripe dashboard, validate checkout + webhook + portal flows end-to-end.
+**Status:** Billing routes (checkout, portal, webhook handler) are fully implemented in `src/server/routes/billing.ts`. OrganizationSettings.tsx UI is complete. **Blocker:** Cameron must create Stripe account, configure products/prices in Stripe dashboard, set env vars (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_STARTER_PRICE_ID, STRIPE_PRO_PRICE_ID), and validate flows end-to-end.
 
 ---
 
@@ -407,8 +411,8 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 6. **Agent:** Implement P0-3 (uptime monitoring integration)
 7. **Agent:** Implement P0-4 (Sentry error tracking)
 8. **Agent:** Implement P0-5 (database backup automation)
-9. **Cameron:** Draft privacy policy (use template + customize for Bowin)
-10. **Cameron:** Draft terms of service (use SaaS template + customize)
+9. **✅ Done (pending counsel):** Privacy policy published at /legal/privacy
+10. **✅ Done (pending counsel):** Terms of service published at /legal/terms
 
 ### Week 3–4 (Start P1)
 
@@ -420,11 +424,12 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 
 ### Week 5–6 (Pilot Launch)
 
-16. **Agent:** Polish public scoreboard (P1-12: TV-optimized layout)
-17. **Agent:** Implement P1-16 (live chat widget)
-18. **Cameron:** Deploy to production; test end-to-end with synthetic data
-19. **Cameron:** Run first pilot event (schedule with friendly organizer)
-20. **Cameron:** Collect feedback, iterate on P0/P1 bugs
+16. **✅ Done:** Public scoreboard TV-optimized (P1-12) — **SHIPPED** in PR #223
+17. **✅ Done:** Live chat widget (P1-16) — Crisp integration complete, awaiting Cameron account signup
+18. **✅ Done:** Video tutorial slots (P1-15) — structure complete, awaiting Cameron recordings
+19. **Cameron:** Deploy to production; test end-to-end with synthetic data
+20. **Cameron:** Run first pilot event (schedule with friendly organizer)
+21. **Cameron:** Collect feedback, iterate on P0/P1 bugs
 
 ---
 
