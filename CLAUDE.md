@@ -61,8 +61,8 @@ DATABASE_URL=postgresql://taekwondo:***@taekwondo-db:5432/taekwondo_tournament
 | Auth middleware | jsonwebtoken 9 + express-rate-limit 8 | `src/server/middleware/auth.ts` |
 
 The dev script (`npm run dev`) uses `concurrently` to run Vite and
-nodemon+ts-node in parallel. Build: `prisma generate && vite build
-&& tsc -p tsconfig.server.json`. Server entry point: `server.js`
+`tsx watch src/server/index.ts` (`npm run dev:server`) in parallel. Build: `prisma generate && vite build
+&& tsc -p tsconfig.server.json && tsc -p tsconfig.demo.json`. Server entry point: `server.js`
 (produced by `tsc` from `src/server/index.ts`).
 
 ---
