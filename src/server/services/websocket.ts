@@ -1,7 +1,7 @@
 import type { Server as HTTPServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'http';
-import { verifyToken } from '../middleware/auth.js';
+import { verifyToken, SESSION_COOKIE } from '../middleware/auth.js';
 
 interface BracketClient {
   ws: WebSocket;
@@ -48,9 +48,13 @@ export function initializeWebSocket(server: HTTPServer): WebSocketServer {
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     let client: BracketClient | null = null;
 
-    // Extract JWT from query string (WebSocket doesn't support headers cleanly)
+    // Auth: prefer the HttpOnly `bowin_session` cookie (set on login).
+    // Browsers auto-attach same-origin cookies on the WebSocket upgrade
+    // handshake, so the browser path needs no extra work. The
+    // `?token=` query string is kept as a fallback for non-browser
+    // clients (curl, scripts, tests) that can't carry a cookie.
     const url = new URL(req.url || '', `http://${req.headers.host}`);
-    const token = url.searchParams.get('token');
+    const token = extractSessionToken(req.headers.cookie) || url.searchParams.get('token');
 
     if (!token) {
       ws.close(1008, 'Missing authentication token');
@@ -177,4 +181,30 @@ export function getSubscriptionStats(): Record<string, number> {
     stats[divisionId] = subs.size;
   });
   return stats;
+}
+
+/**
+ * Parse the Cookie header and return the value of the session cookie,
+ * or null if it's not present. We avoid pulling in the `cookie` package
+ * as a direct dependency for this single use — the JWT body is
+ * base64url so trimming/light decoding is enough here.
+ */
+function extractSessionToken(cookieHeader: string | undefined): string | null {
+  if (!cookieHeader) return null;
+  const pairs = cookieHeader.split(';');
+  for (const pair of pairs) {
+    const eqIdx = pair.indexOf('=');
+    if (eqIdx === -1) continue;
+    const rawName = pair.slice(0, eqIdx).trim();
+    if (rawName !== SESSION_COOKIE) continue;
+    const rawValue = pair.slice(eqIdx + 1).trim();
+    if (!rawValue) return null;
+    try {
+      return decodeURIComponent(rawValue);
+    } catch {
+      // Malformed percent-encoding — fall through and return raw value.
+      return rawValue;
+    }
+  }
+  return null;
 }
