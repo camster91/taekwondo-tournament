@@ -15,10 +15,11 @@ import {
 } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { Button, Card, Input, Label, Modal, PageHeader, Spinner } from '../components/ui';
+import { Button, Card, Input, Label, Modal, PageHeader, Spinner, ConfirmDialog } from '../components/ui';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
 import CustomDomainSettings from '../components/CustomDomainSettings';
+import { saveDraft, loadDraft, clearDraft, type DraftOrganization } from '../utils/draft-storage';
 
 type Entitlements = {
   maxTournaments: number;
@@ -112,6 +113,24 @@ export default function OrganizationSettings() {
   const [supportAlertEmail, setSupportAlertEmail] = useState('');
   const [hasSavedSupportApiKey, setHasSavedSupportApiKey] = useState(false);
   const [clearSupportApiKey, setClearSupportApiKey] = useState(false);
+  const [showDraftDialog, setShowDraftDialog] = useState(false);
+  const [draftOrg, setDraftOrg] = useState<DraftOrganization | null>(null);
+
+  // Load draft on mount
+  useEffect(() => {
+    const draft = loadDraft<DraftOrganization>('organization');
+    if (draft && !organizationsQuery.data?.organizations[0]) {
+      setDraftOrg(draft);
+      setShowDraftDialog(true);
+    }
+  }, [organizationsQuery.data]);
+
+  // Save draft on meaningful changes
+  useEffect(() => {
+    if (name.trim().length >= 2 && !organizationsQuery.data?.organizations[0]) {
+      saveDraft<DraftOrganization>('organization', { name: name.trim() });
+    }
+  }, [name, organizationsQuery.data]);
 
   const organizationsQuery = useQuery({
     queryKey: ['organizations', 'current'],
@@ -167,8 +186,10 @@ export default function OrganizationSettings() {
     ),
     onSuccess: async () => {
       setName('');
+      clearDraft('organization'); // Clear draft on successful create
       toast.success('Organization created.');
       await queryClient.invalidateQueries({ queryKey: ['organizations', 'current'] });
+      await queryClient.invalidateQueries({ queryKey: ['onboarding'] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -317,42 +338,66 @@ export default function OrganizationSettings() {
   const organization = organizationsQuery.data?.organizations[0];
   if (!organization) {
     return (
-      <div className="mx-auto max-w-3xl">
-        <PageHeader title="Organization & billing" description="Create the workspace that owns your tournaments, staff, and subscription." />
-        <Card className="overflow-hidden p-0">
-          <div className="bg-gradient-to-br from-primary-600 to-accent-700 px-6 py-8 text-white sm:px-10">
-            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
-              <Building2 className="h-6 w-6" />
+      <>
+        <div className="mx-auto max-w-3xl">
+          <PageHeader title="Organization & billing" description="Create the workspace that owns your tournaments, staff, and subscription." />
+          <Card className="overflow-hidden p-0">
+            <div className="bg-gradient-to-br from-primary-600 to-accent-700 px-6 py-8 text-white sm:px-10">
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
+                <Building2 className="h-6 w-6" />
+              </div>
+              <h2 className="text-2xl font-bold">Set up your organization</h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-primary-100">
+                Start on the free evaluation plan. You can configure one draft tournament before choosing a pilot or paid plan.
+              </p>
             </div>
-            <h2 className="text-2xl font-bold">Set up your organization</h2>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-primary-100">
-              Start on the free evaluation plan. You can configure one draft tournament before choosing a pilot or paid plan.
-            </p>
-          </div>
-          <form
-            className="space-y-5 p-6 sm:p-10"
-            onSubmit={(event) => { event.preventDefault(); createMutation.mutate(); }}
-          >
-            <div>
-              <Label htmlFor="organization-name">Organization name</Label>
-              <Input
-                id="organization-name"
-                autoComplete="organization"
-                placeholder="e.g. Northside Taekwondo"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                minLength={2}
-                maxLength={100}
-                required
-              />
-              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Use the school or tournament company name customers recognize.</p>
-            </div>
-            <Button type="submit" size="lg" loading={createMutation.isPending} disabled={name.trim().length < 2}>
-              Create organization
-            </Button>
-          </form>
-        </Card>
-      </div>
+            <form
+              className="space-y-5 p-6 sm:p-10"
+              onSubmit={(event) => { event.preventDefault(); createMutation.mutate(); }}
+            >
+              <div>
+                <Label htmlFor="organization-name">Organization name</Label>
+                <Input
+                  id="organization-name"
+                  autoComplete="organization"
+                  placeholder="e.g. Northside Taekwondo"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  minLength={2}
+                  maxLength={100}
+                  required
+                />
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Use the school or tournament company name customers recognize.</p>
+              </div>
+              <Button type="submit" size="lg" loading={createMutation.isPending} disabled={name.trim().length < 2}>
+                Create organization
+              </Button>
+            </form>
+          </Card>
+        </div>
+
+        {/* Draft recovery dialog */}
+        <ConfirmDialog
+          open={showDraftDialog}
+          onOpenChange={setShowDraftDialog}
+          title="Resume draft?"
+          message={`You have an unfinished organization "${draftOrg?.name}". Resume or start fresh?`}
+          confirmLabel="Resume"
+          cancelLabel="Discard"
+          variant="warning"
+          onConfirm={() => {
+            if (draftOrg) {
+              setName(draftOrg.name);
+            }
+            setShowDraftDialog(false);
+          }}
+          onCancel={() => {
+            clearDraft('organization');
+            setDraftOrg(null);
+            setShowDraftDialog(false);
+          }}
+        />
+      </>
     );
   }
 
