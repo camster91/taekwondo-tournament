@@ -333,6 +333,145 @@ router.delete('/:id/public-slug', authenticate, requireTournamentAccess('directo
   res.json({ ok: true });
 });
 
+// Set event slug for tenant-branded portal URLs (/events/:orgSlug/:eventSlug)
+// PUT /api/tournaments/:id/event-slug — sets or updates the event slug
+router.put('/:id/event-slug', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+  const { eventSlug } = req.body;
+
+  // Import validation utilities
+  const { validateSlug } = await import('../../shared/utils/slug-validation.js');
+
+  // Validate slug format and reserved words
+  const validation = validateSlug(eventSlug, 'event');
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
+  }
+
+  // Check tournament exists and get its org
+  const tournament = await prisma.tournament.findUnique({
+    where: { id },
+    select: { id: true, organizationId: true },
+  });
+
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  if (!tournament.organizationId) {
+    return res.status(400).json({
+      error: 'Tournament must belong to an organization to use portal slugs',
+    });
+  }
+
+  // Check uniqueness within organization scope
+  const existing = await prisma.tournament.findFirst({
+    where: {
+      organizationId: tournament.organizationId,
+      eventSlug: validation.normalized,
+      NOT: { id }, // Exclude current tournament
+    },
+  });
+
+  if (existing) {
+    return res.status(409).json({
+      error: `Event slug "${validation.normalized}" is already in use by another event in this organization`,
+    });
+  }
+
+  // Update the tournament
+  const updated = await prisma.tournament.update({
+    where: { id },
+    data: { eventSlug: validation.normalized },
+    select: { id: true, eventSlug: true },
+  });
+
+  res.json(updated);
+});
+
+// Publish or unpublish event to portal
+// POST /api/tournaments/:id/portal/publish — publish to portal
+// POST /api/tournaments/:id/portal/unpublish — remove from portal
+router.post('/:id/portal/:action', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+  const action = req.params.action;
+
+  if (action !== 'publish' && action !== 'unpublish') {
+    return res.status(400).json({ error: 'Invalid action. Use "publish" or "unpublish"' });
+  }
+
+  // Check tournament exists and has required fields
+  const tournament = await prisma.tournament.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      organizationId: true,
+      eventSlug: true,
+      portalPublished: true,
+      organization: {
+        select: { slug: true },
+      },
+    },
+  });
+
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  if (!tournament.organizationId || !tournament.organization) {
+    return res.status(400).json({
+      error: 'Tournament must belong to an organization to publish to portal',
+    });
+  }
+
+  if (action === 'publish') {
+    // Require event slug before publishing
+    if (!tournament.eventSlug) {
+      return res.status(400).json({
+        error: 'Event slug is required before publishing. Set the event slug first.',
+      });
+    }
+
+    // Publish
+    const updated = await prisma.tournament.update({
+      where: { id },
+      data: {
+        portalPublished: true,
+        portalPublishedAt: tournament.portalPublished ? undefined : new Date(),
+      },
+      select: {
+        id: true,
+        eventSlug: true,
+        portalPublished: true,
+        portalPublishedAt: true,
+        organization: {
+          select: { slug: true },
+        },
+      },
+    });
+
+    res.json({
+      ...updated,
+      portalUrl: `/events/${updated.organization?.slug}/${updated.eventSlug}`,
+    });
+  } else {
+    // Unpublish
+    const updated = await prisma.tournament.update({
+      where: { id },
+      data: { portalPublished: false },
+      select: {
+        id: true,
+        eventSlug: true,
+        portalPublished: true,
+      },
+    });
+
+    res.json(updated);
+  }
+});
+
 // Generate QR code poster PDF for venue signage.
 // GET /api/tournaments/:id/qr-poster — downloads a PDF with QR codes
 // for public registration and live scoreboard.

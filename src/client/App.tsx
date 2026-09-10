@@ -82,6 +82,8 @@ const SchoolPortal = lazy(() => import('./pages/SchoolPortal'));
 const OrganizationSettings = lazy(() => import('./pages/OrganizationSettings'));
 const SupportTickets = lazy(() => import('./pages/SupportTickets'));
 const VideoTutorials = lazy(() => import('./pages/VideoTutorials'));
+const OrganizerPortal = lazy(() => import('./pages/OrganizerPortal'));
+const EventPortal = lazy(() => import('./pages/EventPortal'));
 
 // Fallback rendered while a lazy page chunk is fetched. Centred spinner
 // keeps the chrome stable so the page doesn't reflow when the real
@@ -596,6 +598,8 @@ function AppRoutes() {
           <Route path="/check-registration" element={<CheckRegistration />} />
           <Route path="/manage-registration" element={<ManageRegistration />} />
           <Route path="/verify-parent-consent" element={<VerifyParentConsent />} />
+          <Route path="/events/:orgSlug" element={<OrganizerPortal />} />
+          <Route path="/events/:orgSlug/:eventSlug" element={<EventPortal />} />
           <Route path="/login" element={<Login />} />
           <Route path="/verify" element={<VerifyMagicLink />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
