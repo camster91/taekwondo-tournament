@@ -1,6 +1,7 @@
 /**
- * Sentry initialization for client-side error tracking.
+ * Error tracking initialization for client-side (Sentry SDK).
  *
+ * Works with both Sentry.io and GlitchTip (self-hosted, Sentry-compatible).
  * Gated by VITE_SENTRY_DSN env var — when unset, all Sentry calls become no-ops.
  * Use VITE_SENTRY_DSN to enable; set VITE_SENTRY_ENVIRONMENT to distinguish dev/staging/prod.
  *
