@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { checkA11y } from './axe-helper';
 
 /**
  * T6 — PublicRegister a11y audit. Asserts the P0 fixes shipped with t_2f76f877:
@@ -122,5 +123,49 @@ test.describe('public registration — accessibility (WCAG 2.1 AA)', () => {
     await expect(page.locator('input[name="firstName"]')).toHaveAttribute('autocomplete', 'given-name');
     await expect(page.locator('input[name="lastName"]')).toHaveAttribute('autocomplete', 'family-name');
     await expect(page.locator('input[name="dateOfBirth"]')).toHaveAttribute('autocomplete', 'bday');
+  });
+
+  test('axe scan on step 1 (empty state)', async ({ page }) => {
+    await page.route('**/api/public/tournaments', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+    await page.goto('/register');
+    await expect(page.getByRole('heading', { level: 1, name: 'No Open Tournaments' })).toBeVisible();
+
+    const results = await checkA11y(page);
+    expect(results.violations).toEqual([]);
+  });
+
+  test('axe scan on step 1 (with tournament)', async ({ page }) => {
+    await page.goto('/register');
+    await expect(page.locator('select[name="tournamentId"]')).toBeVisible();
+    await expect(page.locator('option', { hasText: 'E2E Open 2026' })).toHaveCount(1, { timeout: 10_000 });
+
+    const results = await checkA11y(page);
+    expect(results.violations).toEqual([]);
+  });
+
+  test('axe scan on step 2 (parent/consent)', async ({ page }) => {
+    await page.goto('/register');
+    await expect(page.locator('select[name="tournamentId"]')).toBeVisible();
+    await expect(page.locator('option', { hasText: 'E2E Open 2026' })).toHaveCount(1, { timeout: 10_000 });
+
+    const tournamentValue = await page
+      .locator('option', { hasText: 'E2E Open 2026' })
+      .first()
+      .getAttribute('value');
+    await page.locator('select[name="tournamentId"]').selectOption(tournamentValue!);
+    await page.locator('input[name="firstName"]').fill('Axe');
+    await page.locator('input[name="lastName"]').fill('Scan');
+    await page.locator('select[name="gender"]').selectOption('M');
+    await page.locator('input[name="dateOfBirth"]').fill('2016-01-15');
+    await page.locator('select[name="belt"]').selectOption('Yellow');
+    await page.locator('input[name="patterns"]').check();
+    await page.getByRole('button', { name: /Next: Parent & Consent/i }).click();
+
+    await expect(page.getByLabel(/Parent\/Guardian Name/i)).toBeVisible();
+
+    const results = await checkA11y(page);
+    expect(results.violations).toEqual([]);
   });
 });

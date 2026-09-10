@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { loginAsDemo } from './helpers';
+import { checkA11y } from './axe-helper';
 
 /**
  * T7 — Scorekeeper a11y audit. Asserts the P0 fixes shipped with t_fb76d72d:
@@ -555,5 +556,33 @@ test.describe('scorekeeper (a11y)', () => {
     expect(putCount).toBe(1);
     await warning.getByRole('button', { name: /I verified server state/i }).click();
     await expect(warning).toHaveCount(0);
+  });
+
+  test('axe scan on scorekeeper division list', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
+    await expect(page.getByRole('heading', { name: /Scorekeeper/i })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+
+    const results = await checkA11y(page);
+    expect(results.violations).toEqual([]);
+  });
+
+  test('axe scan on scorekeeper match view', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
+    await page.waitForLoadState('networkidle');
+
+    const readyDivision = page
+      .locator('button')
+      .filter({ has: page.locator('text=/\\d+ ready/i') })
+      .first();
+    await expect(readyDivision).toBeVisible();
+    await readyDivision.click();
+
+    await expect(page.getByLabel(/match \d+ of \d+/i).first()).toBeVisible({ timeout: 5_000 });
+
+    const results = await checkA11y(page);
+    expect(results.violations).toEqual([]);
   });
 });
