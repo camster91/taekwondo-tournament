@@ -24,14 +24,14 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
   ) => {
     const inputClasses = [
       /* 44px on every viewport: consistent alignment and a mobile-safe target. */
-      'w-full h-11 px-3 rounded-lg border border-slate-200 dark:border-slate-700',
-      'bg-white dark:bg-slate-900',
-      'text-sm text-slate-900 dark:text-slate-100',
-      'placeholder:text-slate-400',
+      'w-full h-11 px-3 rounded-lg border border-surface-200 dark:border-surface-700',
+      'bg-white dark:bg-surface-900',
+      'text-sm text-surface-900 dark:text-surface-100',
+      'placeholder:text-surface-400',
       'focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500',
       'transition-all',
       'disabled:opacity-50 disabled:cursor-not-allowed',
-      error && 'border-red-500 focus:ring-red-500/30 focus:border-red-500',
+      error && 'border-danger focus:ring-danger/30 focus:border-danger',
       leftIcon && 'pl-9',
       rightIcon && 'pr-9',
       inputClassName,
@@ -52,7 +52,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className={['relative w-full', className].filter(Boolean).join(' ')}>
         {leftIcon && (
-          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-surface-400">
             {leftIcon}
           </div>
         )}
@@ -62,7 +62,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           {...props}
         />
         {rightIcon && (
-          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400">
+          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-surface-400">
             {rightIcon}
           </div>
         )}

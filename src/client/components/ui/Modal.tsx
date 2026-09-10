@@ -152,11 +152,11 @@ export default function Modal({
       >
         <div className="modal-header">
           <div className="min-w-0 flex-1 pr-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+            <h2 className="text-lg font-semibold text-surface-900 dark:text-white truncate">
               {title}
             </h2>
             {subtitle && (
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+              <p className="text-sm text-surface-600 dark:text-surface-400 mt-0.5">
                 {subtitle}
               </p>
             )}

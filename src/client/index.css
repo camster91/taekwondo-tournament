@@ -11,11 +11,17 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* Bowin: arena ink for operational trust, belt red for identity. */
+  /* Bowin Brand Identity
+     Arena ink (#0b1220) for operational trust, belt red (#e11d48) for identity.
+     Design for adult gym-tool density: precise, fast, confident. */
+  
+  /* Brand Colors */
   --color-brand-ink: #0b1220;
   --color-brand-red: #e11d48;
   --color-brand-rose: #fb7185;
   --color-brand-gold: #f59e0b;
+
+  /* Primary: Deep blue-gray for surfaces and text hierarchy */
   --color-primary-50:  #f1f5f9;
   --color-primary-100: #e2e8f0;
   --color-primary-200: #cbd5e1;
@@ -28,7 +34,7 @@
   --color-primary-900: #0b1220;
   --color-primary-950: #080d17;
 
-  /* Accent: amber for highlights, badges, the trophy */
+  /* Accent: Rose-red for interactive elements, CTAs, active states */
   --color-accent-50:  #fff1f2;
   --color-accent-100: #ffe4e6;
   --color-accent-200: #fecdd3;
@@ -41,7 +47,7 @@
   --color-accent-900: #4c0519;
   --color-accent-950: #2a0612;
 
-  /* Surface: cool neutral, near-white in light, deep in dark */
+  /* Surface: Cool neutral for backgrounds, borders, dividers */
   --color-surface-0:  #ffffff;
   --color-surface-50: #fafbfc;
   --color-surface-100: #f4f5f7;
@@ -55,7 +61,7 @@
   --color-surface-900: #111827;
   --color-surface-950: #0a0e1a;
 
-  /* Semantic */
+  /* Semantic State Colors */
   --color-success:  #10b981;
   --color-warning:  #f59e0b;
   --color-danger:   #ef4444;
