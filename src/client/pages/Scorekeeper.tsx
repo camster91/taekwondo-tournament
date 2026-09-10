@@ -1367,19 +1367,24 @@ export default function Scorekeeper() {
               </div>
             )}
 
-            {/* P2-9: Video URL */}
-            <div>
-              <label htmlFor="scorekeeper-video-url" className="sr-only">
-                Video Review URL
+            {/* Video Review URL - P2-9 enhanced */}
+            <div className="mb-4">
+              <label htmlFor="scorekeeper-video-url" className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                <Monitor className="h-4 w-4" />
+                Video Review URL (Optional)
               </label>
               <input
                 id="scorekeeper-video-url"
                 type="url"
                 value={videoUrl}
                 onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="Video URL (optional, e.g. YouTube)"
-                className="w-full p-3 bg-gray-700 rounded-lg mb-4"
+                placeholder="YouTube, Vimeo, or direct video link"
+                className="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                aria-describedby="video-url-help"
               />
+              <p id="video-url-help" className="text-xs text-gray-400 mt-1">
+                Attach video evidence for review or replay. Links appear in results.
+              </p>
             </div>
 
             {/* Submit Button */}
