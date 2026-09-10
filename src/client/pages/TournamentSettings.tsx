@@ -38,6 +38,12 @@ interface Tournament {
   status: string;
   settings: string | null;
   publicSlug?: string | null;
+  eventSlug?: string | null;
+  portalPublished?: boolean;
+  organizationId?: string | null;
+  organization?: {
+    slug: string;
+  } | null;
 }
 
 interface AgeGroup {
@@ -119,6 +125,11 @@ export default function TournamentSettings() {
   const [shareSlug, setShareSlug] = useState<string | null>(null);
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+
+  // Portal state — event slug and publication status
+  const [eventSlug, setEventSlug] = useState<string>('');
+  const [portalPublished, setPortalPublished] = useState<boolean>(false);
+  const [eventSlugDirty, setEventSlugDirty] = useState<boolean>(false);
 
   const { addToast } = useToast();
 
@@ -218,6 +229,15 @@ export default function TournamentSettings() {
     }
   }, [tournament?.publicSlug]);
 
+  // Hydrate portal state from tournament data
+  useEffect(() => {
+    if (tournament) {
+      setEventSlug(tournament.eventSlug || '');
+      setPortalPublished(tournament.portalPublished || false);
+      setEventSlugDirty(false);
+    }
+  }, [tournament]);
+
   const generateSlugMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch(`/api/tournaments/${id}/public-slug`, {
@@ -260,6 +280,63 @@ export default function TournamentSettings() {
       setTimeout(() => setCopyState('idle'), 2000);
     } catch {
       // Fallback for browsers without clipboard API permission
+      addToast('Copy failed — please copy manually', 'error');
+    }
+  };
+
+  // Portal management mutations
+  const saveEventSlugMutation = useMutation({
+    mutationFn: async (slug: string) => {
+      const res = await fetch(`/api/tournaments/${id}/event-slug`, {
+        method: 'PUT',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventSlug: slug }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to save event slug');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setEventSlug(data.eventSlug);
+      setEventSlugDirty(false);
+      addToast('Event slug saved', 'success');
+      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+    },
+    onError: (error: Error) => addToast(error.message, 'error'),
+  });
+
+  const publishPortalMutation = useMutation({
+    mutationFn: async (action: 'publish' | 'unpublish') => {
+      const res = await fetch(`/api/tournaments/${id}/portal/${action}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Failed to ${action} portal`);
+      }
+      return res.json();
+    },
+    onSuccess: (data, action) => {
+      setPortalPublished(data.portalPublished);
+      addToast(
+        action === 'publish' ? 'Portal published successfully' : 'Portal unpublished',
+        'success'
+      );
+      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+    },
+    onError: (error: Error) => addToast(error.message, 'error'),
+  });
+
+  const copyPortalLink = async () => {
+    if (!tournament?.organization?.slug || !eventSlug) return;
+    const url = `${window.location.origin}/events/${tournament.organization.slug}/${eventSlug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      addToast('Portal link copied to clipboard', 'success');
+    } catch {
       addToast('Copy failed — please copy manually', 'error');
     }
   };
@@ -651,6 +728,112 @@ export default function TournamentSettings() {
         }}
         onClose={() => setRevokeOpen(false)}
       />
+
+      {/* Event Portal — tenant-branded public event page */}
+      {tournament?.organizationId && (
+        <Card data-tour="settings-event-portal" className="mb-6">
+          <CardHeader
+            title="Event Portal"
+            icon={LinkIcon}
+            description="Branded public event page for registration and results. Appears on your organization's event directory."
+          />
+          <CardBody>
+            <div className="space-y-4">
+              {/* Event Slug Input */}
+              <div>
+                <Label htmlFor="eventSlug">
+                  Event Slug
+                  <span className="ml-2 text-sm font-normal text-gray-600 dark:text-gray-400">
+                    (used in portal URL)
+                  </span>
+                </Label>
+                <div className="mt-1 flex items-center gap-2">
+                  <Input
+                    id="eventSlug"
+                    value={eventSlug}
+                    onChange={(e) => {
+                      setEventSlug(e.target.value);
+                      setEventSlugDirty(true);
+                    }}
+                    placeholder="spring-championship-2027"
+                    className="flex-1 font-mono text-sm"
+                    disabled={!tournament?.organizationId}
+                  />
+                  <Button
+                    variant="primary"
+                    onClick={() => saveEventSlugMutation.mutate(eventSlug)}
+                    disabled={!eventSlugDirty || !eventSlug.trim() || saveEventSlugMutation.isPending}
+                    loading={saveEventSlugMutation.isPending}
+                  >
+                    {saveEventSlugMutation.isPending ? 'Saving...' : 'Save Slug'}
+                  </Button>
+                </div>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Lowercase letters, numbers, and hyphens only. 3-63 characters.
+                </p>
+              </div>
+
+              {/* Portal Status & Actions */}
+              {eventSlug && (
+                <div className="space-y-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                  {portalPublished ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                            ✓ Published to Portal
+                          </span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => publishPortalMutation.mutate('unpublish')}
+                          disabled={publishPortalMutation.isPending}
+                        >
+                          {publishPortalMutation.isPending ? 'Unpublishing...' : 'Unpublish'}
+                        </Button>
+                      </div>
+
+                      {tournament?.organization?.slug && (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            readOnly
+                            value={`${window.location.origin}/events/${tournament.organization.slug}/${eventSlug}`}
+                            className="flex-1 font-mono text-sm"
+                            onClick={(e) => (e.target as HTMLInputElement).select()}
+                          />
+                          <Button variant="outline" size="sm" onClick={copyPortalLink}>
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        This event is discoverable on your organization's public event portal.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-4 flex-wrap">
+                        <Button
+                          variant="primary"
+                          onClick={() => publishPortalMutation.mutate('publish')}
+                          disabled={publishPortalMutation.isPending || !eventSlug.trim()}
+                        >
+                          {publishPortalMutation.isPending ? 'Publishing...' : 'Publish to Portal'}
+                        </Button>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          Make this event visible on your organization's portal
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Age Groups */}
       <Card className="mb-6">
