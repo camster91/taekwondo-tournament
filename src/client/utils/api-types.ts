@@ -1,4 +1,6 @@
 /**
+ * @deprecated This file is being migrated to `src/shared/contracts/`.
+ * 
  * Shared response shapes for the dashboard / detail page API calls.
  *
  * These mirror the server-side include shape used in `routes/divisions.ts`
@@ -6,6 +8,13 @@
  * declaring its own ad-hoc `any[]` shape and lets the same types flow
  * through hooks, derived selectors, and components.
  *
+ * **Migration plan**:
+ * - Phase 1 (current): Shared contracts in `src/shared/contracts/` with test coverage
+ * - Phase 2 (next): Migrate remaining pages to use `@/shared/contracts`
+ * - Phase 3: Delete this file after all consumers migrated
+ * 
+ * **New consumers**: Import from `../../shared/contracts` instead of this file.
+ * 
  * Only the fields the dashboards actually consume are typed; the server
  * returns more (registration, audit log, etc.) but pages that don't
  * need them should not pretend they do.
