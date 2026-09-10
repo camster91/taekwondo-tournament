@@ -280,7 +280,7 @@ export default function PublicScoreboard() {
         </div>
       )}
       {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-primary-950 to-slate-900 border-b border-white/5">
+      <div className="bg-gradient-to-r from-surface-900 via-primary-950 to-surface-900 border-b border-white/5">
         <div className="px-4 md:px-8 lg:px-12 py-4 md:py-5 lg:py-6 flex items-center justify-between">
           <div className="flex items-center gap-4 md:gap-6">
             {tournament?.brandLogoUrl ? (
@@ -420,7 +420,7 @@ export default function PublicScoreboard() {
               {inProgressMatches.map((match) => {
                 const division = getDivisionForMatch(match);
                 return (
-                  <Card key={match.id} className="overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-900 border-2 border-amber-500/40 shadow-2xl">
+                  <Card key={match.id} className="overflow-hidden rounded-2xl bg-gradient-to-br from-warning/15 via-surface-900 to-surface-900 border-2 border-warning/40 shadow-2xl">
                     <CardBody className="p-6 md:p-7 lg:p-8">
                       <div className="relative">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-warning/500/10 rounded-full blur-3xl" />
@@ -556,8 +556,8 @@ export default function PublicScoreboard() {
           {/* Division Summary */}
           <div className="mt-8 md:mt-10">
             <div className="flex items-center mb-4 md:mb-5">
-              <Users className="h-6 w-6 md:h-7 md:w-7 text-purple-400 mr-3" />
-              <h3 className="text-xl md:text-2xl lg:text-3xl font-semibold text-purple-400">DIVISION STATUS</h3>
+              <Users className="h-6 w-6 md:h-7 md:w-7 text-accent-400 mr-3" />
+              <h3 className="text-xl md:text-2xl lg:text-3xl font-semibold text-accent-400">DIVISION STATUS</h3>
             </div>
             {(() => {
               // Show a division row only if it has a bracket with matches.

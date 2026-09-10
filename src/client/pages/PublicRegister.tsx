@@ -1137,7 +1137,7 @@ export default function PublicRegister() {
                 </div>
 
                 {/* v2: Compete with older */}
-                <div className="mt-4 flex items-start gap-2 p-2 -ml-2 rounded hover:bg-surface-50 dark:hover:bg-slate-800/50 transition-colors">
+                <div className="mt-4 flex items-start gap-2 p-2 -ml-2 rounded hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors">
                   <input
                     type="checkbox"
                     name="competeWithOlder"
