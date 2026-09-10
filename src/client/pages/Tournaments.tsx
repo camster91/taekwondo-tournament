@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
 import Badge from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
+import OperationStatus from '../components/ui/OperationStatus';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { SPORT_PROFILES } from '../../shared/constants/sport-profiles';
 import { saveDraft, loadDraft, clearDraft, type DraftTournament } from '../utils/draft-storage';
@@ -24,12 +25,6 @@ import {
   serializeTournamentListFilters,
   updateSearchParams,
 } from '../utils/url-state';
-import {
-  getAsyncStateMessage,
-  isOperationInProgress,
-  canRetry,
-  type AsyncOperationState,
-} from '../utils/async-state';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
@@ -213,31 +208,12 @@ export default function Tournaments() {
 
       {/* Error Banner */}
       {isError && (
-        <Card className="border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-900/20">
-          <CardBody>
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0">
-                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-red-900 dark:text-red-100">
-                  Failed to load tournaments
-                </h3>
-                <p className="mt-1 text-sm text-red-700 dark:text-red-300">
-                  {error instanceof Error ? error.message : 'An error occurred'}
-                </p>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => refetch()}
-                  className="mt-3"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" /> Try Again
-                </Button>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
+        <OperationStatus
+          state="rejected"
+          message={error instanceof Error ? error.message : 'Failed to load tournaments'}
+          actionLabel="Retry"
+          onAction={() => refetch()}
+        />
       )}
 
       {/* Search Bar */}

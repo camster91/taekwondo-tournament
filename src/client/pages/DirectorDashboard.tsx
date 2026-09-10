@@ -28,6 +28,9 @@ import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { StatTile } from '../components/ui';
+import Spinner from '../components/ui/Spinner';
+import EmptyState from '../components/ui/EmptyState';
+import OperationStatus from '../components/ui/OperationStatus';
 import type { ApiDivision, ApiMatch, ApiTournamentSummary } from '../utils/api-types';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
 import {
@@ -201,7 +204,7 @@ export default function DirectorDashboard() {
     },
   });
 
-  const { data: progress, isLoading, dataUpdatedAt } = useQuery<TournamentProgress>({
+  const { data: progress, isLoading, isError, error, refetch } = useQuery<TournamentProgress>({
     queryKey: ['director-dashboard', tournamentId],
     queryFn: async () => {
       const [tournamentRes, divisionsRes] = await Promise.all([
@@ -501,6 +504,31 @@ export default function DirectorDashboard() {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Director Dashboard"
+          description="Tournament data unavailable"
+        >
+          <Link
+            to={`/tournaments/${tournamentId}`}
+            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          >
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back to Tournament
+          </Link>
+        </PageHeader>
+        <OperationStatus
+          state="rejected"
+          message={error instanceof Error ? error.message : 'Failed to load tournament progress'}
+          actionLabel="Retry"
+          onAction={() => refetch()}
+        />
+      </div>
+    );
+  }
+
   if (!progress) {
     return (
       <div className="text-center py-12">
@@ -562,7 +590,17 @@ export default function DirectorDashboard() {
               <Button type="submit" loading={operationalQueryMutation.isPending} disabled={!operationalQuestion.trim()}>Ask</Button>
             </form>
             <p id="operational-query-help" className="text-sm text-gray-600 dark:text-gray-400">This never changes tournament data.</p>
-            {operationalQueryMutation.isError && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100">{operationalQueryMutation.error instanceof Error ? operationalQueryMutation.error.message : 'The operational question could not be answered.'}</div>}
+            {operationalQueryMutation.isError && (
+              <OperationStatus
+                state="rejected"
+                message={operationalQueryMutation.error instanceof Error ? operationalQueryMutation.error.message : 'The operational question could not be answered.'}
+                actionLabel="Retry"
+                onAction={() => {
+                  const question = operationalQuestion.trim();
+                  if (question) operationalQueryMutation.mutate(question);
+                }}
+              />
+            )}
             {operationalQueryMutation.data && (
               <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
                 <p>{operationalQueryMutation.data.answer}</p>
@@ -581,19 +619,20 @@ export default function DirectorDashboard() {
             <h2 id="attention-heading" className="text-lg font-semibold text-gray-900 dark:text-white">Attention required</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">Live operational risks, ordered by severity.</p>
           </div>
-          {attentionQuery.isError && (
-            <Button variant="secondary" size="sm" onClick={() => void attentionQuery.refetch()}>Retry alerts</Button>
-          )}
         </div>
         {attentionQuery.isLoading && (
-          <div role="status" className="rounded-lg border border-gray-200 p-4 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-300">
-            Checking tournament-day risks…
+          <div className="flex items-center gap-2 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+            <Spinner size="sm" />
+            <span className="text-sm text-gray-600 dark:text-gray-300">Checking tournament-day risks…</span>
           </div>
         )}
         {attentionQuery.isError && (
-          <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200">
-            The command centre is unavailable. Existing tournament data is still shown; retry before relying on the alert list.
-          </div>
+          <OperationStatus
+            state="rejected"
+            message="The command centre is unavailable. Existing tournament data is still shown."
+            actionLabel="Retry"
+            onAction={() => void attentionQuery.refetch()}
+          />
         )}
         {attentionQuery.data?.alerts.length === 0 && offlineOperations.needsReview.length === 0 && (
           <div role="status" className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
@@ -667,12 +706,22 @@ export default function DirectorDashboard() {
         </div>
 
         {sosAlertsQuery.isLoading && (
-          <div role="status" className="rounded-lg border border-gray-200 p-4 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-300">
-            Loading alerts…
+          <div className="flex items-center gap-2 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+            <Spinner size="sm" />
+            <span className="text-sm text-gray-600 dark:text-gray-300">Loading alerts…</span>
           </div>
         )}
 
-        {sosAlertsQuery.data?.alerts.filter(a => !a.resolved).length === 0 && !sosAlertsQuery.isLoading && (
+        {sosAlertsQuery.isError && (
+          <OperationStatus
+            state="rejected"
+            message="Failed to load SOS alerts"
+            actionLabel="Retry"
+            onAction={() => void sosAlertsQuery.refetch()}
+          />
+        )}
+
+        {sosAlertsQuery.data?.alerts.filter(a => !a.resolved).length === 0 && !sosAlertsQuery.isLoading && !sosAlertsQuery.isError && (
           <div role="status" className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
             <CheckCircle className="h-5 w-5" aria-hidden="true" /> No active SOS alerts.
           </div>
@@ -873,9 +922,15 @@ export default function DirectorDashboard() {
         <CardHeader title="Ring Status" />
         <CardBody>
           {progress.rings.length === 0 ? (
-            <p className="text-gray-600 dark:text-gray-400 text-center py-4">
-              No rings assigned yet. Assign rings in the schedule page.
-            </p>
+            <EmptyState
+              icon={Monitor}
+              title="No rings assigned yet"
+              description="Assign rings in the schedule page to track ring status here."
+              action={{
+                label: 'View Schedule',
+                onClick: () => window.location.href = `/tournaments/${tournamentId}/schedule`
+              }}
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {progress.rings.map((ring) => {
@@ -965,9 +1020,15 @@ export default function DirectorDashboard() {
         <CardHeader title="Division Progress" />
         <CardBody>
           {progress.divisionDetails.length === 0 ? (
-            <p className="text-gray-600 dark:text-gray-400 text-center py-4">
-              No divisions created yet.
-            </p>
+            <EmptyState
+              icon={Target}
+              title="No divisions created yet"
+              description="Generate divisions from registered competitors to track progress here."
+              action={{
+                label: 'Manage Divisions',
+                onClick: () => window.location.href = `/tournaments/${tournamentId}/divisions`
+              }}
+            />
           ) : (
             <div className="space-y-3">
               {progress.divisionDetails.map((division) => {
