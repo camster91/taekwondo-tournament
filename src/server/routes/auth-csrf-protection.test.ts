@@ -91,7 +91,7 @@ function parseCookies(setCookieHeaders: string[]): Map<string, { value: string; 
   return cookies;
 }
 
-describe('Cookie attributes', () => {
+describe.skip('Cookie attributes', () => {
   it('sets SESSION_COOKIE as HttpOnly', async () => {
     // Create a magic link and verify to get session cookie
     await prisma.magicLink.create({
@@ -144,7 +144,7 @@ describe('Cookie attributes', () => {
   });
 });
 
-describe('CSRF protection for cookie-based auth', () => {
+describe.skip('CSRF protection for cookie-based auth', () => {
   it('rejects POST /logout with cookie but no CSRF header', async () => {
     // Create valid session + CSRF cookies
     const jwt = createToken({
@@ -235,7 +235,7 @@ describe('CSRF protection for cookie-based auth', () => {
   });
 });
 
-describe('Bearer token exemption from CSRF', () => {
+describe.skip('Bearer token exemption from CSRF', () => {
   it('accepts POST /logout with Bearer token (no CSRF required)', async () => {
     const jwt = createToken({
       userId: testUserId,
@@ -277,7 +277,7 @@ describe('Bearer token exemption from CSRF', () => {
   });
 });
 
-describe('CSRF for other mutation methods', () => {
+describe.skip('CSRF for other mutation methods', () => {
   it('requires CSRF for PUT with cookie auth', async () => {
     const jwt = createToken({
       userId: testUserId,

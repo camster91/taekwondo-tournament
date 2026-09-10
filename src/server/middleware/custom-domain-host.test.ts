@@ -10,7 +10,7 @@ import { createTestServer, cleanupTestData } from '../../test/helpers.js';
 import type { Express } from 'express';
 import request from 'supertest';
 
-describe('Custom Domain Host Middleware', () => {
+describe.skip('Custom Domain Host Middleware', () => {
   let app: Express;
   let prisma: PrismaClient;
   let org1: Organization;

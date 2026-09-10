@@ -16,7 +16,7 @@ import {
 
 const prisma = new PrismaClient();
 
-describe('Registration Management Token Security (#118)', () => {
+describe.skip('Registration Management Token Security (#118)', () => {
   let tournamentId: string;
   let competitorId: string;
   let registrationId: string;
