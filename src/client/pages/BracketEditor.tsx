@@ -37,15 +37,13 @@ interface Registration {
   competitor: Competitor;
 }
 
-interface Match {
-  id: string;
-  matchNumber: number;
-  roundNumber: number;
-  bracketType: string;
+import type { ApiMatch } from '../../shared/contracts';
+
+// BracketEditor extends ApiMatch with legacy competitor*Id fields
+interface Match extends Omit<ApiMatch, 'competitor1' | 'competitor2' | 'winner'> {
   competitor1Id: string | null;
   competitor2Id: string | null;
   winnerId: string | null;
-  status: string;
   competitor1: { competitor: Competitor } | null;
   competitor2: { competitor: Competitor } | null;
   winner: { competitor: Competitor } | null;

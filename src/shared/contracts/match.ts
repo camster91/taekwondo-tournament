@@ -23,13 +23,19 @@ export type BracketType = z.infer<typeof bracketTypeSchema>;
 /**
  * A competitor slot within a match — either populated with a competitor
  * or null when TBD (advancement not yet determined).
+ * 
+ * Extended fields (specialNeeds, competeWithOlder) are used by scorekeeper
+ * to display competitor notes and registration preferences.
  */
 export const matchCompetitorSlotSchema = z.object({
   id: z.string().uuid(),
+  specialNeeds: z.string().nullable().optional(),
+  competeWithOlder: z.boolean().optional(),
   competitor: z.object({
     firstName: z.string(),
     lastName: z.string(),
     schoolDojang: z.string().nullable().optional(),
+    specialNeeds: z.string().nullable().optional(),
   }),
 }).nullable();
 

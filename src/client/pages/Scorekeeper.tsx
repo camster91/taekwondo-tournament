@@ -46,51 +46,18 @@ import {
 import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner';
 import PendingOperationsPanel from '../components/PendingOperationsPanel';
 
-interface Match {
-  id: string;
-  matchNumber: number;
-  roundNumber: number;
-  bracketType: string;
-  ringNumber?: number | null;
-  status: string;
-  score1: string | null;
-  score2: string | null;
+import type { ApiMatch, ApiDivision, ApiTournamentSummary } from '../../shared/contracts';
+
+// Scorekeeper uses the full match shape from the contract, plus winnerId
+// which is derived client-side (winnerId = winner?.id ?? null)
+interface Match extends ApiMatch {
   winnerId: string | null;
-  videoUrl?: string | null; // P2-9
-  competitor1: {
-    id: string;
-    specialNeeds?: string | null;
-    competeWithOlder?: boolean;
-    competitor: {
-      firstName: string;
-      lastName: string;
-      schoolDojang: string | null;
-      specialNeeds?: string | null;
-    };
-  } | null;
-  competitor2: {
-    id: string;
-    specialNeeds?: string | null;
-    competeWithOlder?: boolean;
-    competitor: {
-      firstName: string;
-      lastName: string;
-      schoolDojang: string | null;
-      specialNeeds?: string | null;
-    };
-  } | null;
 }
 
-interface Division {
-  id: string;
-  name: string;
-  eventType: string;
-  bracket: {
-    id: string;
-    matches: Match[];
-  } | null;
-}
+// Division shape matches the contract
+type Division = ApiDivision;
 
+// Tournament shape — only needs id and sportProfileSlug
 interface Tournament {
   id: string;
   sportProfileSlug: string | null;
@@ -256,14 +223,25 @@ export default function Scorekeeper() {
     queryKey: ['scorekeeper-divisions', tournamentId],
     queryFn: async () => {
       if (!user || !tournamentId) throw new Error('Authenticated tournament context is required');
-      const result = await loadVenueData<Division[]>({
+      const result = await loadVenueData<ApiDivision[]>({
         scope: { ownerId: user.id, tournamentId, kind: 'scorekeeper' },
         store: venueSnapshots,
-        validate: (value): value is Division[] => isScorekeeperDivisionData(value),
+        validate: (value): value is ApiDivision[] => isScorekeeperDivisionData(value),
         request: () => fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`, { headers: getAuthHeaders() }),
       });
       setCachedSnapshotAt(result.source === 'snapshot' ? result.savedAt : null);
-      return result.data;
+      
+      // Transform API data to add winnerId (client-side derived field)
+      return result.data.map((div): Division => ({
+        ...div,
+        bracket: div.bracket ? {
+          ...div.bracket,
+          matches: div.bracket.matches.map((m): Match => ({
+            ...m,
+            winnerId: m.winner?.id ?? null,
+          })),
+        } : null,
+      }));
     },
     enabled: Boolean(user && tournamentId),
     refetchInterval: 10000,
