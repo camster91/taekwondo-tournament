@@ -85,6 +85,8 @@ const SupportTickets = lazy(() => import('./pages/SupportTickets'));
 const VideoTutorials = lazy(() => import('./pages/VideoTutorials'));
 const OrganizerPortal = lazy(() => import('./pages/OrganizerPortal'));
 const EventPortal = lazy(() => import('./pages/EventPortal'));
+const TournamentTemplates = lazy(() => import('./pages/TournamentTemplates'));
+const TournamentTemplateForm = lazy(() => import('./pages/TournamentTemplateForm'));
 
 // Fallback rendered while a lazy page chunk is fetched. Centred spinner
 // keeps the chrome stable so the page doesn't reflow when the real
@@ -643,6 +645,21 @@ function AppRoutes() {
             <Route path="/competitors/:id/profile" element={<CompetitorProfile />} />
             <Route path="/trash" element={<Trash />} />
             <Route path="/tournaments" element={<Tournaments />} />
+            <Route path="/tournament-templates" element={
+              <ProtectedRoute requiredRoles={['admin', 'director']}>
+                <TournamentTemplates />
+              </ProtectedRoute>
+            } />
+            <Route path="/tournament-templates/new" element={
+              <ProtectedRoute requiredRoles={['admin', 'director']}>
+                <TournamentTemplateForm />
+              </ProtectedRoute>
+            } />
+            <Route path="/tournament-templates/:id/edit" element={
+              <ProtectedRoute requiredRoles={['admin', 'director']}>
+                <TournamentTemplateForm />
+              </ProtectedRoute>
+            } />
             <Route path="/tournaments/:id" element={<TournamentDetail />} />
             <Route path="/tournaments/:id/results" element={<Results />} />
             <Route

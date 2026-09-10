@@ -612,6 +612,7 @@ model Organization {
   invitations         Invitation[]
   auditLogs           UserAuditLog[]
   usageRecords        OrganizationUsageRecord[]
+  tournamentTemplates TournamentTemplate[]
 
   @@index([slug])
 }
@@ -864,4 +865,38 @@ model BackupState {
   payload      String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// Organization-scoped tournament templates
+// Allows directors to create reusable tournament setup templates
+// capturing settings, rules, weight classes, sport defaults.
+// Templates are cloned into new tournaments via POST /api/tournaments/from-template/:id
+model TournamentTemplate {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String // e.g. "Spring Sparring Championship Template"
+  description    String? // Optional notes for directors
+  
+  // Tournament setup fields (cloned into new tournament)
+  sportProfileSlug String  @default("taekwondo")
+  settings         String? // JSON - tournament settings (division threshold, age groups, etc.)
+  rules            String? // JSON - tournament rules
+  weightClasses    String? // JSON - array of weight class definitions
+  
+  // Branding defaults (optional overrides of org-level branding)
+  brandName         String?
+  brandPrimaryColor String?
+  brandLogoUrl      String?
+  
+  // Soft-delete: keep templates for audit/restore
+  deletedAt DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // User ID who created the template
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, deletedAt])
 }

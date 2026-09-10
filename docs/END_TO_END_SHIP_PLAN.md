@@ -22,6 +22,8 @@
 - ✅ PR #251: Key Gaps polish — announcer view readability (bigger fonts, ring badges for TV display), video review integration polish (clearer labels, help text), division merge conflicts UI (amber warning banner showing replaced divisions & excluded registrations)
 - ✅ PR #252: Ship plan sync post-#251 + typecheck leftovers (@types/ws, Waitlist/sentry/DirectorDashboard/ToastContext/etc.) + #189 demo data disclosure
 - ✅ PR #253: Typecheck completion + TV-optimized public scoreboard — fixed remaining typecheck errors (PublicScoreboard refetchInterval, Results videoUrl, VideoTutorials icon prop), TV-optimized public scoreboard (4K-safe fonts, improved contrast, better spacing for venue displays)
+- ✅ PR #254: Support-access test role fixes + ship-plan sync post-#253
+- 🔄 **This PR**: Org-level tournament templates — reusable tournament setup templates (settings, rules, weight classes, sport defaults) scoped to organization; create tournaments from templates; fail-closed tenant isolation
 
 ---
 
@@ -50,7 +52,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 |------|------------|--------|----------|
 | **Core product** | | | |
 | Auth & users | 90% | 🟢 Strong | JWT token revocation, httpOnly cookies + CSRF, registration token security complete; org invites shipped; lacks SSO |
-| Tournament setup | 95% | 🟢 Strong | Settings, rules, weight classes complete; needs org-level templates |
+| Tournament setup | 100% | 🟢 Strong | Settings, rules, weight classes, org-level templates complete |
 | Competitor registry | 95% | 🟢 Strong | Excel import, search, soft-delete, merge/deduplication complete |
 | Registration (staff) | 95% | 🟢 Strong | Bulk + manual registration complete |
 | Registration (public) | 100% | 🟢 Strong | Self-serve form, waitlist, payment gateway, confirmation emails, token security complete |

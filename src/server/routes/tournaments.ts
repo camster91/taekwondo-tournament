@@ -294,6 +294,154 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
   res.status(201).json(tournament);
 });
 
+// Create tournament from template
+router.post('/from-template/:templateId', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const authReq = req as AuthenticatedRequest;
+  const templateId = getParam(req.params.templateId);
+  
+  if (!authReq.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const membership = await prisma.organizationMember.findFirst({
+    where: { userId: authReq.user.id },
+    select: { organizationId: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (!membership) {
+    return res.status(403).json({ error: 'No organization membership found' });
+  }
+
+  const template = await prisma.tournamentTemplate.findFirst({
+    where: {
+      id: templateId,
+      organizationId: membership.organizationId,
+      deletedAt: null,
+    },
+  });
+
+  if (!template) {
+    return res.status(404).json({ error: 'Template not found' });
+  }
+
+  const { name, date, location } = req.body;
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    return res.status(400).json({ error: 'Tournament name is required' });
+  }
+  if (!date || typeof date !== 'string' || isNaN(Date.parse(date))) {
+    return res.status(400).json({ error: 'Valid date is required' });
+  }
+
+  const normalizeDate = (raw: string): Date => {
+    const dateOnly = raw.includes('T') ? raw.slice(0, 10) : raw;
+    return new Date(dateOnly + 'T12:00:00.000Z');
+  };
+
+  const organization = await prisma.organization.findUnique({
+    where: { id: membership.organizationId },
+    select: { plan: true },
+  });
+  if (!organization) {
+    return res.status(404).json({ error: 'Organization not found' });
+  }
+
+  const tournamentCount = await prisma.tournament.count({
+    where: { organizationId: membership.organizationId, deletedAt: null },
+  });
+  if (!canCreateTournament(organization.plan, tournamentCount)) {
+    return res.status(402).json({
+      error: 'Your organization has reached its tournament limit.',
+      code: 'TOURNAMENT_LIMIT_REACHED',
+    });
+  }
+
+  const tournament = await prisma.tournament.create({
+    data: {
+      name: name.trim(),
+      date: normalizeDate(date),
+      location: typeof location === 'string' ? location : null,
+      settings: template.settings,
+      status: 'draft',
+      sportProfileSlug: template.sportProfileSlug,
+      organizationId: membership.organizationId,
+      brandName: template.brandName,
+      brandPrimaryColor: template.brandPrimaryColor,
+      brandLogoUrl: template.brandLogoUrl,
+    },
+  });
+
+  if (template.weightClasses) {
+    try {
+      const weightClasses = JSON.parse(template.weightClasses) as Array<{
+        name: string;
+        gender?: string;
+        ageMin?: number;
+        ageMax?: number;
+        weightMinLbs?: number;
+        weightMaxLbs?: number;
+        displayOrder?: number;
+      }>;
+      
+      await prisma.weightClass.createMany({
+        data: weightClasses.map((wc) => ({
+          tournamentId: tournament.id,
+          name: wc.name,
+          gender: wc.gender || null,
+          ageMin: wc.ageMin ?? null,
+          ageMax: wc.ageMax ?? null,
+          weightMinLbs: wc.weightMinLbs ?? null,
+          weightMaxLbs: wc.weightMaxLbs ?? null,
+          displayOrder: wc.displayOrder ?? null,
+        })),
+      });
+    } catch (err) {
+      console.error('[create-from-template] Failed to parse/create weight classes:', err);
+    }
+  }
+
+  if (template.rules) {
+    try {
+      const rules = JSON.parse(template.rules);
+      const rulesData = Array.isArray(rules) ? rules : [rules];
+      await prisma.tournamentRule.createMany({
+        data: rulesData.map((rule: Record<string, unknown>) => ({
+          tournamentId: tournament.id,
+          name: String(rule.name || 'Custom Rule'),
+          description: rule.description ? String(rule.description) : null,
+          category: String(rule.category || 'custom'),
+          ruleType: String(rule.ruleType || 'custom_constraint'),
+          enforcement: String(rule.enforcement || 'soft'),
+          parameters: typeof rule.parameters === 'string' ? rule.parameters : JSON.stringify(rule.parameters || {}),
+          priority: typeof rule.priority === 'number' ? rule.priority : 50,
+          isActive: rule.isActive === false ? false : true,
+          source: 'manual',
+          createdBy: authReq.user!.id,
+        })),
+      });
+    } catch (err) {
+      console.error('[create-from-template] Failed to parse/create rules:', err);
+    }
+  }
+
+  if (authReq.user) {
+    await createAuditLog(prisma, {
+      userId: authReq.user.id,
+      action: 'tournament_created',
+      details: { tournamentId: tournament.id, tournamentName: name, fromTemplate: templateId },
+      ipAddress: getClientIp(authReq),
+      userAgent: getUserAgent(authReq),
+      organizationId: membership.organizationId,
+      tournamentId: tournament.id,
+    }).catch((err) => {
+      console.error('[audit-log] tournament_created (from template) event failed:', err);
+    });
+  }
+
+  res.status(201).json(tournament);
+});
+
 // Update tournament (requires authentication + admin/director role)
 // Generate or rotate the per-tournament public scoreboard slug.
 // POST /api/tournaments/:id/public-slug — returns the new slug (or

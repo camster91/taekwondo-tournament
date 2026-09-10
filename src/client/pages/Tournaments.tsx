@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search } from 'lucide-react';
+import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
@@ -52,11 +52,21 @@ export default function Tournaments() {
   };
   const [deleteTarget, setDeleteTarget] = useState<Tournament | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [formData, setFormData] = useState({
     name: '',
     date: '',
     location: '',
     sportProfileSlug: 'taekwondo',
+  });
+
+  const { data: templates } = useQuery<Array<{id: string; name: string; description: string | null}>>({
+    queryKey: ['tournament-templates'],
+    queryFn: async () => {
+      const res = await fetch('/api/tournament-templates', { headers: getAuthHeaders() });
+      if (!res.ok) return [];
+      return res.json();
+    },
   });
 
   const { data: tournaments, isLoading } = useQuery<Tournament[]>({
@@ -69,8 +79,11 @@ export default function Tournaments() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      const res = await fetch('/api/tournaments', {
+    mutationFn: async (data: typeof formData & { templateId?: string }) => {
+      const url = data.templateId 
+        ? `/api/tournaments/from-template/${data.templateId}`
+        : '/api/tournaments';
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(data),
@@ -85,6 +98,7 @@ export default function Tournaments() {
       queryClient.invalidateQueries({ queryKey: ['tournaments'] });
       closeCreateModal();
       setFormData({ name: '', date: '', location: '', sportProfileSlug: 'taekwondo' });
+      setSelectedTemplateId('');
     },
   });
 
@@ -241,10 +255,45 @@ export default function Tournaments() {
             id="create-tournament-form"
             onSubmit={(e) => {
               e.preventDefault();
-              createMutation.mutate(formData);
+              createMutation.mutate({ ...formData, templateId: selectedTemplateId || undefined });
             }}
             className="space-y-4"
           >
+            {templates && templates.length > 0 && (
+              <div>
+                <Label>Use Template (Optional)</Label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(e) => setSelectedTemplateId(e.target.value)}
+                    className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  >
+                    <option value="">Start from scratch</option>
+                    {templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    as={Link}
+                    to="/tournament-templates"
+                    variant="secondary"
+                    size="sm"
+                    className="flex items-center gap-1 whitespace-nowrap"
+                    onClick={closeCreateModal}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Manage
+                  </Button>
+                </div>
+                {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.description && (
+                  <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-400">
+                    {templates.find(t => t.id === selectedTemplateId)?.description}
+                  </p>
+                )}
+              </div>
+            )}
             <div>
               <Label>Sport</Label>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
