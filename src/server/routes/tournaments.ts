@@ -2003,4 +2003,126 @@ router.put(
   }
 );
 
+// Schedule delay propagation (P1-125: Day-of delay recording)
+router.post(
+  '/:id/schedule/delay/preview',
+  authenticate,
+  requireTournamentAccess('director'),
+  validateRequest(
+    z.object({
+      delayType: z.enum(['ring', 'division']),
+      ringNumber: z.number().int().min(1).optional(),
+      divisionId: z.string().uuid().optional(),
+      delayMinutes: z.number().int().min(1).max(480), // Max 8 hours
+      reason: z.string().min(1).max(500),
+    })
+  ),
+  async (req: Request, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const tournamentId = getParam(req.params.id);
+    const delayInput = req.body as {
+      delayType: 'ring' | 'division';
+      ringNumber?: number;
+      divisionId?: string;
+      delayMinutes: number;
+      reason: string;
+    };
+
+    const { previewScheduleDelay } = await import('../services/schedule-delay-propagation.js');
+
+    try {
+      const preview = await previewScheduleDelay(prisma, {
+        tournamentId,
+        ...delayInput,
+      });
+      res.json(preview);
+    } catch (error) {
+      if (error instanceof Error) {
+        res.status(400).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Failed to preview schedule delay' });
+      }
+    }
+  }
+);
+
+router.post(
+  '/:id/schedule/delay/apply',
+  authenticate,
+  requireTournamentAccess('director'),
+  validateRequest(
+    z.object({
+      delayInput: z.object({
+        delayType: z.enum(['ring', 'division']),
+        ringNumber: z.number().int().min(1).optional(),
+        divisionId: z.string().uuid().optional(),
+        delayMinutes: z.number().int().min(1).max(480),
+        reason: z.string().min(1).max(500),
+      }),
+      expectedUpdatedAt: z.string(),
+      expectedInputVersion: z.string(),
+      operationKey: z.string(),
+    })
+  ),
+  async (req: Request, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const tournamentId = getParam(req.params.id);
+    const authReq = req as AuthenticatedRequest;
+    const { applyScheduleDelay } = await import('../services/schedule-delay-propagation.js');
+
+    try {
+      const result = await applyScheduleDelay(prisma, {
+        tournamentId,
+        delayInput: req.body.delayInput,
+        expectedUpdatedAt: req.body.expectedUpdatedAt,
+        expectedInputVersion: req.body.expectedInputVersion,
+        operationKey: req.body.operationKey,
+        approvedBy: authReq.user!.id,
+      });
+      res.json(result);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (
+          error.message.includes('stale') ||
+          error.message.includes('changed since preview')
+        ) {
+          res.status(409).json({ error: error.message });
+        } else {
+          res.status(400).json({ error: error.message });
+        }
+      } else {
+        res.status(500).json({ error: 'Failed to apply schedule delay' });
+      }
+    }
+  }
+);
+
+router.post(
+  '/:id/schedule/delay/undo/:auditId',
+  authenticate,
+  requireTournamentAccess('director'),
+  async (req: Request, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    const authReq = req as AuthenticatedRequest;
+    const { undoScheduleDelay } = await import('../services/schedule-delay-propagation.js');
+
+    try {
+      await undoScheduleDelay(
+        prisma,
+        getParam(req.params.auditId),
+        authReq.user!.id,
+        new Date(),
+        getParam(req.params.id)
+      );
+      res.json({ ok: true });
+    } catch (error) {
+      if (error instanceof Error) {
+        res.status(400).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Failed to undo schedule delay' });
+      }
+    }
+  }
+);
+
 export default router;
