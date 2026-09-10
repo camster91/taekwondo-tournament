@@ -71,9 +71,9 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 |----|----------|------|---------------------|--------|
 | P0-1 | #237 | **✅ VERIFIED: JWT token revocation** | Logout invalidates tokens via `tokenVersion` bump; isActive flip kills sessions — **FULLY TESTED** (auth-session-invalidation.test.ts + auth-token-version.test.ts, 8 regression tests) | S (verify) |
 | P0-2 | #237 | **✅ VERIFIED: HttpOnly cookies + CSRF** | SESSION_COOKIE with httpOnly:true + double-submit CSRF protection on mutations; Bearer tokens exempt — **FULLY TESTED** (auth-csrf-protection.test.ts, 11 tests covering cookie attributes, CSRF gates, Bearer exemption) | S (verify) |
-| P0-3 | #TBD | **Uptime monitoring** | Add UptimeRobot/Pingdom for /api/health/ready; 5xx rate alerts to email/Slack — **Cameron-gated: requires account signup** | S |
-| P0-4 | #TBD | **Error tracking** | Integrate Sentry (server + client); capture user context, breadcrumbs — **Cameron-gated: requires account signup** | S |
-| P0-5 | #TBD | **Database backups** | Automate daily encrypted backups to off-host storage; test restore drill — **Cameron-gated: VPS setup** | M |
+| P0-3 | #TBD | **Uptime monitoring** | Add **Uptime Kuma** (self-hosted on Ashbi VPS) for /api/health/ready; 5xx rate alerts to email/Slack — **VPS-first: no third-party SaaS required** | S |
+| P0-4 | #TBD | **Error tracking** | Integrate **GlitchTip** (self-hosted Sentry-compatible on Ashbi VPS); capture user context, breadcrumbs — **VPS-first: no third-party SaaS required** | S |
+| P0-5 | #TBD | **Database backups** | Automate daily encrypted backups to off-host storage; test restore drill — **VPS-capable: see BACKUP-RECOVERY.md** | M |
 | P0-6 | #232 | **✅ Privacy policy v1** | Legal.tsx published at /legal/privacy; linked from footer + public registration — **SHIPPED** in PR #232 (pending counsel approval of copy) | M (legal review) |
 | P0-7 | #232 | **✅ Terms of service v1** | Legal.tsx published at /legal/terms; linked from footer + public registration — **SHIPPED** in PR #232 (pending counsel approval of copy) | M (legal review) |
 | P0-8 | #232 | **✅ VERIFIED: Parental consent flow** | Public registration requires guardianAttested checkbox for minors (age < 18); parent email required and verified via email link with 48h TTL — **FULLY IMPLEMENTED** (ParentalConsentVerification model + service + routes in PR #232) | M |
@@ -82,6 +82,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 - 1 pilot tournament completes with no security incidents, no data loss, and documented recovery time < 5 min.
 - Privacy/terms are live and linked in footer + public registration flow.
 - Monitoring alerts fire correctly (test with synthetic failure).
+- **VPS-first setup complete:** Uptime Kuma + GlitchTip running on Ashbi VPS (optional but recommended).
 
 ---
 
@@ -110,8 +111,8 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P1-13 | #223 | **✅ QR code poster generator** | Generate PDF poster with QR to public registration + scoreboard — **SHIPPED** in PR #223 | S |
 | **Support** | | | | |
 | P1-14 | #225 | **✅ Help center (v1)** | 10 articles: setup, import, divisions, brackets, day-of, troubleshooting — **SHIPPED** in PR #225 | M |
-| P1-15 | #236 | **✅ Video tutorial slots (structure only)** | 3 tutorial pages (quickstart, import Excel, run a tournament) with embed support via env vars; placeholders when videos missing — **SHIPPED** (agent work, awaiting Cameron recordings) | M |
-| P1-16 | #236 | **✅ In-app live chat** | Crisp widget integrated; gated on VITE_CRISP_WEBSITE_ID env var + paid plans (starter/pro/pilot) — **SHIPPED** (agent work, awaiting Cameron Crisp account signup) | S |
+| P1-15 | #236 | **✅ Video tutorial slots (structure only)** | 3 tutorial pages (quickstart, import Excel, run a tournament) with embed support via env vars; placeholders when videos missing — **SHIPPED** (agent work, awaiting Cameron recordings or VPS-hosted MP4/WebM at `/media/...`) | M |
+| P1-16 | #TBD | **✅ In-app support chat** | First-party support ticket widget (POST /api/support) with email alerts; Crisp optional fallback via VITE_CRISP_WEBSITE_ID env var — **VPS-first: no third-party required for pilot** | S |
 
 **Exit criteria:**  
 - 5 pilot tournaments run successfully with zero payment failures.
@@ -252,7 +253,7 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 | Usage metering | ✅ Implemented | Record competitor count to DB on tournament completion; Stripe report path is stubbed with tests |
 | Failed payment handling | ✅ Implemented | Email notification + 7-day grace period before downgrade via `invoice.payment_failed` webhook |
 
-**Status:** Billing routes (checkout, portal, webhook handler) are fully implemented in `src/server/routes/billing.ts`. OrganizationSettings.tsx UI is complete. Grace period service (`src/server/services/grace-period.ts`) is implemented and tested. **Blocker:** Cameron must:
+**Status:** Billing routes (checkout, portal, webhook handler) are fully implemented in `src/server/routes/billing.ts`. OrganizationSettings.tsx UI is complete. Grace period service (`src/server/services/grace-period.ts`) is implemented and tested. **Pilot alternative (no Stripe):** Directors can manually mark registrations as paid/waived via PUT `/api/tournaments/:id/registrations/:regId` with `paymentStatus: 'paid' | 'waived'`. Accepts invoice, e-transfer, cash payments without Stripe. **Blocker for self-service:** Cameron must:
 1. Create Stripe account, configure products/prices in Stripe dashboard
 2. Set env vars (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_STARTER_PRICE_ID, STRIPE_PRO_PRICE_ID)
 3. Validate flows end-to-end
@@ -310,12 +311,12 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 8. **Tax registration:** Sales tax nexus determination, state registrations (Cameron + accountant)
 9. **Bank account:** Connect payout account to Stripe (Cameron)
 
-### Operations & Vendor Setup
+### Operations & Vendor Setup (VPS-First)
 
 10. **Domain purchase:** Buy `bowin.io` or final production domain (Cameron)
 11. **Email domain verification:** Mailgun sender identity (Cameron, DNS records)
-12. **Monitoring accounts:** Sign up for UptimeRobot, Sentry (Cameron, credit card)
-13. **Support tool setup:** Intercom/Crisp account for live chat (Cameron, credit card)
+12. **Monitoring setup (VPS-first):** Install Uptime Kuma + GlitchTip on Ashbi VPS (Cameron, Docker) — **no third-party accounts required**
+13. **Support tool setup (optional):** Crisp account for live chat fallback (Cameron, credit card) — **first-party support tickets work without it**
 
 ### Product & Marketing
 
@@ -410,13 +411,13 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 2. **Cameron:** Create Stripe account (test mode); configure 6 products/prices
 3. **Agent:** Verify P0-1 (JWT token revocation — already implemented, needs test)
 4. **Agent:** Verify P0-2 (HttpOnly cookies — already implemented, needs test)
-5. **Cameron:** Sign up for UptimeRobot + Sentry (free tiers OK for pilot)
+5. **Cameron:** Install Uptime Kuma + GlitchTip on Ashbi VPS (Docker, no third-party accounts needed)
 
 ### Week 2
 
-6. **Agent:** Implement P0-3 (uptime monitoring integration)
-7. **Agent:** Implement P0-4 (Sentry error tracking)
-8. **Agent:** Implement P0-5 (database backup automation)
+6. **Agent:** Implement P0-3 (Uptime Kuma monitoring integration — just configure monitors, no code changes)
+7. **Agent:** Implement P0-4 (GlitchTip error tracking — point SENTRY_DSN at GlitchTip instance, no code changes)
+8. **Agent:** Implement P0-5 (database backup automation — see BACKUP-RECOVERY.md)
 9. **✅ Done (pending counsel):** Privacy policy published at /legal/privacy
 10. **✅ Done (pending counsel):** Terms of service published at /legal/terms
 

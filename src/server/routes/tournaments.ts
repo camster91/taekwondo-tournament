@@ -89,6 +89,8 @@ const registrationUpdateSchema = z.object({
   specialNeeds: z.string().max(500).optional().nullable(),
   manualDivisionId: z.string().optional().nullable(),
   seeding: z.number().int().min(1).optional().nullable(),
+  // Manual payment override for pilots without Stripe
+  paymentStatus: z.enum(['not_required', 'pending', 'paid', 'waived', 'failed']).optional(),
 });
 
 const weightClassesSchema = z.object({
@@ -1288,7 +1290,7 @@ router.post('/:id/registrations/bulk', authenticate, requireTournamentAccess('di
 // Update registration (requires authentication + admin/director role)
 router.put('/:id/registrations/:regId', authenticate, requireTournamentAccess('director'), validateRequest(registrationUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { patterns, sparring, weightAtRegistration, checkedIn, checkInWeight, competeWithOlder, specialNeeds, manualDivisionId, seeding } = req.body;
+  const { patterns, sparring, weightAtRegistration, checkedIn, checkInWeight, competeWithOlder, specialNeeds, manualDivisionId, seeding, paymentStatus } = req.body;
 
   // Verify registration belongs to this tournament
   const existing = await prisma.registration.findFirst({
@@ -1312,6 +1314,16 @@ router.put('/:id/registrations/:regId', authenticate, requireTournamentAccess('d
   if (specialNeeds !== undefined) updateData.specialNeeds = specialNeeds;
   if (manualDivisionId !== undefined) updateData.manualDivisionId = manualDivisionId || null;
   if (seeding !== undefined) updateData.seeding = seeding || null;
+  // Manual payment override (for pilots without Stripe: mark paid/waived/failed manually)
+  if (paymentStatus !== undefined) {
+    updateData.paymentStatus = paymentStatus;
+    // Set paymentReceivedAt when marking as paid or waived manually
+    if (paymentStatus === 'paid' || paymentStatus === 'waived') {
+      updateData.paymentReceivedAt = existing.paymentReceivedAt || new Date();
+    } else if (paymentStatus === 'pending' || paymentStatus === 'failed') {
+      updateData.paymentReceivedAt = null;
+    }
+  }
 
   const registration = await prisma.registration.update({
     where: { id: getParam(req.params.regId) },
