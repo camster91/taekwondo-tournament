@@ -378,22 +378,23 @@ export default function OrganizationSettings() {
 
         {/* Draft recovery dialog */}
         <ConfirmDialog
-          open={showDraftDialog}
-          onOpenChange={setShowDraftDialog}
+          isOpen={showDraftDialog}
+          onClose={() => {
+            // Cancel = Discard draft
+            clearDraft('organization');
+            setDraftOrg(null);
+            setShowDraftDialog(false);
+          }}
           title="Resume draft?"
           message={`You have an unfinished organization "${draftOrg?.name}". Resume or start fresh?`}
-          confirmLabel="Resume"
-          cancelLabel="Discard"
+          confirmText="Resume"
+          cancelText="Discard"
           variant="warning"
           onConfirm={() => {
+            // Confirm = Resume (pre-fill form)
             if (draftOrg) {
               setName(draftOrg.name);
             }
-            setShowDraftDialog(false);
-          }}
-          onCancel={() => {
-            clearDraft('organization');
-            setDraftOrg(null);
             setShowDraftDialog(false);
           }}
         />

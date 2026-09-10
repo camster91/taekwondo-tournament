@@ -473,8 +473,14 @@ export default function Tournaments() {
       {/* Draft Recovery Dialog */}
       <ConfirmDialog
         isOpen={showDraftDialog}
-        onClose={() => setShowDraftDialog(false)}
+        onClose={() => {
+          // Cancel = Discard draft
+          clearDraft('tournament');
+          setDraftTournament(null);
+          setShowDraftDialog(false);
+        }}
         onConfirm={() => {
+          // Confirm = Resume (pre-fill form)
           if (draftTournament) {
             setFormData({
               name: draftTournament.name,
@@ -483,11 +489,6 @@ export default function Tournaments() {
               sportProfileSlug: draftTournament.sportProfileSlug,
             });
           }
-          setShowDraftDialog(false);
-        }}
-        onCancel={() => {
-          clearDraft('tournament');
-          setDraftTournament(null);
           setShowDraftDialog(false);
         }}
         title="Resume draft?"
