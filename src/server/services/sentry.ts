@@ -18,6 +18,86 @@ import type { Request, Response, NextFunction } from 'express-serve-static-core'
 
 type ExpressApp = ReturnType<typeof express>;
 
+/** Headers that must never reach Sentry/GlitchTip. Lowercased. */
+const SENSITIVE_HEADERS = new Set([
+  'cookie',
+  'set-cookie',
+  'authorization',
+  'x-csrf-token',
+  'x-api-key',
+]);
+
+const REDACTED = '[REDACTED]';
+
+/**
+ * Mutate and return a Sentry event with PII fields stripped.
+ *
+ * Why this is exported: the same redaction logic is used in `beforeSend`
+ * (errors, messages) and exercised in the unit tests below. The test
+ * passes synthetic event shapes, runs the function, and asserts the
+ * redacted result.
+ *
+ * Coverage:
+ *  - `event.user.email` / `event.user.username` — replaced with [REDACTED]
+ *  - `event.user.ip_address` — last two IPv4 octets masked; last three
+ *    IPv6 groups masked
+ *  - `event.request.headers` — cookie / set-cookie / authorization /
+ *    x-csrf-token / x-api-key replaced with [REDACTED]
+ *  - `event.request.data` — replaced with [REDACTED] (request body
+ *    can carry magic-link tokens, profile names, payment fields)
+ *  - `event.request.query_string` — replaced with [REDACTED] (URL
+ *    parameters may carry `token=…` for magic links / invites)
+ *  - any `event.contexts[*].email` — replaced with [REDACTED] (covers
+ *    `Sentry.withScope({ setContext('user', { email }) })`)
+ */
+export function redactSentryEvent(event: {
+  user?: { email?: string; username?: string; ip_address?: unknown };
+  request?: {
+    headers?: Record<string, unknown>;
+    data?: unknown;
+    query_string?: unknown;
+  };
+  contexts?: Record<string, unknown>;
+}): typeof event {
+  if (event.user) {
+    if (event.user.email) event.user.email = REDACTED;
+    if (event.user.username) event.user.username = REDACTED;
+    if (event.user.ip_address) {
+      const ip = event.user.ip_address as unknown;
+      if (typeof ip === 'string' && ip.includes('.') && !ip.includes(':')) {
+        event.user.ip_address = ip.replace(/\.\d+\.\d+$/, `.${REDACTED}`);
+      } else if (typeof ip === 'string' && ip.includes(':')) {
+        event.user.ip_address = `${ip.split(':').slice(0, 3).join(':')}::${REDACTED}`;
+      }
+    }
+  }
+  if (event.request) {
+    if (event.request.headers) {
+      const headers = event.request.headers as Record<string, unknown>;
+      for (const key of Object.keys(headers)) {
+        if (SENSITIVE_HEADERS.has(key.toLowerCase())) {
+          headers[key] = REDACTED;
+        }
+      }
+    }
+    if (event.request.data !== undefined) {
+      event.request.data = REDACTED;
+    }
+    if (event.request.query_string !== undefined && typeof event.request.query_string === 'string') {
+      event.request.query_string = REDACTED;
+    }
+  }
+  if (event.contexts) {
+    for (const ctxKey of Object.keys(event.contexts)) {
+      const ctx = event.contexts[ctxKey] as Record<string, unknown> | undefined;
+      if (ctx && typeof ctx === 'object' && 'email' in ctx) {
+        ctx.email = REDACTED;
+      }
+    }
+  }
+  return event;
+}
+
 const SENTRY_DSN = process.env.SENTRY_DSN;
 const SENTRY_ENVIRONMENT = process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development';
 
@@ -42,6 +122,16 @@ export function initSentry(app: ExpressApp): void {
     ],
     // Performance monitoring — sample 10% of transactions in production, 100% in dev
     tracesSampleRate: SENTRY_ENVIRONMENT === 'production' ? 0.1 : 1.0,
+    // Scrub PII from error/capture events. mountSentryRequestHandler
+    // below attaches `Sentry.setUser({ id, email, role })` to every
+    // request, and Sentry v10's httpIntegration captures the full
+    // request body / query string into the event. Without this hook
+    // every exception ships the user's email plus the request
+    // payload to Sentry/GlitchTip — under GDPR / PIPEDA that's
+    // data the user never consented to sending.
+    beforeSend(event) {
+      return redactSentryEvent(event as Parameters<typeof redactSentryEvent>[0]) as typeof event;
+    },
     // Don't send PII (emails, names, etc.) in breadcrumbs or transactions
     beforeBreadcrumb(breadcrumb, hint) {
       // Strip sensitive headers

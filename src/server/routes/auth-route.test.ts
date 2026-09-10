@@ -63,7 +63,12 @@ vi.mock('../middleware/auth.js', () => ({
     },
   SESSION_COOKIE: 'bowin_session',
   SESSION_COOKIE_OPTIONS: {},
+  setCsrfCookie: vi.fn(),
   invalidateAuthCache: (...args: any[]) => invalidateAuthCache(...args),
+  // SH-3: src/server/routes/auth.ts imports the synthetic tenant
+  // constants from the middleware; the mock must surface them.
+  DEMO_ORG_ID: '00000000-0000-4000-8000-000000000001',
+  DEMO_ROLE: 'demo',
 }));
 
 vi.mock('../services/email.js', () => ({

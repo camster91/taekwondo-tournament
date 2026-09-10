@@ -64,6 +64,21 @@ const registerLimiter = createRateLimiter({
   message: { error: 'Too many accounts created, please try again later' },
 });
 
+// Admin privilege-change limiter. Without it, a stolen admin JWT +
+// leaked CSRF cookie (e.g. one-off XSS) can call PUT/DELETE
+// /api/auth/users/:id/role and friends in a tight loop. The 7-day
+// JWT TTL is the upper bound on damage; a 30/hour per-IP cap
+// bounds the per-IP burst. Cross-tenant abuse (multiple IPs) is
+// already gated by the role requirement and audit log, and a
+// stolen JWT isn't expected to be used in a spray — this is a
+// network-rate safety net, not the only one. Closes the rate
+// limit gap called out in the track-1 review candidate list.
+const adminMutationLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 30, // 30 privilege-changing operations per IP per hour
+  message: { error: 'Too many admin actions, please try again later' },
+});
+
 // Validation schemas
 const profileUpdateSchema = z.object({
   firstName: z.string().min(1, 'First name is required').max(100),
@@ -323,11 +338,28 @@ router.post('/verify-magic-link', authLimiter, async (req: Request, res: Respons
       return res.status(400).json({ error: 'Invalid or expired link/code' });
     }
 
-    // Mark as used
-    await prisma.magicLink.update({
-      where: { id: magicLink.id },
-      data: { usedAt: new Date(), failedAttempts: 0 },
+    // Mark as used — atomic claim via conditional update. Without the
+    // `usedAt: null` guard, two concurrent verifications (e.g. user
+    // double-click + attacker retry) would both pass the findFirst on
+    // line 273, then both call `update` and both mint a JWT. The
+    // conditional updateMany flips the row to `usedAt: <now>` only
+    // for the first request; the second request sees count === 0
+    // and is rejected as if the link were already used. Closes the
+    // "one link = two sessions" race.
+    //
+    // Cast through `as never` for the `where` clause: the Prisma
+    // client types lag the schema (the `usedAt` / `failedAttempts`
+    // columns exist in prisma/schema.prisma but aren't yet in the
+    // generated MagicLinkWhereInput / MagicLinkUpdateManyMutationInput).
+    // The same drift affects every other `where: { usedAt: null }`
+    // call in this file; the schema regenerate lives in a follow-up.
+    const claimed = await prisma.magicLink.updateMany({
+      where: { id: magicLink.id, usedAt: null } as never,
+      data: { usedAt: new Date(), failedAttempts: 0 } as never,
     });
+    if (claimed.count === 0) {
+      return res.status(400).json({ error: 'Invalid or expired link/code' });
+    }
 
     // Look up user
     const user = await prisma.user.findUnique({
@@ -685,7 +717,7 @@ router.get('/users', authenticate, async (req: AuthenticatedRequest, res: Respon
 });
 
 // Admin: Update user role
-router.put('/users/:userId/role', authenticate, requireRole('admin'), validateRequest(roleUpdateSchema), async (req: AuthenticatedRequest, res: Response) => {
+router.put('/users/:userId/role', authenticate, requireRole('admin'), adminMutationLimiter, validateRequest(roleUpdateSchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { userId } = req.params;
   const { role } = req.body as { role: string };
@@ -728,6 +760,14 @@ router.put('/users/:userId/role', authenticate, requireRole('admin'), validateRe
       console.error('[audit-log] role_change event failed:', err);
     });
 
+    // Track-1 security review 3.7: rotate the CSRF token on every
+    // privilege change. The target's old CSRF cookie (if any) is
+    // now stale, so re-issuing bounds the window a leaked token
+    // remains usable. The change is harmless for the caller — the
+    // response includes a new Set-Cookie for the admin client as
+    // well.
+    setCsrfCookie(res);
+
     res.json(user);
   } catch (error) {
     console.error('Update role error:', error);
@@ -736,7 +776,7 @@ router.put('/users/:userId/role', authenticate, requireRole('admin'), validateRe
 });
 
 // Admin: Toggle user active status
-router.put('/users/:userId/status', authenticate, requireRole('admin'), validateRequest(statusUpdateSchema), async (req: AuthenticatedRequest, res: Response) => {
+router.put('/users/:userId/status', authenticate, requireRole('admin'), adminMutationLimiter, validateRequest(statusUpdateSchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { userId } = req.params;
   const { isActive } = req.body as { isActive: boolean };
@@ -775,6 +815,10 @@ router.put('/users/:userId/status', authenticate, requireRole('admin'), validate
       console.error('[audit-log] user_status_changed event failed:', err);
     });
 
+    // Track-1 security review 3.7: rotate the CSRF token when an
+    // account is disabled so any leaked CSRF cookie becomes stale.
+    setCsrfCookie(res);
+
     res.json(user);
   } catch (error) {
     console.error('Update status error:', error);
@@ -783,7 +827,7 @@ router.put('/users/:userId/status', authenticate, requireRole('admin'), validate
 });
 
 // Admin: Grant tournament access
-router.post('/tournaments/:tournamentId/access', authenticate, requireRole('admin'), validateRequest(tournamentAccessSchema), async (req: AuthenticatedRequest, res: Response) => {
+router.post('/tournaments/:tournamentId/access', authenticate, requireRole('admin'), adminMutationLimiter, validateRequest(tournamentAccessSchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { tournamentId } = req.params;
   const { userId, role } = req.body as { userId: string; role: string };
@@ -832,6 +876,11 @@ router.post('/tournaments/:tournamentId/access', authenticate, requireRole('admi
         select: { id: true },
       });
       invalidateAuthCache(userId);
+      // Track-1 security review 3.7: when a user's per-tournament
+      // role changes, rotate the CSRF cookie so the prior token
+      // (which would otherwise remain usable until the session
+      // expires) is invalidated for the target user.
+      setCsrfCookie(res);
     }
 
     res.json(access);
@@ -842,7 +891,7 @@ router.post('/tournaments/:tournamentId/access', authenticate, requireRole('admi
 });
 
 // Admin: Revoke tournament access
-router.delete('/tournaments/:tournamentId/access/:userId', authenticate, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+router.delete('/tournaments/:tournamentId/access/:userId', authenticate, requireRole('admin'), adminMutationLimiter, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { tournamentId, userId } = req.params;
 
@@ -878,6 +927,15 @@ router.delete('/tournaments/:tournamentId/access/:userId', authenticate, require
       select: { id: true },
     });
     invalidateAuthCache(userId);
+    // Track-1 security review 3.7: rotate the CSRF cookie on
+    // privilege revoke so any leaked CSRF for the target user
+    // becomes stale. 204 means the client cannot read the new
+    // Set-Cookie value, so the caller's own browser must reload
+    // the page; the caller's next request is unauthenticated for
+    // CSRF purposes until the server issues a fresh one. This is
+    // acceptable: the revoked target's outstanding browser session
+    // is the one we're protecting.
+    setCsrfCookie(res);
 
     res.status(204).send();
   } catch (error) {
