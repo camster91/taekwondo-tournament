@@ -2,6 +2,8 @@
 
 This document describes the monitoring and observability setup for Bowin Tournament OS.
 
+**VPS-First Philosophy:** Cameron prefers self-hosted, VPS-capable solutions over third-party SaaS. Use **Uptime Kuma** (monitoring) and **GlitchTip** (error tracking) on the Ashbi VPS instead of UptimeRobot or Sentry SaaS. Both are optional — the app works without them, but they improve production visibility.
+
 ## Health Check Endpoints
 
 ### `/api/health/ready` — Readiness Probe
@@ -20,13 +22,16 @@ This document describes the monitoring and observability setup for Bowin Tournam
 - `200 OK` — Application is ready
 - `503 Service Unavailable` — Database connection failed or other critical service is unavailable
 
-**Usage with UptimeRobot:**
-1. Create a new HTTP(s) monitor in UptimeRobot
-2. Set the URL to: `https://your-domain.com/api/health/ready`
-3. Set the monitoring interval (recommended: 5 minutes)
-4. Configure alert contacts (email, Slack, etc.)
-5. Set keyword monitoring (optional): Look for `"status":"ok"` in response body
-6. Set expected status code: `200`
+**Usage with Uptime Kuma (recommended, self-hosted):**
+1. Install Uptime Kuma on the Ashbi VPS: `docker run -d -p 3001:3001 -v uptime-kuma:/app/data --name uptime-kuma louislam/uptime-kuma:1`
+2. Create a new HTTP(s) monitor in the Uptime Kuma dashboard
+3. Set the URL to: `https://your-domain.com/api/health/ready`
+4. Set the monitoring interval (recommended: 5 minutes)
+5. Configure alert contacts (email, Slack, Discord, Telegram, etc.)
+6. Set keyword monitoring (optional): Look for `"status":"ok"` in response body
+7. Set expected status code: `200`
+
+**Alternative (third-party SaaS):** If you prefer not to self-host, UptimeRobot works the same way
 
 **Example curl:**
 ```bash
@@ -37,7 +42,9 @@ curl -f https://tkd.ashbi.ca/api/health/ready
 
 ---
 
-## Monitoring Recommendations
+## Monitoring Recommendations (VPS-First)
+
+Use **Uptime Kuma** (self-hosted uptime monitoring) and **GlitchTip** (self-hosted Sentry-compatible error tracking) on the Ashbi VPS. Both are optional but recommended for production visibility.
 
 ### Critical Alerts (immediate attention required)
 
@@ -45,11 +52,12 @@ curl -f https://tkd.ashbi.ca/api/health/ready
    - Alert: `/api/health/ready` returns non-200 status
    - Action: Check database connectivity, review server logs
    - Frequency: Check every 5 minutes
+   - Tool: Uptime Kuma (self-hosted) or UptimeRobot (SaaS)
 
 2. **5xx Error Rate**
    - Alert: More than 5% of requests return 5xx status codes
-   - Action: Review application logs, check Sentry for error details
-   - Metric source: Sentry, application logs, or reverse proxy metrics
+   - Action: Review application logs, check GlitchTip for error details
+   - Metric source: GlitchTip (self-hosted), Sentry (SaaS), application logs, or reverse proxy metrics
 
 3. **Database Connection Pool Exhaustion**
    - Alert: Prisma connection pool is exhausted
@@ -80,60 +88,96 @@ curl -f https://tkd.ashbi.ca/api/health/ready
 
 ---
 
-## UptimeRobot Configuration Examples
+## Uptime Kuma Configuration Examples (Recommended, Self-Hosted)
+
+### Installation on Ashbi VPS
+```bash
+# Run Uptime Kuma as a Docker container
+docker run -d \
+  --name uptime-kuma \
+  -p 3001:3001 \
+  -v uptime-kuma:/app/data \
+  --restart unless-stopped \
+  louislam/uptime-kuma:1
+
+# Access at http://your-vps-ip:3001 and configure reverse proxy (Caddy) if needed
+```
 
 ### Basic Readiness Monitor
 ```
 Monitor Type: HTTP(s)
 URL: https://tkd.ashbi.ca/api/health/ready
-Monitoring Interval: 5 minutes
+Heartbeat Interval: 300 seconds (5 minutes)
 Monitor Timeout: 30 seconds
-Alert Contacts: [Your email/Slack]
+Notification: Email, Slack, Discord, Telegram, etc.
 Keyword: "status":"ok" (optional)
-Status Code: 200
+Expected Status Code: 200
 ```
 
 ### Public Registration Page Monitor
 ```
 Monitor Type: HTTP(s)
 URL: https://tkd.ashbi.ca/register/[tournament-id]
-Monitoring Interval: 10 minutes
+Heartbeat Interval: 600 seconds (10 minutes)
 Monitor Timeout: 30 seconds
-Alert Contacts: [Your email/Slack]
-Status Code: 200
+Notification: Email, Slack
+Expected Status Code: 200
 ```
 
 ### Public Scoreboard Monitor
 ```
 Monitor Type: HTTP(s)
 URL: https://tkd.ashbi.ca/display/[tournament-id]
-Monitoring Interval: 10 minutes
+Heartbeat Interval: 600 seconds (10 minutes)
 Monitor Timeout: 30 seconds
-Alert Contacts: [Your email/Slack]
-Status Code: 200
+Notification: Email, Slack
+Expected Status Code: 200
 ```
+
+**Alternative (third-party SaaS):** If you prefer not to self-host, UptimeRobot configuration is identical (just different UI)
 
 ---
 
-## Error Tracking with Sentry
+## Error Tracking with GlitchTip (Recommended, Self-Hosted)
 
-Sentry is integrated for server-side and client-side error tracking. Configuration:
+**GlitchTip** is a self-hosted, Sentry-compatible error tracking platform. It uses the same SDK and environment variables as Sentry SaaS, so switching is zero-code-change. Host it on the Ashbi VPS.
+
+### Installation on Ashbi VPS
+```bash
+# GlitchTip Docker Compose setup (simplified)
+# Full setup: https://glitchtip.com/documentation/install
+
+docker run -d \
+  --name glitchtip \
+  -e DATABASE_URL=postgresql://user:pass@db:5432/glitchtip \
+  -e SECRET_KEY=$(openssl rand -hex 32) \
+  -e PORT=8000 \
+  -e EMAIL_URL=smtp://mailgun:key@smtp.mailgun.org:587 \
+  -p 8000:8000 \
+  --restart unless-stopped \
+  glitchtip/glitchtip:latest
+
+# Access at http://your-vps-ip:8000 and configure reverse proxy (Caddy) if needed
+# Create a project and copy the DSN
+```
 
 ### Server Setup
-Set these environment variables:
+Set these environment variables (same as Sentry):
 ```bash
-SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+SENTRY_DSN=https://your-glitchtip-dsn@glitchtip.ashbi.ca/project-id
 SENTRY_ENVIRONMENT=production
 ```
 
 ### Client Setup
-Set these at build time:
+Set these at build time (same as Sentry):
 ```bash
-VITE_SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+VITE_SENTRY_DSN=https://your-glitchtip-dsn@glitchtip.ashbi.ca/project-id
 VITE_SENTRY_ENVIRONMENT=production
 ```
 
-### What Sentry Captures
+**The existing Sentry SDK in the codebase is fully compatible with GlitchTip.** Just point the DSN at your GlitchTip instance instead of sentry.io.
+
+### What GlitchTip/Sentry Captures
 - Uncaught exceptions (server + client)
 - Unhandled promise rejections
 - React component errors (via ErrorBoundary)
@@ -141,10 +185,12 @@ VITE_SENTRY_ENVIRONMENT=production
 - Breadcrumbs (user actions, API calls, console logs)
 - Performance monitoring (10% sample rate in production)
 
-### Sentry Alerts (recommended)
+### GlitchTip Alerts (recommended)
 1. **Critical:** New issue affecting > 10 users
 2. **Critical:** Issue spike (> 2x baseline in 1 hour)
 3. **Warning:** Issue regression (previously resolved issue returns)
+
+**Alternative (third-party SaaS):** If you prefer not to self-host, Sentry SaaS works the same way (just point the DSN at sentry.io)
 
 ---
 
@@ -236,7 +282,9 @@ See `docs/BACKUP-RECOVERY.md` for detailed backup procedures.
 
 ## References
 
-- [Sentry Documentation](https://docs.sentry.io/)
-- [UptimeRobot Documentation](https://uptimerobot.com/kb/)
+- [Uptime Kuma](https://github.com/louislam/uptime-kuma) — Self-hosted uptime monitoring (recommended)
+- [GlitchTip Documentation](https://glitchtip.com/documentation) — Self-hosted Sentry-compatible error tracking (recommended)
+- [Sentry Documentation](https://docs.sentry.io/) — Third-party SaaS alternative
+- [UptimeRobot Documentation](https://uptimerobot.com/kb/) — Third-party SaaS alternative
 - [Prometheus Metrics](https://prometheus.io/docs/concepts/metric_types/)
 - [Mailgun Webhooks](https://documentation.mailgun.com/en/latest/api-webhooks.html)
