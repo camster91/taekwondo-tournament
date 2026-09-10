@@ -47,6 +47,8 @@ interface Tournament {
   settings: string | null;
   publicSlug?: string | null;
   publicScoreboardRefreshMs?: number | null;
+  maxCapacity?: number | null;
+  waitlistEnabled?: boolean;
   eventSlug?: string | null;
   portalPublished?: boolean;
   organizationId?: string | null;
@@ -138,6 +140,11 @@ export default function TournamentSettings() {
   // Public scoreboard refresh interval state
   const [refreshMs, setRefreshMs] = useState<number>(10000); // Default 10s
   const [refreshMsDirty, setRefreshMsDirty] = useState(false);
+
+  // Capacity & waitlist state (#191)
+  const [maxCapacity, setMaxCapacity] = useState<number | null>(null);
+  const [waitlistEnabled, setWaitlistEnabled] = useState<boolean>(false);
+  const [capacityDirty, setCapacityDirty] = useState(false);
 
   // Portal state — event slug and publication status
   const [eventSlug, setEventSlug] = useState<string>('');
@@ -264,6 +271,15 @@ export default function TournamentSettings() {
     }
   }, [tournament?.publicScoreboardRefreshMs]);
 
+  // Hydrate capacity settings from tournament
+  useEffect(() => {
+    if (tournament) {
+      setMaxCapacity(tournament.maxCapacity ?? null);
+      setWaitlistEnabled(tournament.waitlistEnabled ?? false);
+      setCapacityDirty(false);
+    }
+  }, [tournament]);
+
   // Hydrate portal state from tournament data
   useEffect(() => {
     if (tournament) {
@@ -335,6 +351,31 @@ export default function TournamentSettings() {
     onSuccess: () => {
       setRefreshMsDirty(false);
       addToast('Refresh interval saved', 'success');
+      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+    },
+    onError: (error: Error) => addToast(error.message, 'error'),
+  });
+
+  // Save capacity settings mutation
+  const saveCapacityMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/tournaments/${id}`, {
+        method: 'PUT',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maxCapacity,
+          waitlistEnabled,
+        }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to save capacity settings');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setCapacityDirty(false);
+      addToast('Capacity settings saved', 'success');
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
     },
     onError: (error: Error) => addToast(error.message, 'error'),
@@ -702,6 +743,80 @@ export default function TournamentSettings() {
                 </p>
               </div>
             </div>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Capacity & Waitlist — #191 */}
+      <Card data-tour="settings-capacity" className="mb-6">
+        <CardHeader
+          title="Capacity & Waitlist"
+          icon={AlertCircle}
+          description="Limit total registrations and enable waitlist when full."
+        />
+        <CardBody>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="maxCapacity">
+                  Maximum Capacity
+                </Label>
+                <Input
+                  id="maxCapacity"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={maxCapacity ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? null : Number(e.target.value);
+                    setMaxCapacity(val);
+                    setCapacityDirty(true);
+                  }}
+                  placeholder="Unlimited"
+                />
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Maximum number of active registrations. Leave blank for unlimited.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="waitlistEnabled"
+                  checked={waitlistEnabled}
+                  onChange={(e) => {
+                    setWaitlistEnabled(e.target.checked);
+                    setCapacityDirty(true);
+                  }}
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                />
+                <Label htmlFor="waitlistEnabled" className="mb-0">
+                  Enable Waitlist
+                </Label>
+              </div>
+            </div>
+            {capacityDirty && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="primary"
+                  onClick={() => saveCapacityMutation.mutate()}
+                  disabled={saveCapacityMutation.isPending}
+                  className="flex items-center gap-2"
+                >
+                  {saveCapacityMutation.isPending ? (
+                    <>
+                      <Spinner size="sm" /> Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" /> Save Capacity Settings
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              When capacity is reached, new registrations are automatically waitlisted. You can promote waitlisted competitors from the Registrations page.
+            </p>
           </div>
         </CardBody>
       </Card>

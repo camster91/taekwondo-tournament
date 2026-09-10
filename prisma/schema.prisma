@@ -80,6 +80,10 @@ model Tournament {
   // Public scoreboard display settings (P1-12)
   publicScoreboardRefreshMs Int? @default(10000) // Auto-refresh interval in milliseconds (3000-60000 range)
 
+  // Capacity limits and waitlist (P2-1, #191)
+  maxCapacity Int? // Maximum total registrations (null = unlimited)
+  waitlistEnabled Boolean @default(false) // Whether to enable waitlist when at capacity
+
   registrations       Registration[]
   divisions           Division[]
   weightClasses       WeightClass[]

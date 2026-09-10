@@ -64,6 +64,8 @@ const tournamentCreateSchema = z.object({
 const tournamentUpdateSchema = tournamentCreateSchema.partial().extend({
   status: z.enum(['draft', 'registration', 'brackets', 'in_progress', 'active', 'completed']).optional(),
   publicScoreboardRefreshMs: z.number().int().min(3000).max(60000).optional(),
+  maxCapacity: z.number().int().min(1).optional().nullable(),
+  waitlistEnabled: z.boolean().optional(),
 });
 
 const registrationSchema = z.object({
@@ -887,7 +889,7 @@ router.post('/:id/operational-query', authenticate, requireTournamentAccess('dir
 
 router.put('/:id', authenticate, requireTournamentAccess('director'), validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { name, date, location, status, settings, publicScoreboardRefreshMs } = req.body;
+  const { name, date, location, status, settings, publicScoreboardRefreshMs, maxCapacity, waitlistEnabled } = req.body;
 
   try {
     if (status === 'registration') {
@@ -918,6 +920,8 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
           status,
           settings: settings ? JSON.stringify(mergeGeneralSettings(current.settings, settings)) : undefined,
           publicScoreboardRefreshMs,
+          maxCapacity: maxCapacity !== undefined ? maxCapacity : undefined,
+          waitlistEnabled: waitlistEnabled !== undefined ? waitlistEnabled : undefined,
         },
       });
 
@@ -1182,6 +1186,20 @@ router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer')
   res.json(registrations);
 });
 
+// Get tournament capacity status
+router.get('/:id/capacity', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { getTournamentCapacityStatus } = await import('../services/waitlist.js');
+
+  const status = await getTournamentCapacityStatus(prisma, getParam(req.params.id));
+
+  if (!status) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  res.json(status);
+});
+
 // Get waitlisted registrations for a tournament
 router.get('/:id/registrations/waitlist', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
@@ -1226,7 +1244,9 @@ router.get('/:id/registrations/waitlist', authenticate, requireTournamentAccess(
 // Promote a waitlisted registration to active
 router.post('/:id/registrations/:regId/promote', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const authReq = req as AuthenticatedRequest;
   const registrationId = getParam(req.params.regId);
+  const tournamentId = getParam(req.params.id);
 
   const registration = await prisma.registration.findUnique({
     where: { id: registrationId },
@@ -1234,9 +1254,12 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
       competitor: true,
       tournament: {
         select: {
+          id: true,
           name: true,
           date: true,
           brandName: true,
+          maxCapacity: true,
+          organizationId: true,
           organization: {
             select: { brandName: true },
           },
@@ -1249,46 +1272,83 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
     return res.status(404).json({ error: 'Registration not found' });
   }
 
+  // Verify registration belongs to this tournament
+  if (registration.tournamentId !== tournamentId) {
+    return res.status(400).json({ error: 'Registration does not belong to this tournament' });
+  }
+
   if (registration.waitlistStatus !== 'waitlisted') {
     return res.status(400).json({ error: 'Registration is not waitlisted' });
   }
 
-  // Generate a new management token for the promoted registration
-  const { generateManagementToken, getManagementTokenExpiry, hashManagementToken } = await import('../utils/registration-management-token.js');
-  const newManagementToken = generateManagementToken();
-  const newExpiry = getManagementTokenExpiry(); // 30 days
+  // Check if tournament has available capacity
+  const { getTournamentCapacityStatus } = await import('../services/waitlist.js');
+  const capacityStatus = await getTournamentCapacityStatus(prisma, tournamentId);
 
-  // Promote
-  await prisma.registration.update({
-    where: { id: registrationId },
-    data: {
-      waitlistStatus: 'active',
-      waitlistPromotedAt: new Date(),
-      waitlistPosition: null,
-      managementTokenHash: hashManagementToken(newManagementToken),
-      managementTokenExpiresAt: newExpiry,
-      managementTokenRevokedAt: null, // clear any prior revocation
-    },
-  });
-
-  // Renumber remaining waitlist
-  const remaining = await prisma.registration.findMany({
-    where: {
-      tournamentId: registration.tournamentId,
-      waitlistStatus: 'waitlisted',
-    },
-    orderBy: { waitlistPosition: 'asc' },
-  });
-
-  for (let i = 0; i < remaining.length; i++) {
-    await prisma.registration.update({
-      where: { id: remaining[i].id },
-      data: { waitlistPosition: i + 1 },
+  if (capacityStatus && capacityStatus.maxCapacity && capacityStatus.spotsRemaining === 0) {
+    return res.status(400).json({
+      error: 'Tournament is at full capacity. Cannot promote from waitlist.',
+      capacity: capacityStatus,
     });
   }
 
+  // Generate a new management token for the promoted registration
+  const newManagementToken = generateManagementToken();
+  const newExpiry = getManagementTokenExpiry(); // 30 days
+
+  // Promote in transaction to ensure atomicity
+  await prisma.$transaction(async (tx) => {
+    // Promote the registration
+    await tx.registration.update({
+      where: { id: registrationId },
+      data: {
+        waitlistStatus: 'promoted',
+        waitlistPromotedAt: new Date(),
+        waitlistPosition: null,
+        managementTokenHash: hashManagementToken(newManagementToken),
+        managementTokenExpiresAt: newExpiry,
+        managementTokenRevokedAt: null,
+      },
+    });
+
+    // Renumber remaining waitlist
+    const remaining = await tx.registration.findMany({
+      where: {
+        tournamentId,
+        waitlistStatus: 'waitlisted',
+      },
+      orderBy: { waitlistPosition: 'asc' },
+    });
+
+    for (let i = 0; i < remaining.length; i++) {
+      await tx.registration.update({
+        where: { id: remaining[i].id },
+        data: { waitlistPosition: i + 1 },
+      });
+    }
+
+    // Audit log
+    if (authReq.user) {
+      await createAuditLog(tx as unknown as PrismaClient, {
+        userId: authReq.user.id,
+        action: 'waitlist_promoted',
+        details: {
+          registrationId,
+          competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+          tournamentId,
+          tournamentName: registration.tournament.name,
+        },
+        ipAddress: getClientIp(authReq),
+        userAgent: getUserAgent(authReq),
+        organizationId: registration.tournament.organizationId || undefined,
+        tournamentId,
+      }).catch((err) => {
+        console.error('[audit-log] waitlist_promoted event failed:', err);
+      });
+    }
+  });
+
   // Send promotion email
-  const { sendEmail, isEmailConfigured } = await import('../services/email.js');
   if (registration.parentEmail && isEmailConfigured()) {
     const { waitlistPromotionEmail } = await import('../services/email-templates.js');
     const organizerBrandName = registration.tournament.brandName || registration.tournament.organization?.brandName || undefined;
