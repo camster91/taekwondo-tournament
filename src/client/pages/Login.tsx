@@ -187,19 +187,19 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fafbfc] dark:bg-[#0a0e1a] text-slate-900 dark:text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-surface-50 dark:bg-surface-950 text-surface-900 dark:text-surface-100 flex flex-col">
       {/* Header — minimal brand bar */}
-      <header className="border-b border-slate-200/60 dark:border-slate-800/60 bg-white/60 dark:bg-slate-950/60 backdrop-blur-xl sticky top-0 z-30">
+      <header className="border-b border-surface-200 dark:border-surface-700 bg-surface-0/60 dark:bg-surface-900/60 backdrop-blur-xl sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" aria-label="Bowin home">
             <BowinLogo />
           </Link>
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-slate-600 dark:text-slate-400 hidden sm:inline">Tournament organizer sign-in</span>
+            <span className="text-surface-600 dark:text-surface-400 hidden sm:inline">Tournament organizer sign-in</span>
             {setupStatus?.needsSetup === false ? (
               <Link
                 to="/register"
-                className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                className="text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white"
               >
                 Competitor registration →
               </Link>
@@ -210,21 +210,21 @@ export default function Login() {
 
       <main className="flex-1 grid lg:grid-cols-[1.1fr_0.9fr]">
         {/* ─── Left: Hero ─── */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-[#0F172A] via-[#0F172A] to-[#1E293B] text-white hidden lg:block">
+        <section className="relative overflow-hidden bg-gradient-to-br from-brand-ink via-brand-ink to-primary-800 text-white hidden lg:block">
           {/* Decorative gradients — bowin ink + red accent */}
-          <div className="absolute top-0 left-0 w-[600px] h-[600px] bg-[#DC2626]/15 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-[#DC2626]/10 rounded-full blur-3xl translate-x-1/3 translate-y-1/3" />
+          <div className="absolute top-0 left-0 w-[600px] h-[600px] bg-brand-red/15 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+          <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-brand-red/10 rounded-full blur-3xl translate-x-1/3 translate-y-1/3" />
           <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]" />
 
           <div className="relative max-w-xl mx-auto lg:mx-0 lg:ml-auto lg:mr-12 px-6 lg:px-0 py-16 lg:py-24 flex flex-col justify-center min-h-full">
             <div className="inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-full bg-white/10 border border-white/10 text-xs font-medium text-white/80 backdrop-blur-sm mb-6 animate-fade-in">
-              <Sparkles className="h-3.5 w-3.5 text-[#DC2626]" />
+              <Sparkles className="h-3.5 w-3.5 text-brand-red" />
               <span>Tournaments, run like a black belt.</span>
             </div>
 
             <h2 className="text-4xl lg:text-5xl font-bold tracking-tight leading-[1.1] animate-slide-up">
               Run a real tournament.{' '}
-              <span className="text-[#DC2626]">
+              <span className="text-brand-red">
                 Not a spreadsheet.
               </span>
             </h2>
@@ -242,8 +242,8 @@ export default function Login() {
                 { icon: Zap, label: 'Excel import', sub: 'Drop your .xlsm, we handle the rest' },
               ].map((f) => (
                 <div key={f.label} className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-lg bg-[#DC2626]/15 border border-[#DC2626]/30 flex items-center justify-center flex-shrink-0">
-                    <f.icon className="h-4 w-4 text-[#FCA5A5]" />
+                  <div className="h-9 w-9 rounded-lg bg-brand-red/15 border border-brand-red/30 flex items-center justify-center flex-shrink-0">
+                    <f.icon className="h-4 w-4 text-brand-rose" />
                   </div>
                   <div className="flex-1">
                     <div className="text-sm font-medium text-white">{f.label}</div>
@@ -273,18 +273,18 @@ export default function Login() {
         </section>
 
         {/* ─── Right: Auth card ─── */}
-        <section className="flex items-center justify-center px-6 py-12 lg:py-24 bg-[#fafbfc] dark:bg-[#0a0e1a]">
+        <section className="flex items-center justify-center px-6 py-12 lg:py-24 bg-surface-50 dark:bg-surface-950">
           <div className="w-full max-w-md">
             {setupStatusLoading ? (
               <div role="status" aria-live="polite" className="text-center py-10">
                 <Spinner size="lg" />
                 <h1 className="mt-4 text-xl font-semibold">Checking system readiness</h1>
-                <p className="mt-2 text-sm text-slate-600">Sign-in will appear after this check completes.</p>
+                <p className="mt-2 text-sm text-surface-600">Sign-in will appear after this check completes.</p>
               </div>
             ) : setupStatusError ? (
-              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 dark:border-red-800 dark:bg-red-900/20">
-                <h1 className="text-xl font-semibold text-red-900 dark:text-red-100">Sign-in temporarily unavailable</h1>
-                <p className="mt-2 text-sm text-red-700 dark:text-red-300">{setupFailureMessage}</p>
+              <div role="alert" className="rounded-xl border border-danger/20 bg-danger/10 p-5 dark:border-danger/30 dark:bg-danger/20">
+                <h1 className="text-xl font-semibold text-danger dark:text-danger">Sign-in temporarily unavailable</h1>
+                <p className="mt-2 text-sm text-danger/90 dark:text-danger/80">{setupFailureMessage}</p>
                 <Button
                   type="button"
                   variant="primary"
@@ -305,16 +305,16 @@ export default function Login() {
             ) : (
               <div className="animate-slide-up">
                 {error && (
-                  <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/60 rounded-xl p-3.5 flex items-start">
-                    <AlertCircle className="h-4 w-4 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+                  <div className="mb-4 bg-danger/10 border border-danger/20 dark:border-danger/30 rounded-xl p-3.5 flex items-start">
+                    <AlertCircle className="h-4 w-4 text-danger mr-2 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm text-danger/90 dark:text-danger/80">{error}</span>
                   </div>
                 )}
 
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white mb-2">
+                <h1 className="text-2xl font-semibold tracking-tight text-surface-900 dark:text-white mb-2">
                   Organizer Sign In
                 </h1>
-                <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                <p className="text-sm text-surface-600 dark:text-surface-400 mb-6">
                   Access your tournament management workspace
                 </p>
 
@@ -337,11 +337,11 @@ export default function Login() {
                 )}
 
                 {step === 'email' && (
-                  <p className="mt-6 text-center text-xs text-slate-600">
+                  <p className="mt-6 text-center text-xs text-surface-600">
                     By continuing, you acknowledge Bowin&apos;s{' '}
-                    <Link className="underline hover:text-slate-900 dark:hover:text-white" to="/legal/privacy">Privacy Notice</Link>
+                    <Link className="underline hover:text-surface-900 dark:hover:text-white" to="/legal/privacy">Privacy Notice</Link>
                     {' '}and{' '}
-                    <Link className="underline hover:text-slate-900 dark:hover:text-white" to="/legal/terms">Tournament Terms</Link>.
+                    <Link className="underline hover:text-surface-900 dark:hover:text-white" to="/legal/terms">Tournament Terms</Link>.
                     Email addresses are used to send sign-in links and provide account access.
                   </p>
                 )}
@@ -352,12 +352,12 @@ export default function Login() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200/60 dark:border-slate-800/60 py-4 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600">
+      <footer className="border-t border-surface-200 dark:border-surface-700 py-4 px-6">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-surface-600">
           <div>bowin &middot; tournament manager v1.0</div>
           <div className="flex items-center gap-4">
-            <a href="/register" className="hover:text-slate-900 dark:hover:text-white">Public Registration</a>
-            <a href="/api/health" target="_blank" rel="noopener" className="hover:text-slate-900 dark:hover:text-white">Status</a>
+            <a href="/register" className="hover:text-surface-900 dark:hover:text-white">Public Registration</a>
+            <a href="/api/health" target="_blank" rel="noopener" className="hover:text-surface-900 dark:hover:text-white">Status</a>
           </div>
         </div>
       </footer>
@@ -385,7 +385,7 @@ function EmailForm({
   return (
     <div className="space-y-5">
       <h2 className="sr-only">Sign in</h2>
-      <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 text-center">
+      <h3 className="text-sm font-medium text-surface-600 dark:text-surface-400 text-center">
         Or sign in with email
       </h3>
 
@@ -412,9 +412,9 @@ function EmailForm({
       {onDemo && (
         <>
           <div className="relative my-6 flex items-center">
-            <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
-            <span className="px-3 text-xs text-slate-600 dark:text-slate-500 uppercase tracking-wider">or</span>
-            <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
+            <div className="flex-1 border-t border-surface-200 dark:border-surface-700" />
+            <span className="px-3 text-xs text-surface-600 dark:text-surface-500 uppercase tracking-wider">or</span>
+            <div className="flex-1 border-t border-surface-200 dark:border-surface-700" />
           </div>
 
           <Button
@@ -422,12 +422,12 @@ function EmailForm({
             variant="ghost"
             onClick={onDemo}
             loading={demoLoading}
-            className="w-full text-slate-600 dark:text-slate-300"
+            className="w-full text-surface-600 dark:text-surface-300"
           >
             <Sparkles className="h-4 w-4 mr-2" /> Explore the live demo
           </Button>
 
-          <p className="text-center text-xs text-slate-600">
+          <p className="text-center text-xs text-surface-600">
             Fabricated tournament data. No signup. Demo activity may be reset.
           </p>
         </>
@@ -492,19 +492,19 @@ function CodeForm({
               <span className="text-xs font-semibold uppercase tracking-wider text-primary-600 dark:text-primary-400">Dev Mode — Email Not Configured</span>
             </div>
 
-            <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+            <p className="text-sm text-surface-600 dark:text-surface-300 mb-4">
               Email is not set up in this environment. Copy the link below and open it to sign in.
             </p>
 
             {/* Magic URL row */}
             <div className="mb-3">
-              <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Magic link</div>
+              <div className="text-xs font-medium text-surface-600 dark:text-surface-400 mb-1.5">Magic link</div>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   readOnly
                   value={devModeData.magicUrl}
-                  className="flex-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-200 font-mono truncate"
+                  className="flex-1 text-xs bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg px-3 py-2 text-surface-700 dark:text-surface-200 font-mono truncate"
                 />
                 <button
                   onClick={() => handleCopy('url', devModeData.magicUrl)}
@@ -517,7 +517,7 @@ function CodeForm({
                   href={devModeData.magicUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-700 dark:text-surface-200 transition-colors"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   Open
@@ -527,14 +527,14 @@ function CodeForm({
 
             {/* 6-digit code row */}
             <div>
-              <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">6-digit code</div>
+              <div className="text-xs font-medium text-surface-600 dark:text-surface-400 mb-1.5">6-digit code</div>
               <div className="flex items-center gap-2">
                 <div className="flex-1 text-center text-2xl font-mono font-bold tracking-[0.3em] text-primary-700 dark:text-primary-300 py-2">
                   {devModeData.code}
                 </div>
                 <button
                   onClick={() => handleCopy('code', devModeData.code)}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-700 dark:text-surface-200 transition-colors"
                 >
                   <Copy className="h-3.5 w-3.5" />
                   {copied === 'code' ? 'Copied!' : 'Copy'}
@@ -545,11 +545,11 @@ function CodeForm({
         </div>
       )}
 
-      <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-4 flex items-start">
-        <CheckCircle className="h-5 w-5 text-emerald-500 mr-3 flex-shrink-0 mt-0.5" />
+      <div className="bg-success/10 dark:bg-success/20 border border-success/20 dark:border-success/30 rounded-xl p-4 flex items-start">
+        <CheckCircle className="h-5 w-5 text-success mr-3 flex-shrink-0 mt-0.5" />
         <div className="text-sm">
-          <div className="font-medium text-emerald-900 dark:text-emerald-200">Sign-in link sent</div>
-          <p className="mt-1 text-emerald-700 dark:text-emerald-300/80">
+          <div className="font-medium text-success dark:text-success">Sign-in link sent</div>
+          <p className="mt-1 text-success/90 dark:text-success/80">
             We sent a link to <strong>{email}</strong>.{devModeData ? ' Or use the magic link above.' : ' Or enter the 6-digit code below.'}
           </p>
         </div>
@@ -616,13 +616,13 @@ function SetupForm({
     <div className="space-y-5">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Set up your admin account</h2>
-        <p className="mt-1 text-sm text-slate-600">No accounts exist yet. Create the first one to get started.</p>
+        <p className="mt-1 text-sm text-surface-600">No accounts exist yet. Create the first one to get started.</p>
       </div>
 
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/60 rounded-xl p-3.5 flex items-start">
-          <AlertCircle className="h-4 w-4 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
-          <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+        <div className="bg-danger/10 dark:bg-danger/20 border border-danger/20 dark:border-danger/30 rounded-xl p-3.5 flex items-start">
+          <AlertCircle className="h-4 w-4 text-danger mr-2 flex-shrink-0 mt-0.5" />
+          <span className="text-sm text-danger/90 dark:text-danger/80">{error}</span>
         </div>
       )}
 

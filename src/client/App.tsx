@@ -226,7 +226,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       <aside
         className={classNames(
           'fixed inset-y-0 left-0 z-40 flex flex-col w-64 no-print',
-          'bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950',
+          'bg-gradient-to-b from-surface-900 via-surface-900 to-surface-950',
           'transition-all duration-300 ease-out',
           'lg:relative lg:flex-shrink-0',
           sidebarCollapsed ? 'lg:w-16' : 'lg:w-64',
@@ -387,7 +387,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
               </button>
               {userMenuOpen && (
                 <div className={classNames(
-                  'absolute bg-slate-800 border border-white/10 rounded-lg p-1 shadow-2xl animate-slide-up z-50',
+                  'absolute bg-surface-800 border border-white/10 rounded-lg p-1 shadow-2xl animate-slide-up z-50',
                   sidebarCollapsed ? 'bottom-full left-1/2 -translate-x-1/2 mb-1 min-w-[160px]' : 'bottom-full left-0 right-0 mb-1'
                 )}>
                   <Link
@@ -465,7 +465,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm lg:hidden animate-fade-in"
+          className="fixed inset-0 z-30 bg-surface-950/60 backdrop-blur-sm lg:hidden animate-fade-in"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -484,7 +484,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                   setMobileOpen(true);
                 }
               }}
-              className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md transition-colors"
+              className="p-1.5 text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 rounded-md transition-colors"
               aria-label={window.matchMedia('(min-width: 1024px)').matches ? (sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar') : 'Open menu'}
               title={window.matchMedia('(min-width: 1024px)').matches ? (sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar') : 'Open menu'}
             >
@@ -501,13 +501,13 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
 
             {/* Current user indicator — desktop only, visible identity */}
             {user && (
-              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/60 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 rounded-lg">
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/60 dark:bg-surface-800/60 border border-surface-200/60 dark:border-surface-700/60 rounded-lg">
                 <div className="h-6 w-6 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-[10px] font-semibold">
                   {initials}
                 </div>
                 <div className="text-xs">
-                  <div className="font-medium text-slate-900 dark:text-white">{userName}</div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{user.role}</div>
+                  <div className="font-medium text-surface-900 dark:text-white">{userName}</div>
+                  <div className="text-[10px] text-surface-500 dark:text-surface-400 capitalize">{user.role}</div>
                 </div>
               </div>
             )}
@@ -516,7 +516,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                 between light/dark without opening the account menu. */}
             <button
               onClick={toggleTheme}
-              className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="p-2 text-surface-600 hover:text-surface-900 dark:text-surface-400 dark:hover:text-white rounded-md hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
               aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             >
@@ -525,7 +525,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
 
             {/* Notification bell */}
             <button
-              className="p-2 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="p-2 text-surface-600 hover:text-surface-900 dark:text-surface-400 dark:hover:text-white rounded-md hover:bg-surface-100 dark:hover:bg-surface-800"
               aria-label="Notifications"
               title="Notifications"
             >
