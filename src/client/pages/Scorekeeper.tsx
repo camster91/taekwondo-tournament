@@ -41,6 +41,7 @@ import {
   serializeScorekeeperFilters,
   updateSearchParams,
 } from '../utils/url-state';
+import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner';
 
 interface Match {
   id: string;
@@ -1008,6 +1009,8 @@ export default function Scorekeeper() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      {/* Connection status banner (#138 offline resilience) */}
+      <ConnectionStatusBanner pendingCount={offlineOperations.pending.length} />
       {/* Live region for keyboard nav / undo / result announcements.
           aria-live="polite" lets the SR finish reading current content first.
           Lives at the top of the page so it exists on every view (division list + match view). */}
