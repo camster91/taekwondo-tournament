@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText } from 'lucide-react';
+import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText, AlertTriangle } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
@@ -239,8 +239,8 @@ export default function Tournaments() {
           {/* Active/Upcoming Tournaments */}
           {upcomingTournaments && upcomingTournaments.length > 0 && (
             <section>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-                <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse" />
+              <h2 className="text-lg font-semibold text-surface-900 dark:text-white mb-4 flex items-center">
+                <span className="w-2 h-2 bg-success rounded-full mr-2 animate-pulse" />
                 Active & Upcoming
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -259,7 +259,7 @@ export default function Tournaments() {
           {/* Past Tournaments */}
           {pastTournaments && pastTournaments.length > 0 && (
             <section>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <h2 className="text-lg font-semibold text-surface-900 dark:text-white mb-4">
                 Past Tournaments
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -337,10 +337,10 @@ export default function Tournaments() {
             className="space-y-4"
           >
             {createMutation.isError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
+              <div className="rounded-lg border border-danger/20 bg-danger/10 p-3 dark:border-danger/30 dark:bg-danger/20">
                 <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700 dark:text-red-300">
+                  <AlertTriangle className="h-4 w-4 text-danger dark:text-danger flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-danger/90 dark:text-danger/80">
                     {createMutation.error instanceof Error ? createMutation.error.message : 'Failed to create tournament'}
                   </p>
                 </div>
@@ -353,7 +353,7 @@ export default function Tournaments() {
                   <select
                     value={selectedTemplateId}
                     onChange={(e) => setSelectedTemplateId(e.target.value)}
-                    className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    className="flex-1 rounded-lg border border-surface-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-100"
                   >
                     <option value="">Start from scratch</option>
                     {templates.map((template) => (
@@ -375,7 +375,7 @@ export default function Tournaments() {
                   </Button>
                 </div>
                 {selectedTemplateId && templates.find(t => t.id === selectedTemplateId)?.description && (
-                  <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-400">
+                  <p className="mt-1.5 text-xs text-surface-600 dark:text-surface-400">
                     {templates.find(t => t.id === selectedTemplateId)?.description}
                   </p>
                 )}
@@ -392,7 +392,7 @@ export default function Tournaments() {
                     className={`flex flex-col items-center p-2 rounded-lg border-2 text-xs font-medium transition-colors ${
                       formData.sportProfileSlug === sport.slug
                         ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 text-gray-600 dark:text-gray-400'
+                        : 'border-surface-200 dark:border-surface-700 hover:border-primary-300 text-surface-600 dark:text-surface-400'
                     }`}
                   >
                     <span className="text-2xl mb-1">{sport.icon}</span>
@@ -429,7 +429,7 @@ export default function Tournaments() {
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 placeholder="e.g., Downtown Martial Arts Center"
               />
-              <p className="mt-1 text-xs text-gray-600">Optional</p>
+              <p className="mt-1 text-xs text-surface-600">Optional</p>
             </div>
           </form>
         </Modal>
@@ -493,16 +493,16 @@ function TournamentCard({
 
   return (
     <Card interactive={!isCompleted} className={isCompleted ? 'opacity-75' : 'border-l-4 border-l-primary-500'}>
-      <Link to={destination} className="block hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+      <Link to={destination} className="block hover:bg-surface-50/50 dark:hover:bg-surface-800/30 transition-colors">
         <CardBody>
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center min-w-0">
-              <div className={`p-2 rounded-lg ${isCompleted ? 'bg-gray-100 dark:bg-gray-700' : 'bg-primary-100 dark:bg-primary-900/30'}`}>
-                <Trophy className={`h-6 w-6 ${isCompleted ? 'text-gray-700' : 'text-primary-600 dark:text-primary-400'}`} />
+              <div className={`p-2 rounded-lg ${isCompleted ? 'bg-surface-100 dark:bg-surface-700' : 'bg-primary-100 dark:bg-primary-900/30'}`}>
+                <Trophy className={`h-6 w-6 ${isCompleted ? 'text-surface-700' : 'text-primary-600 dark:text-primary-400'}`} />
               </div>
               <div className="ml-3 min-w-0">
                 <h3
-                  className="font-semibold text-gray-900 dark:text-white truncate flex items-center gap-1.5"
+                  className="font-semibold text-surface-900 dark:text-white truncate flex items-center gap-1.5"
                   title={tournament.name}
                 >
                   <span className="truncate">{tournament.name}</span>
@@ -514,7 +514,7 @@ function TournamentCard({
                 </h3>
                 <StatusBadge status={tournament.status} />
                 {tournament.sportProfileSlug && (
-                  <span className="text-xs text-gray-600 mt-0.5">
+                  <span className="text-xs text-surface-600 mt-0.5">
                     {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.icon}{' '}
                     {SPORT_PROFILES.find(p => p.slug === tournament.sportProfileSlug)?.name}
                   </span>
@@ -524,7 +524,7 @@ function TournamentCard({
           </div>
 
           <div className="mt-4 space-y-2 text-sm">
-            <div className="flex items-center text-gray-600 dark:text-gray-400">
+            <div className="flex items-center text-surface-600 dark:text-surface-400">
               <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
               <span>{new Date(tournament.date).toLocaleDateString('en-US', {
                 weekday: 'short',
@@ -534,27 +534,27 @@ function TournamentCard({
               })}</span>
             </div>
             {tournament.location && (
-              <div className="flex items-center text-gray-600 dark:text-gray-400">
+              <div className="flex items-center text-surface-600 dark:text-surface-400">
                 <MapPin className="h-4 w-4 mr-2 flex-shrink-0" />
                 <span className="truncate">{tournament.location}</span>
               </div>
             )}
             <div className="flex items-center gap-4 pt-1">
-              <div className="flex items-center text-gray-600 dark:text-gray-400">
+              <div className="flex items-center text-surface-600 dark:text-surface-400">
                 <Users className="h-4 w-4 mr-1.5" />
                 <span className="font-medium">{tournament._count.registrations}</span>
-                <span className="ml-1 text-gray-600">competitors</span>
+                <span className="ml-1 text-surface-600">competitors</span>
               </div>
-              <div className="flex items-center text-gray-600 dark:text-gray-400">
+              <div className="flex items-center text-surface-600 dark:text-surface-400">
                 <LayoutGrid className="h-4 w-4 mr-1.5" />
                 <span className="font-medium">{tournament._count.divisions}</span>
-                <span className="ml-1 text-gray-600">divisions</span>
+                <span className="ml-1 text-surface-600">divisions</span>
               </div>
             </div>
           </div>
         </CardBody>
       </Link>
-      <div className="px-4 pb-4 pt-0 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row gap-2">
+      <div className="px-4 pb-4 pt-0 border-t border-surface-200 dark:border-surface-700 flex flex-col sm:flex-row gap-2">
         <Button
           as={Link}
           to={destination}
@@ -567,7 +567,7 @@ function TournamentCard({
         <Button
           onClick={onDelete}
           variant="secondary"
-          className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+          className="flex-1 text-danger hover:text-danger hover:bg-danger/10 dark:hover:bg-danger/20"
         >
           Delete
         </Button>

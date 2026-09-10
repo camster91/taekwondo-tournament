@@ -513,7 +513,7 @@ export default function DirectorDashboard() {
         >
           <Link
             to={`/tournaments/${tournamentId}`}
-            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+            className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 flex items-center mb-2"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back to Tournament
@@ -532,7 +532,7 @@ export default function DirectorDashboard() {
   if (!progress) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-600 dark:text-gray-400">Tournament not found</p>
+        <p className="text-surface-600 dark:text-surface-400">Tournament not found</p>
       </div>
     );
   }
@@ -552,14 +552,14 @@ export default function DirectorDashboard() {
         description={progress.tournament.name}
         actions={
           <div className="text-right">
-            <div className="text-sm text-gray-600 dark:text-gray-400">Last updated</div>
-            <div className="text-lg font-medium text-gray-900 dark:text-white">{new Date().toLocaleTimeString()}</div>
+            <div className="text-sm text-surface-600 dark:text-surface-400">Last updated</div>
+            <div className="text-lg font-medium text-surface-900 dark:text-white">{new Date().toLocaleTimeString()}</div>
           </div>
         }
       >
         <Link
           to={`/tournaments/${tournamentId}`}
-          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Tournament
@@ -589,7 +589,7 @@ export default function DirectorDashboard() {
               />
               <Button type="submit" loading={operationalQueryMutation.isPending} disabled={!operationalQuestion.trim()}>Ask</Button>
             </form>
-            <p id="operational-query-help" className="text-sm text-gray-600 dark:text-gray-400">This never changes tournament data.</p>
+            <p id="operational-query-help" className="text-sm text-surface-600 dark:text-surface-400">This never changes tournament data.</p>
             {operationalQueryMutation.isError && (
               <OperationStatus
                 state="rejected"
@@ -602,7 +602,7 @@ export default function DirectorDashboard() {
               />
             )}
             {operationalQueryMutation.data && (
-              <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+              <div role="status" className="rounded-lg border border-info/20 bg-info/10 p-3 text-sm text-info dark:border-info/30 dark:bg-info/20 dark:text-info">
                 <p>{operationalQueryMutation.data.answer}</p>
                 <p className="mt-1 text-xs">Current as of {new Date(operationalQueryMutation.data.generatedAt).toLocaleTimeString()}.</p>
                 {operationalQueryMutation.data.evidence.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5">{operationalQueryMutation.data.evidence.map((item) => <li key={`${item.href}:${item.label}`}><Link className="underline" to={item.href}>{item.label}</Link> <span className="text-xs">({new Date(item.observedAt).toLocaleTimeString()})</span></li>)}</ul>}
@@ -616,8 +616,8 @@ export default function DirectorDashboard() {
       <section aria-labelledby="attention-heading" className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 id="attention-heading" className="text-lg font-semibold text-gray-900 dark:text-white">Attention required</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Live operational risks, ordered by severity.</p>
+          <h2 id="attention-heading" className="text-lg font-semibold text-surface-900 dark:text-white">Attention required</h2>
+          <p className="text-sm text-surface-600 dark:text-surface-400">Live operational risks, ordered by severity.</p>
           </div>
         </div>
         {attentionQuery.isLoading && (
@@ -640,7 +640,7 @@ export default function DirectorDashboard() {
           </div>
         )}
         {offlineOperations.needsReview.length > 0 && (
-          <article className="rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30">
+          <article className="rounded-lg border border-danger/30 bg-danger/10 p-4 dark:border-danger/40 dark:bg-danger/20">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
@@ -667,17 +667,17 @@ export default function DirectorDashboard() {
             <article
               key={alert.id}
               className={`rounded-lg border p-4 ${critical
-                ? 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
-                : 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'}`}
+                ? 'border-danger/30 bg-danger/10 dark:border-danger/40 dark:bg-danger/20'
+                : 'border-warning/30 bg-warning/10 dark:border-warning/40 dark:bg-warning/20'}`}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex gap-3">
-                  <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${critical ? 'text-red-600' : 'text-amber-600'}`} aria-hidden="true" />
+                  <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${critical ? 'text-danger' : 'text-warning'}`} aria-hidden="true" />
                   <div>
-                    <h3 className={`font-semibold ${critical ? 'text-red-900 dark:text-red-100' : 'text-amber-900 dark:text-amber-100'}`}>{alert.title}</h3>
-                    <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">{alert.summary}</p>
-                    <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">Affected: {alert.affectedLabels.join('; ')}</p>
-                    <p className="mt-2 text-sm font-medium text-gray-900 dark:text-white">Recommended: {alert.recommendation}</p>
+                    <h3 className={`font-semibold ${critical ? 'text-danger dark:text-danger' : 'text-warning dark:text-warning'}`}>{alert.title}</h3>
+                    <p className="mt-1 text-sm text-surface-800 dark:text-surface-200">{alert.summary}</p>
+                    <p className="mt-1 text-sm text-surface-700 dark:text-surface-300">Affected: {alert.affectedLabels.join('; ')}</p>
+                    <p className="mt-2 text-sm font-medium text-surface-900 dark:text-white">Recommended: {alert.recommendation}</p>
                   </div>
                 </div>
                 <Button as={Link} to={alert.href} variant={critical ? 'danger' : 'secondary'} size="sm" className="shrink-0">
@@ -693,11 +693,11 @@ export default function DirectorDashboard() {
       <section aria-labelledby="sos-alerts-heading" className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 id="sos-alerts-heading" className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            <h2 id="sos-alerts-heading" className="text-lg font-semibold text-surface-900 dark:text-white flex items-center gap-2">
               <Bell className="h-5 w-5" />
               SOS Alerts
             </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Staff-raised urgent issues requiring immediate attention</p>
+            <p className="text-sm text-surface-600 dark:text-surface-400">Staff-raised urgent issues requiring immediate attention</p>
           </div>
           <Button variant="primary" size="sm" onClick={() => setShowNewAlert(true)}>
             <AlertCircle className="h-4 w-4 mr-1" />
@@ -735,17 +735,17 @@ export default function DirectorDashboard() {
               key={alert.id}
               className={`rounded-lg border p-4 ${
                 critical
-                  ? 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
+                  ? 'border-danger/30 bg-danger/10 dark:border-danger/40 dark:bg-danger/20'
                   : warning
-                  ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'
-                  : 'border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30'
+                    ? 'border-warning/30 bg-warning/10 dark:border-warning/40 dark:bg-warning/20'
+                    : 'border-info/20 bg-info/10 dark:border-info/30 dark:bg-info/20'
               }`}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex gap-3">
                   <AlertCircle
                     className={`mt-0.5 h-5 w-5 shrink-0 ${
-                      critical ? 'text-red-600' : warning ? 'text-amber-600' : 'text-blue-600'
+                      critical ? 'text-danger' : warning ? 'text-warning' : 'text-info'
                     }`}
                     aria-hidden="true"
                   />
@@ -753,10 +753,10 @@ export default function DirectorDashboard() {
                     <h3
                       className={`font-semibold ${
                         critical
-                          ? 'text-red-900 dark:text-red-100'
+                          ? 'text-danger dark:text-danger'
                           : warning
-                          ? 'text-amber-900 dark:text-amber-100'
-                          : 'text-blue-900 dark:text-blue-100'
+                            ? 'text-warning dark:text-warning'
+                            : 'text-info dark:text-info'
                       }`}
                     >
                       {alert.title}
@@ -788,15 +788,15 @@ export default function DirectorDashboard() {
         {/* New Alert Modal */}
         {showNewAlert && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={() => setShowNewAlert(false)}>
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Raise SOS Alert</h3>
+            <div className="bg-white dark:bg-surface-800 rounded-xl p-6 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-xl font-bold mb-4 text-surface-900 dark:text-white">Raise SOS Alert</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Severity</label>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Severity</label>
                   <select
                     value={alertSeverity}
                     onChange={(e) => setAlertSeverity(e.target.value as 'info' | 'warning' | 'critical')}
-                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full p-2 border border-surface-300 dark:border-surface-600 rounded-lg bg-white dark:bg-surface-700 text-surface-900 dark:text-white"
                   >
                     <option value="info">Info</option>
                     <option value="warning">Warning</option>
@@ -804,11 +804,11 @@ export default function DirectorDashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Category</label>
                   <select
                     value={alertCategory}
                     onChange={(e) => setAlertCategory(e.target.value)}
-                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full p-2 border border-surface-300 dark:border-surface-600 rounded-lg bg-white dark:bg-surface-700 text-surface-900 dark:text-white"
                   >
                     <option value="ring">Ring Issue</option>
                     <option value="division">Division Issue</option>
@@ -819,34 +819,34 @@ export default function DirectorDashboard() {
                 </div>
                 {alertCategory === 'ring' && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ring Number</label>
+                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Ring Number</label>
                     <input
                       type="number"
                       min="1"
                       value={alertRingNumber || ''}
                       onChange={(e) => setAlertRingNumber(e.target.value ? parseInt(e.target.value) : null)}
-                      className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      className="w-full p-2 border border-surface-300 dark:border-surface-600 rounded-lg bg-white dark:bg-surface-700 text-surface-900 dark:text-white"
                       placeholder="e.g. 1, 2, 3"
                     />
                   </div>
                 )}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title *</label>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Title *</label>
                   <input
                     type="text"
                     value={alertTitle}
                     onChange={(e) => setAlertTitle(e.target.value)}
-                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full p-2 border border-surface-300 dark:border-surface-600 rounded-lg bg-white dark:bg-surface-700 text-surface-900 dark:text-white"
                     placeholder="Brief description"
                     maxLength={200}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Description</label>
                   <textarea
                     value={alertDescription}
                     onChange={(e) => setAlertDescription(e.target.value)}
-                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full p-2 border border-surface-300 dark:border-surface-600 rounded-lg bg-white dark:bg-surface-700 text-surface-900 dark:text-white"
                     rows={3}
                     placeholder="Additional details (optional)"
                     maxLength={1000}
@@ -1073,7 +1073,7 @@ export default function DirectorDashboard() {
                       </div>
                     </div>
                     {division.ring && (
-                      <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded">
+                      <span className="text-xs bg-gray-100 dark:bg-gray-700 text-surface-700 dark:text-surface-300 px-2 py-1 rounded">
                         Ring {division.ring}
                       </span>
                     )}
@@ -1138,13 +1138,13 @@ export default function DirectorDashboard() {
         <CardBody>
           <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
             <div className="flex-1">
-              <label htmlFor="display-mode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mode</label>
+              <label htmlFor="display-mode" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Mode</label>
               <select
                 id="display-mode"
                 value={displayMode}
                 disabled={demoReadOnly}
                 onChange={(e) => setDisplayMode(e.target.value as 'all' | 'ring' | 'featured')}
-                className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 w-full sm:w-auto"
+                className="h-10 px-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-sm text-surface-900 dark:text-surface-100 w-full sm:w-auto"
               >
                 <option value="all">All rings (auto-cycle)</option>
                 <option value="ring">Single ring</option>
@@ -1153,13 +1153,13 @@ export default function DirectorDashboard() {
             </div>
             {displayMode === 'ring' && (
               <div className="flex-1">
-                <label htmlFor="display-ring" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ring</label>
+                <label htmlFor="display-ring" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Ring</label>
                 <select
                   id="display-ring"
                   value={displayRing}
                   disabled={demoReadOnly}
                   onChange={(e) => setDisplayRing(parseInt(e.target.value, 10))}
-                  className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 w-full sm:w-auto"
+                  className="h-10 px-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-sm text-surface-900 dark:text-surface-100 w-full sm:w-auto"
                 >
                   {Array.from(
                     new Set(
@@ -1177,7 +1177,7 @@ export default function DirectorDashboard() {
             )}
             {displayMode === 'featured' && (
               <div className="flex-1">
-                <label htmlFor="display-match" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Match ID</label>
+                <label htmlFor="display-match" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Match ID</label>
                 <input
                   id="display-match"
                   type="text"
@@ -1185,7 +1185,7 @@ export default function DirectorDashboard() {
                   disabled={demoReadOnly}
                   onChange={(e) => setDisplayMatchId(e.target.value)}
                   placeholder="e.g. 7f59a9ad-6b08-4867-96e5-d5a8a29a682b"
-                  className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 font-mono w-full"
+                  className="h-10 px-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 text-sm text-surface-900 dark:text-surface-100 font-mono w-full"
                 />
               </div>
             )}
