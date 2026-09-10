@@ -569,10 +569,10 @@ export default function Schedule() {
 
   const getRingColor = (ring: number) => {
     const colors = [
-      { light: 'bg-blue-100 border-blue-300', dark: 'dark:bg-blue-900/30 dark:border-blue-700', text: 'text-blue-900 dark:text-blue-200' },
-      { light: 'bg-green-100 border-green-300', dark: 'dark:bg-green-900/30 dark:border-green-700', text: 'text-green-900 dark:text-green-200' },
-      { light: 'bg-yellow-100 border-yellow-300', dark: 'dark:bg-yellow-900/30 dark:border-yellow-700', text: 'text-yellow-900 dark:text-yellow-200' },
-      { light: 'bg-purple-100 border-purple-300', dark: 'dark:bg-purple-900/30 dark:border-purple-700', text: 'text-purple-900 dark:text-purple-200' },
+      { light: 'bg-info/100 border-info300', dark: 'dark:bg-info/900/30 dark:border-info700', text: 'text-info900 dark:text-info200' },
+      { light: 'bg-success/100 border-success300', dark: 'dark:bg-success/900/30 dark:border-success700', text: 'text-success900 dark:text-success200' },
+      { light: 'bg-warning/100 border-warning300', dark: 'dark:bg-warning/900/30 dark:border-warning700', text: 'text-warning900 dark:text-warning200' },
+      { light: 'bg-primary-100 border-primary-300', dark: 'dark:bg-primary-900/30 dark:border-primary-700', text: 'text-primary-900 dark:text-primary-200' },
       { light: 'bg-pink-100 border-pink-300', dark: 'dark:bg-pink-900/30 dark:border-pink-700', text: 'text-pink-900 dark:text-pink-200' },
       { light: 'bg-orange-100 border-orange-300', dark: 'dark:bg-orange-900/30 dark:border-orange-700', text: 'text-orange-900 dark:text-orange-200' },
     ];
@@ -645,7 +645,7 @@ export default function Schedule() {
       >
         <Link
           to={`/tournaments/${id}`}
-          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 flex items-center mb-2"
           aria-label="Back to Tournament"
         >
           <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" />
@@ -682,15 +682,15 @@ export default function Schedule() {
         <CardBody className="space-y-4">
           {conditionsLoading && <div role="status" className="flex items-center gap-2 text-sm"><Spinner size="sm" /> Loading saved live conditionsâ€¦</div>}
           {scheduleConditionsError && <OperationStatus state="rejected" message="Stored live conditions could not be loaded. Editing and optimization are disabled until the authoritative snapshot is available." actionLabel="Try again" onAction={() => void refetchConditions()} />}
-          {conditionsDirty && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"><p className="font-semibold">Unsaved changes</p><p>These live-condition edits are not used by the optimizer. Save or restore them before generating, approving, or applying a proposal.</p></div>}
+          {conditionsDirty && <div role="status" className="rounded-lg border border-warning300 bg-warning/50 p-3 text-sm text-warning900 dark:border-warning800 dark:bg-warning/950/30 dark:text-warning100"><p className="font-semibold">Unsaved changes</p><p>These live-condition edits are not used by the optimizer. Save or restore them before generating, approving, or applying a proposal.</p></div>}
           {incidentsLoading && <div role="status" className="flex items-center gap-2 text-sm"><Spinner size="sm" /> Loading unresolved incidents…</div>}
           {incidentsError && <OperationStatus state="rejected" message="Unresolved incidents could not be loaded. Saving and optimization are disabled so missing incident evidence is not treated as zero." actionLabel="Try again" onAction={() => void refetchIncidents()} />}
           <fieldset disabled={scheduleBusy || !conditionsHydrated || scheduleConditionsError || incidentsLoading || incidentsError} aria-busy={conditionsMutation.isPending || conditionsLoading} className="space-y-4">
             <div className="max-w-xs"><Label htmlFor="optimizer-rest-window">Athlete rest window (minutes)</Label><Input id="optimizer-rest-window" type="number" min={0} max={240} value={restWindowMinutes} onChange={(event) => setRestWindowMinutes(Number(event.target.value))} /></div>
-            <div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Director-confirmed ring delays</h3><div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div><h3 className="text-sm font-semibold text-surface-900 dark:text-white">Director-confirmed ring delays</h3><div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {Array.from({ length: schedule?.config.ringCount ?? 0 }, (_, index) => index + 1).map((ring) => <div key={ring}><Label htmlFor={`optimizer-ring-delay-${ring}`}>Ring {ring} delay (minutes)</Label><Input id={`optimizer-ring-delay-${ring}`} type="number" min={0} max={240} placeholder="No delay" value={ringDelays[ring] ?? ''} onChange={(event) => setRingDelays((current) => ({ ...current, [ring]: event.target.value }))} /></div>)}
             </div></div>
-            {unresolvedIncidents.length > 0 && <div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Unresolved incident ring blocks</h3><div className="mt-2 grid gap-3 sm:grid-cols-2">
+            {unresolvedIncidents.length > 0 && <div><h3 className="text-sm font-semibold text-surface-900 dark:text-white">Unresolved incident ring blocks</h3><div className="mt-2 grid gap-3 sm:grid-cols-2">
               {unresolvedIncidents.map((incident) => <div key={incident.id}><Label htmlFor={`optimizer-incident-${incident.id}`}>{incident.type} ({incident.severity})</Label><Select id={`optimizer-incident-${incident.id}`} value={incidentRings[incident.id] ?? ''} onChange={(event) => setIncidentRings((current) => ({ ...current, [incident.id]: event.target.value }))}><option value="">Does not block a ring</option>{Array.from({ length: schedule?.config.ringCount ?? 0 }, (_, index) => index + 1).map((ring) => <option key={ring} value={ring}>Blocks Ring {ring}</option>)}</Select></div>)}
             </div></div>}
             <Button variant="secondary" loading={conditionsMutation.isPending} disabled={!conditionsHydrated || Boolean(scheduleConditionsError) || incidentsLoading || incidentsError} onClick={() => conditionsMutation.mutate()}>Save live conditions</Button>
@@ -714,7 +714,7 @@ export default function Schedule() {
           {optimizationLoading ? <div role="status" className="flex items-center gap-2 text-sm"><Spinner size="sm" /> Loading current optimization state…</div>
             : optimizationLoadError ? <OperationStatus state="rejected" message="Current optimization state is unavailable. Proposal actions are disabled until the server state is known." actionLabel="Try again" onAction={() => void refetchOptimization()} />
               : <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-gray-600 dark:text-gray-300">{latestOptimization ? `Latest proposal: ${latestOptimization.status}. Review its evidence before acting.` : 'No optimization proposal exists for the current schedule.'}</p>
+                <p className="text-sm text-surface-600 dark:text-surface-300">{latestOptimization ? `Latest proposal: ${latestOptimization.status}. Review its evidence before acting.` : 'No optimization proposal exists for the current schedule.'}</p>
                 <div className="flex gap-2">
                   {latestOptimization && <Button variant="secondary" onClick={() => setOptimizationOpen(true)}>Review proposal</Button>}
                   {(!latestOptimization || latestOptimization.status === 'rejected' || latestOptimization.status === 'applied') && (
@@ -840,13 +840,13 @@ export default function Schedule() {
       {schedule?.warnings && schedule.warnings.length > 0 && (
         <div
           role="alert"
-          className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6"
+          className="bg-warning/50 dark:bg-warning/900/20 border border-warning200 dark:border-warning800 rounded-lg p-4 mb-6"
         >
           <div className="flex items-start">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <AlertTriangle className="h-5 w-5 text-warning600 dark:text-warning400 mr-2 flex-shrink-0 mt-0.5" aria-hidden="true" />
             <div>
-              <h3 className="font-medium text-yellow-800 dark:text-yellow-200">Schedule Warnings</h3>
-              <ul className="mt-1 text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside">
+              <h3 className="font-medium text-warning800 dark:text-warning200">Schedule Warnings</h3>
+              <ul className="mt-1 text-sm text-warning700 dark:text-warning300 list-disc list-inside">
                 {schedule.warnings.map((warning, i) => (
                   <li key={i}>{warning}</li>
                 ))}
@@ -877,27 +877,27 @@ export default function Schedule() {
                       {scheduleByRing[Number(ring)].length} divisions
                     </p>
                   </div>
-                  <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                  <div className="divide-y divide-surface-100 dark:divide-surface-700">
                     {scheduleByRing[Number(ring)].map((div) => (
-                      <div key={div.divisionId} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <div key={div.divisionId} className="p-3 hover:bg-surface-50 dark:hover:bg-surface-700/50">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                          <span className="text-sm font-medium text-surface-600 dark:text-surface-400">
                             {div.startTime} - {div.endTime}
                           </span>
                           <span
                             className={`text-xs px-2 py-0.5 rounded ${
                               div.eventType === 'patterns'
-                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
-                                : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+                                ? 'bg-info/100 dark:bg-info/900/30 text-info800 dark:text-info300'
+                                : 'bg-danger/100 dark:bg-danger/900/30 text-danger800 dark:text-danger300'
                             }`}
                           >
                             {div.eventType === 'patterns' ? 'Patterns' : 'Sparring'}
                           </span>
                         </div>
-                        <p className="font-medium text-gray-900 dark:text-white text-sm">
+                        <p className="font-medium text-surface-900 dark:text-white text-sm">
                           {div.divisionName}
                         </p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                        <p className="text-xs text-surface-600 dark:text-surface-400 mt-1">
                           {div.competitorCount} competitors •{' '}
                           {div.estimatedDurationMinutes} min
                         </p>
@@ -953,8 +953,8 @@ export default function Schedule() {
               </TableHead>
               <TableBody>
                 {schedule.schedule.map((div) => (
-                  <tr key={div.divisionId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td className="font-medium text-gray-900 dark:text-white">
+                  <tr key={div.divisionId} className="hover:bg-surface-50 dark:hover:bg-surface-700/50">
+                    <td className="font-medium text-surface-900 dark:text-white">
                       {div.startTime} - {div.endTime}
                     </td>
                     <td>
@@ -975,14 +975,14 @@ export default function Schedule() {
                       <span
                         className={`text-xs px-2 py-1 rounded ${
                           div.eventType === 'patterns'
-                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
-                            : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
+                            ? 'bg-info/100 dark:bg-info/900/30 text-info800 dark:text-info300'
+                            : 'bg-danger/100 dark:bg-danger/900/30 text-danger800 dark:text-danger300'
                         }`}
                       >
                         {div.eventType === 'patterns' ? 'Patterns' : 'Sparring'}
                       </span>
                     </td>
-                    <td className="text-gray-600 dark:text-gray-400">
+                    <td className="text-surface-600 dark:text-surface-400">
                       {(() => {
                         const names = div.competitorNames ?? [];
                         if (names.length === 0) return '—';
@@ -998,7 +998,7 @@ export default function Schedule() {
                         );
                       })()}
                     </td>
-                    <td className="text-gray-600 dark:text-gray-400">{div.estimatedDurationMinutes} min</td>
+                    <td className="text-surface-600 dark:text-surface-400">{div.estimatedDurationMinutes} min</td>
                   </tr>
                 ))}
               </TableBody>
@@ -1078,26 +1078,26 @@ export default function Schedule() {
           <div className="space-y-5">
             {operationError && <OperationStatus state="rejected" message={operationError} />}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">Affected divisions</p><p className="text-xl font-semibold">{preview.impact.affectedDivisionIds.length}</p></div>
-              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">Ring changes</p><p className="text-xl font-semibold">{preview.impact.ringChanges}</p></div>
-              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">Time changes</p><p className="text-xl font-semibold">{preview.impact.timeChanges}</p></div>
-              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><p className="text-xs text-gray-600 dark:text-gray-400">New warnings</p><p className="text-xl font-semibold">{preview.impact.addedWarnings.length}</p></div>
+              <div className="rounded-lg bg-surface-50 p-3 dark:bg-surface-800"><p className="text-xs text-surface-600 dark:text-surface-400">Affected divisions</p><p className="text-xl font-semibold">{preview.impact.affectedDivisionIds.length}</p></div>
+              <div className="rounded-lg bg-surface-50 p-3 dark:bg-surface-800"><p className="text-xs text-surface-600 dark:text-surface-400">Ring changes</p><p className="text-xl font-semibold">{preview.impact.ringChanges}</p></div>
+              <div className="rounded-lg bg-surface-50 p-3 dark:bg-surface-800"><p className="text-xs text-surface-600 dark:text-surface-400">Time changes</p><p className="text-xl font-semibold">{preview.impact.timeChanges}</p></div>
+              <div className="rounded-lg bg-surface-50 p-3 dark:bg-surface-800"><p className="text-xs text-surface-600 dark:text-surface-400">New warnings</p><p className="text-xl font-semibold">{preview.impact.addedWarnings.length}</p></div>
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white">Affected divisions</h3>
+              <h3 className="font-semibold text-surface-900 dark:text-white">Affected divisions</h3>
               {preview.impact.affectedLabels.length ? (
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700 dark:text-gray-300">
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-surface-700 dark:text-surface-300">
                   {preview.impact.affectedLabels.map((label) => <li key={label}>{label}</li>)}
                 </ul>
-              ) : <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">The proposed configuration produces the same division timing and rings.</p>}
+              ) : <p className="mt-2 text-sm text-surface-600 dark:text-surface-400">The proposed configuration produces the same division timing and rings.</p>}
             </div>
             {preview.impact.addedWarnings.length > 0 && (
-              <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+              <div role="alert" className="rounded-lg border border-warning300 bg-warning/50 p-3 text-sm text-warning900 dark:border-warning800 dark:bg-warning/950/30 dark:text-warning100">
                 <p className="font-semibold">Review new warnings before applying</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">{preview.impact.addedWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
               </div>
             )}
-            <p className="text-sm text-gray-700 dark:text-gray-300">Applying records who approved the change and preserves the previous schedule for one-click undo. Undo is blocked if another schedule edit occurs first.</p>
+            <p className="text-sm text-surface-700 dark:text-surface-300">Applying records who approved the change and preserves the previous schedule for one-click undo. Undo is blocked if another schedule edit occurs first.</p>
           </div>
         )}
       </Modal>
@@ -1135,7 +1135,7 @@ export default function Schedule() {
               <option value="ring">Ring Delay</option>
               <option value="division">Division-Specific Delay</option>
             </Select>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
               {delayType === 'ring'
                 ? 'Delays all pending divisions in the selected ring'
                 : 'Delays a specific division and downstream divisions'}
@@ -1194,7 +1194,7 @@ export default function Schedule() {
               onChange={(e) => setDelayReason(e.target.value)}
               maxLength={500}
             />
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
               Provide a brief explanation for the delay (for audit trail)
             </p>
           </div>
@@ -1214,30 +1214,30 @@ export default function Schedule() {
           delayPreview ? (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Affected Divisions</p>
+                <div className="rounded-lg bg-surface-50 p-3 dark:bg-surface-800">
+                  <p className="text-xs text-surface-600 dark:text-surface-400">Affected Divisions</p>
                   <p className="text-xl font-semibold">{delayPreview.impact.affectedDivisionIds.length}</p>
                 </div>
-                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
-                  <p className="text-xs text-gray-600 dark:text-gray-400">Delay</p>
+                <div className="rounded-lg bg-surface-50 p-3 dark:bg-surface-800">
+                  <p className="text-xs text-surface-600 dark:text-surface-400">Delay</p>
                   <p className="text-xl font-semibold">{delayMinutes} min</p>
                 </div>
               </div>
 
               {delayPreview.impact.divisionMoves.length > 0 && (
                 <div>
-                  <h4 className="font-semibold text-sm text-gray-900 dark:text-white mb-2">
+                  <h4 className="font-semibold text-sm text-surface-900 dark:text-white mb-2">
                     Time Changes
                   </h4>
                   <div className="space-y-1 max-h-48 overflow-y-auto">
                     {delayPreview.impact.divisionMoves.map((move) => (
                       <div
                         key={move.divisionId}
-                        className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded px-2 py-1"
+                        className="text-sm text-surface-700 dark:text-surface-300 bg-surface-50 dark:bg-surface-800 rounded px-2 py-1"
                       >
                         <span className="font-medium">{move.divisionName}</span> (Ring {move.ring})
                         <br />
-                        <span className="text-gray-600 dark:text-gray-400">
+                        <span className="text-surface-600 dark:text-surface-400">
                           {move.oldStartTime}-{move.oldEndTime} → {move.newStartTime}-{move.newEndTime}
                         </span>
                       </div>
@@ -1247,7 +1247,7 @@ export default function Schedule() {
               )}
 
               {delayPreview.impact.warnings.length > 0 && (
-                <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                <div role="alert" className="rounded-lg border border-warning300 bg-warning/50 p-3 text-sm text-warning900 dark:border-warning800 dark:bg-warning/950/30 dark:text-warning100">
                   <p className="font-semibold mb-2">Warnings</p>
                   <ul className="list-disc space-y-1 pl-5">
                     {delayPreview.impact.warnings.map((warning, i) => (
@@ -1258,7 +1258,7 @@ export default function Schedule() {
               )}
 
               {delayPreview.impact.conflicts.length > 0 && (
-                <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100">
+                <div role="alert" className="rounded-lg border border-danger300 bg-danger/50 p-3 text-sm text-danger900 dark:border-danger800 dark:bg-danger/950/30 dark:text-danger100">
                   <p className="font-semibold mb-2">Conflicts Detected</p>
                   <ul className="list-disc space-y-1 pl-5">
                     {delayPreview.impact.conflicts.map((conflict, i) => (
@@ -1268,7 +1268,7 @@ export default function Schedule() {
                 </div>
               )}
 
-              <p className="text-sm text-gray-700 dark:text-gray-300">
+              <p className="text-sm text-surface-700 dark:text-surface-300">
                 This delay will be recorded in the audit trail and can be undone if no further schedule changes occur.
               </p>
             </div>

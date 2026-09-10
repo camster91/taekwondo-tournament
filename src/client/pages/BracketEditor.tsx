@@ -568,7 +568,7 @@ export default function BracketEditor() {
   if (!division) {
     return (
       <div className="text-center py-12">
-        <div className="text-gray-600 dark:text-gray-400">Division not found</div>
+        <div className="text-surface-600 dark:text-surface-400">Division not found</div>
       </div>
     );
   }
@@ -687,7 +687,7 @@ export default function BracketEditor() {
       {/* Back link */}
       <Link
         to={`/tournaments/${tournamentId}/divisions`}
-        className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center"
+        className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 flex items-center"
         aria-label="Back to Divisions"
       >
         <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" /> Back to Divisions
@@ -738,7 +738,7 @@ export default function BracketEditor() {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-gray-600 dark:text-gray-400">
+                <p className="text-xs text-surface-600 dark:text-surface-400">
                   Every registered competitor is already assigned to a division.
                 </p>
               )}
@@ -748,13 +748,13 @@ export default function BracketEditor() {
             {division.assignments.map((a, i) => (
               <span
                 key={a.id}
-                className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 gap-2"
+                className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-surface-100 dark:bg-surface-700 text-surface-900 dark:text-surface-100 gap-2"
               >
                 <span className="font-medium mr-1">{i + 1}.</span>
                 {a.registration.competitor.firstName}{' '}
                 {a.registration.competitor.lastName}
                 {a.registration.competitor.schoolDojang && (
-                  <span className="ml-1 text-gray-600 dark:text-gray-400 text-xs">
+                  <span className="ml-1 text-surface-600 dark:text-surface-400 text-xs">
                     ({a.registration.competitor.schoolDojang})
                   </span>
                 )}
@@ -766,7 +766,7 @@ export default function BracketEditor() {
                     }
                   }}
                   aria-label={`Remove ${a.registration.competitor.firstName} ${a.registration.competitor.lastName} from this division`}
-                  className="ml-1 text-gray-500 hover:text-red-600 dark:hover:text-red-400 focus:outline-none focus:ring-2 focus:ring-red-500 rounded-full"
+                  className="ml-1 text-surface-500 hover:text-danger600 dark:hover:text-danger400 focus:outline-none focus:ring-2 focus:ring-red-500 rounded-full"
                 >
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
@@ -855,11 +855,11 @@ export default function BracketEditor() {
       ) : (
         <Card>
           <CardBody className="text-center py-12">
-            <Trophy className="mx-auto h-12 w-12 text-gray-600 dark:text-gray-500" aria-hidden="true" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
+            <Trophy className="mx-auto h-12 w-12 text-surface-600 dark:text-surface-500" aria-hidden="true" />
+            <h3 className="mt-2 text-sm font-medium text-surface-900 dark:text-white">
               No bracket generated
             </h3>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
               Generate a bracket to start the competition.
             </p>
             <Button
@@ -912,13 +912,13 @@ export default function BracketEditor() {
           <div className="space-y-4 text-sm">
             {correctionError && <OperationStatus state="rejected" message={correctionError} />}
             <p>This correction replaces <strong>{correctionPreview.impact.oldMatchCount}</strong> matches with <strong>{correctionPreview.impact.newMatchCount}</strong> for {correctionPreview.impact.competitorCount} competitors.</p>
-            <dl className="grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-4 dark:bg-gray-900">
-              <div><dt className="text-gray-500">Completed results</dt><dd className="font-semibold">{correctionPreview.impact.completedMatchesRemoved}</dd></div>
-              <div><dt className="text-gray-500">Scored matches</dt><dd className="font-semibold">{correctionPreview.impact.scoredMatchesRemoved}</dd></div>
-              <div><dt className="text-gray-500">Audit entries</dt><dd className="font-semibold">{correctionPreview.impact.matchAuditRowsRemoved}</dd></div>
-              <div><dt className="text-gray-500">Match histories</dt><dd className="font-semibold">{correctionPreview.impact.matchupHistoryRowsRemoved}</dd></div>
-              <div><dt className="text-gray-500">BYEs before</dt><dd className="font-semibold">{correctionPreview.impact.oldByeCount}</dd></div>
-              <div><dt className="text-gray-500">BYEs after</dt><dd className="font-semibold">{correctionPreview.impact.newByeCount}</dd></div>
+            <dl className="grid grid-cols-2 gap-3 rounded-xl bg-surface-50 p-4 dark:bg-surface-900">
+              <div><dt className="text-surface-500">Completed results</dt><dd className="font-semibold">{correctionPreview.impact.completedMatchesRemoved}</dd></div>
+              <div><dt className="text-surface-500">Scored matches</dt><dd className="font-semibold">{correctionPreview.impact.scoredMatchesRemoved}</dd></div>
+              <div><dt className="text-surface-500">Audit entries</dt><dd className="font-semibold">{correctionPreview.impact.matchAuditRowsRemoved}</dd></div>
+              <div><dt className="text-surface-500">Match histories</dt><dd className="font-semibold">{correctionPreview.impact.matchupHistoryRowsRemoved}</dd></div>
+              <div><dt className="text-surface-500">BYEs before</dt><dd className="font-semibold">{correctionPreview.impact.oldByeCount}</dd></div>
+              <div><dt className="text-surface-500">BYEs after</dt><dd className="font-semibold">{correctionPreview.impact.newByeCount}</dd></div>
             </dl>
             {correctionPreview.impact.changedFirstRoundPairings.length > 0 && (
               <div>
@@ -933,7 +933,7 @@ export default function BracketEditor() {
             {correctionPreview.impact.inProgressMatchesBlocked > 0 ? (
               <OperationStatus state="rejected" message="A match is currently in progress. Finish or safely correct it before reseeding." />
             ) : (
-              <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">The current bracket, results, notes, and histories will be snapshotted. Undo remains available only until the replacement bracket is scored or otherwise changed.</p>
+              <p className="rounded-lg border border-warning300 bg-warning/50 p-3 text-warning950 dark:border-warning800 dark:bg-warning/950/40 dark:text-warning100">The current bracket, results, notes, and histories will be snapshotted. Undo remains available only until the replacement bracket is scored or otherwise changed.</p>
             )}
           </div>
         )}
@@ -1011,14 +1011,14 @@ function BracketSection({
   return (
     <div className="mb-8 last:mb-0" role="rowgroup" aria-label={ariaLabel}>
       <h4
-        className={`text-sm font-semibold text-gray-700 dark:text-gray-300 ${
+        className={`text-sm font-semibold text-surface-700 dark:text-surface-300 ${
           subtitle ? 'mb-1' : 'mb-4'
         }`}
       >
         {title}
       </h4>
       {subtitle && (
-        <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">
+        <p className="text-xs text-surface-600 dark:text-surface-400 mb-4">
           {subtitle}
         </p>
       )}
@@ -1035,7 +1035,7 @@ function BracketSection({
               }
             >
               {rounds.length > 1 && (
-                <div className="text-xs text-gray-600 dark:text-gray-400 text-center mb-2">
+                <div className="text-xs text-surface-600 dark:text-surface-400 text-center mb-2">
                   Round {round}
                 </div>
               )}
@@ -1092,17 +1092,17 @@ function MatchCard({
     <div
       className={`w-48 border rounded-lg overflow-hidden ${
         isComplete
-          ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/30'
+          ? 'border-success300 dark:border-success700 bg-success/50 dark:bg-success/900/30'
           : isReady
-          ? 'border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/30'
-          : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+          ? 'border-warning300 dark:border-warning700 bg-warning/50 dark:bg-warning/900/30'
+          : 'border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800'
       }`}
     >
-      <div className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-xs text-gray-700 dark:text-gray-400 flex justify-between">
+      <div className="px-2 py-1 bg-surface-100 dark:bg-surface-700 text-xs text-surface-700 dark:text-surface-400 flex justify-between">
         <span>Match {label}</span>
         <span className="capitalize" aria-label={`Status: ${cardStatus}`}>{cardStatus}</span>
       </div>
-      <div className="divide-y divide-gray-200 dark:divide-gray-700">
+      <div className="divide-y divide-surface-200 dark:divide-surface-700">
         <button
           onClick={() =>
             isReady && match.competitor1Id && onSelectWinner(match.competitor1Id)
@@ -1117,17 +1117,17 @@ function MatchCard({
             (match.winnerId === match.competitor1Id ? ' (winner)' : '') +
             (isReady ? ' — press Enter to record as winner' : '')
           }
-          className={`w-full px-3 py-2 text-left text-sm truncate text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+          className={`w-full px-3 py-2 text-left text-sm truncate text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500 ${
             match.winnerId === match.competitor1Id
-              ? 'bg-green-100 dark:bg-green-800/50 font-semibold'
+              ? 'bg-success/100 dark:bg-success/800/50 font-semibold'
               : isReady
-              ? 'hover:bg-gray-50 dark:hover:bg-gray-700'
+              ? 'hover:bg-surface-50 dark:hover:bg-surface-700'
               : ''
           }`}
         >
           {name1}
           {match.competitor1?.competitor.schoolDojang && (
-            <span className="text-xs text-gray-600 dark:text-gray-500 ml-1">
+            <span className="text-xs text-surface-600 dark:text-surface-500 ml-1">
               ({match.competitor1.competitor.schoolDojang.substring(0, 20)})
             </span>
           )}
@@ -1146,17 +1146,17 @@ function MatchCard({
             (match.winnerId === match.competitor2Id ? ' (winner)' : '') +
             (isReady ? ' — press Enter to record as winner' : '')
           }
-          className={`w-full px-3 py-2 text-left text-sm truncate text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+          className={`w-full px-3 py-2 text-left text-sm truncate text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500 ${
             match.winnerId === match.competitor2Id
-              ? 'bg-green-100 dark:bg-green-800/50 font-semibold'
+              ? 'bg-success/100 dark:bg-success/800/50 font-semibold'
               : isReady
-              ? 'hover:bg-gray-50 dark:hover:bg-gray-700'
+              ? 'hover:bg-surface-50 dark:hover:bg-surface-700'
               : ''
           }`}
         >
           {name2}
           {match.competitor2?.competitor.schoolDojang && (
-            <span className="text-xs text-gray-600 dark:text-gray-500 ml-1">
+            <span className="text-xs text-surface-600 dark:text-surface-500 ml-1">
               ({match.competitor2.competitor.schoolDojang.substring(0, 20)})
             </span>
           )}
@@ -1167,7 +1167,7 @@ function MatchCard({
           onClick={onSwap}
           aria-label={`Swap competitors in match ${label}`}
           title="Swap competitors (useful for fixing a bad auto-seed)"
-          className="w-full px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 flex items-center justify-center gap-1"
+          className="w-full px-2 py-1 text-xs text-surface-500 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 bg-surface-50 dark:bg-surface-700/50 border-t border-surface-200 dark:border-surface-700 focus:outline-none focus:ring-2 focus:ring-primary-500 flex items-center justify-center gap-1"
         >
           <ArrowLeftRight className="h-3 w-3" aria-hidden="true" />
           Swap
