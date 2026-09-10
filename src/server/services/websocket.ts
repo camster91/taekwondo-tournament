@@ -1,6 +1,7 @@
 import type { Server as HTTPServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'http';
+import type { PrismaClient } from '@prisma/client';
 import { verifyToken, SESSION_COOKIE } from '../middleware/auth.js';
 import { WsPubSub } from './ws-pubsub.js';
 
@@ -62,6 +63,14 @@ export interface InitializeWebSocketOptions {
    * so the cross-instance contract is exercised end-to-end.
    */
   pubsub?: WsPubSub;
+  /**
+   * Prisma client used for the per-subscribe authorization check
+   * (closes HIGH #6 from the backend review). Required in
+   * production; when omitted, the subscribe handler falls back to
+   * an in-process allow-list of admin users from the JWT so test
+   * rigs without a database can still mount the server.
+   */
+  prisma?: PrismaClient;
 }
 
 export async function initializeWebSocket(
@@ -127,40 +136,100 @@ export async function initializeWebSocket(
         const msg: BracketMessage = JSON.parse(message.toString());
 
         if (msg.type === 'subscribe' && msg.tournamentId && msg.divisionId) {
-          // Subscribe to division updates
-          client = {
+          // Pull the strings into local consts so the narrowing
+          // from the `&&` guard above survives across the async
+          // boundary. Otherwise the closure's BracketMessage
+          // type widens back to `string | undefined` and the
+          // assignment to BracketClient fails the build.
+          const tournamentId: string = msg.tournamentId;
+          const divisionId: string = msg.divisionId;
+          // HIGH #6: per-resource authorization. The previous
+          // version trusted msg.tournamentId / msg.divisionId
+          // straight from the client, so any authenticated user
+          // could subscribe to any other tenant's bracket feed
+          // and receive live match updates. We now resolve the
+          // division -> tournament mapping and the user's
+          // UserTournamentAccess row before joining the
+          // subscription set. Mismatched tournament or missing
+          // access row → `subscription_denied` + socket close.
+          //
+          // The check is async: we set `client` after the
+          // promise resolves, so a rejected subscribe never
+          // accidentally lands in the local fanout map.
+          void handleSubscribe({
             ws,
             userId,
-            tournamentId: msg.tournamentId,
-            divisionId: msg.divisionId,
-          };
+            role: payload.role,
+            tournamentId,
+            divisionId,
+            prisma: options.prisma,
+          }).then((outcome) => {
+            if (outcome.kind === 'denied') {
+              try {
+                ws.send(JSON.stringify({
+                  type: 'subscription_denied',
+                  tournamentId,
+                  divisionId,
+                  reason: outcome.reason,
+                }));
+              } catch (err) {
+                console.error('[websocket] failed to send subscription_denied:', err);
+              }
+              // 4xxx is the ws-library convention for application
+              // policy failure. 4403 mirrors HTTP 403.
+              ws.close(4403, `Subscription denied: ${outcome.reason}`);
+              return;
+            }
+            const newClient: BracketClient = {
+              ws,
+              userId,
+              tournamentId,
+              divisionId,
+            };
+            client = newClient;
+            if (!divisionSubscriptions.has(divisionId)) {
+              divisionSubscriptions.set(divisionId, new Set());
+            }
+            divisionSubscriptions.get(divisionId)!.add(newClient);
 
-          if (!divisionSubscriptions.has(msg.divisionId)) {
-            divisionSubscriptions.set(msg.divisionId, new Set());
-          }
-          divisionSubscriptions.get(msg.divisionId)!.add(client);
+            // Bump the refcount and LISTEN on the Postgres channel
+            // when this instance's first local subscriber appears for
+            // the topic. Done asynchronously — even if LISTEN fails,
+            // the local subscription is still recorded so the local
+            // fanout path keeps working.
+            const prev = pubsubRefcount.get(divisionId) ?? 0;
+            pubsubRefcount.set(divisionId, prev + 1);
+            if (prev === 0) {
+              void pubsub.subscribe(divisionId).catch((err: unknown) => {
+                console.error(
+                  `[websocket] pubsub.subscribe(${divisionId}) failed:`,
+                  err,
+                );
+              });
+            }
 
-          // Bump the refcount and LISTEN on the Postgres channel
-          // when this instance's first local subscriber appears for
-          // the topic. Done asynchronously — even if LISTEN fails,
-          // the local subscription is still recorded so the local
-          // fanout path keeps working.
-          const prev = pubsubRefcount.get(msg.divisionId) ?? 0;
-          pubsubRefcount.set(msg.divisionId, prev + 1);
-          if (prev === 0) {
-            void pubsub.subscribe(msg.divisionId).catch((err: unknown) => {
-              console.error(
-                `[websocket] pubsub.subscribe(${msg.divisionId}) failed:`,
-                err,
-              );
-            });
-          }
-
-          // Send confirmation
-          ws.send(JSON.stringify({
-            type: 'subscribed',
-            divisionId: msg.divisionId,
-          }));
+            // Send confirmation
+            ws.send(JSON.stringify({
+              type: 'subscribed',
+              divisionId,
+            }));
+          }).catch((err: unknown) => {
+            // Fail-closed: if the auth check itself blows up
+            // (DB down, malformed payload, etc.) we refuse the
+            // subscription rather than silently granting access.
+            console.error('[websocket] subscribe authorization error:', err);
+            try {
+              ws.send(JSON.stringify({
+                type: 'subscription_denied',
+                tournamentId,
+                divisionId,
+                reason: 'authorization_error',
+              }));
+            } catch {
+              // best-effort
+            }
+            ws.close(4403, 'Subscription denied: authorization_error');
+          });
         } else if (msg.type === 'unsubscribe' && client) {
           // Unsubscribe from division
           const subs = divisionSubscriptions.get(client.divisionId);
@@ -219,6 +288,113 @@ export async function initializeWebSocket(
 
   console.log('[websocket] WebSocket server initialized at /ws/brackets');
   return wss;
+}
+
+/**
+ * Per-resource authorization result for a `subscribe` message.
+ * `allowed` is the only path that lands a connection in the
+ * fanout map; `denied` carries a reason the client can show in
+ * the UI and a matching ws close code (4403).
+ */
+type SubscribeAuthResult =
+  | { kind: 'allowed' }
+  | { kind: 'denied'; reason: string };
+
+interface SubscribeAuthInput {
+  userId: string;
+  role?: string;
+  tournamentId: string;
+  divisionId: string;
+  prisma?: PrismaClient;
+}
+
+/**
+ * Resolve whether the connecting user is allowed to subscribe to
+ * `divisionId` inside `tournamentId`.
+ *
+ * Two layers of check, both required:
+ *
+ * 1. The division must actually belong to the requested
+ *    tournament. Otherwise a user with access to tournament A
+ *    could subscribe by passing any divisionId from tournament B
+ *    and still get B's match updates (the local fanout is keyed
+ *    by divisionId, not tournamentId).
+ *
+ * 2. The user must have a `UserTournamentAccess` row for the
+ *    tournament with role `director` / `scorekeeper` / `viewer`,
+ *    OR hold the global `admin` role on their JWT. The `admin`
+ *    bypass mirrors `checkTournamentAccess` so platform staff
+ *    don't need a per-tournament row.
+ *
+ * When `prisma` is not provided (test rigs, in-process unit
+ * tests), we degrade to JWT-role-only: any JWT with `role !==
+ * 'viewer'` is allowed, and the division-membership check is
+ * skipped. The production path always supplies a Prisma client.
+ */
+async function checkSubscribeAuthorization(
+  input: SubscribeAuthInput,
+): Promise<SubscribeAuthResult> {
+  const { userId, role, tournamentId, divisionId, prisma } = input;
+
+  // Platform admins short-circuit before any DB read. The role
+  // comes from the verified JWT, so a forged subscribe cannot
+  // bypass this.
+  if (role === 'admin') {
+    return { kind: 'allowed' };
+  }
+
+  if (!prisma) {
+    // No DB available — fall back to a JWT-only check so test
+    // rigs without Postgres can still mount the server. Score
+    // updaters and above are accepted; viewers are denied. This
+    // path is unreachable in production because
+    // `src/server/index.ts` always passes the prisma client.
+    if (role && role !== 'viewer') {
+      return { kind: 'allowed' };
+    }
+    return { kind: 'denied', reason: 'no_database' };
+  }
+
+  // Verify the division belongs to the tournament the client
+  // claimed. Doing this first means a user with access to
+  // tournament A cannot probe divisionIds from tournament B and
+  // (if (2) is also lenient) silently subscribe.
+  const division = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { tournamentId: true },
+  });
+  if (!division) {
+    return { kind: 'denied', reason: 'division_not_found' };
+  }
+  if (division.tournamentId !== tournamentId) {
+    return { kind: 'denied', reason: 'tournament_mismatch' };
+  }
+
+  const access = await prisma.userTournamentAccess.findFirst({
+    where: {
+      userId,
+      tournamentId,
+      role: { in: ['director', 'scorekeeper', 'viewer'] },
+    },
+    select: { id: true },
+  });
+  if (!access) {
+    return { kind: 'denied', reason: 'forbidden' };
+  }
+  return { kind: 'allowed' };
+}
+
+interface HandleSubscribeInput {
+  ws: WebSocket;
+  userId: string;
+  role?: string;
+  tournamentId: string;
+  divisionId: string;
+  prisma?: PrismaClient;
+}
+
+async function handleSubscribe(input: HandleSubscribeInput): Promise<SubscribeAuthResult> {
+  return checkSubscribeAuthorization(input);
 }
 
 /**

@@ -399,8 +399,10 @@ const server = app.listen(Number(PORT), '0.0.0.0', async () => {
 // Initialize WebSocket server after HTTP server is listening. Awaiting the
 // init means the pubsub's LISTEN client is up before the first request
 // can hit a route that calls `broadcast*`; otherwise an early match update
-// would race a not-yet-connected listener.
-initializeWebSocket(server).catch((err: unknown) => {
+// would race a not-yet-connected listener. The prisma client is passed in
+// so the per-subscribe authorization check (HIGH #6) can verify the user's
+// UserTournamentAccess row before joining the local fanout set.
+initializeWebSocket(server, { prisma }).catch((err: unknown) => {
   console.error('[startup] FATAL: failed to initialize WebSocket server:', err);
   process.exit(1);
 });
