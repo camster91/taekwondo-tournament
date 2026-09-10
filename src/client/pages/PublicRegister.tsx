@@ -266,7 +266,10 @@ export default function PublicRegister() {
             date: data.event.date,
             location: data.event.location,
             sportProfileSlug: data.event.sportProfileSlug || 'taekwondo',
-            settings: data.event.registrationFee ? JSON.stringify({ registrationFee: data.event.registrationFee }) : null,
+            settings: JSON.stringify({
+              registrationFee: data.event.registrationFee || undefined,
+              tournamentFeeCents: data.event.tournamentFeeCents || undefined,
+            }),
             brandName: data.event.brandName,
             brandPrimaryColor: data.event.brandPrimaryColor,
             brandLogoUrl: data.event.brandLogoUrl,

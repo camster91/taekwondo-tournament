@@ -205,12 +205,17 @@ router.get('/:orgSlug/:eventSlug', portalLimiter, async (req: Request, res: Resp
 
   // Parse registration fee from settings (same logic as public.ts)
   let registrationFee: string | null = null;
+  let tournamentFeeCents = 0; // P2.4: Expose fee amount for Stripe checkout UI
   try {
     if (event.settings) {
       const parsed = JSON.parse(event.settings) as Record<string, unknown>;
       const fee = parsed.registrationFee;
       if (typeof fee === 'string' && fee.trim()) {
         registrationFee = fee;
+      }
+      const feeCents = parsed.tournamentFeeCents;
+      if (typeof feeCents === 'number' && feeCents > 0) {
+        tournamentFeeCents = feeCents;
       }
     }
   } catch {
@@ -231,8 +236,10 @@ router.get('/:orgSlug/:eventSlug', portalLimiter, async (req: Request, res: Resp
       date: event.date,
       location: event.location,
       status: event.status,
+      sportProfileSlug: event.sportProfileSlug, // P1.2: Required for PublicRegister sport-specific logic
       registrationCount: event._count.registrations,
       registrationFee,
+      tournamentFeeCents, // P2.4: For Stripe checkout UI
       publicScoreboardSlug: event.publicSlug, // For linking to scoreboard
       // Event-level branding overrides org branding
       brandName: event.brandName || organization.brandName || event.name,
@@ -276,6 +283,8 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
     select: {
       id: true,
       plan: true,
+      brandName: true, // P2.6: For email branding
+      name: true, // P2.6: Fallback for email branding
       tournaments: {
         where: {
           eventSlug,
@@ -404,6 +413,16 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
     const ageAtTournament = calculateAge(dob, tournament.date);
     const isMinor = calculateAge(dob, new Date()) < 18;
 
+    // P1.1: Require parent contact for minors when guardianAttested
+    if (isMinor && guardianAttested) {
+      if (!parentName?.trim()) {
+        return res.status(400).json({ error: 'Parent/Guardian name is required for competitors under 18' });
+      }
+      if (!parentEmail?.trim()) {
+        return res.status(400).json({ error: 'Parent/Guardian email is required for competitors under 18' });
+      }
+    }
+
     const consent = buildRegistrationConsent(
       { privacyAccepted, rulesAccepted, guardianAttested },
       isMinor,
@@ -522,8 +541,9 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
           const stripe = new Stripe(stripeSecretKey);
 
           const publicUrl = process.env.PUBLIC_APP_URL || 'http://localhost:5173';
-          const successUrl = `${publicUrl}/events/${orgSlug}/${eventSlug}?payment=success&registration=${registration.id}`;
-          const cancelUrl = `${publicUrl}/events/${orgSlug}/${eventSlug}?payment=cancelled&registration=${registration.id}`;
+          // P1.3: Return to PublicRegister with portal context so success handling can show confirmation + management token
+          const successUrl = `${publicUrl}/register?portal=${orgSlug}/${eventSlug}&payment=success&registration=${registration.id}`;
+          const cancelUrl = `${publicUrl}/register?portal=${orgSlug}/${eventSlug}&payment=cancelled&registration=${registration.id}`;
 
           const session = await stripe.checkout.sessions.create({
             mode: 'payment',
@@ -598,7 +618,8 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
         sparring && 'Sparring',
       ].filter(Boolean).join(' & ');
       
-      const organizerBrandName = tournament.brandName || organization.id || undefined;
+      // P2.6: Use org brand/name, never UUID
+      const organizerBrandName = tournament.brandName || organization.brandName || organization.name || tournament.name;
       const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`;
       
       if (isMinor) {

@@ -515,7 +515,10 @@ router.get('/:id/qr-poster', authenticate, requireTournamentAccess('viewer'), as
   if (tournament.portalPublished && tournament.eventSlug && tournament.organization?.slug) {
     // Portal-scoped URLs (tenant-branded)
     registrationUrl = `${publicUrl}/events/${tournament.organization.slug}/${tournament.eventSlug}`;
-    scoreboardUrl = `${publicUrl}/events/${tournament.organization.slug}/${tournament.eventSlug}?scoreboard=true`;
+    // P2.5: Scoreboard URL must point to actual scoreboard display, not EventPortal
+    scoreboardUrl = tournament.publicSlug
+      ? `${publicUrl}/display/${tournament.id}?key=${encodeURIComponent(tournament.publicSlug)}`
+      : `${publicUrl}/scoreboard/${tournament.publicSlug}`;
   } else {
     // Legacy UUID-based URLs (backward compatible)
     registrationUrl = `${publicUrl}/register/${tournament.id}`;

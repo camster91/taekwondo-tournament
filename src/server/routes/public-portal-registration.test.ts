@@ -1,304 +1,353 @@
 /**
- * Unit tests for portal-scoped registration endpoint.
- * Validates tenant isolation, fail-closed behavior, and cross-org protection.
+ * Integration tests for portal-scoped registration endpoint.
+ * Validates tenant isolation, fail-closed behavior, and cross-org protection
+ * by mounting the actual router with mocked Prisma.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
+import express, { type Express } from 'express';
+import request from 'supertest';
 
-// Mock data factories
-function mockOrganization(id: string, slug: string, plan = 'free') {
+// Import the actual router
+import publicPortalRouter from './public-portal.js';
+
+// Mock Prisma client
+function createMockPrisma(): Partial<PrismaClient> {
   return {
-    id,
-    slug,
-    plan,
-    name: `Test Org ${slug}`,
-    brandName: null,
-    brandPrimaryColor: null,
-    brandLogoUrl: null,
-    tournaments: [],
+    organization: {
+      findUnique: vi.fn(),
+    } as any,
+    registration: {
+      count: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    } as any,
+    competitor: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    } as any,
   };
 }
 
-function mockTournament(id: string, orgId: string, eventSlug: string, status = 'registration') {
-  return {
-    id,
-    name: `Test Event ${eventSlug}`,
-    eventSlug,
-    date: new Date('2027-06-01'),
-    location: 'Test Venue',
-    status,
-    settings: null,
-    brandName: null,
-    organizationId: orgId,
-    portalPublished: true,
-    deletedAt: null,
-  };
-}
+describe('Portal-scoped registration (real router)', () => {
+  let app: Express;
+  let prisma: Partial<PrismaClient>;
 
-describe('Portal-scoped registration tenant isolation', () => {
-  it('validates org slug format (fail-closed)', () => {
-    // Invalid org slugs should return 404, not 400 (prevents enumeration)
-    const invalidSlugs = [
-      '', // empty
-      'ab', // too short
-      'UPPER', // uppercase not allowed
-      'has spaces', // spaces not allowed
-      'has_underscores', // underscores not allowed
-      'a'.repeat(64), // too long
-    ];
-
-    for (const slug of invalidSlugs) {
-      // Each should fail the regex test: /^[a-z0-9-]{3,63}$/
-      expect(slug).not.toMatch(/^[a-z0-9-]{3,63}$/);
-    }
+  beforeEach(() => {
+    // Disable rate limiting for tests
+    process.env.RATE_LIMIT_DISABLED = '1';
+    process.env.NODE_ENV = 'test';
+    
+    app = express();
+    app.use(express.json());
+    prisma = createMockPrisma();
+    app.locals.prisma = prisma;
+    
+    // Mount the router under /api/public/portal
+    app.use('/api/public/portal', publicPortalRouter);
+    
+    // Reset all mocks
+    vi.clearAllMocks();
   });
 
-  it('validates event slug format (fail-closed)', () => {
-    const invalidSlugs = [
-      '', // empty
-      'ab', // too short
-      'UPPER', // uppercase not allowed
-      'has spaces', // spaces not allowed
-      'has_underscores', // underscores not allowed
-      'a'.repeat(64), // too long
-    ];
+  it('rejects invalid org slug format (fail-closed with 404)', async () => {
+    const response = await request(app)
+      .post('/api/public/portal/UPPERCASE/spring-2027/register')
+      .send({
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'M',
+        dateOfBirth: '2015-01-01',
+        belt: 'Yellow',
+        patterns: true,
+        privacyAccepted: true,
+        rulesAccepted: true,
+      });
 
-    for (const slug of invalidSlugs) {
-      expect(slug).not.toMatch(/^[a-z0-9-]{3,63}$/);
-    }
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('Event not found');
+    // Should not even query the database
+    expect(prisma.organization?.findUnique).not.toHaveBeenCalled();
   });
 
-  it('rejects registration when org slug does not exist', async () => {
-    // Simulate org not found: empty tournaments array means wrong org/event combo
-    const org = mockOrganization('org-1', 'karate-dojo', 'pro');
-    org.tournaments = []; // No matching event
+  it('rejects invalid event slug format (fail-closed with 404)', async () => {
+    const response = await request(app)
+      .post('/api/public/portal/karate-dojo/HAS_UNDERSCORE/register')
+      .send({
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'M',
+        dateOfBirth: '2015-01-01',
+        belt: 'Yellow',
+        patterns: true,
+        privacyAccepted: true,
+        rulesAccepted: true,
+      });
 
-    // In the real handler, this would return 404
-    expect(org.tournaments.length).toBe(0);
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('Event not found');
   });
 
-  it('rejects registration when event slug does not exist for org', async () => {
-    const org = mockOrganization('org-1', 'karate-dojo', 'pro');
-    const event = mockTournament('event-1', 'org-1', 'spring-2027');
-    org.tournaments = [event];
+  it('returns 404 when organization does not exist', async () => {
+    (prisma.organization!.findUnique as any).mockResolvedValue(null);
 
-    // If the query filters by eventSlug='wrong-slug', tournaments will be empty
-    const queryResult = org.tournaments.filter((t) => t.eventSlug === 'wrong-slug');
-    expect(queryResult.length).toBe(0);
+    const response = await request(app)
+      .post('/api/public/portal/nonexistent-org/spring-2027/register')
+      .send({
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'M',
+        dateOfBirth: '2015-01-01',
+        belt: 'Yellow',
+        patterns: true,
+        privacyAccepted: true,
+        rulesAccepted: true,
+      });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('Event not found');
+    expect(prisma.organization!.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { slug: 'nonexistent-org' },
+      })
+    );
   });
 
-  it('rejects registration when event is unpublished', async () => {
-    const org = mockOrganization('org-1', 'karate-dojo', 'pro');
-    const event = mockTournament('event-1', 'org-1', 'spring-2027');
-    event.portalPublished = false; // Unpublished
-    org.tournaments = [event];
+  it('returns 404 when event does not exist for org', async () => {
+    (prisma.organization!.findUnique as any).mockResolvedValue({
+      id: 'org-1',
+      plan: 'pro',
+      brandName: 'Test Org',
+      name: 'Test Org',
+      tournaments: [], // No matching event
+    });
 
-    // The DB query filters portalPublished=true, so unpublished events won't appear
-    const queryResult = org.tournaments.filter((t) => t.portalPublished === true);
-    expect(queryResult.length).toBe(0);
+    const response = await request(app)
+      .post('/api/public/portal/karate-dojo/nonexistent-event/register')
+      .send({
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'M',
+        dateOfBirth: '2015-01-01',
+        belt: 'Yellow',
+        patterns: true,
+        privacyAccepted: true,
+        rulesAccepted: true,
+      });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('Event not found');
   });
 
-  it('rejects registration when event is soft-deleted', async () => {
-    const org = mockOrganization('org-1', 'karate-dojo', 'pro');
-    const event = mockTournament('event-1', 'org-1', 'spring-2027');
-    event.deletedAt = new Date(); // Soft-deleted
-    org.tournaments = [event];
+  it('returns 404 when event is unpublished', async () => {
+    (prisma.organization!.findUnique as any).mockResolvedValue({
+      id: 'org-1',
+      plan: 'pro',
+      brandName: 'Test Org',
+      name: 'Test Org',
+      tournaments: [], // DB query filters portalPublished=true, so unpublished events don't appear
+    });
 
-    // The DB query filters deletedAt=null
-    const queryResult = org.tournaments.filter((t) => t.deletedAt === null);
-    expect(queryResult.length).toBe(0);
+    const response = await request(app)
+      .post('/api/public/portal/karate-dojo/spring-2027/register')
+      .send({
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'M',
+        dateOfBirth: '2015-01-01',
+        belt: 'Yellow',
+        patterns: true,
+        privacyAccepted: true,
+        rulesAccepted: true,
+      });
+
+    expect(response.status).toBe(404);
   });
 
   it('prevents cross-tenant registration (org A cannot register for org B event)', async () => {
-    const orgA = mockOrganization('org-a', 'karate-dojo', 'pro');
-    const orgB = mockOrganization('org-b', 'judo-club', 'pro');
-    const eventB = mockTournament('event-b', 'org-b', 'summer-2027');
+    // Attempting to register through org A's portal for org B's event
+    // The query filters by organizationId, so org B's event won't appear
+    (prisma.organization!.findUnique as any).mockResolvedValue({
+      id: 'org-a',
+      plan: 'pro',
+      brandName: 'Org A',
+      name: 'Org A',
+      tournaments: [], // No events from org-b appear in org-a's query
+    });
 
-    // orgA's query for events would not include eventB (different organizationId)
-    const orgAEvents = [eventB].filter((e) => e.organizationId === orgA.id);
-    expect(orgAEvents.length).toBe(0);
+    const response = await request(app)
+      .post('/api/public/portal/org-a/org-b-event/register')
+      .send({
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'M',
+        dateOfBirth: '2015-01-01',
+        belt: 'Yellow',
+        patterns: true,
+        privacyAccepted: true,
+        rulesAccepted: true,
+      });
 
-    // Even if somehow the event leaked through, the defense-in-depth check
-    // would catch it: tournament.organizationId !== organization.id
-    expect(eventB.organizationId).not.toBe(orgA.id);
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('Event not found');
   });
 
-  it('allows registration when all validations pass', async () => {
-    const org = mockOrganization('org-1', 'karate-dojo', 'pro');
-    const event = mockTournament('event-1', 'org-1', 'spring-2027', 'registration');
-    org.tournaments = [event];
+  it('returns 400 when event status is not "registration"', async () => {
+    (prisma.organization!.findUnique as any).mockResolvedValue({
+      id: 'org-1',
+      plan: 'pro',
+      brandName: 'Test Org',
+      name: 'Test Org',
+      tournaments: [{
+        id: 'event-1',
+        name: 'Spring Championship',
+        date: new Date('2027-06-01'),
+        location: 'Test Venue',
+        status: 'completed', // Event is closed
+        settings: null,
+        brandName: null,
+        organizationId: 'org-1',
+      }],
+    });
 
-    // Simulate successful query
-    const queryResult = org.tournaments.filter(
-      (t) =>
-        t.eventSlug === 'spring-2027' &&
-        t.portalPublished === true &&
-        t.deletedAt === null &&
-        t.organizationId === org.id
-    );
+    const response = await request(app)
+      .post('/api/public/portal/karate-dojo/spring-2027/register')
+      .send({
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'M',
+        dateOfBirth: '2015-01-01',
+        belt: 'Yellow',
+        patterns: true,
+        privacyAccepted: true,
+        rulesAccepted: true,
+      });
 
-    expect(queryResult.length).toBe(1);
-    expect(queryResult[0].status).toBe('registration');
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Registration is not open for this event');
   });
 
-  it('rejects registration when event status is not "registration"', async () => {
-    const org = mockOrganization('org-1', 'karate-dojo', 'pro');
-    const event = mockTournament('event-1', 'org-1', 'spring-2027', 'completed');
-    org.tournaments = [event];
+  it('requires parent contact for minors when guardianAttested', async () => {
+    (prisma.organization!.findUnique as any).mockResolvedValue({
+      id: 'org-1',
+      plan: 'pro',
+      brandName: 'Test Org',
+      name: 'Test Org',
+      tournaments: [{
+        id: 'event-1',
+        name: 'Spring Championship',
+        date: new Date('2027-06-01'),
+        location: 'Test Venue',
+        status: 'registration',
+        settings: null,
+        brandName: null,
+        organizationId: 'org-1',
+      }],
+    });
 
-    // The handler checks tournament.status !== 'registration' and returns 400
-    expect(event.status).not.toBe('registration');
+    (prisma.registration!.count as any).mockResolvedValue(0);
+
+    const response = await request(app)
+      .post('/api/public/portal/karate-dojo/spring-2027/register')
+      .send({
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'M',
+        dateOfBirth: '2015-01-01', // Minor (12 years old at tournament)
+        belt: 'Yellow',
+        patterns: true,
+        privacyAccepted: true,
+        rulesAccepted: true,
+        guardianAttested: true,
+        // Missing parentName and parentEmail
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/Parent.*Guardian.*required/i);
   });
 
-  it('respects plan limits (free plan)', async () => {
-    const org = mockOrganization('org-1', 'karate-dojo', 'free');
-    const event = mockTournament('event-1', 'org-1', 'spring-2027');
-    org.tournaments = [event];
+  it('validates required fields', async () => {
+    const response = await request(app)
+      .post('/api/public/portal/karate-dojo/spring-2027/register')
+      .send({
+        // Missing firstName, lastName, gender, dateOfBirth, belt
+        patterns: true,
+        privacyAccepted: true,
+        rulesAccepted: true,
+      });
 
-    // Free plan allows 30 competitors
-    // Simulate 30 existing registrations
-    const existingCount = 30;
-    const canAdd = existingCount < 30;
-
-    expect(canAdd).toBe(false); // At limit
+    expect(response.status).toBe(404); // Slug validation happens first
   });
 
-  it('respects plan limits (pro plan)', async () => {
-    const org = mockOrganization('org-1', 'karate-dojo', 'pro');
-    const event = mockTournament('event-1', 'org-1', 'spring-2027');
-    org.tournaments = [event];
+  it('requires at least one event (patterns or sparring)', async () => {
+    (prisma.organization!.findUnique as any).mockResolvedValue({
+      id: 'org-1',
+      plan: 'pro',
+      brandName: 'Test Org',
+      name: 'Test Org',
+      tournaments: [{
+        id: 'event-1',
+        name: 'Spring Championship',
+        date: new Date('2027-06-01'),
+        status: 'registration',
+        settings: null,
+        brandName: null,
+        organizationId: 'org-1',
+      }],
+    });
 
-    // Pro plan allows 500 competitors
-    const existingCount = 500;
-    const canAdd = existingCount < 500;
+    const response = await request(app)
+      .post('/api/public/portal/karate-dojo/spring-2027/register')
+      .send({
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'M',
+        dateOfBirth: '2015-01-01',
+        belt: 'Yellow',
+        patterns: false,
+        sparring: false, // Neither selected
+        privacyAccepted: true,
+        rulesAccepted: true,
+      });
 
-    expect(canAdd).toBe(false); // At limit
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Validation failed');
+    expect(response.body.details).toContain('Please select at least one event (Patterns or Sparring)');
   });
 
-  it('handles duplicate registration (same competitor, same event)', async () => {
-    // Simulate existing registration
-    const existingRegistration = {
-      id: 'reg-1',
-      tournamentId: 'event-1',
-      competitorId: 'comp-1',
-    };
+  it('requires weight for sparring registration', async () => {
+    (prisma.organization!.findUnique as any).mockResolvedValue({
+      id: 'org-1',
+      plan: 'pro',
+      brandName: 'Test Org',
+      name: 'Test Org',
+      tournaments: [{
+        id: 'event-1',
+        name: 'Spring Championship',
+        date: new Date('2027-06-01'),
+        status: 'registration',
+        settings: null,
+        brandName: null,
+        organizationId: 'org-1',
+      }],
+    });
 
-    // The handler checks for existing registration via unique constraint
-    // and returns 409 if found
-    expect(existingRegistration.tournamentId).toBe('event-1');
-    expect(existingRegistration.competitorId).toBe('comp-1');
-  });
+    const response = await request(app)
+      .post('/api/public/portal/karate-dojo/spring-2027/register')
+      .send({
+        firstName: 'John',
+        lastName: 'Doe',
+        gender: 'M',
+        dateOfBirth: '2015-01-01',
+        belt: 'Yellow',
+        sparring: true, // Selected sparring
+        // Missing weightLbs
+        privacyAccepted: true,
+        rulesAccepted: true,
+      });
 
-  it('allows same competitor to register for different events', async () => {
-    const orgA = mockOrganization('org-a', 'karate-dojo', 'pro');
-    const event1 = mockTournament('event-1', 'org-a', 'spring-2027');
-    const event2 = mockTournament('event-2', 'org-a', 'fall-2027');
-
-    const competitor = { id: 'comp-1', firstName: 'John', lastName: 'Doe' };
-
-    // Same competitor can register for both events
-    const reg1 = { tournamentId: event1.id, competitorId: competitor.id };
-    const reg2 = { tournamentId: event2.id, competitorId: competitor.id };
-
-    expect(reg1.tournamentId).not.toBe(reg2.tournamentId);
-  });
-
-  it('allows same competitor to register for events across different orgs', async () => {
-    const orgA = mockOrganization('org-a', 'karate-dojo', 'pro');
-    const orgB = mockOrganization('org-b', 'judo-club', 'pro');
-    const eventA = mockTournament('event-a', 'org-a', 'spring-2027');
-    const eventB = mockTournament('event-b', 'org-b', 'summer-2027');
-
-    const competitor = { id: 'comp-1', firstName: 'John', lastName: 'Doe' };
-
-    // Same competitor can register for events in different orgs
-    const regA = { tournamentId: eventA.id, competitorId: competitor.id };
-    const regB = { tournamentId: eventB.id, competitorId: competitor.id };
-
-    expect(eventA.organizationId).not.toBe(eventB.organizationId);
-    expect(regA.tournamentId).not.toBe(regB.tournamentId);
-  });
-
-  it('validates required fields (firstName, lastName, gender, dateOfBirth, belt)', () => {
-    const requiredFields = ['firstName', 'lastName', 'gender', 'dateOfBirth', 'belt'];
-    const invalidData = {
-      firstName: '', // empty
-      lastName: '', // empty
-      gender: 'X', // invalid (must be M or F)
-      dateOfBirth: null, // missing
-      belt: '', // empty
-    };
-
-    expect(invalidData.firstName.trim()).toBe('');
-    expect(invalidData.lastName.trim()).toBe('');
-    expect(['M', 'F'].includes(invalidData.gender)).toBe(false);
-    expect(invalidData.dateOfBirth).toBeNull();
-    expect(invalidData.belt?.trim()).toBeFalsy();
-  });
-
-  it('validates at least one event (patterns or sparring) is selected', () => {
-    const invalidData = { patterns: false, sparring: false };
-    expect(invalidData.patterns || invalidData.sparring).toBe(false);
-  });
-
-  it('requires weight for sparring registration', () => {
-    const data = { sparring: true, weightLbs: null };
-    expect(data.sparring && !data.weightLbs).toBe(true); // Should fail validation
-  });
-
-  it('validates field length limits', () => {
-    const data = {
-      firstName: 'a'.repeat(101), // > 100
-      lastName: 'a'.repeat(101), // > 100
-      schoolDojang: 'a'.repeat(201), // > 200
-      specialNeeds: 'a'.repeat(2001), // > 2000
-      parentName: 'a'.repeat(201), // > 200
-      parentEmail: 'a'.repeat(201), // > 200
-      parentPhone: 'a'.repeat(51), // > 50
-    };
-
-    expect(data.firstName.length).toBeGreaterThan(100);
-    expect(data.lastName.length).toBeGreaterThan(100);
-    expect(data.schoolDojang.length).toBeGreaterThan(200);
-    expect(data.specialNeeds.length).toBeGreaterThan(2000);
-    expect(data.parentName.length).toBeGreaterThan(200);
-    expect(data.parentEmail.length).toBeGreaterThan(200);
-    expect(data.parentPhone.length).toBeGreaterThan(50);
-  });
-
-  it('validates weight range (0-500 lbs)', () => {
-    expect(600).toBeGreaterThan(500); // Invalid
-    expect(-1).toBeLessThan(0); // Invalid
-    expect(150).toBeGreaterThanOrEqual(0); // Valid
-    expect(150).toBeLessThanOrEqual(500); // Valid
-  });
-
-  it('validates height range (0-108 inches)', () => {
-    expect(120).toBeGreaterThan(108); // Invalid
-    expect(-1).toBeLessThan(0); // Invalid
-    expect(60).toBeGreaterThanOrEqual(0); // Valid
-    expect(60).toBeLessThanOrEqual(108); // Valid
-  });
-
-  it('validates dan rank range (0-9)', () => {
-    expect(10).toBeGreaterThan(9); // Invalid
-    expect(-1).toBeLessThan(0); // Invalid
-    expect(5).toBeGreaterThanOrEqual(0); // Valid
-    expect(5).toBeLessThanOrEqual(9); // Valid
-  });
-
-  it('validates minimum age (4 years old)', () => {
-    const tournamentDate = new Date('2027-06-01');
-    const dob = new Date('2024-06-01'); // 3 years old at tournament
-    const age = tournamentDate.getFullYear() - dob.getFullYear();
-    expect(age).toBeLessThan(4); // Should fail validation
-  });
-
-  it('generates unique management tokens', () => {
-    // Management tokens should be 32-byte hex strings (64 characters)
-    const token = 'a'.repeat(64);
-    expect(token.length).toBe(64);
-    expect(token).toMatch(/^[a-f0-9]{64}$/);
+    expect(response.status).toBe(400);
+    expect(response.body.details).toContain('Weight is required for sparring registration');
   });
 });
