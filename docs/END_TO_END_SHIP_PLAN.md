@@ -21,7 +21,8 @@
 - ✅ PR #244: Phase 2 completion checkpoint — waitlist, payment at registration, deduplication, manual division override, bracket print, real-time collab, announcer view, video review, director dashboard, certificates, school reports, historical trends, COPPA, GDPR, onboarding checklist
 - ✅ PR #245: Registration management token security (P0-118) — 30-day token expiration, director revoke/rotate, audit logging, comprehensive integration tests
 - ✅ PR #246: Post-#245 sync — docs/END_TO_END_SHIP_PLAN.md sync + #216/#186 cannot-reproduce verification
-- 🔄 **This PR**: Pilot polish batch — public scoreboard refresh interval setting, email template design pass with tenant branding, multi-sport seed data examples (Karate/Judo), test-aware rate limit middleware
+- ✅ PR #247: Pilot polish batch — public scoreboard refresh interval setting, email template design pass with tenant branding, multi-sport seed data examples (Karate/Judo), test-aware rate limit middleware
+- 🔄 **This PR**: Appendix tech debt (#2 bracket PDF layout, #4 migration CI smoke) + scorekeeper validation (#188)
 
 ---
 

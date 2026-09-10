@@ -28,6 +28,7 @@ export interface BracketMatch {
   score1?: number | null;
   score2?: number | null;
   status: string;
+  ringNumber?: number | null;
 }
 
 export interface DivisionInfo {
@@ -78,14 +79,15 @@ const MARGIN = 40;
 const CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN;
 
 /**
- * Draw fold marks at the edges of the page for cutting/folding guides
+ * Draw fold marks at the edges of the page for cutting/folding guides.
+ * These are print-shop standard guide marks for trimming or folding.
  */
 function drawFoldMarks(doc: jsPDF, pageWidth: number, pageHeight: number): void {
   doc.setDrawColor(200);
   doc.setLineWidth(0.5);
   
-  const markLength = 10;
-  const markOffset = 5;
+  const markLength = 12;  // Slightly longer for visibility
+  const markOffset = 4;   // Closer to edge
   
   // Top edge marks (at 1/3 and 2/3)
   const third = pageWidth / 3;
@@ -104,6 +106,12 @@ function drawFoldMarks(doc: jsPDF, pageWidth: number, pageHeight: number): void 
   // Right edge marks
   doc.line(pageWidth - markOffset - markLength, thirdHeight, pageWidth - markOffset, thirdHeight);
   doc.line(pageWidth - markOffset - markLength, thirdHeight * 2, pageWidth - markOffset, thirdHeight * 2);
+  
+  // Center cross-hair marks for perfect alignment
+  doc.line(pageWidth / 2 - 6, markOffset, pageWidth / 2 + 6, markOffset);
+  doc.line(pageWidth / 2 - 6, pageHeight - markOffset, pageWidth / 2 + 6, pageHeight - markOffset);
+  doc.line(markOffset, pageHeight / 2 - 6, markOffset + markLength, pageHeight / 2);
+  doc.line(pageWidth - markOffset - markLength, pageHeight / 2, pageWidth - markOffset, pageHeight / 2 + 6);
 }
 
 /**
@@ -201,19 +209,19 @@ function drawWinnersBracket(
   height: number,
   showResults: boolean
 ): void {
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text('Winners Bracket', x + width / 2, y - 5, { align: 'center' });
+  doc.text('Winners Bracket', x + width / 2, y - 8, { align: 'center' });
 
   const round1 = matches.filter(m => m.round === 1);
   const round2 = matches.filter(m => m.round === 2);
   const round3 = matches.filter(m => m.round === 3);
 
-  const matchWidth = 100;
-  const matchHeight = 40;
+  const matchWidth = 105;   // Slightly wider for better readability
+  const matchHeight = 45;   // Taller for better spacing
   const colSpacing = (width - matchWidth) / 3;
 
-  // Round 1 - 4 matches
+  // Round 1 - 4 matches with better spacing
   const r1Spacing = height / 4;
   round1.forEach((match, i) => {
     drawMatchBox(doc, match, x, y + i * r1Spacing, matchWidth, matchHeight, showResults);
@@ -246,9 +254,9 @@ function drawWinnersBracket(
     );
   }
 
-  // Draw connecting lines
-  doc.setDrawColor(150);
-  doc.setLineWidth(0.5);
+  // Draw connecting lines (slightly thicker for print clarity)
+  doc.setDrawColor(120);
+  doc.setLineWidth(0.75);
 
   // R1 to R2 connections
   for (let i = 0; i < 2; i++) {
@@ -258,10 +266,10 @@ function drawWinnersBracket(
     const x1 = x + matchWidth;
     const x2 = x + colSpacing;
 
-    doc.line(x1, y1Top, x1 + 10, y1Top);
-    doc.line(x1, y1Bot, x1 + 10, y1Bot);
-    doc.line(x1 + 10, y1Top, x1 + 10, y1Bot);
-    doc.line(x1 + 10, yMid, x2, yMid);
+    doc.line(x1, y1Top, x1 + 12, y1Top);
+    doc.line(x1, y1Bot, x1 + 12, y1Bot);
+    doc.line(x1 + 12, y1Top, x1 + 12, y1Bot);
+    doc.line(x1 + 12, yMid, x2, yMid);
   }
 
   // R2 to R3 connections
@@ -271,10 +279,10 @@ function drawWinnersBracket(
   const x2End = x + colSpacing + matchWidth;
   const x3Start = x + colSpacing * 2;
 
-  doc.line(x2End, y2Top, x2End + 10, y2Top);
-  doc.line(x2End, y2Bot, x2End + 10, y2Bot);
-  doc.line(x2End + 10, y2Top, x2End + 10, y2Bot);
-  doc.line(x2End + 10, yMid, x3Start, yMid);
+  doc.line(x2End, y2Top, x2End + 12, y2Top);
+  doc.line(x2End, y2Bot, x2End + 12, y2Bot);
+  doc.line(x2End + 12, y2Top, x2End + 12, y2Bot);
+  doc.line(x2End + 12, yMid, x3Start, yMid);
 }
 
 function drawLosersBracket(
@@ -372,27 +380,36 @@ function drawMatchBox(
   doc.setLineWidth(0.5);
   doc.line(x, y + height / 2, x + width, y + height / 2);
 
-  // Match number
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100);
-  doc.text(`#${match.matchNumber}`, x + 2, y + 8);
+  // Match number (larger, bolder, more readable)
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0);
+  doc.text(`Match #${match.matchNumber}`, x + 3, y + 10);
+
+  // Ring assignment if present
+  if (match.ringNumber !== null && match.ringNumber !== undefined) {
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(80);
+    doc.text(`Ring ${match.ringNumber}`, x + width - 25, y + 8);
+  }
+  
   doc.setTextColor(0);
 
-  // Competitor names
-  doc.setFontSize(8);
+  // Competitor names (slightly larger for readability)
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
 
   const c1Name = match.competitor1?.name || '________';
   const c2Name = match.competitor2?.name || '________';
 
-  // Truncate long names
-  const maxLen = 15;
-  const name1 = c1Name.length > maxLen ? c1Name.substring(0, maxLen) + '...' : c1Name;
-  const name2 = c2Name.length > maxLen ? c2Name.substring(0, maxLen) + '...' : c2Name;
+  // Truncate long names but leave more room
+  const maxLen = 18;
+  const name1 = c1Name.length > maxLen ? c1Name.substring(0, maxLen - 2) + '..' : c1Name;
+  const name2 = c2Name.length > maxLen ? c2Name.substring(0, maxLen - 2) + '..' : c2Name;
 
-  doc.text(name1, x + 15, y + height / 4 + 3);
-  doc.text(name2, x + 15, y + height * 3 / 4 + 3);
+  doc.text(name1, x + 4, y + height / 4 + 5);
+  doc.text(name2, x + 4, y + height * 3 / 4 + 5);
 
   // Score boxes
   if (showResults && match.status === 'completed') {
@@ -409,16 +426,16 @@ function drawMatchBox(
     }
 
     if (match.score1 !== null && match.score1 !== undefined) {
-      doc.text(String(match.score1), x + width - 15, y + height / 4 + 3);
+      doc.text(String(match.score1), x + width - 15, y + height / 4 + 5);
     }
     if (match.score2 !== null && match.score2 !== undefined) {
-      doc.text(String(match.score2), x + width - 15, y + height * 3 / 4 + 3);
+      doc.text(String(match.score2), x + width - 15, y + height * 3 / 4 + 5);
     }
   } else {
-    // Empty score boxes for printing
+    // Empty score boxes for printing (slightly larger)
     doc.setDrawColor(180);
-    doc.rect(x + width - 25, y + 3, 20, height / 2 - 6);
-    doc.rect(x + width - 25, y + height / 2 + 3, 20, height / 2 - 6);
+    doc.rect(x + width - 28, y + 4, 24, height / 2 - 8);
+    doc.rect(x + width - 28, y + height / 2 + 4, 24, height / 2 - 8);
   }
 }
 

@@ -97,32 +97,67 @@ interface ScoreSubmission {
   notes: string;
 }
 
-function validateWinResult(
+/**
+ * Validates scorekeeper result submission before showing confirmation dialog.
+ * Prevents invalid results from reaching the server.
+ * 
+ * Rules:
+ * - Win: requires valid non-tied scores, winner must match higher score
+ * - Forfeit/Injury/DQ: winner selection required, scores optional
+ * - All: both competitors must be assigned
+ */
+function validateResult(
   resultType: ResultType,
   selectedWinner: string | null,
   match: Match | undefined,
   score1: string,
   score2: string,
 ): string | null {
-  if (!selectedWinner || !match || resultType !== 'win') return null;
-
-  const first = Number(score1);
-  const second = Number(score2);
-  if (
-    !/^\d{1,3}$/.test(score1) ||
-    !/^\d{1,3}$/.test(score2) ||
-    !Number.isInteger(first) ||
-    !Number.isInteger(second)
-  ) {
-    return 'Enter a whole-number score from 0 to 999 for both competitors.';
+  // Must have a match and winner selected
+  if (!match) return 'No match selected.';
+  if (!selectedWinner) return 'Select a winner before recording the result.';
+  
+  // Both competitors must be assigned
+  if (!match.competitor1 || !match.competitor2) {
+    return 'This match has an empty slot. Assign both competitors before scoring.';
   }
-  if (first === second) return 'A win cannot end in a tie. Choose a non-tied score or a different result type.';
-
-  const scoreWinnerId = first > second ? match.competitor1?.id : match.competitor2?.id;
-  if (!scoreWinnerId || scoreWinnerId !== selectedWinner) {
-    return 'The selected winner must have the higher score.';
+  
+  // Winner must be one of the two competitors
+  if (selectedWinner !== match.competitor1.id && selectedWinner !== match.competitor2.id) {
+    return 'Selected winner is not a competitor in this match.';
   }
-  return null;
+
+  // Win-specific validation: scores must be valid and non-tied
+  if (resultType === 'win') {
+    if (!score1.trim() || !score2.trim()) {
+      return 'Enter scores for both competitors when recording a win.';
+    }
+    
+    const first = Number(score1);
+    const second = Number(score2);
+    
+    if (
+      !/^\d{1,3}$/.test(score1) ||
+      !/^\d{1,3}$/.test(score2) ||
+      !Number.isInteger(first) ||
+      !Number.isInteger(second)
+    ) {
+      return 'Scores must be whole numbers from 0 to 999.';
+    }
+    
+    if (first === second) {
+      return 'A win cannot end in a tie. Enter non-tied scores or choose Forfeit/Injury/DQ.';
+    }
+
+    const scoreWinnerId = first > second ? match.competitor1.id : match.competitor2.id;
+    if (scoreWinnerId !== selectedWinner) {
+      return 'The winner must have the higher score. Check your scores or winner selection.';
+    }
+  }
+  
+  // Forfeit/Injury/DQ: winner required, scores optional (no validation)
+  
+  return null; // Valid
 }
 
 export default function Scorekeeper() {
@@ -244,7 +279,7 @@ export default function Scorekeeper() {
 
   const currentMatch = readyMatches[currentMatchIndex];
   const resultValidationError = useMemo(
-    () => validateWinResult(resultType, selectedWinner, currentMatch, score1, score2),
+    () => validateResult(resultType, selectedWinner, currentMatch, score1, score2),
     [currentMatch, resultType, score1, score2, selectedWinner],
   );
   const selectedDivisionMatches = useMemo(() => (
