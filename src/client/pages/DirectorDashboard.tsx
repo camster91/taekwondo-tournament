@@ -915,21 +915,22 @@ export default function DirectorDashboard() {
                         Updated {freshnessLabel}
                       </div>
                     )}
-                  {ring.currentMatch ? (
-                    <div className="text-sm">
-                      <p className="text-gray-600 dark:text-gray-400 mb-1">{ring.currentMatch.divisionName}</p>
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {ring.currentMatch.competitor1} vs {ring.currentMatch.competitor2}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-600 dark:text-gray-400">No active match</p>
-                  )}
-                  <p className="text-xs text-gray-600 dark:text-gray-500 mt-2">
-                    {ring.upcomingMatches} match{ring.upcomingMatches !== 1 ? 'es' : ''} remaining
-                  </p>
-                </div>
-              ))}
+                    {ring.currentMatch ? (
+                      <div className="text-sm">
+                        <p className="text-gray-600 dark:text-gray-400 mb-1">{ring.currentMatch.divisionName}</p>
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {ring.currentMatch.competitor1} vs {ring.currentMatch.competitor2}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-600 dark:text-gray-400">No active match</p>
+                    )}
+                    <p className="text-xs text-gray-600 dark:text-gray-500 mt-2">
+                      {ring.upcomingMatches} match{ring.upcomingMatches !== 1 ? 'es' : ''} remaining
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardBody>

@@ -106,7 +106,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <SentryErrorBoundary fallback={SentryFallback}>
+        <SentryErrorBoundary fallback={(errorData) => <SentryFallback error={errorData.error as Error} />}>
           <ErrorBoundary>
             <App />
           </ErrorBoundary>
