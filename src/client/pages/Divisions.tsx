@@ -57,6 +57,11 @@ import { StatTile } from '../components/ui';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
 import DivisionMoveCompetitorModal from './DivisionMoveCompetitor';
+import DivisionExceptionDialog, {
+  type DivisionExceptionParams,
+  type DivisionCreateParams,
+  type DivisionMergeParams,
+} from '../components/DivisionExceptionDialog';
 import {
   parseDivisionFilters,
   serializeDivisionFilters,
@@ -226,6 +231,8 @@ export default function Divisions() {
   const [resultMessage, setResultMessage] = useState<{ title: string; message: string } | null>(null);
   const [recommendationStatus, setRecommendationStatus] = useState<{ state: OperationState; message: string } | null>(null);
   const [applyRecommendationConfirm, setApplyRecommendationConfirm] = useState(false);
+  const [divisionExceptionParams, setDivisionExceptionParams] = useState<DivisionExceptionParams | null>(null);
+  const [selectedDivisionsForMerge, setSelectedDivisionsForMerge] = useState<Set<string>>(new Set());
   const { addToast } = useToast();
 
   // Sync filters to URL when they change
@@ -446,6 +453,132 @@ export default function Divisions() {
       });
     },
   });
+
+  const createDivisionMutation = useMutation({
+    mutationFn: async (divisionData: {
+      name: string;
+      beltLevel: string;
+      gender: string;
+      eventType: string;
+      ageMin: number;
+      ageMax: number;
+      weightClass?: string | null;
+      tournamentId: string;
+    }) => {
+      const res = await fetch(`/api/divisions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(divisionData),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to create division');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+      setDivisionExceptionParams(null);
+      addToast(`Created division: ${data.name}`, 'success');
+    },
+    onError: (error: Error) => {
+      addToast(error.message, 'error');
+    },
+  });
+
+  const mergeDivisionsMutation = useMutation({
+    mutationFn: async ({
+      sourceDivisionIds,
+      targetDivisionId,
+      auditReason,
+    }: {
+      sourceDivisionIds: string[];
+      targetDivisionId: string;
+      auditReason: string;
+    }) => {
+      const res = await fetch(`/api/divisions/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ sourceDivisionIds, targetDivisionId, auditReason }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        if (error.code === 'ACTIVE_BRACKETS') {
+          throw new Error(
+            `Cannot merge: ${error.warning}. ${error.suggestion || 'Clear brackets before merging.'}`
+          );
+        }
+        throw new Error(error.error || 'Failed to merge divisions');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+      setDivisionExceptionParams(null);
+      setSelectedDivisionsForMerge(new Set());
+      addToast(data.message || 'Divisions merged successfully', 'success');
+    },
+    onError: (error: Error) => {
+      addToast(error.message, 'error');
+    },
+  });
+
+  const handleDivisionExceptionConfirm = (result: {
+    type: 'move' | 'create' | 'merge';
+    auditReason: string;
+    toDivisionId?: string;
+    assignmentId?: string;
+    divisionData?: {
+      name: string;
+      beltLevel: string;
+      gender: string;
+      eventType: string;
+      ageMin: number;
+      ageMax: number;
+      weightClass?: string | null;
+      tournamentId: string;
+    };
+    sourceDivisionIds?: string[];
+    targetDivisionId?: string;
+  }) => {
+    if (result.type === 'create' && result.divisionData) {
+      createDivisionMutation.mutate(result.divisionData);
+    } else if (result.type === 'merge' && result.sourceDivisionIds && result.targetDivisionId) {
+      mergeDivisionsMutation.mutate({
+        sourceDivisionIds: result.sourceDivisionIds,
+        targetDivisionId: result.targetDivisionId,
+        auditReason: result.auditReason,
+      });
+    }
+    // Note: 'move' is handled by DivisionMoveCompetitorModal
+  };
+
+  const handleMergeSelected = () => {
+    if (!divisions || selectedDivisionsForMerge.size < 2) {
+      addToast('Select at least 2 divisions to merge', 'error');
+      return;
+    }
+
+    const sourceDivs = divisions.filter((d) => selectedDivisionsForMerge.has(d.id));
+    const availableTargets = divisions.filter((d) => !selectedDivisionsForMerge.has(d.id));
+
+    const mergeParams: DivisionMergeParams = {
+      type: 'merge',
+      sourceDivisions: sourceDivs.map((d) => ({
+        id: d.id,
+        name: d.name,
+        competitorCount: d._count.assignments,
+        hasActiveBracket: Boolean(d.bracket),
+      })),
+      availableTargets: availableTargets.map((d) => ({
+        id: d.id,
+        name: d.name,
+        hasActiveBracket: Boolean(d.bracket),
+      })),
+    };
+
+    setDivisionExceptionParams(mergeParams);
+  };
 
   // Manual assignment UI for #50 — backend endpoints exist
   // (POST /api/divisions/:id/assign, DELETE /api/divisions/:id/assign/:id),
@@ -1493,6 +1626,18 @@ export default function Divisions() {
           tournamentId={id as string}
         />
       )}
+
+      {/* Division Exception Dialog (Create / Merge) */}
+      <DivisionExceptionDialog
+        isOpen={!!divisionExceptionParams}
+        onClose={() => {
+          setDivisionExceptionParams(null);
+          setSelectedDivisionsForMerge(new Set());
+        }}
+        onConfirm={handleDivisionExceptionConfirm}
+        params={divisionExceptionParams}
+        isLoading={createDivisionMutation.isPending || mergeDivisionsMutation.isPending}
+      />
     </div>
     </DndContext>
   );
