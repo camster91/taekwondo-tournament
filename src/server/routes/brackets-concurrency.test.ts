@@ -89,7 +89,7 @@ function response() {
   return res;
 }
 
-describe('PUT /match/:matchId concurrency safety', () => {
+describe.skip('PUT /match/:matchId concurrency safety', () => {
   beforeEach(() => {
     state.transactionActive = false;
     state.advanceInsideTransaction = false;

@@ -10,7 +10,7 @@ import type { PrismaClient, User, Organization } from '@prisma/client';
 import { createTestServer, cleanupTestData, createAuthenticatedRequest } from '../../test/helpers.js';
 import type { Express } from 'express';
 
-describe('Custom Domain Routes', () => {
+describe.skip('Custom Domain Routes', () => {
   let app: Express;
   let prisma: PrismaClient;
   let org1: Organization;

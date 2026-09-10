@@ -42,6 +42,143 @@ Give prospects a safe, useful demonstration without connecting public demo ident
 - Reset, isolation, expiry, rate limiting, logout, and external-side-effect denial pass in the deployed environment.
 - Exact-image health, fixture, and rollback evidence is recorded.
 
+### Cameron/VPS operator steps (required for Phase 1 completion)
+
+The code and tests for isolated demo readiness are complete. Remaining steps require Cameron action on the VPS:
+
+#### 1. Provision dedicated demo hostname + DNS
+```bash
+# On DNS provider (e.g. Cloudflare)
+# Create A record: demo.tkd.ashbi.ca → 187.77.26.99
+```
+
+#### 2. Provision isolated demo database
+```bash
+# On VPS as root
+docker run -d \
+  --name bowin-demo-db \
+  --restart unless-stopped \
+  --network markup-net \
+  -e POSTGRES_USER=bowin_demo \
+  -e POSTGRES_PASSWORD={secure_password_distinct_from_production} \
+  -e POSTGRES_DB=bowin_demo \
+  -v bowin-demo-pgdata:/var/lib/postgresql/data \
+  postgres:16-alpine
+```
+
+#### 3. Generate unique demo signing keys
+```bash
+# On VPS as root
+# These keys MUST be distinct from production and staging
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+  -out /etc/taekwondo.d/offline-capability-demo-private-key
+openssl rsa -in /etc/taekwondo.d/offline-capability-demo-private-key \
+  -pubout -out /etc/taekwondo.d/offline-capability-demo-public-key
+chmod 600 /etc/taekwondo.d/offline-capability-demo-*
+
+# Generate demo JWT secret (distinct from production)
+openssl rand -base64 32 > /etc/taekwondo.d/jwt-secret-demo
+chmod 600 /etc/taekwondo.d/jwt-secret-demo
+```
+
+#### 4. Configure Caddy reverse proxy for demo hostname
+```bash
+# Add to /opt/caddy/Caddyfile
+demo.tkd.ashbi.ca {
+    reverse_proxy 127.0.0.1:18305
+    encode gzip
+}
+
+# Reload Caddy
+docker exec caddy caddy reload --config /etc/caddy/Caddyfile
+```
+
+#### 5. Verify demo environment variables
+The demo deploy script (`scripts/deploy-demo.sh`) requires these env vars in the live container:
+- `ENABLE_DEMO_LOGIN=1` — enables demo route
+- `DEMO_ISOLATED_DATA=1` — production fail-closed attestation
+- `DEMO_RATE_LIMIT_MAX=30` — higher than production (default 20)
+- `DATABASE_URL=postgresql://bowin_demo:...@bowin-demo-db:5432/bowin_demo` — isolated DB
+- `JWT_SECRET=$(cat /etc/taekwondo.d/jwt-secret-demo)` — distinct secret
+- `PUBLIC_APP_URL=https://demo.tkd.ashbi.ca`
+- `ALLOWED_ORIGINS=https://demo.tkd.ashbi.ca`
+- `OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=...` — base64-encoded demo private key
+- **NO external integration keys**: MUST NOT have `MAILGUN_API_KEY`, `STRIPE_SECRET_KEY`, `OPENAI_API_KEY`, `SUPPORT_ALERT_EMAIL` configured (deploy script validates this)
+
+#### 6. Deploy demo environment
+```bash
+# From repo root on local machine
+# Script validates isolation attestations and refuses production/staging DBs
+./scripts/deploy-demo.sh
+```
+
+The deploy script:
+- Builds and ships the exact tracked revision
+- Validates `ENABLE_DEMO_LOGIN=1` and `DEMO_ISOLATED_DATA=1` are set
+- Validates demo DB URL is distinct from production
+- Refuses deploy if external integration keys are configured
+- Runs `prisma migrate deploy` in candidate container
+- Resets fabricated showcase data via marker-protected `demo:reset:production`
+- Tests internal + public health checks
+- Retains rollback container (`bowin-demo-rollback`)
+
+#### 7. Verify demo isolation post-deploy
+```bash
+# From any machine with curl
+# 1. Health check
+curl https://demo.tkd.ashbi.ca/api/health/ready
+# Should return: {"status":"ok","db":"ok"}
+
+# 2. Setup status reports demo enabled
+curl https://demo.tkd.ashbi.ca/api/auth/setup-status
+# Should return: {"needsSetup":false,"demoLoginEnabled":true}
+
+# 3. Demo login creates independent principal
+curl -X POST https://demo.tkd.ashbi.ca/api/auth/demo
+# Should return 200 with JWT and demo user
+
+# 4. Fabricated tournaments visible
+curl -H "Authorization: Bearer {jwt}" https://demo.tkd.ashbi.ca/api/tournaments
+# Should include "Bowin Live Championship (Demo)" and "Future Stars Open Registration (Demo)"
+
+# 5. Administrative reads blocked for demo users
+curl -H "Authorization: Bearer {jwt}" https://demo.tkd.ashbi.ca/api/auth/users
+# Should return 403: "This action is unavailable in the public demo."
+
+# 6. External integrations blocked
+curl -X POST -H "Authorization: Bearer {jwt}" https://demo.tkd.ashbi.ca/api/billing/checkout -d '{}'
+# Should return 403: demo capability denied
+```
+
+#### 8. Establish reset cadence
+The fabricated showcase can be reset to clean state:
+```bash
+# On VPS as root, inside bowin-demo container
+docker exec -e DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 bowin-demo npm run demo:reset:production
+```
+
+Recommended cadence: daily at 02:00 UTC via cron (same as backup window).
+
+#### Rollback procedure
+If demo deploy fails or produces broken state:
+```bash
+# On VPS as root
+docker stop bowin-demo
+docker rename bowin-demo-rollback bowin-demo
+docker start bowin-demo
+# Health check
+curl https://demo.tkd.ashbi.ca/api/health/ready
+```
+
+#### Security boundaries (already implemented in code)
+- Demo users cannot access `/api/auth/users`, `/api/invites`, `/api/billing`, `/api/organizations`, `/api/support`
+- Demo users can only mutate fabricated bracket matches and registrations (read-only otherwise)
+- Demo login route is unmounted in production unless BOTH `ENABLE_DEMO_LOGIN=1` AND `DEMO_ISOLATED_DATA=1` are set
+- Deploy script refuses to proceed if demo DB URL matches production
+- Deploy script refuses to proceed if external integration keys are configured
+- Fabricated showcase org/tournaments have `marker: 'bowin-resettable-showcase-v1'` in settings JSON
+- Reset command refuses to delete any org without the marker
+
 ## Phase 2 — production operations and recovery
 
 Tracking issue: #165.
