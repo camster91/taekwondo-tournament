@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText } from 'lucide-react';
+import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText, AlertTriangle } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
