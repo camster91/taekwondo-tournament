@@ -7,11 +7,14 @@ import {
 } from './stripe-billing.js';
 
 describe('checkoutPlanFromInput', () => {
-  it('accepts only purchasable self-service plans', () => {
+  it('accepts purchasable self-service plans including per-event tiers', () => {
     expect(checkoutPlanFromInput('starter')).toBe('starter');
     expect(checkoutPlanFromInput('pro')).toBe('pro');
-    expect(() => checkoutPlanFromInput('free')).toThrow(/starter or pro/);
-    expect(() => checkoutPlanFromInput(undefined)).toThrow(/starter or pro/);
+    expect(checkoutPlanFromInput('per_event_small')).toBe('per_event_small');
+    expect(checkoutPlanFromInput('per_event_medium')).toBe('per_event_medium');
+    expect(checkoutPlanFromInput('per_event_large')).toBe('per_event_large');
+    expect(() => checkoutPlanFromInput('free')).toThrow(/one of:/);
+    expect(() => checkoutPlanFromInput(undefined)).toThrow(/one of:/);
   });
 });
 
@@ -21,12 +24,31 @@ const env = {
 };
 
 describe('stripePriceMapFromEnv', () => {
-  it('requires distinct configured price IDs', () => {
-    expect(() => stripePriceMapFromEnv({})).toThrow(/STRIPE_STARTER_PRICE_ID/);
+  it('builds a map from configured price IDs and requires at least one', () => {
+    // At least one price ID required
+    expect(() => stripePriceMapFromEnv({})).toThrow(/At least one/);
+    
+    // Distinct IDs required
     expect(() => stripePriceMapFromEnv({
       STRIPE_STARTER_PRICE_ID: 'same',
       STRIPE_PRO_PRICE_ID: 'same',
     })).toThrow(/distinct/);
+    
+    // Should accept starter only
+    const starterOnly = stripePriceMapFromEnv({
+      STRIPE_STARTER_PRICE_ID: 'price_starter',
+    });
+    expect(starterOnly['price_starter']).toBe('starter');
+    
+    // Should accept all types
+    const allPrices = stripePriceMapFromEnv({
+      STRIPE_STARTER_PRICE_ID: 'price_starter',
+      STRIPE_PRO_PRICE_ID: 'price_pro',
+      STRIPE_PER_EVENT_SMALL_PRICE_ID: 'price_small',
+      STRIPE_PER_EVENT_MEDIUM_PRICE_ID: 'price_medium',
+      STRIPE_PER_EVENT_LARGE_PRICE_ID: 'price_large',
+    });
+    expect(Object.keys(allPrices)).toHaveLength(5);
   });
 });
 

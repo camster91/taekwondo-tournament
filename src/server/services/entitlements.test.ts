@@ -17,6 +17,7 @@ describe('plan entitlements', () => {
   it('keeps free organizations in evaluation mode without public registration', () => {
     expect(getPlanEntitlements('free')).toEqual({
       maxTournaments: 1,
+      maxCompetitorsPerTournament: 30,
       maxMembers: 1,
       maxRings: 1,
       publicRegistration: false,
@@ -30,6 +31,7 @@ describe('plan entitlements', () => {
   it('supports the supervised managed-pilot event envelope', () => {
     expect(getPlanEntitlements('pilot')).toEqual({
       maxTournaments: 5,
+      maxCompetitorsPerTournament: 9999,
       maxMembers: 10,
       maxRings: 6,
       publicRegistration: true,

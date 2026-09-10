@@ -1,10 +1,26 @@
 import type { PlanName } from './entitlements.js';
 
-export type StripePriceMap = Readonly<Record<string, 'starter' | 'pro'>>;
+export type PlanTier =
+  | 'starter'
+  | 'pro'
+  | 'per_event_small'
+  | 'per_event_medium'
+  | 'per_event_large';
 
-export function checkoutPlanFromInput(value: unknown): 'starter' | 'pro' {
-  if (value === 'starter' || value === 'pro') return value;
-  throw new Error('Plan must be starter or pro');
+export type StripePriceMap = Readonly<Record<string, PlanTier>>;
+
+export function checkoutPlanFromInput(value: unknown): PlanTier {
+  const validPlans: PlanTier[] = [
+    'starter',
+    'pro',
+    'per_event_small',
+    'per_event_medium',
+    'per_event_large',
+  ];
+  if (typeof value === 'string' && validPlans.includes(value as PlanTier)) {
+    return value as PlanTier;
+  }
+  throw new Error('Plan must be one of: starter, pro, per_event_small, per_event_medium, per_event_large');
 }
 
 export function stripePriceMapFromEnv(
@@ -12,10 +28,38 @@ export function stripePriceMapFromEnv(
 ): StripePriceMap {
   const starter = env.STRIPE_STARTER_PRICE_ID?.trim();
   const pro = env.STRIPE_PRO_PRICE_ID?.trim();
-  if (!starter) throw new Error('STRIPE_STARTER_PRICE_ID is required');
-  if (!pro) throw new Error('STRIPE_PRO_PRICE_ID is required');
-  if (starter === pro) throw new Error('Stripe starter and pro price IDs must be distinct');
-  return { [starter]: 'starter', [pro]: 'pro' };
+  const perEventSmall = env.STRIPE_PER_EVENT_SMALL_PRICE_ID?.trim();
+  const perEventMedium = env.STRIPE_PER_EVENT_MEDIUM_PRICE_ID?.trim();
+  const perEventLarge = env.STRIPE_PER_EVENT_LARGE_PRICE_ID?.trim();
+
+  // Collect all non-empty price IDs
+  const allIds: string[] = [];
+  if (starter) allIds.push(starter);
+  if (pro) allIds.push(pro);
+  if (perEventSmall) allIds.push(perEventSmall);
+  if (perEventMedium) allIds.push(perEventMedium);
+  if (perEventLarge) allIds.push(perEventLarge);
+
+  // Require at least one price ID to be configured
+  if (allIds.length === 0) {
+    throw new Error('At least one Stripe price ID must be configured (STRIPE_STARTER_PRICE_ID, STRIPE_PRO_PRICE_ID, or STRIPE_PER_EVENT_*_PRICE_ID)');
+  }
+
+  // Ensure all configured IDs are unique
+  const uniqueIds = new Set(allIds);
+  if (allIds.length !== uniqueIds.size) {
+    throw new Error('All configured Stripe price IDs must be distinct');
+  }
+
+  // Build map with available price IDs
+  const map: Record<string, PlanTier> = {};
+  if (starter) map[starter] = 'starter';
+  if (pro) map[pro] = 'pro';
+  if (perEventSmall) map[perEventSmall] = 'per_event_small';
+  if (perEventMedium) map[perEventMedium] = 'per_event_medium';
+  if (perEventLarge) map[perEventLarge] = 'per_event_large';
+
+  return map;
 }
 
 export function stripeRuntimeConfigFromEnv(env: Record<string, string | undefined>): {
@@ -45,7 +89,7 @@ export type MappedSubscription = {
   providerCustomerId: string;
   providerSubscriptionId: string;
   status: string;
-  plan: 'starter' | 'pro';
+  plan: PlanTier;
   effectivePlan: PlanName;
   cancelAtPeriodEnd: boolean;
   currentPeriodEnd: Date | null;
@@ -64,16 +108,49 @@ export function mapStripeSubscription(
     ? subscription.customer
     : subscription.customer.id;
   const entitled = subscription.status === 'active' || subscription.status === 'trialing';
+
+  // Map subscription tier to org plan
+  let effectivePlan: PlanName;
+  if (!entitled) {
+    effectivePlan = 'free';
+  } else if (plan === 'starter' || plan === 'pro') {
+    effectivePlan = plan;
+  } else {
+    // Per-event subscriptions map to 'starter' plan for entitlements
+    // since they're event-based and not seat-based
+    effectivePlan = 'starter';
+  }
+
   return {
     organizationId,
     providerCustomerId,
     providerSubscriptionId: subscription.id,
     status: subscription.status,
     plan,
-    effectivePlan: entitled ? plan : 'free',
+    effectivePlan,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
     currentPeriodEnd: subscription.current_period_end
       ? new Date(subscription.current_period_end * 1000)
       : null,
   };
+}
+
+export function getPriceIdForTier(
+  tier: PlanTier,
+  env: Record<string, string | undefined>,
+): string | null {
+  switch (tier) {
+    case 'starter':
+      return env.STRIPE_STARTER_PRICE_ID?.trim() || null;
+    case 'pro':
+      return env.STRIPE_PRO_PRICE_ID?.trim() || null;
+    case 'per_event_small':
+      return env.STRIPE_PER_EVENT_SMALL_PRICE_ID?.trim() || null;
+    case 'per_event_medium':
+      return env.STRIPE_PER_EVENT_MEDIUM_PRICE_ID?.trim() || null;
+    case 'per_event_large':
+      return env.STRIPE_PER_EVENT_LARGE_PRICE_ID?.trim() || null;
+    default:
+      return null;
+  }
 }

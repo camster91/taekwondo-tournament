@@ -33,6 +33,7 @@ import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
 import { generateQRPoster } from '../services/qr-poster.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
+import { recordTournamentUsage } from '../services/usage-metering.js';
 import {
   applyScheduleCorrection,
   buildScheduleImpact,
@@ -591,9 +592,10 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
     const tournamentId = getParam(req.params.id);
     const tournament = await prisma.$transaction(async (tx) => {
       const current = settings
-        ? await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { settings: true } })
-        : null;
-      return tx.tournament.update({
+        ? await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { settings: true, status: true, organizationId: true } })
+        : await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { status: true, organizationId: true } });
+      
+      const updatedTournament = await tx.tournament.update({
         where: { id: tournamentId },
         data: {
           name,
@@ -603,6 +605,13 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
           settings: settings ? JSON.stringify(mergeGeneralSettings(current!.settings, settings)) : undefined,
         },
       });
+
+      // Record usage when tournament is completed
+      if (status === 'completed' && current.status !== 'completed' && current.organizationId) {
+        await recordTournamentUsage(tx as unknown as PrismaClient, tournamentId, current.organizationId);
+      }
+
+      return updatedTournament;
     }, { isolationLevel: 'Serializable' });
 
     res.json(tournament);
