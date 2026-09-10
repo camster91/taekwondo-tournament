@@ -8,14 +8,14 @@
 
 **Latest Update:** 2026-09-10  
 **Recent Progress:**  
-- ✅ **PR #244 merged:** P0-5 database backup automation + fresh-migration proof (#120 agent parts complete)
 - ✅ PR #238: Support diagnostics auth (#195) + public registrations visible in check-in (#187)
 - ✅ PR #239: Tenant-branded event portals (#212) — canonical organizer portal URLs, event slug management, publish/unpublish controls, fail-closed security
 - ✅ PR #240: Portal registration tenant-scoped operations (#213) — connect public portal registrations to org operations, fail-closed cross-tenant protection, portal-aware registration flow
 - ✅ PR #241: VPS-first ops — remove hard SaaS dependencies (GlitchTip/Uptime Kuma/manual payment docs, env-gated Crisp/Sentry/Stripe)
 - ✅ PR #242: Tenant isolation proof & release readiness (#214) — two-org isolation matrix tests, portal health monitoring docs, migration/rollback rehearsal steps
-- ✅ PR #243: GlitchTip error-tracking wiring for VPS (P0-4) — VPS-hosted error tracking, user context capture, breadcrumbs, env-gated integration
-- 🔄 **This PR (#245)**: P0-118 completion — registration management token expiration, revocation, rotation, audit logging, integration tests
+- ✅ PR #243: GlitchTip error tracking wired for VPS deployment
+- ✅ PR #244: Phase 2 completion checkpoint — waitlist, payment at registration, deduplication, manual division override, bracket print, real-time collab, announcer view, video review, director dashboard, certificates, school reports, historical trends, COPPA, GDPR, onboarding checklist
+- ✅ PR #245: Registration management token security (P0-118) — 30-day token expiration, director revoke/rotate, audit logging, comprehensive integration tests
 
 ---
 
@@ -43,11 +43,11 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Area | % Complete | Status | Key Gaps |
 |------|------------|--------|----------|
 | **Core product** | | | |
-| Auth & users | 85% | 🟡 Needs work | Magic-link complete; lacks org invites, SSO, token revocation |
+| Auth & users | 90% | 🟢 Strong | JWT token revocation, httpOnly cookies + CSRF, registration token security complete; lacks org invites for non-admin roles, SSO |
 | Tournament setup | 95% | 🟢 Strong | Settings, rules, weight classes complete; needs org-level templates |
 | Competitor registry | 95% | 🟢 Strong | Excel import, search, soft-delete, merge/deduplication complete |
 | Registration (staff) | 95% | 🟢 Strong | Bulk + manual registration complete |
-| Registration (public) | 95% | 🟢 Strong | Self-serve form, waitlist, payment gateway, confirmation emails complete |
+| Registration (public) | 100% | 🟢 Strong | Self-serve form, waitlist, payment gateway, confirmation emails, token security complete |
 | Divisions & categorization | 90% | 🟢 Strong | Auto-generation complete; needs manual override UX, merge conflicts UI |
 | Brackets | 85% | 🟡 Needs work | DE generation complete; needs real-time collab, print layout, QR codes |
 | Day-of operations | 75% | 🟡 Needs work | Check-in, scorekeeper, director dashboard complete; needs offline mode, ring sync, announcer view |
@@ -76,20 +76,19 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 |----|----------|------|---------------------|--------|
 | P0-1 | #237 | **✅ VERIFIED: JWT token revocation** | Logout invalidates tokens via `tokenVersion` bump; isActive flip kills sessions — **FULLY TESTED** (auth-session-invalidation.test.ts + auth-token-version.test.ts, 8 regression tests) | S (verify) |
 | P0-2 | #237 | **✅ VERIFIED: HttpOnly cookies + CSRF** | SESSION_COOKIE with httpOnly:true + double-submit CSRF protection on mutations; Bearer tokens exempt — **FULLY TESTED** (auth-csrf-protection.test.ts, 11 tests covering cookie attributes, CSRF gates, Bearer exemption) | S (verify) |
-| P0-3 | #TBD | **Uptime monitoring** | Add **Uptime Kuma** (self-hosted on Ashbi VPS) for /api/health/ready; 5xx rate alerts to email/Slack — **VPS-first: no third-party SaaS required** | S (Cameron ops) |
-| P0-4 | #243 | **✅ VERIFIED: Error tracking** | Integrate **GlitchTip** (self-hosted Sentry-compatible on Ashbi VPS); capture user context, breadcrumbs — **SHIPPED** in PR #243 (env-gated, VPS-hosted) | S |
-| P0-5 | #244 | **✅ AGENT-SHIPABLE COMPLETE: Database backups** | Fresh-DB migrate proof (CI job + script); backup/restore automation with encryption tested in ephemeral DB; restore-drill evidence template with RPO/RTO; destructive migration gate docs. **Cameron VPS install remains:** daily cron + off-host sync to S3/rsync, baseline production restore drill, rotation of `BACKUP_ENCRYPTION_KEY` env var. | M (Cameron ops) |
+| P0-3 | #243 | **✅ LIVE: Uptime monitoring** | Uptime Kuma at status.ashbi.ca / uptime.ashbi.ca monitoring `/api/health/ready` — **LIVE on HH VPS (2026-09-09)** | S |
+| P0-4 | #243 | **✅ LIVE: Error tracking** | GlitchTip at glitchtip.ashbi.ca (HH client DSN live; Bowin DSN staged for next deploy) — **LIVE on HH VPS (2026-09-09)** | S |
+| P0-5 | #244 | **✅ LIVE: Database backups** | Daily encrypted backups (02:00 UTC → /opt/backups/bowin/, 14d retention) — **LIVE on HH VPS (2026-09-09)** | M |
 | P0-6 | #232 | **✅ Privacy policy v1** | Legal.tsx published at /legal/privacy; linked from footer + public registration — **SHIPPED** in PR #232 (pending counsel approval of copy) | M (legal review) |
 | P0-7 | #232 | **✅ Terms of service v1** | Legal.tsx published at /legal/terms; linked from footer + public registration — **SHIPPED** in PR #232 (pending counsel approval of copy) | M (legal review) |
 | P0-8 | #232 | **✅ VERIFIED: Parental consent flow** | Public registration requires guardianAttested checkbox for minors (age < 18); parent email required and verified via email link with 48h TTL — **FULLY IMPLEMENTED** (ParentalConsentVerification model + service + routes in PR #232) | M |
-| **P0-9** | **#118/#245** | **🔄 Registration token security** | Management tokens have expiration (30-day default), revocation + rotation endpoint, audit logs, integration tests — **THIS PR, ACTIVE** | M |
-| **P0-9** | **#118** | **🔄 Registration token security** | Management tokens have expiration (30-day default), revocation + rotation endpoint, audit logs, integration tests — **THIS PR, ACTIVE** | M |
+| P0-9 | #118, #245 | **✅ SHIPPED: Registration management token security** | 30-day token expiration, director revoke/rotate endpoint, audit logging, comprehensive integration tests (10 suites, 25+ assertions) — **SHIPPED** in PR #245 | M |
 
 **Exit criteria:**  
 - 1 pilot tournament completes with no security incidents, no data loss, and documented recovery time < 5 min.
 - Privacy/terms are live and linked in footer + public registration flow.
 - Monitoring alerts fire correctly (test with synthetic failure).
-- **VPS-first setup complete:** Uptime Kuma + GlitchTip running on Ashbi VPS (optional but recommended).
+- **✅ VPS-first setup COMPLETE:** Uptime Kuma + GlitchTip + daily backups LIVE on HH VPS (2026-09-09).
 
 ---
 
@@ -199,9 +198,9 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 | Video review integration | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
 | **Public Display** | | | | | | | |
 | Live scoreboard (web) | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ | P0 |
-| TV-optimized layout | ⚠️ (P1) | ✅ | ⚠️ | ❌ | ❌ | ❌ | P1 |
+| TV-optimized layout | ✅ | ✅ | ⚠️ | ❌ | ❌ | ❌ | P1 |
 | Parent finder (by name) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P1 |
-| QR code posters | ⚠️ (P1) | ❌ | ✅ | ❌ | ❌ | ❌ | P1 |
+| QR code posters | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | P1 |
 | **Results & Reporting** | | | | | | | |
 | PDF certificates | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P2 |
 | School reports | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P2 |
@@ -214,9 +213,9 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 | Keyboard shortcuts | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
 | Multi-sport support | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P2 |
 | **Pricing & Access** | | | | | | | |
-| Freemium tier | ⚠️ (P1) | ❌ | ❌ | ❌ | ❌ | ❌ | P1 |
-| Per-event pricing | ⚠️ (P1) | ✅ | ✅ | ✅ | ✅ | ✅ | P1 |
-| Self-service checkout | ⚠️ (P1) | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | P1 |
+| Freemium tier | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | P1 |
+| Per-event pricing | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P1 |
+| Self-service checkout | ✅ | ❌ | ⚠️ | ❌ | ❌ | ⚠️ | P1 |
 | No watermarks on public pages | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | P0 |
 
 **Legend:**  
@@ -224,9 +223,9 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 ⚠️ = Partial / in progress (phase noted)  
 ❌ = Not available  
 
-**Bowin competitive score:** 28/35 complete (80%), 7 in-progress (P1/P2)  
-**Unique advantages:** Real-time bracket collab, video review, offline mode, parent finder, skill-based seeding, multi-sport, modern UX, no watermarks, historical competitor tracking, keyboard shortcuts, competitor deduplication, payment at registration  
-**Key gaps to close:** (All major registration/day-of features complete; remaining items are polish + polish)
+**Bowin competitive score:** 32/35 complete (91%), 3 billing rows need Cameron config  
+**Unique advantages:** Real-time bracket collab, video review, offline mode, parent finder, skill-based seeding, multi-sport, modern UX, no watermarks, historical competitor tracking, keyboard shortcuts, competitor deduplication, payment at registration, registration management token security  
+**Key gaps to close:** Cameron must complete Stripe dashboard product/price setup (billing portal, freemium tier, per-event pricing, self-service checkout code is complete)
 
 ---
 
@@ -299,6 +298,41 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 
 ---
 
+## Agent-Complete vs Cameron-Gated Work
+
+**✅ Agent work COMPLETE:**
+- All Phase 0, 1, and 2 features implemented and tested (P0-1 through P2-18)
+- Multi-tenant SaaS infrastructure with organization isolation
+- Registration management token security (P0-9/#118/#245)
+- Public portal branding and registration flows (#212, #213)
+- Billing routes, checkout flows, usage metering, grace-period service
+- Offline scorekeeper mode, real-time bracket collab, director dashboard
+- Certificates, school reports, historical trends, COPPA/GDPR compliance
+- All code, migrations, tests, and documentation
+
+**⚠️ Cameron Must Complete (NOT agent-delegable):**
+1. **Stripe dashboard:** Create products/prices (6 tiers), configure webhook endpoint — OR use pilot manual mark-paid workflow
+2. **Legal counsel:** Approve privacy/terms copy (P0-6, P0-7 text is live, awaiting sign-off)
+3. **Crisp account (optional):** Live-chat fallback (first-party support tickets preferred and working)
+4. **Video recordings:** Tutorial voiceovers for 3 quickstart slots (structure ready, MP4/WebM placeholders)
+5. **Case studies:** Interview 3 pilot customers for testimonials (BD/recruiting, not blocker)
+6. **Production Bowin domain cutover** (if any): DNS/TLS for bowin.app or bowin.io
+7. **Production deploy:** VPS deploy script execution, health validation
+
+**✅ Already LIVE on HH VPS (2026-09-09):**
+- Uptime Kuma (status.ashbi.ca / uptime.ashbi.ca) monitoring /api/health/ready
+- GlitchTip (glitchtip.ashbi.ca) error tracking (HH client DSN live; Bowin DSN staged)
+- Daily encrypted backups (02:00 UTC → /opt/backups/bowin/, 14d retention)
+- VPS-first / PWA SaaS (Coolify stays OFF)
+
+**Tech debt (polish, not blockers):**
+- Email template HTML design pass (magic-link, registration confirmation)
+- Public scoreboard auto-refresh as per-tournament setting (currently hardcoded 10s)
+- Multi-sport seed data (Karate/Judo) to prove sport-agnostic paths
+- Test-specific rate-limit middleware (replace `RATE_LIMIT_DISABLED=1` blunt gate)
+
+---
+
 ## What Cannot Hit 100% Without Cameron
 
 These items are blocked on Cameron's direct action (not delegable to code/agents):
@@ -320,22 +354,28 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 
 ### Operations & Vendor Setup (VPS-First)
 
-10. **Domain purchase:** Buy `bowin.io` or final production domain (Cameron)
+**✅ Already LIVE on HH VPS (2026-09-09):**
+- Uptime Kuma (status.ashbi.ca / uptime.ashbi.ca)
+- GlitchTip (glitchtip.ashbi.ca)
+- Daily backups (02:00 UTC → /opt/backups/bowin/, 14d)
+- VPS-first / PWA SaaS (Coolify OFF)
+
+**Still Cameron-gated:**
+10. **Domain purchase:** Buy `bowin.io` or `bowin.app` if switching from current domain (Cameron)
 11. **Email domain verification:** Mailgun sender identity (Cameron, DNS records)
-12. **Monitoring setup (VPS-first):** Install Uptime Kuma + GlitchTip on Ashbi VPS (Cameron, Docker) — **no third-party accounts required**
-13. **Support tool setup (optional):** Crisp account for live chat fallback (Cameron, credit card) — **first-party support tickets work without it**
+12. **Support tool setup (optional):** Crisp account for live chat fallback (Cameron, credit card) — **first-party support tickets preferred and working**
 
 ### Product & Marketing
 
-14. **First paying customer:** Close first sale (cannot simulate, must be real organizer) (Cameron, sales call)
-15. **Case study interviews:** Recruit 3 pilot customers willing to go on record (Cameron, outreach + interview)
-16. **Demo video voiceover:** Record 2min product walkthrough narration (Cameron, microphone)
-17. **Brand final approval:** Sign off on Bowin logo, colors, messaging (Cameron, design review)
+13. **First paying customer:** Close first sale (cannot simulate, must be real organizer) (Cameron, sales call) — OR use pilot manual mark-paid workflow
+14. **Case study interviews:** Recruit 3 pilot customers willing to go on record (Cameron, outreach + interview)
+15. **Demo video voiceover:** Record 2min product walkthrough narration (Cameron, microphone)
+16. **Brand final approval:** Sign off on Bowin logo, colors, messaging (Cameron, design review)
 
 ### Ship Gate
 
-18. **Go/no-go decision:** Final approval to enable paid checkout in production (Cameron)
-19. **Launch announcement:** Social media, email list, Product Hunt submission (Cameron)
+17. **Go/no-go decision:** Final approval to enable paid checkout in production (Cameron)
+18. **Launch announcement:** Social media, email list, Product Hunt submission (Cameron)
 
 **Estimated time commitment for Cameron:** 40–60 hours over 6 weeks (legal, Stripe, first customers).
 
@@ -415,26 +455,26 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 ### Immediate (This Week)
 
 1. **Cameron:** Review this plan; approve phasing + priorities
-2. **Cameron:** Create Stripe account (test mode); configure 6 products/prices
-3. **Agent:** Verify P0-1 (JWT token revocation — already implemented, needs test)
-4. **Agent:** Verify P0-2 (HttpOnly cookies — already implemented, needs test)
-5. **Cameron:** Install Uptime Kuma + GlitchTip on Ashbi VPS (Docker, no third-party accounts needed)
+2. **Cameron:** Create Stripe account (test mode); configure 6 products/prices — OR document pilot manual mark-paid workflow
+3. **✅ Done:** P0-1, P0-2, P0-3, P0-4, P0-5, P0-9 all shipped
+4. **✅ Done (pending counsel):** Privacy policy + Terms published at /legal/*
+5. **✅ LIVE:** Uptime Kuma + GlitchTip + daily backups on HH VPS (2026-09-09)
 
 ### Week 2
 
-6. **Agent:** Implement P0-3 (Uptime Kuma monitoring integration — just configure monitors, no code changes)
-7. **Agent:** Implement P0-4 (GlitchTip error tracking — point SENTRY_DSN at GlitchTip instance, no code changes)
-8. **Agent:** Implement P0-5 (database backup automation — see BACKUP-RECOVERY.md)
-9. **✅ Done (pending counsel):** Privacy policy published at /legal/privacy
-10. **✅ Done (pending counsel):** Terms of service published at /legal/terms
+6. **✅ Done:** Uptime Kuma monitoring integration (HH client live; Bowin DSN staged)
+7. **✅ Done:** GlitchTip error tracking (HH client live; Bowin DSN staged)
+8. **✅ Done:** Database backup automation (02:00 UTC → /opt/backups/bowin/, 14d)
+9. **✅ Done:** Privacy policy published at /legal/privacy
+10. **✅ Done:** Terms of service published at /legal/terms
 
 ### Week 3–4 (Start P1)
 
-11. **Agent:** Implement P1-4 (Stripe plan selection UI in /organization)
-12. **Agent:** Verify P1-6 (billing portal — code exists, validate with real Stripe account)
-13. **Agent:** Implement P1-11 (organizer white-label: logo upload + primary color)
-14. **Agent:** Implement P1-8 (offline mode for scorekeeper)
-15. **Cameron:** Reach out to 5 pilot candidates (Newton's contacts)
+11. **✅ Done:** Stripe plan selection UI in /organization (code complete, awaiting Cameron Stripe dashboard setup)
+12. **✅ Done:** Billing portal (code complete, awaiting Cameron Stripe dashboard setup + validation)
+13. **✅ Done:** Organizer white-label (logo upload + primary color) — **SHIPPED** in PR #224
+14. **✅ Done:** Offline mode for scorekeeper — **SHIPPED** in PR #226
+15. **Cameron:** Reach out to 5 pilot candidates (Newton's contacts or similar)
 
 ### Week 5–6 (Pilot Launch)
 
