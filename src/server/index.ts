@@ -383,7 +383,31 @@ const server = app.listen(Number(PORT), '0.0.0.0', async () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 
   if (retentionConfig) {
-    await startRetentionPurgeJob({ database: prisma, ...retentionConfig });
+    // MEDIUM #8: wrap the four purge deletes in a single
+    // Prisma `$transaction` so a partial failure rolls back
+    // instead of leaving soft-deleted rows in a half-purged
+    // state. The retention service treats the optional
+    // `runInTransaction` as a no-op when omitted, so the test
+    // mocks can still pass the bare prisma client.
+    //
+    // The retention service only touches the four model
+    // delegates, so we forward just those rather than the
+    // full prisma client (which is a Proxy that would lose
+    // its own-property surface on spread).
+    const retentionDatabase = {
+      incident: prisma.incident,
+      division: prisma.division,
+      tournament: prisma.tournament,
+      competitor: prisma.competitor,
+      // Prisma's $transaction receives a callback that gets a
+      // transaction-scoped client with the same shape as the
+      // top-level client, so passing `tx` back into the
+      // service is type-safe and lets the four deletes share
+      // one transaction.
+      runInTransaction: <R>(work: (tx: typeof prisma) => Promise<R>) =>
+        prisma.$transaction((tx) => work(tx as unknown as typeof prisma)),
+    };
+    await startRetentionPurgeJob({ database: retentionDatabase, ...retentionConfig });
   } else {
     console.log('[retention] automatic purge disabled');
   }

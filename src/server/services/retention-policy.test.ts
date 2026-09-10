@@ -41,6 +41,71 @@ describe('purgeExpiredSoftDeletes', () => {
     }
     expect(result).toEqual({ incidents: 2, divisions: 3, tournaments: 1, competitors: 4, total: 10 });
   });
+
+  it('wraps the four deletes in runInTransaction when provided (MEDIUM #8)', async () => {
+    // The transaction callback must receive a client (the
+    // Prisma $transaction shape) and all four deletes must run
+    // against that client — not against the top-level
+    // `database` object. Without this, a partial failure in
+    // the third or fourth call would leave the soft-delete
+    // trash in a half-purged state.
+    const txDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const topLevelDeleteMany = vi.fn().mockResolvedValue({ count: 0 });
+    const txClient = {
+      incident: { deleteMany: txDeleteMany },
+      division: { deleteMany: txDeleteMany },
+      tournament: { deleteMany: txDeleteMany },
+      competitor: { deleteMany: txDeleteMany },
+    };
+    const runInTransaction = vi.fn(async (work: (tx: typeof txClient) => unknown) => work(txClient));
+    const database = {
+      incident: { deleteMany: topLevelDeleteMany },
+      division: { deleteMany: topLevelDeleteMany },
+      tournament: { deleteMany: topLevelDeleteMany },
+      competitor: { deleteMany: topLevelDeleteMany },
+      runInTransaction,
+    };
+    const cutoff = new Date('2026-07-31T12:00:00.000Z');
+
+    const result = await purgeExpiredSoftDeletes(database, cutoff);
+
+    expect(runInTransaction).toHaveBeenCalledTimes(1);
+    expect(txDeleteMany).toHaveBeenCalledTimes(4);
+    expect(topLevelDeleteMany).not.toHaveBeenCalled();
+    expect(result).toEqual({ incidents: 1, divisions: 1, tournaments: 1, competitors: 1, total: 4 });
+  });
+
+  it('rolls back when a delete inside the transaction throws', async () => {
+    // If the third delete (tournament) throws, the work passed
+    // to runInTransaction must reject. The test mock simulates
+    // Prisma's behavior: the callback's rejection propagates
+    // out of $transaction unchanged so the caller can decide
+    // what to do (the retention scheduler logs and continues
+    // to the next interval — see startRetentionPurgeJob).
+    const txDeleteMany = vi
+      .fn()
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 2 })
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce({ count: 4 });
+    const txClient = {
+      incident: { deleteMany: txDeleteMany },
+      division: { deleteMany: txDeleteMany },
+      tournament: { deleteMany: txDeleteMany },
+      competitor: { deleteMany: txDeleteMany },
+    };
+    const database = {
+      incident: { deleteMany: txDeleteMany },
+      division: { deleteMany: txDeleteMany },
+      tournament: { deleteMany: txDeleteMany },
+      competitor: { deleteMany: txDeleteMany },
+      runInTransaction: vi.fn(async (work: (tx: typeof txClient) => unknown) => work(txClient)),
+    };
+
+    await expect(
+      purgeExpiredSoftDeletes(database, new Date('2026-07-31T12:00:00.000Z')),
+    ).rejects.toThrow('boom');
+  });
 });
 
 describe('startRetentionPurgeJob', () => {
