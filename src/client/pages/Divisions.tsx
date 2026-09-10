@@ -38,6 +38,8 @@ import {
   Undo2,
   GripVertical,
   ArrowRight,
+  Plus,
+  Merge,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -1180,7 +1182,38 @@ export default function Divisions() {
               </Select>
             </div>
             {divisions?.length ? (
-              <div className="ml-auto">
+              <div className="ml-auto flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    // Prompt for basic division parameters for exception case
+                    const createParams: DivisionCreateParams = {
+                      type: 'create',
+                      tournamentId: id as string,
+                      suggestedName: `Manual Division ${(divisions?.length || 0) + 1}`,
+                      eventType: 'patterns',
+                      beltLevel: 'CB',
+                      gender: 'M',
+                      ageMin: 6,
+                      ageMax: 99,
+                    };
+                    setDivisionExceptionParams(createParams);
+                  }}
+                  className="text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Division
+                </Button>
+                {selectedDivisionsForMerge.size >= 2 && (
+                  <Button
+                    variant="secondary"
+                    onClick={handleMergeSelected}
+                    className="text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                  >
+                    <Merge className="h-4 w-4 mr-2" />
+                    Merge {selectedDivisionsForMerge.size} Selected
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   onClick={() => setClearConfirm(true)}
@@ -1287,6 +1320,16 @@ export default function Divisions() {
                       onManageCompetitors={() => setAssignTarget(div)}
                       onSplit={() => setSplitTarget(div)}
                       onDelete={() => setDeleteTarget(div)}
+                      isSelected={selectedDivisionsForMerge.has(div.id)}
+                      onToggleSelect={(divisionId) => {
+                        const newSelection = new Set(selectedDivisionsForMerge);
+                        if (newSelection.has(divisionId)) {
+                          newSelection.delete(divisionId);
+                        } else {
+                          newSelection.add(divisionId);
+                        }
+                        setSelectedDivisionsForMerge(newSelection);
+                      }}
                     />
                   ))}
                 </SortableContext>
@@ -1799,12 +1842,16 @@ function SortableDivisionRow({
   onManageCompetitors,
   onSplit,
   onDelete,
+  isSelected,
+  onToggleSelect,
 }: {
   div: Division;
   tournamentId: string;
   onManageCompetitors: () => void;
   onSplit: () => void;
   onDelete: () => void;
+  isSelected?: boolean;
+  onToggleSelect?: (divisionId: string) => void;
 }) {
   const {
     attributes,
@@ -1825,9 +1872,18 @@ function SortableDivisionRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isDragging ? 'bg-primary-50 dark:bg-primary-900/20 shadow-lg z-10' : ''}`}
+      className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isDragging ? 'bg-primary-50 dark:bg-primary-900/20 shadow-lg z-10' : ''} ${isSelected ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500' : ''}`}
     >
       <div className="flex items-center min-w-0 flex-1">
+        {onToggleSelect && (
+          <input
+            type="checkbox"
+            checked={isSelected || false}
+            onChange={() => onToggleSelect(div.id)}
+            className="mr-3 h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+            aria-label={`Select ${div.name} for merge`}
+          />
+        )}
         <button
           {...attributes}
           {...listeners}
