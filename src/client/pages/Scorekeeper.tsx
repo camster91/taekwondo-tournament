@@ -33,7 +33,7 @@ import AccessibleDialog from '../components/ui/AccessibleDialog';
 import OperationStatus from '../components/ui/OperationStatus';
 import { buildDeliveryUncertainMessage, buildOfflineOperationStatuses, buildOfflineReviewMessage, pendingOfflineTargetIds } from '../utils/offline-operation-status';
 import { readAdminOperationError } from '../utils/admin-operation-error';
-import { latestCompletedMatchId } from '../utils/scorekeeper-undo';
+import { latestCompletedMatchId, findUndoneMatchIndex } from '../utils/scorekeeper-undo';
 import { browserVenueDataSnapshotStore, loadVenueData } from '../utils/venue-data-snapshot';
 import { isScorekeeperDivisionData } from '../utils/venue-data-contracts';
 import { shouldQueueOfflineMutation } from '../utils/offline-delivery';
@@ -433,12 +433,31 @@ export default function Scorekeeper() {
       setAnnounce('Undoing match result.');
     },
     onSuccess: async () => {
+      // Capture the undone match id before clearing pendingUndoId so we
+      // can reposition the cursor on the (now ready / in_progress) match.
+      const undoneMatchId = pendingUndoId;
       try {
         await queryClient.refetchQueries({ queryKey: ['scorekeeper-divisions'] }, { throwOnError: true });
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ['director-dashboard'] }),
           queryClient.invalidateQueries({ queryKey: ['divisions'] }),
         ]);
+        // Closes the June 2026 audit: "Scorekeeper stale closure on Ctrl+Z".
+        // The server has been reverted, but the local form (score1, score2,
+        // winner, result type, notes, videoUrl, penalties) still holds the
+        // submitted values until we explicitly reset it. We also reposition
+        // currentMatchIndex so the scorekeeper is parked on the undone
+        // match — they just undid it, so they almost certainly want to
+        // re-record the result.
+        resetForm();
+        if (undoneMatchId) {
+          const fresh = queryClient.getQueryData<Division[]>([
+            'scorekeeper-divisions',
+            tournamentId,
+          ]);
+          const idx = findUndoneMatchIndex(fresh, selectedDivision, undoneMatchId);
+          if (idx >= 0) setCurrentMatchIndex(idx);
+        }
         setPendingUndoId(null);
         addToast('Match result undone', 'success');
         setAnnounce('Last result undone.');
