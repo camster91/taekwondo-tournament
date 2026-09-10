@@ -367,9 +367,12 @@ export default function DirectorDashboard() {
     },
     refetchInterval: 10000,
     refetchIntervalInBackground: false,
-    onSuccess: (data) => {
-      // Track ring updates for sync freshness indicator (P1-9)
-      const currentDataStr = JSON.stringify(data.rings.map(r => ({
+  });
+  
+  // Track ring updates for sync freshness indicator (P1-9) - moved from onSuccess to useEffect per React Query v5
+  useEffect(() => {
+    if (progress?.rings) {
+      const currentDataStr = JSON.stringify(progress.rings.map(r => ({
         ring: r.ring,
         status: r.status,
         currentMatch: r.currentMatch?.id,
@@ -379,14 +382,14 @@ export default function DirectorDashboard() {
       if (currentDataStr !== previousDataRef.current) {
         const now = Date.now();
         const updates: Record<string, number> = {};
-        data.rings.forEach(ring => {
+        progress.rings.forEach(ring => {
           updates[ring.ring] = now;
         });
         setRingUpdates(prev => ({ ...prev, ...updates }));
         previousDataRef.current = currentDataStr;
       }
-    },
-  });
+    }
+  }, [progress]);
 
   const attentionQuery = useQuery<AttentionResponse>({
     queryKey: ['tournament-attention', tournamentId],

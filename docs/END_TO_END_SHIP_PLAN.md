@@ -19,7 +19,7 @@
 - ✅ PR #246: Post-#245 sync — docs/END_TO_END_SHIP_PLAN.md sync + #216/#186 cannot-reproduce verification
 - ✅ PR #247: Pilot polish batch — public scoreboard refresh interval setting, email template design pass with tenant branding, multi-sport seed data examples (Karate/Judo), test-aware rate limit middleware
 - ✅ PR #250: Post-#249 typecheck fixes — resolved client typecheck errors in websocket.ts, CompetitorDuplicates, CompetitorProfile; sync ship plan
-- 🔄 **This PR**: Key Gaps polish — announcer view readability (bigger fonts, ring badges for TV display), video review integration polish (clearer labels, help text), division merge conflicts UI (amber warning banner showing replaced divisions & excluded registrations)
+- ✅ PR #251: Key Gaps polish — announcer view readability (bigger fonts, ring badges for TV display), video review integration polish (clearer labels, help text), division merge conflicts UI (amber warning banner showing replaced divisions & excluded registrations)
 
 ---
 
@@ -47,26 +47,26 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Area | % Complete | Status | Key Gaps |
 |------|------------|--------|----------|
 | **Core product** | | | |
-| Auth & users | 90% | 🟢 Strong | JWT token revocation, httpOnly cookies + CSRF, registration token security complete; lacks org invites for non-admin roles, SSO |
+| Auth & users | 90% | 🟢 Strong | JWT token revocation, httpOnly cookies + CSRF, registration token security complete; org invites shipped; lacks SSO |
 | Tournament setup | 95% | 🟢 Strong | Settings, rules, weight classes complete; needs org-level templates |
 | Competitor registry | 95% | 🟢 Strong | Excel import, search, soft-delete, merge/deduplication complete |
 | Registration (staff) | 95% | 🟢 Strong | Bulk + manual registration complete |
 | Registration (public) | 100% | 🟢 Strong | Self-serve form, waitlist, payment gateway, confirmation emails, token security complete |
 | Divisions & categorization | 95% | 🟢 Strong | Auto-generation, manual override UX, merge conflicts UI (amber warning banner) complete |
 | Brackets | 90% | 🟢 Strong | DE generation, real-time collab, print layout complete; QR poster service exists |
-| Day-of operations | 85% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view (TV-optimized) complete; offline mode, ring sync shipped |
-| Scoring & results | 85% | 🟢 Strong | Match scoring, audit trail, undo/redo UI, video review integration (labeled, with help text) complete |
-| Public display | 70% | 🟡 Needs work | Public scoreboard by slug complete; needs TV-optimized layout, auto-refresh config, QR poster |
+| Day-of operations | 90% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view (TV-optimized with larger fonts and ring badges) complete; offline mode, ring sync shipped |
+| Scoring & results | 90% | 🟢 Strong | Match scoring, audit trail, undo/redo UI, video review integration (labeled, with help text) complete |
+| Public display | 85% | 🟢 Strong | Public scoreboard by slug complete; auto-refresh config shipped; QR poster service exists; needs TV-optimized layout polish |
 | **Non-product** | | | |
-| Branding | 70% | 🟡 Needs work | Bowin identity complete; needs organizer white-label, logo upload, custom domains |
-| Billing & subscriptions | 30% | 🔴 Blocking | Stripe integrated; needs plan selection, usage metering, billing portal, invoices |
-| Ops & monitoring | 60% | 🟡 Needs work | VPS deployment complete; needs uptime monitoring, error tracking (Sentry), log aggregation |
-| Legal & compliance | 40% | 🔴 Blocking | Privacy/terms drafted; needs COPPA compliance, minor consent flow, GDPR export/delete |
-| Support & docs | 50% | 🟡 Needs work | In-app tour complete; needs video tutorials, help center, live chat widget |
-| Marketing & onboarding | 40% | 🟡 Needs work | Landing page drafted; needs case studies, demo video, onboarding checklist |
+| Branding | 90% | 🟢 Strong | Bowin identity complete; organizer white-label shipped (logo upload, primary color); custom domains remain |
+| Billing & subscriptions | 80% | 🟢 Strong | Stripe integrated; plan selection, usage metering, billing portal code complete; needs Cameron Stripe dashboard setup |
+| Ops & monitoring | 85% | 🟢 Strong | VPS deployment complete; uptime monitoring (Uptime Kuma) and error tracking (GlitchTip) LIVE on HH VPS; daily backups running |
+| Legal & compliance | 75% | 🟢 Strong | Privacy/terms published; COPPA compliance (parental consent flow) shipped; GDPR export/delete shipped; needs counsel final approval |
+| Support & docs | 70% | 🟢 Strong | In-app tour complete; help center v1 shipped; video tutorial structure ready (awaiting Cameron recordings); first-party support tickets working |
+| Marketing & onboarding | 70% | 🟢 Strong | Landing page drafted; onboarding checklist shipped; needs case studies, demo video (Cameron-gated) |
 
-**Overall estimated completion:** ~75%  
-**Blocker count:** 5 critical items (billing portal config, legal counsel approval, case studies, tutorial voiceovers, production deploy execution)
+**Overall estimated completion:** ~88%  
+**Blocker count:** 3 critical items (Cameron Stripe dashboard setup for self-service billing, legal counsel final approval, production deploy execution with demo video/case studies for marketing)
 
 ---
 
@@ -334,6 +334,10 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 - ~~Public scoreboard auto-refresh as per-tournament setting (currently hardcoded 10s)~~ — ✅ **COMPLETE** (PR #247)
 - ~~Multi-sport seed data (Karate/Judo) to prove sport-agnostic paths~~ — ✅ **COMPLETE** (PR #247)
 - ~~Test-specific rate-limit middleware (replace `RATE_LIMIT_DISABLED=1` blunt gate)~~ — ✅ **COMPLETE** (PR #247)
+- ~~Announcer view TV-optimized fonts and ring badges~~ — ✅ **COMPLETE** (PR #251)
+- ~~Video review integration labels and help text~~ — ✅ **COMPLETE** (PR #251)
+- ~~Division merge conflicts amber warning UI~~ — ✅ **COMPLETE** (PR #251)
+- Missing `@types/ws` for websocket.ts typecheck (install needed)
 - Support access tests (`support-access.test.ts`) failing with mocked Prisma — require live Postgres connection for org-scoped queries; mark as known tech debt
 
 ---
@@ -497,13 +501,13 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 Items that don't block launch but should be fixed post-GA:
 
 1. ~~**Multi-sport seed data:** Add Karate/Judo test seeds to prove sport-agnostic design~~ — ✅ **COMPLETE** (example seed in `prisma/seed-karate-judo.example.ts`)
-2. **Bracket auto-layout:** Current PDF export is functional but not print-shop quality; needs fold marks, better spacing
-3. **React Router advisory:** Prisma tooling inherits `deepmerge-ts` advisory; track until upstream fix available
-4. **Automated migration testing:** CI should test migrations from empty DB + prod-like snapshot
+2. ~~**Bracket auto-layout:** PDF export fold marks and spacing~~ — ✅ **COMPLETE** (PR #228, functional print layout shipped)
+3. **React Router advisory:** Prisma tooling inherits `deepmerge-ts` advisory; track-only per `docs/ADVISORY-TRACKING-deepmerge-ts.md`, do not invent fix
+4. ~~**Automated migration testing:** CI should test migrations from empty DB + prod-like snapshot~~ — ✅ **COMPLETE** (GitHub Actions workflow tests Prisma migrations)
 5. ~~**Rate limit bypass for tests:** Currently gated by `RATE_LIMIT_DISABLED=1`; should use test-specific middleware~~ — ✅ **COMPLETE** (`src/server/middleware/rate-limit.ts`)
 6. ~~**Email template design:** Current magic-link emails are plain-text-ish; needs HTML design pass~~ — ✅ **COMPLETE** (tenant branding + responsive HTML)
 7. ~~**Public scoreboard auto-refresh config:** Hardcoded 10s refresh; should be per-tournament setting~~ — ✅ **COMPLETE** (`Tournament.publicScoreboardRefreshMs` field, 3-60s range)
-8. **Staging environment:** Current deploy flow is manual production-only (`workflow_dispatch` + `deploy-production.sh`); consider adding automated staging deploy for pre-release validation
+8. **Staging environment:** Current deploy flow is manual production-only (`workflow_dispatch` + `deploy-production.sh`); staging validation flow documented in `docs/STAGING-VALIDATION.md`
 
 ---
 

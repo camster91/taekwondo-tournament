@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { Users, ChevronUp, Trash2 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
@@ -32,7 +32,6 @@ interface WaitlistedCompetitor {
 
 function Waitlist() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
-  const { getAuthHeaders } = useAuth();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [confirmPromote, setConfirmPromote] = useState<string | null>(null);
@@ -192,13 +191,13 @@ function Waitlist() {
 
       {competitorToPromote && (
         <ConfirmDialog
-          open={!!confirmPromote}
+          isOpen={!!confirmPromote}
           onClose={() => setConfirmPromote(null)}
           onConfirm={() => promoteMutation.mutate(confirmPromote!)}
           title="Promote from waitlist?"
-          description={`Promote ${competitorToPromote.competitor.firstName} ${competitorToPromote.competitor.lastName} to an active registration? They will receive a confirmation email.`}
+          message={`Promote ${competitorToPromote.competitor.firstName} ${competitorToPromote.competitor.lastName} to an active registration? They will receive a confirmation email.`}
           confirmText="Promote"
-          confirmVariant="primary"
+          variant="info"
         />
       )}
 

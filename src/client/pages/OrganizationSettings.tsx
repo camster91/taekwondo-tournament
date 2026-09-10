@@ -35,6 +35,8 @@ type Organization = {
   membershipRole: string;
   entitlements: Entitlements;
   _count: { tournaments: number; members: number };
+  brandLogoUrl?: string | null;
+  brandPrimaryColor?: string | null;
   billingSubscription?: {
     provider: string;
     status: string;

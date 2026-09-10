@@ -254,7 +254,7 @@ export default function PublicRegister() {
     // Portal mode: fetch event from portal API
     if (portalOrgSlug && portalEventSlug) {
       const [eventResult, legalResult] = await Promise.allSettled([
-        fetchJson<{ event: { id: string; name: string; date: string; location: string | null; status: string; registrationFee: string | null; brandName?: string; brandPrimaryColor?: string; brandLogoUrl?: string | null; sportProfileSlug?: string | null; } }>(
+        fetchJson<{ event: { id: string; name: string; date: string; location: string | null; status: string; registrationFee: string | null; tournamentFeeCents?: number | null; brandName?: string; brandPrimaryColor?: string; brandLogoUrl?: string | null; sportProfileSlug?: string | null; } }>(
           fetch,
           `/api/public/portal/${portalOrgSlug}/${portalEventSlug}`
         ).then((data) => {

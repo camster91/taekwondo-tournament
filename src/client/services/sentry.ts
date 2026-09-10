@@ -13,7 +13,7 @@
  */
 
 import * as Sentry from '@sentry/react';
-import type { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 
 const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN;
 const SENTRY_ENVIRONMENT = import.meta.env.VITE_SENTRY_ENVIRONMENT || import.meta.env.MODE || 'development';
@@ -121,7 +121,9 @@ export function isSentryEnabled(): boolean {
  * ErrorBoundary component for React. Wrap your app with this to catch component errors.
  * No-op fallback when VITE_SENTRY_DSN is unset.
  */
-const NoOpErrorBoundary = ({ children }: { children: ReactNode }) => children as JSX.Element;
+function NoOpErrorBoundary({ children }: { children: ReactNode }) {
+  return React.createElement(React.Fragment, null, children);
+}
 
 export const ErrorBoundary = SENTRY_DSN
   ? Sentry.ErrorBoundary

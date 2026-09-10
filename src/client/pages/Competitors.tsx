@@ -939,7 +939,7 @@ export default function Competitors() {
                               <IconButton
                                 icon={<Users className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />}
                                 label={`View profile for ${c.firstName} ${c.lastName}`}
-                                variant="secondary"
+                                variant="primary"
                                 size="sm"
                               />
                             </Link>
