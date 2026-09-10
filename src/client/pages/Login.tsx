@@ -612,6 +612,15 @@ function SetupForm({
   error: string;
   loading: boolean;
 }) {
+  // The setup-form error is rendered into a stable id so screen readers
+  // announce it as a live alert. When the error becomes non-empty, focus
+  // the alert so keyboard and SR users land on the failure instead of
+  // silently resubmitting. See WCAG 3.3.1 / 4.1.3.
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+
   return (
     <div className="space-y-5">
       <div>
@@ -620,13 +629,20 @@ function SetupForm({
       </div>
 
       {error && (
-        <div className="bg-danger/10 dark:bg-danger/20 border border-danger/20 dark:border-danger/30 rounded-xl p-3.5 flex items-start">
-          <AlertCircle className="h-4 w-4 text-danger mr-2 flex-shrink-0 mt-0.5" />
+        <div
+          ref={errorRef}
+          id="setup-form-error"
+          role="alert"
+          tabIndex={-1}
+          aria-live="assertive"
+          className="bg-danger/10 dark:bg-danger/20 border border-danger/20 dark:border-danger/30 rounded-xl p-3.5 flex items-start"
+        >
+          <AlertCircle className="h-4 w-4 text-danger mr-2 flex-shrink-0 mt-0.5" aria-hidden="true" />
           <span className="text-sm text-danger/90 dark:text-danger/80">{error}</span>
         </div>
       )}
 
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form onSubmit={onSubmit} className="space-y-4" aria-describedby={error ? 'setup-form-error' : undefined} noValidate={Boolean(error)}>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label>First name</Label>
