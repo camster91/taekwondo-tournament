@@ -17,36 +17,10 @@ import {
 } from '../utils/scoreboard-availability';
 import { fetchJson } from '../utils/api-status';
 
-interface Match {
-  id: string;
-  matchNumber: number;
-  roundNumber: number;
-  bracketType: string;
-  ringNumber?: number | null;
-  scheduledTime?: string | null;
-  status: string;
-  score1: string | null;
-  score2: string | null;
-  winnerId: string | null;
-  competitor1: {
-    id: string;
-    competitor: { firstName: string; lastName: string; schoolDojang: string | null };
-  } | null;
-  competitor2: {
-    id: string;
-    competitor: { firstName: string; lastName: string; schoolDojang: string | null };
-  } | null;
-}
+// Use shared API contracts instead of local interfaces
+import type { ApiDivision } from '../../shared/contracts';
 
-interface Division {
-  id: string;
-  name: string;
-  eventType: string;
-  bracket: {
-    id: string;
-    matches: Match[];
-  } | null;
-}
+type Division = ApiDivision;
 
 interface Tournament {
   id: string;
