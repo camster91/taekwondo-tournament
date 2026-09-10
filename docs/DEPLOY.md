@@ -70,13 +70,86 @@ Automatic retention is deliberately disabled by default. Verify a backup and obt
 
 Application rollback means redeploying the previous immutable image. Database rollback is restore-based because Prisma production migrations are forward-only. Never restore over the live database without first retaining a snapshot of the failed state. Validate tenant counts and a representative tournament after restoration.
 
+### Automatic Rollback (Fail-Closed)
+
+The deploy script performs automatic rollback if:
+1. Candidate container health check fails (before cutover)
+2. New release internal health check fails (after cutover)
+3. New release public health check fails (after cutover)
+4. Database migrations fail
+5. Deployed image SHA doesn't match expected revision
+
+Automatic rollback sequence:
+1. Stop new failing container
+2. Restore database from pre-deploy backup (if migrations were applied)
+3. Rename rollback container back to live
+4. Start previous release container
+5. Verify health checks pass on restored release
+6. Exit with status 90 (CRITICAL failure) if rollback fails
+
+### Manual Rollback Procedure
+
+If post-deploy issues are found after the automatic cutover succeeded:
+
+```bash
+# On the VPS (187.77.26.99):
+
+# 1. Stop the failing release
+docker stop taekwondo-tournament
+
+# 2. Restore database from backup (if migrations were applied)
+BACKUP_FILE=/var/backups/taekwondo/pre-<timestamp>-<sha>.dump
+docker exec -i markup-postgres pg_restore -U markup -d postgres --clean --create < $BACKUP_FILE
+
+# 3. Swap containers
+docker rename taekwondo-tournament-rollback taekwondo-tournament
+docker start taekwondo-tournament
+
+# 4. Verify health
+curl https://tkd.ashbi.ca/api/health/ready
+
+# 5. Check deployment records
+ls -lh /opt/bowin-production-releases/deployments/
+cat /opt/bowin-production-releases/deployments/<timestamp>-<sha>.json
+```
+
+**Rollback time target:** < 5 minutes
+- Container swap: ~10 seconds (stop + rename + start)
+- DB restore: 2-4 minutes (depends on backup size)
+- Automatic rollback during deploy: ~2 minutes total
+
+**Deployment evidence:** Each successful deployment creates a JSON record at `/opt/bowin-production-releases/deployments/<timestamp>-<sha>.json` containing:
+- Git revision SHA
+- Deployment timestamp (UTC)
+- Deployer identity (user@host)
+- Docker image ID
+- Backup file path
+- Rollback container name
+- Public URL
+- Health check status
+
+This evidence is recorded without exposing secrets and enables audit trails for compliance.
+
 ## GitHub CI and VPS deployment
 
-**CI:** GitHub Actions runs on pushes and pull requests to `main`. Workflows include:
+**CI:** GitHub Actions runs on pushes to `main`. Workflows include:
 - `.github/workflows/ci.yml`: lint, typecheck, unit tests, E2E tests (Playwright), build verification
 - `.github/workflows/build-and-push.yml`: multi-arch Docker image build (amd64 + arm64) and push to `ghcr.io/camster91/taekwondo-tournament`
 
+**Artifact publishing (fail-closed):** 
+- Primary immutable tag: `ghcr.io/camster91/taekwondo-tournament:main-<sha>` (content-addressable, never mutates)
+- Content digest: `@sha256:<digest>` (pinned to exact build output)
+- Branch pointer: `ghcr.io/camster91/taekwondo-tournament:main` (mutable, updated on each push)
+- Legacy tag: `ghcr.io/camster91/taekwondo-tournament:latest` (deprecated; backward compatibility only)
+- **IMPORTANT:** Pull requests do NOT publish artifacts (no PR-triggered builds that could mutate production tags)
+
 **Deployment:** Production deployment is **manual-only** via `scripts/deploy-production.sh` executed from a developer's local machine (requires SSH key for VPS). There is NO automated GitHub Actions deployment workflow. The script performs an immutable, rollback-safe deploy with automatic health-check validation.
+
+**Deployment artifact source:** VPS production deployment builds Docker images from **immutable git source archives** (SHA-verified tar.gz), NOT from pre-built GHCR images. The GHCR images published by CI are for local testing and non-production deployments only. This ensures production deployments are:
+- Reproducible from source at any time
+- Independent of external registry availability
+- Verifiable via git SHA and archive checksum
+- Protected from supply-chain attacks on published images
 
 **VPS access:** Deployment requires SSH access to the Ashbi VPS (187.77.26.99) with the appropriate SSH key (`BOWIN_PRODUCTION_SSH_KEY` env var, defaults to `/c/Users/camst/.ssh/id_ed25519_hostinger`). Environment variables for the live container are preserved from the previous deployment and updated only for changed legal/consent fields.
 

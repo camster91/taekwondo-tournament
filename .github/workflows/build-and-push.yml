@@ -3,14 +3,21 @@ name: Build and Push Image
 # Reusable build workflow for camster91/* Node.js web apps.
 # Triggered on push to main and on tag. Builds a multi-stage Docker image
 # and pushes it to ghcr.io. The image becomes the canonical deployable
-# artifact — any host (Coolify, Hostinger, Render, Fly, local docker) can
-# run it without needing source code, Node, or build tools on the host.
+# artifact — any host can run it without needing source code, Node, or
+# build tools on the host.
 #
-# Conventions:
-#   - Image: ghcr.io/camster91/<repo>:main (or :<tag> for releases)
+# Tag strategy (fail-closed artifact publishing):
+#   - PRIMARY: :<tag>-<sha> (immutable, content-addressable)
+#   - SECONDARY: :<tag> (main or version, updated pointer)
+#   - DEPRECATED: :latest (backward compatibility only; VPS deploy uses SHA)
+#   - Image: ghcr.io/camster91/<repo>
 #   - Multi-arch: linux/amd64 + linux/arm64 (Raspberry Pi, Apple Silicon hosts)
 #   - Buildx cache pushed to GHCR type=cache (saves ~3min per build)
 #   - SBOM + provenance attestations enabled (for supply-chain trust)
+#
+# IMPORTANT: VPS production deployment (scripts/deploy-production.sh) builds
+# images from immutable source archives (git SHA), NOT from GHCR. These
+# published images are for local testing and non-production deployments only.
 
 on:
   push:
@@ -111,6 +118,7 @@ jobs:
 
       - name: Build and push
         uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
           file: ${{ inputs.dockerfile || 'Dockerfile' }}
@@ -119,13 +127,14 @@ jobs:
           platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
           push: true
           tags: |
-            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}-${{ steps.meta.outputs.sha }}
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.image }}:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           provenance: true
           sbom: true
+          outputs: type=image,name=${{ steps.meta.outputs.image }},push=true
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.source=${{ github.event.repository.html_url }}
@@ -136,9 +145,16 @@ jobs:
         run: |
           echo "## Image published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Pull:** \`docker pull ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Run:** \`docker run -d -p 3000:3000 --name ${{ github.event.repository.name }} ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Primary (immutable):** \`${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}-${{ steps.meta.outputs.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Digest:** \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch pointer:** \`${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Legacy:** \`${{ steps.meta.outputs.image }}:latest\` (deprecated; use SHA tag)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pull (recommended):** \`docker pull ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}-${{ steps.meta.outputs.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Pull by digest:** \`docker pull ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Platforms:** ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}" >> $GITHUB_STEP_SUMMARY
-          echo "**SHA:** ${{ steps.meta.outputs.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Note:** VPS production deployment builds from immutable git archives, not GHCR." >> $GITHUB_STEP_SUMMARY

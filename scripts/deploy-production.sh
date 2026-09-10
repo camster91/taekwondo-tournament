@@ -58,7 +58,16 @@ LOCK_DIR=/var/lock/bowin-production-deploy.lock
 
 wait_for_health() {
   local url=$1
-  for _ in $(seq 1 45); do curl -fsS --max-time 5 "$url" >/dev/null && return 0; sleep 1; done
+  local description=$2
+  echo "==> Waiting for health check: ${description}"
+  for attempt in $(seq 1 45); do 
+    if curl -fsS --max-time 5 "$url" >/dev/null 2>&1; then
+      echo "Health check PASSED (${description}) on attempt ${attempt}/45"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "FAIL-CLOSED: Health check FAILED (${description}) after 45 attempts" >&2
   return 1
 }
 restore_database() {
@@ -69,6 +78,7 @@ restore_database() {
   docker exec -i markup-postgres pg_restore -U markup -d postgres --clean --if-exists --create --no-owner --exit-on-error < "$BACKUP"
 }
 restore_previous_release() {
+  echo "==> Rolling back to previous release"
   docker rm -f "$LIVE" >/dev/null 2>&1 || true
   if [ "$PREVIOUS_RENAMED" -eq 1 ]; then
     docker inspect "$ROLLBACK" >/dev/null
@@ -76,8 +86,9 @@ restore_previous_release() {
   fi
   test "$(docker inspect "$LIVE" --format '{{.Image}}')" = "$PREVIOUS_IMAGE_ID"
   docker start "$LIVE" >/dev/null
-  wait_for_health "http://127.0.0.1:${LIVE_PORT}/api/health/ready"
-  wait_for_health "$PUBLIC_URL/api/health/ready"
+  wait_for_health "http://127.0.0.1:${LIVE_PORT}/api/health/ready" "rollback internal"
+  wait_for_health "$PUBLIC_URL/api/health/ready" "rollback public"
+  echo "Rollback complete; previous release restored"
 }
 cleanup() {
   status=$?
@@ -151,8 +162,21 @@ grep -q '^REGISTRATION_CONSENT_VERSION=' "$ENV_FILE"; grep -q '^PRIVACY_NOTICE_U
 
 echo "==> Starting private candidate while production remains live"
 docker run -d --name "$CANDIDATE" --network markup-net --env-file "$ENV_FILE" "$IMAGE" node server.js >/dev/null
-for _ in $(seq 1 45); do docker exec "$CANDIDATE" wget -q -O /dev/null http://127.0.0.1:3001/api/health/ready && break; sleep 1; done
-docker exec "$CANDIDATE" wget -q -O /dev/null http://127.0.0.1:3001/api/health/ready
+echo "Waiting for candidate health check..."
+CANDIDATE_HEALTHY=0
+for attempt in $(seq 1 45); do 
+  if docker exec "$CANDIDATE" wget -q -O /dev/null http://127.0.0.1:3001/api/health/ready 2>/dev/null; then
+    echo "Candidate health check PASSED on attempt ${attempt}/45"
+    CANDIDATE_HEALTHY=1
+    break
+  fi
+  sleep 1
+done
+if [ "$CANDIDATE_HEALTHY" -ne 1 ]; then
+  echo "FAIL-CLOSED: Candidate health check FAILED after 45 attempts" >&2
+  docker logs "$CANDIDATE" 2>&1 | tail -n 50 >&2
+  exit 1
+fi
 docker rm -f "$CANDIDATE" >/dev/null
 
 echo "==> Stopping production writes and validating backup"
@@ -178,15 +202,44 @@ else
   echo "==> Demo reset skipped (not an isolated synthetic environment)"
 fi
 
-echo "==> Publishing candidate on existing port ${LIVE_PORT}"
+echo "==> Publishing new release on port ${LIVE_PORT}"
 docker run -d --name "$LIVE" --restart unless-stopped --network markup-net -p "127.0.0.1:${LIVE_PORT}:3001" --env-file "$ENV_FILE" "$IMAGE" >/dev/null
-wait_for_health "http://127.0.0.1:${LIVE_PORT}/api/health/ready"
-wait_for_health "$PUBLIC_URL/api/health/ready"
-test "$(docker inspect "$LIVE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"
+wait_for_health "http://127.0.0.1:${LIVE_PORT}/api/health/ready" "new release internal" || {
+  echo "FAIL-CLOSED: New release failed internal health check; initiating automatic rollback" >&2
+  exit 1
+}
+wait_for_health "$PUBLIC_URL/api/health/ready" "new release public" || {
+  echo "FAIL-CLOSED: New release failed public health check; initiating automatic rollback" >&2
+  exit 1
+}
+ACTUAL_SHA=$(docker inspect "$LIVE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+if [ "$ACTUAL_SHA" != "$RELEASE_SHA" ]; then
+  echo "FAIL-CLOSED: Deployed image SHA mismatch (expected ${RELEASE_SHA}, got ${ACTUAL_SHA})" >&2
+  exit 1
+fi
+echo "SHA verification PASSED: deployed ${RELEASE_SHA}"
 
 DB_MUTATED=0
 CUTOVER_STARTED=0
-echo "DEPLOYED revision=${RELEASE_SHA} backup=$(basename "$BACKUP") rollback=${ROLLBACK}"
+DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+DEPLOYED_IMAGE=$(docker inspect "$LIVE" --format '{{.Image}}')
+echo "==> Recording deployment evidence"
+mkdir -p /opt/bowin-production-releases/deployments
+cat > "/opt/bowin-production-releases/deployments/${STAMP}.json" <<DEPLOY_RECORD
+{
+  "revision": "${RELEASE_SHA}",
+  "deployed_at": "${DEPLOYED_AT}",
+  "deployed_by": "$(whoami)@$(hostname)",
+  "image_id": "${DEPLOYED_IMAGE}",
+  "backup": "$(basename "$BACKUP")",
+  "rollback_container": "${ROLLBACK}",
+  "public_url": "${PUBLIC_URL}",
+  "health_check_passed": true
+}
+DEPLOY_RECORD
+echo "DEPLOYED revision=${RELEASE_SHA} backup=$(basename "$BACKUP") rollback=${ROLLBACK} at=${DEPLOYED_AT}"
+echo "Deployment record: /opt/bowin-production-releases/deployments/${STAMP}.json"
 REMOTE
 
 echo "Production release ${RELEASE_SHA} passed direct and public readiness gates."
+echo "Deployment evidence recorded without exposing secrets."
