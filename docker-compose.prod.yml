@@ -1,0 +1,92 @@
+# =============================================================================
+# Bowin Tournament OS — production compose override
+# =============================================================================
+# Apply on top of `docker-compose.yml`:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.prod.yml \
+#     <command>
+#
+# Purpose: the AUTHORITATIVE production posture for host-port bindings. The
+# base file is already minimal (`app` binds 3001:3001; `taekwondo-db` has
+# no `ports:` block at all), but this override is defense in depth: a
+# future edit to docker-compose.yml that adds `- 5432:5432` (or any other
+# DB port) to either service MUST be masked here in production.
+#
+# How this override strips host ports safely
+# ------------------------------------------
+# Docker Compose CONCATENATES `ports:` lists across files (it does NOT
+# replace them). To strip a binding we therefore use the `!override` tag
+# (Compose v2.24.4+), which replaces the whole list with whatever we
+# declare. The base file's `3001:3001` on `app` is intentionally preserved
+# in production: Traefik / the reverse proxy terminates TLS in front of
+# the docker network, and we want the same single host port so deploys
+# stay drop-in.
+#
+# What this file changes vs the base
+# ----------------------------------
+#   - `taekwondo-db`: `ports: !override []` — explicit empty host-port
+#     list. If a future commit re-introduces a `5432:5432` binding in the
+#     base file, this override strips it for the merged production
+#     config.
+#   - `app`: NOT re-declared. The base file's `3001:3001` is the
+#     production host port (Traefik reverse-proxies through it).
+#
+# What this file does NOT change
+# -----------------------------
+#   - It does not change environment variables, volumes, healthchecks, or
+#     any other field. The base file's env interpolation, secret flow,
+#     and resource limits are already production-shaped.
+#   - It does not change the DB password source. The `${POSTGRES_PASSWORD:?...}`
+#     contract from the base file is preserved.
+#
+# Verify with:
+#   ./scripts/test-compose-port-hardening.sh
+#
+# Closes audit #63.
+# =============================================================================
+
+services:
+  taekwondo-db:
+    # `!override` is required because Compose concatenates `ports:` lists
+    # across files (does not replace). An empty list under `!override`
+    # means: production MUST have zero host-bound DB ports, regardless of
+    # what the base file declares. Requires Compose v2.24.4 or newer;
+    # older versions silently ignore the tag and concatenate, which would
+    # leak a host binding if the base file ever adds one. The
+    # `test-compose-port-hardening.sh` script catches that regression.
+    image: postgres:16-alpine
+    container_name: taekwondo-db
+    restart: unless-stopped
+    ports: !override []
+    environment:
+      POSTGRES_DB: taekwondo_tournament
+      POSTGRES_USER: taekwondo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taekwondo -d taekwondo_tournament"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Bumped from 10s to 30s for first-boot data-dir init. The base
+      # file keeps the dev-friendly 10s; production is more conservative.
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    networks:
+      - tkd-net
+
+volumes:
+  postgres_data:
+
+networks:
+  tkd-net:
+    driver: bridge

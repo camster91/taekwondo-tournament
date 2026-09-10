@@ -1,3 +1,38 @@
+# =============================================================================
+# Bowin Tournament OS — local / dev compose file
+# =============================================================================
+# Host-port policy (closes audit #63):
+#   - The `app` service binds ONLY 3001:3001. That single host port is the
+#     app's public surface; the app talks to Postgres on the `tkd-net`
+#     internal bridge and never reaches the host.
+#   - The `taekwondo-db` service has NO `ports:` block at all. The DB is
+#     reachable only from containers on the `tkd-net` bridge (i.e. the
+#     `app` container). It is NEVER bound to a host port, in dev OR prod.
+#   - Do NOT add a line like `- "5432:5432"` (or 3306, 27017, 6379, etc.)
+#     to this file. The Postgres password is also required at deploy time
+#     via `${POSTGRES_PASSWORD:?...}` with no default; see
+#     `.env.example` for the contract.
+#
+# Production posture (defense in depth):
+#   - This file is the dev / local shape. The app's `3001:3001` is the
+#     dev loopback binding for `docker compose up`; the DB has no host
+#     port and is reachable only from the `tkd-net` bridge.
+#   - `docker-compose.prod.yml` is the production override. It
+#     re-declares the DB service with `ports: !override []` (Compose
+#     v2.24.4+) so the merged production config has ZERO host-bound DB
+#     ports, even if a future commit re-introduces a binding in this
+#     file. The app service is NOT re-declared: its 3001:3001 binding is
+#     intentionally the production host port (Traefik reverse-proxies
+#     through it).
+#   - `scripts/test-compose-port-hardening.sh` renders the merged config
+#     and asserts no service binds a database port (5432/3306/27017) to
+#     the host. Run it locally or in CI; it is a hard gate.
+#
+# Why this matters: any service that lands on the same Coolify / VPS
+# host (or that reaches the host via the bastion) would otherwise get
+# a free DB shell once a default password leaks. Closes audit #63.
+# =============================================================================
+
 services:
   app:
     build:
