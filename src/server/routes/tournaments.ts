@@ -63,6 +63,7 @@ const tournamentCreateSchema = z.object({
 
 const tournamentUpdateSchema = tournamentCreateSchema.partial().extend({
   status: z.enum(['draft', 'registration', 'brackets', 'in_progress', 'active', 'completed']).optional(),
+  publicScoreboardRefreshMs: z.number().int().min(3000).max(60000).optional(),
 });
 
 const registrationSchema = z.object({
@@ -738,7 +739,7 @@ router.post('/:id/operational-query', authenticate, requireTournamentAccess('dir
 
 router.put('/:id', authenticate, requireTournamentAccess('director'), validateRequest(tournamentUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { name, date, location, status, settings } = req.body;
+  const { name, date, location, status, settings, publicScoreboardRefreshMs } = req.body;
 
   try {
     if (status === 'registration') {
@@ -768,6 +769,7 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
           location,
           status,
           settings: settings ? JSON.stringify(mergeGeneralSettings(current.settings, settings)) : undefined,
+          publicScoreboardRefreshMs,
         },
       });
 

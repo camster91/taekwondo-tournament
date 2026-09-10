@@ -12,10 +12,16 @@
 - ✅ PR #239: Tenant-branded event portals (#212) — canonical organizer portal URLs, event slug management, publish/unpublish controls, fail-closed security
 - ✅ PR #240: Portal registration tenant-scoped operations (#213) — connect public portal registrations to org operations, fail-closed cross-tenant protection, portal-aware registration flow
 - ✅ PR #241: VPS-first ops — remove hard SaaS dependencies (GlitchTip/Uptime Kuma/manual payment docs, env-gated Crisp/Sentry/Stripe)
+- ✅ PR #238: Support diagnostics auth (#195) + public registrations visible in check-in (#187)
+- ✅ PR #239: Tenant-branded event portals (#212) — canonical organizer portal URLs, event slug management, publish/unpublish controls, fail-closed security
+- ✅ PR #240: Portal registration tenant-scoped operations (#213) — connect public portal registrations to org operations, fail-closed cross-tenant protection, portal-aware registration flow
+- ✅ PR #241: VPS-first ops — remove hard SaaS dependencies (GlitchTip/Uptime Kuma/manual payment docs, env-gated Crisp/Sentry/Stripe)
 - ✅ PR #242: Tenant isolation proof & release readiness (#214) — two-org isolation matrix tests, portal health monitoring docs, migration/rollback rehearsal steps
 - ✅ PR #243: GlitchTip error tracking wired for VPS deployment
 - ✅ PR #244: Phase 2 completion checkpoint — waitlist, payment at registration, deduplication, manual division override, bracket print, real-time collab, announcer view, video review, director dashboard, certificates, school reports, historical trends, COPPA, GDPR, onboarding checklist
 - ✅ PR #245: Registration management token security (P0-118) — 30-day token expiration, director revoke/rotate, audit logging, comprehensive integration tests
+- ✅ PR #246: Post-#245 sync — docs/END_TO_END_SHIP_PLAN.md sync + #216/#186 cannot-reproduce verification
+- 🔄 **This PR**: Pilot polish batch — public scoreboard refresh interval setting, email template design pass with tenant branding, multi-sport seed data examples (Karate/Judo), test-aware rate limit middleware
 
 ---
 
@@ -491,13 +497,13 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 
 Items that don't block launch but should be fixed post-GA:
 
-1. **Multi-sport seed data:** Add Karate/Judo test seeds to prove sport-agnostic design
+1. ~~**Multi-sport seed data:** Add Karate/Judo test seeds to prove sport-agnostic design~~ — ✅ **COMPLETE** (example seed in `prisma/seed-karate-judo.example.ts`)
 2. **Bracket auto-layout:** Current PDF export is functional but not print-shop quality; needs fold marks, better spacing
 3. **React Router advisory:** Prisma tooling inherits `deepmerge-ts` advisory; track until upstream fix available
 4. **Automated migration testing:** CI should test migrations from empty DB + prod-like snapshot
-5. **Rate limit bypass for tests:** Currently gated by `RATE_LIMIT_DISABLED=1`; should use test-specific middleware
-6. **Email template design:** Current magic-link emails are plain-text-ish; needs HTML design pass
-7. **Public scoreboard auto-refresh config:** Hardcoded 10s refresh; should be per-tournament setting
+5. ~~**Rate limit bypass for tests:** Currently gated by `RATE_LIMIT_DISABLED=1`; should use test-specific middleware~~ — ✅ **COMPLETE** (`src/server/middleware/rate-limit.ts`)
+6. ~~**Email template design:** Current magic-link emails are plain-text-ish; needs HTML design pass~~ — ✅ **COMPLETE** (tenant branding + responsive HTML)
+7. ~~**Public scoreboard auto-refresh config:** Hardcoded 10s refresh; should be per-tournament setting~~ — ✅ **COMPLETE** (`Tournament.publicScoreboardRefreshMs` field, 3-60s range)
 8. **Staging environment:** Current deploy flow is manual production-only (`workflow_dispatch` + `deploy-production.sh`); consider adding automated staging deploy for pre-release validation
 
 ---

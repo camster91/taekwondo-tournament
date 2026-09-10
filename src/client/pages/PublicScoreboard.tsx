@@ -52,6 +52,7 @@ interface Tournament {
   brandName?: string | null;
   brandPrimaryColor?: string | null;
   brandLogoUrl?: string | null;
+  publicScoreboardRefreshMs?: number | null;
 }
 
 export default function PublicScoreboard() {
@@ -86,7 +87,7 @@ export default function PublicScoreboard() {
     queryFn: async () => {
       return fetchJson<Tournament>(fetch, `/api/public/tournaments/${tournamentId}`);
     },
-    refetchInterval: 10_000,
+    refetchInterval: tournament?.publicScoreboardRefreshMs ?? 10_000,
     refetchIntervalInBackground: false,
     retry: false,
   });
@@ -108,7 +109,7 @@ export default function PublicScoreboard() {
       setLastFetchAt(new Date());
       return data;
     },
-    refetchInterval: 5000, // TV mode: refresh every 5s (was 3s — cuts poll load)
+    refetchInterval: tournament?.publicScoreboardRefreshMs ?? 5000, // Use tournament setting or default 5s
     refetchIntervalInBackground: false,
     enabled: !tournamentError, // Don't keep retrying the scoreboard if the tournament is bad
     retry: false,

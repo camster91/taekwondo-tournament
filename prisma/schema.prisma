@@ -75,6 +75,12 @@ model Tournament {
   // this tournament. Rotated from the UI to revoke the old link.
   publicSlug String? @unique
 
+  // Public scoreboard auto-refresh interval in milliseconds.
+  // Default: 10000 (10 seconds). Organizers can adjust this in
+  // Tournament Settings to balance freshness vs. server load.
+  // Minimum: 3000 (3s), Maximum: 60000 (60s).
+  publicScoreboardRefreshMs Int? @default(10000)
+
   // Event portal slug for tenant-branded public URLs (/events/:orgSlug/:eventSlug)
   // Unique within the organization scope. Used for branded discovery and sharing.
   // NULL means the event is not published to the portal (preview-only).
