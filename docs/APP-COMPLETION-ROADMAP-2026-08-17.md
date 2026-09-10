@@ -81,17 +81,38 @@ openssl rand -base64 32 > /etc/taekwondo.d/jwt-secret-demo
 chmod 600 /etc/taekwondo.d/jwt-secret-demo
 ```
 
-#### 4. Configure Caddy reverse proxy for demo hostname
+#### 4. Configure Traefik reverse proxy for demo hostname
 ```bash
-# Add to /opt/caddy/Caddyfile
-demo.tkd.ashbi.ca {
-    reverse_proxy 127.0.0.1:18305
-    encode gzip
-}
-
-# Reload Caddy
-docker exec caddy caddy reload --config /etc/caddy/Caddyfile
+# Create Traefik dynamic config
+sudo nano /opt/traefik/dynamic/bowin-demo.yml
 ```
+
+Add the following configuration:
+```yaml
+http:
+  routers:
+    bowin-demo:
+      rule: "Host(`demo.tkd.ashbi.ca`)"
+      entryPoints:
+        - websecure
+      service: bowin-demo-backend
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - compress
+
+  services:
+    bowin-demo-backend:
+      loadBalancer:
+        servers:
+          - url: "http://localhost:18305"
+
+  middlewares:
+    compress:
+      compress: {}
+```
+
+Traefik auto-reloads dynamic configs from `/opt/traefik/dynamic/` within 5-10 seconds. Let's Encrypt will automatically provision an SSL certificate via HTTP-01 challenge.
 
 #### 5. Verify demo environment variables
 The demo deploy script (`scripts/deploy-demo.sh`) requires these env vars in the live container:
