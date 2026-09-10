@@ -153,6 +153,8 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
       brandLogoUrl: true,
       organizationId: true,
       publicScoreboardRefreshMs: true,
+      maxCapacity: true,
+      waitlistEnabled: true,
       organization: {
         select: {
           brandName: true,
@@ -167,6 +169,13 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Tournament not found' });
   }
 
+  // Get capacity status for public display (if capacity limit set)
+  let capacityStatus = null;
+  if (tournament.maxCapacity && tournament.status === 'registration') {
+    const { getTournamentCapacityStatus } = await import('../services/waitlist.js');
+    capacityStatus = await getTournamentCapacityStatus(prisma, tournament.id);
+  }
+
   // Previously gated to status === 'registration' which broke the public
   // scoreboard during in_progress / brackets / completed events. The scoreboard
   // needs the tournament name + date to render its header, and that's not
@@ -179,6 +188,8 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
     brandName: tournament.brandName || tournament.organization?.brandName || tournament.name,
     brandPrimaryColor: tournament.brandPrimaryColor || tournament.organization?.brandPrimaryColor || '#DC2626',
     brandLogoUrl: tournament.brandLogoUrl || tournament.organization?.brandLogoUrl || null,
+    // Capacity status (no PII exposed - just counts)
+    capacityStatus,
     // Don't expose organization object to public API
     organization: undefined,
     organizationId: undefined,
