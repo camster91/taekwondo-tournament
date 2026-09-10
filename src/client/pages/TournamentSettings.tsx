@@ -520,7 +520,7 @@ export default function TournamentSettings() {
       >
         <Link
           to={`/tournaments/${id}`}
-          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Tournament
@@ -529,13 +529,13 @@ export default function TournamentSettings() {
 
       {/* Success Message */}
       {showSaveSuccess && (
-        <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-300">
+        <div className="mb-6 p-4 bg-success/10 dark:bg-success/20 border border-success/30 dark:border-success rounded-lg text-success dark:text-success/30">
           Settings saved successfully!
         </div>
       )}
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
+      <div className="border-b border-surface-200 dark:border-surface-700 mb-6">
         <nav
           role="tablist"
           aria-label="Settings sections"
@@ -551,12 +551,12 @@ export default function TournamentSettings() {
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
               tab === 'setup'
                 ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+                : 'border-transparent text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 hover:border-surface-300'
             }`}
           >
             <Settings className="inline h-4 w-4 mr-1.5" />
             Setup
-            <span className="ml-2 text-xs text-gray-600">(quick)</span>
+            <span className="ml-2 text-xs text-surface-600">(quick)</span>
           </button>
           <button
             type="button"
@@ -568,12 +568,12 @@ export default function TournamentSettings() {
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
               tab === 'rules'
                 ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+                : 'border-transparent text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 hover:border-surface-300'
             }`}
           >
             <Award className="inline h-4 w-4 mr-1.5" />
             Categorization + Brackets
-            <span className="ml-2 text-xs text-gray-600">(advanced)</span>
+            <span className="ml-2 text-xs text-surface-600">(advanced)</span>
           </button>
           <button
             type="button"
@@ -585,7 +585,7 @@ export default function TournamentSettings() {
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
               tab === 'branding'
                 ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+                : 'border-transparent text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 hover:border-surface-300'
             }`}
           >
             <Award className="inline h-4 w-4 mr-1.5" />
@@ -608,7 +608,7 @@ export default function TournamentSettings() {
             <div>
               <Label htmlFor="division-threshold">
                 Division Split Threshold
-                <span className="text-gray-600 dark:text-gray-400 font-normal ml-2">
+                <span className="text-surface-600 dark:text-surface-400 font-normal ml-2">
                   (max competitors per division)
                 </span>
               </Label>
@@ -624,14 +624,14 @@ export default function TournamentSettings() {
                 }
                 className="w-32"
               />
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                 Divisions with more competitors will be split (e.g., DIV1, DIV2)
               </p>
             </div>
             <div>
               <Label htmlFor="registrationFee">
                 Registration Fee Notes
-                <span className="text-gray-600 dark:text-gray-400 font-normal ml-2">
+                <span className="text-surface-600 dark:text-surface-400 font-normal ml-2">
                   (shown to parents during registration)
                 </span>
               </Label>
@@ -643,7 +643,7 @@ export default function TournamentSettings() {
                 placeholder="e.g. $25, pay at door — or leave empty for free"
                 maxLength={200}
               />
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                 Free-text note displayed on the public registration page. We don't
                 process payment here — this is a "pay at the door" or "free event"
                 hint.
@@ -679,7 +679,7 @@ export default function TournamentSettings() {
                   }}
                   placeholder="0.00"
                 />
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                   Shown to parents as a fee notice on the registration form.
                   Set to 0 (or leave blank) to hide the notice.
                 </p>
@@ -697,7 +697,7 @@ export default function TournamentSettings() {
                   placeholder="e.g. Pay at door, cash or cheque"
                   maxLength={200}
                 />
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                   Optional one-liner shown under the fee amount.
                 </p>
               </div>
@@ -732,7 +732,7 @@ export default function TournamentSettings() {
                 >
                   {copyState === 'copied' ? (
                     <>
-                      <CheckIcon className="h-4 w-4 text-green-600" /> Copied
+                      <CheckIcon className="h-4 w-4 text-success" /> Copied
                     </>
                   ) : (
                     <>
@@ -752,12 +752,12 @@ export default function TournamentSettings() {
                 </a>
                 <button
                   onClick={() => setRevokeOpen(true)}
-                  className="text-red-600 dark:text-red-400 hover:underline"
+                  className="text-danger dark:text-danger hover:underline"
                   type="button"
                 >
                   Revoke link
                 </button>
-                <span className="text-gray-600 dark:text-gray-400 text-xs">
+                <span className="text-surface-600 dark:text-surface-400 text-xs">
                   Anyone with this URL can view the live scoreboard.
                 </span>
               </div>
@@ -771,7 +771,7 @@ export default function TournamentSettings() {
               >
                 {generateSlugMutation.isPending ? 'Generating...' : 'Generate share link'}
               </Button>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-surface-600 dark:text-surface-400">
                 Default off. Enable when ready to share with spectators.
               </span>
             </div>
@@ -840,7 +840,7 @@ export default function TournamentSettings() {
                 </Button>
               )}
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-surface-600 dark:text-surface-400">
               This setting affects the public scoreboard for spectators. Tournament staff views always use real-time updates.
             </p>
           </div>
@@ -861,7 +861,7 @@ export default function TournamentSettings() {
               <div>
                 <Label htmlFor="eventSlug">
                   Event Slug
-                  <span className="ml-2 text-sm font-normal text-gray-600 dark:text-gray-400">
+                  <span className="ml-2 text-sm font-normal text-surface-600 dark:text-surface-400">
                     (used in portal URL)
                   </span>
                 </Label>
@@ -886,19 +886,19 @@ export default function TournamentSettings() {
                     {saveEventSlugMutation.isPending ? 'Saving...' : 'Save Slug'}
                   </Button>
                 </div>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                   Lowercase letters, numbers, and hyphens only. 3-63 characters.
                 </p>
               </div>
 
               {/* Portal Status & Actions */}
               {eventSlug && (
-                <div className="space-y-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <div className="space-y-3 pt-3 border-t border-surface-200 dark:border-surface-700">
                   {portalPublished ? (
                     <>
                       <div className="flex items-center gap-2">
                         <div className="flex-1">
-                          <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                          <span className="text-sm font-medium text-success dark:text-success">
                             ✓ Published to Portal
                           </span>
                         </div>
@@ -926,7 +926,7 @@ export default function TournamentSettings() {
                         </div>
                       )}
 
-                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                      <p className="text-xs text-surface-600 dark:text-surface-400">
                         This event is discoverable on your organization's public event portal.
                       </p>
                     </>
@@ -940,7 +940,7 @@ export default function TournamentSettings() {
                         >
                           {publishPortalMutation.isPending ? 'Publishing...' : 'Publish to Portal'}
                         </Button>
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className="text-sm text-surface-600 dark:text-surface-400">
                           Make this event visible on your organization's portal
                         </span>
                       </div>
@@ -975,7 +975,7 @@ export default function TournamentSettings() {
               </TableHead>
               <TableBody>
                 {settings.ageGroups.map((group, index) => (
-                  <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <tr key={index} className="hover:bg-surface-50 dark:hover:bg-surface-800/50">
                     <td>
                       <Input
                         type="text"
@@ -1013,7 +1013,7 @@ export default function TournamentSettings() {
                     <td>
                       <button
                         onClick={() => removeAgeGroup(index)}
-                        className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 touch-target"
+                        className="text-surface-600 hover:text-danger dark:hover:text-danger touch-target"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -1039,7 +1039,7 @@ export default function TournamentSettings() {
         />
         {settings.weightClasses.length === 0 ? (
           <CardBody>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+            <p className="text-sm text-surface-600 dark:text-surface-400 mb-3">
               No custom weight classes. Using system defaults.
             </p>
             <Button variant="secondary" size="sm" onClick={loadDefaultWeightClasses}>
@@ -1061,7 +1061,7 @@ export default function TournamentSettings() {
                 </TableHead>
                 <TableBody>
                   {settings.weightClasses.map((wc, index) => (
-                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <tr key={index} className="hover:bg-surface-50 dark:hover:bg-surface-800/50">
                       <td>
                         <Input
                           type="text"
@@ -1122,7 +1122,7 @@ export default function TournamentSettings() {
                       <td>
                         <button
                           onClick={() => removeWeightClass(index)}
-                          className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 touch-target"
+                          className="text-surface-600 hover:text-danger dark:hover:text-danger touch-target"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -1167,7 +1167,7 @@ export default function TournamentSettings() {
             />
             <CardBody>
               <div className="max-w-2xl space-y-6">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-surface-600 dark:text-surface-400">
                   Customize how your tournament appears on public-facing pages (registration, scoreboard, results).
                   Competitors will see your branding, not "Bowin".
                 </p>
@@ -1176,7 +1176,7 @@ export default function TournamentSettings() {
                   <div>
                     <Label htmlFor="brandName">
                       Brand Name
-                      <span className="text-gray-600 dark:text-gray-400 font-normal ml-2">
+                      <span className="text-surface-600 dark:text-surface-400 font-normal ml-2">
                         (displayed to competitors)
                       </span>
                     </Label>
@@ -1191,7 +1191,7 @@ export default function TournamentSettings() {
                       placeholder={tournament?.name || 'Tournament name'}
                       maxLength={200}
                     />
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                       Leave empty to use tournament name. Example: "Master Kim's Taekwondo Academy"
                     </p>
                   </div>
@@ -1199,7 +1199,7 @@ export default function TournamentSettings() {
                   <div>
                     <Label htmlFor="brandPrimaryColor">
                       Primary Color
-                      <span className="text-gray-600 dark:text-gray-400 font-normal ml-2">
+                      <span className="text-surface-600 dark:text-surface-400 font-normal ml-2">
                         (accent color for buttons, icons)
                       </span>
                     </Label>
@@ -1212,7 +1212,7 @@ export default function TournamentSettings() {
                           setBranding({ ...branding, brandPrimaryColor: e.target.value });
                           setBrandingDirty(true);
                         }}
-                        className="h-10 w-20 rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+                        className="h-10 w-20 rounded border border-surface-300 dark:border-surface-600 cursor-pointer"
                       />
                       <Input
                         type="text"
@@ -1229,12 +1229,12 @@ export default function TournamentSettings() {
                         className="w-32"
                       />
                       <div 
-                        className="h-10 w-10 rounded border border-gray-300 dark:border-gray-600"
+                        className="h-10 w-10 rounded border border-surface-300 dark:border-surface-600"
                         style={{ backgroundColor: branding.brandPrimaryColor }}
                         aria-label="Color preview"
                       />
                     </div>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                       Hex color code. Default: #DC2626 (Bowin red)
                     </p>
                   </div>
@@ -1242,7 +1242,7 @@ export default function TournamentSettings() {
                   <div>
                     <Label htmlFor="brandLogoUrl">
                       Logo URL
-                      <span className="text-gray-600 dark:text-gray-400 font-normal ml-2">
+                      <span className="text-surface-600 dark:text-surface-400 font-normal ml-2">
                         (optional)
                       </span>
                     </Label>
@@ -1257,7 +1257,7 @@ export default function TournamentSettings() {
                       placeholder="https://example.com/logo.png"
                       maxLength={500}
                     />
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                       Public URL to your logo image. Shown on registration and scoreboard pages.
                       Leave empty to show a trophy icon in your brand color.
                     </p>
@@ -1266,7 +1266,7 @@ export default function TournamentSettings() {
                   {branding.brandLogoUrl && (
                     <div>
                       <Label>Logo Preview</Label>
-                      <div className="mt-2 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900">
+                      <div className="mt-2 p-4 border border-surface-200 dark:border-surface-700 rounded-lg bg-surface-50 dark:bg-surface-950">
                         <img 
                           src={branding.brandLogoUrl} 
                           alt="Brand logo preview" 
@@ -1276,7 +1276,7 @@ export default function TournamentSettings() {
                             e.currentTarget.nextElementSibling!.classList.remove('hidden');
                           }}
                         />
-                        <p className="hidden text-sm text-red-600 dark:text-red-400">
+                        <p className="hidden text-sm text-danger dark:text-danger">
                           Failed to load logo. Check the URL is correct and publicly accessible.
                         </p>
                       </div>
@@ -1284,7 +1284,7 @@ export default function TournamentSettings() {
                   )}
                 </div>
 
-                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="pt-4 border-t border-surface-200 dark:border-surface-700">
                   <Button
                     variant="primary"
                     onClick={handleSaveBranding}
@@ -1302,7 +1302,7 @@ export default function TournamentSettings() {
                     )}
                   </Button>
                   {brandingData?.hasOrgBranding && !branding.brandName && (
-                    <p className="mt-2 text-sm text-blue-600 dark:text-blue-400">
+                    <p className="mt-2 text-sm text-info dark:text-info">
                       Currently using organization-level branding as fallback
                     </p>
                   )}
@@ -1321,12 +1321,12 @@ export default function TournamentSettings() {
           aria-label={`Save status: ${getSaveStateLabel(saveState)}`}
           className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 ${
             saveState === 'dirty'
-              ? 'bg-yellow-100 dark:bg-yellow-900/80 border border-yellow-400 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200'
+              ? 'bg-warning/10 dark:bg-warning/80 border border-warning dark:border-warning text-warning dark:text-warning/20'
               : saveState === 'saving'
-                ? 'bg-blue-100 dark:bg-blue-900/80 border border-blue-400 dark:border-blue-700 text-blue-800 dark:text-blue-200'
+                ? 'bg-info/10 dark:bg-info/80 border border-info dark:border-info text-info dark:text-info/20'
                 : saveState === 'saved'
-                  ? 'bg-green-100 dark:bg-green-900/80 border border-green-400 dark:border-green-700 text-green-800 dark:text-green-200'
-                  : 'bg-red-100 dark:bg-red-900/80 border border-red-400 dark:border-red-700 text-red-800 dark:text-red-200'
+                  ? 'bg-success/10 dark:bg-success/80 border border-success dark:border-success text-success dark:text-success/20'
+                  : 'bg-danger/10 dark:bg-danger/80 border border-danger dark:border-danger text-danger dark:text-danger/20'
           }`}
         >
           {saveState === 'error' && <AlertCircle className="h-5 w-5 flex-shrink-0" />}

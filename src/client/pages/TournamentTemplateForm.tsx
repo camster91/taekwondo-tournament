@@ -199,7 +199,7 @@ export default function TournamentTemplateForm() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Optional notes about when to use this template"
-                className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                className="w-full rounded-lg border border-surface-200 px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-100"
                 rows={3}
               />
             </div>
@@ -210,7 +210,7 @@ export default function TournamentTemplateForm() {
                 id="sport"
                 value={sportProfileSlug}
                 onChange={(e) => setSportProfileSlug(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                className="w-full rounded-lg border border-surface-200 px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-100"
               >
                 <option value="taekwondo">Taekwondo</option>
                 <option value="karate">Karate</option>
@@ -240,7 +240,7 @@ export default function TournamentTemplateForm() {
                   })
                 }
               />
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              <p className="mt-1 text-xs text-surface-500 dark:text-surface-400">
                 Maximum number of competitors per division before splitting
               </p>
             </div>
@@ -248,33 +248,33 @@ export default function TournamentTemplateForm() {
         </Card>
 
         <Card>
-          <h3 className="mb-4 text-lg font-semibold text-slate-800 dark:text-slate-100">
+          <h3 className="mb-4 text-lg font-semibold text-surface-800 dark:text-surface-100">
             Tournament Rules
           </h3>
           <TournamentRulesEditor rules={rules} onChange={setRules} />
         </Card>
 
         <Card>
-          <h3 className="mb-4 text-lg font-semibold text-slate-800 dark:text-slate-100">
+          <h3 className="mb-4 text-lg font-semibold text-surface-800 dark:text-surface-100">
             Weight Classes ({weightClasses.length})
           </h3>
-          <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
+          <p className="mb-4 text-sm text-surface-600 dark:text-surface-300">
             Weight classes will be copied to tournaments created from this template.
           </p>
           <div className="space-y-2">
             {weightClasses.map((wc, index) => (
               <div
                 key={index}
-                className="flex items-center gap-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                className="flex items-center gap-4 rounded-lg border border-surface-200 p-3 dark:border-surface-700"
               >
-                <span className="font-medium text-slate-700 dark:text-slate-200">
+                <span className="font-medium text-surface-700 dark:text-surface-200">
                   {wc.name}
                 </span>
-                <span className="text-sm text-slate-500 dark:text-slate-400">
+                <span className="text-sm text-surface-500 dark:text-surface-400">
                   {wc.weightMinLbs}–{wc.weightMaxLbs} lbs
                 </span>
                 {wc.gender && (
-                  <span className="text-sm text-slate-500 dark:text-slate-400">
+                  <span className="text-sm text-surface-500 dark:text-surface-400">
                     {wc.gender === 'M' ? 'Male' : 'Female'}
                   </span>
                 )}

@@ -88,7 +88,7 @@ export default function SupportTickets() {
         title="Support Tickets"
         description="Review AI escalations and support requests."
         actions={
-          <Link to="/dashboard" className="text-sm text-slate-500 hover:text-slate-700">
+          <Link to="/dashboard" className="text-sm text-surface-500 hover:text-surface-700">
             <span className="inline-flex items-center">
               <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to dashboard
             </span>
@@ -111,16 +111,16 @@ export default function SupportTickets() {
         />
         <CardBody className="grid gap-3 md:grid-cols-3">
           <label className="grid gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-300">Search</span>
+            <span className="text-surface-600 dark:text-surface-300">Search</span>
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Ticket id, email, page, or message"
-              className="rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+              className="rounded-lg border border-surface-300/80 bg-white px-3 py-2 text-sm dark:border-surface-700 dark:bg-surface-950"
             />
           </label>
           <label className="grid gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-300">Status</span>
+            <span className="text-surface-600 dark:text-surface-300">Status</span>
             <Select
               value={statusFilter}
               onChange={(event) => setStatusFilter((event.target.value as SupportTicketStatus) || '')}
@@ -133,7 +133,7 @@ export default function SupportTickets() {
             </Select>
           </label>
           <label className="grid gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-300">Limit</span>
+            <span className="text-surface-600 dark:text-surface-300">Limit</span>
             <Select
               value={String(limit)}
               onChange={(event) => setLimit(Number(event.target.value))}
@@ -149,43 +149,43 @@ export default function SupportTickets() {
       <Card>
         <CardBody className="p-0">
           {isLoading ? (
-            <div className="px-4 py-12 text-center text-slate-500">Loading tickets...</div>
+            <div className="px-4 py-12 text-center text-surface-500">Loading tickets...</div>
           ) : filteredTickets.length === 0 ? (
-            <div className="px-4 py-12 text-center text-slate-500">
+            <div className="px-4 py-12 text-center text-surface-500">
               <div className="mx-auto mb-3 grid place-items-center">
-                <CircleX className="h-9 w-9 text-slate-400" />
+                <CircleX className="h-9 w-9 text-surface-400" />
               </div>
               <p>No tickets match your current filters.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                <thead className="bg-slate-50 dark:bg-slate-900/80">
+              <table className="min-w-full divide-y divide-surface-200 dark:divide-surface-800">
+                <thead className="bg-surface-50 dark:bg-surface-950/80">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Ticket</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Priority</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Last message</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Updated</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-surface-500">Ticket</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-surface-500">Contact</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-surface-500">Status</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-surface-500">Priority</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-surface-500">Last message</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-surface-500">Updated</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-surface-100 dark:divide-surface-800">
                   {filteredTickets.map((ticket) => (
                     <tr key={ticket.id}>
                       <td className="px-4 py-3 align-top">
-                        <div className="font-mono text-xs text-slate-700 dark:text-slate-300">{ticket.id}</div>
-                        <div className="mt-1 text-sm font-medium text-slate-900 dark:text-white">{ticket.subject}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">{ticket.source} {ticket.page ? `• ${ticket.page}` : ''}</div>
+                        <div className="font-mono text-xs text-surface-700 dark:text-surface-300">{ticket.id}</div>
+                        <div className="mt-1 text-sm font-medium text-surface-900 dark:text-white">{ticket.subject}</div>
+                        <div className="text-xs text-surface-500 dark:text-surface-400">{ticket.source} {ticket.page ? `• ${ticket.page}` : ''}</div>
                         {ticket.notes ? (
-                          <div className="mt-2 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          <div className="mt-2 rounded-md bg-surface-50 px-2 py-1 text-xs text-surface-600 dark:bg-surface-900 dark:text-surface-300">
                             <span className="font-medium">Notes:</span> {ticket.notes}
                           </div>
                         ) : null}
                       </td>
                       <td className="px-4 py-3 text-sm align-top">
-                        <div className="font-medium text-slate-900 dark:text-white">{ticket.requestedByName || '—'}</div>
-                        <div className="text-slate-500 dark:text-slate-400">{ticket.requestedByEmail || '—'}</div>
+                        <div className="font-medium text-surface-900 dark:text-white">{ticket.requestedByName || '—'}</div>
+                        <div className="text-surface-500 dark:text-surface-400">{ticket.requestedByEmail || '—'}</div>
                         <button
                           type="button"
                           onClick={() => {
@@ -207,7 +207,7 @@ export default function SupportTickets() {
                             id: ticket.id,
                             updates: { status: event.target.value as SupportTicketStatus },
                           })}
-                          className="rounded-md border border-slate-300 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+                          className="rounded-md border border-surface-300 px-2 py-1 text-sm dark:border-surface-700 dark:bg-surface-950"
                         >
                           <option value="open">Open</option>
                           <option value="in_progress">In Progress</option>
@@ -222,25 +222,25 @@ export default function SupportTickets() {
                             id: ticket.id,
                             updates: { priority: event.target.value as SupportTicketPriority },
                           })}
-                          className="rounded-md border border-slate-300 px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+                          className="rounded-md border border-surface-300 px-2 py-1 text-sm dark:border-surface-700 dark:bg-surface-950"
                         >
                           <option value="low">Low</option>
                           <option value="normal">Normal</option>
                           <option value="high">High</option>
                         </select>
                       </td>
-                      <td className="max-w-sm px-4 py-3 text-sm text-slate-700 dark:text-slate-300 align-top">
+                      <td className="max-w-sm px-4 py-3 text-sm text-surface-700 dark:text-surface-300 align-top">
                         <div>{ticket.lastUserMessage}</div>
                         {ticket.lastAssistantMessage ? (
                           <>
-                            <div className="mt-2 text-xs text-slate-500">AI reply:</div>
-                            <div className="rounded-md bg-emerald-50 p-2 text-xs text-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-200">
+                            <div className="mt-2 text-xs text-surface-500">AI reply:</div>
+                            <div className="rounded-md bg-success/10 p-2 text-xs text-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-200">
                               {ticket.lastAssistantMessage}
                             </div>
                           </>
                         ) : null}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-500 align-top">
+                      <td className="px-4 py-3 text-sm text-surface-500 align-top">
                         {new Date(ticket.updatedAt).toLocaleString()}
                         {ticket.status === 'resolved' || ticket.status === 'closed' ? (
                           <div className="mt-1 inline-flex items-center gap-1 text-emerald-500">

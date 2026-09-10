@@ -546,13 +546,13 @@ export default function Competitors() {
 
   const getBeltColor = (belt: string) => {
     const lower = belt.toLowerCase();
-    if (lower.includes('black')) return 'bg-gray-900 text-white';
-    if (lower.includes('red')) return 'bg-red-500 text-white';
-    if (lower.includes('blue')) return 'bg-blue-500 text-white';
-    if (lower.includes('green')) return 'bg-green-500 text-white';
-    if (lower.includes('yellow')) return 'bg-yellow-400 text-gray-900';
-    if (lower.includes('white')) return 'bg-white text-gray-900 border';
-    return 'bg-gray-200';
+    if (lower.includes('black')) return 'bg-surface-950 text-white';
+    if (lower.includes('red')) return 'bg-danger text-white';
+    if (lower.includes('blue')) return 'bg-info text-white';
+    if (lower.includes('green')) return 'bg-success text-white';
+    if (lower.includes('yellow')) return 'bg-warning text-surface-900';
+    if (lower.includes('white')) return 'bg-white text-surface-900 border';
+    return 'bg-surface-200';
   };
 
   const calculateAge = (dateOfBirth: string) => {
@@ -598,24 +598,24 @@ export default function Competitors() {
               {moreMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setMoreMenuOpen(false)} />
-                  <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg py-1 z-20">
+                  <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg shadow-lg py-1 z-20">
                     <button
                       onClick={() => { void handleExportExcel(); setMoreMenuOpen(false); }}
                       disabled={exportState === 'pending'}
-                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                      className="w-full text-left px-4 py-2 text-sm text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-2"
                     >
                       <FileSpreadsheet className="h-4 w-4" /> {exportState === 'pending' ? 'Exportingâ€¦' : 'Export'}
                     </button>
                     <button
                       onClick={() => { handleDownloadTemplate(); setMoreMenuOpen(false); }}
-                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                      className="w-full text-left px-4 py-2 text-sm text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-2"
                     >
                       <Download className="h-4 w-4" /> Template
                     </button>
                     <Link
                       to="/competitors/duplicates"
                       onClick={() => setMoreMenuOpen(false)}
-                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                      className="w-full text-left px-4 py-2 text-sm text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-2"
                     >
                       <UserPlus className="h-4 w-4" /> Find Duplicates
                     </Link>
@@ -647,12 +647,12 @@ export default function Competitors() {
 
       {/* Bulk action toolbar (slides in when something is selected) */}
       {selectedIds.size > 0 && (
-        <Toolbar slideIn className="border-primary-200 dark:border-primary-800/60 bg-gradient-to-r from-primary-50/80 via-white to-white dark:from-primary-950/40 dark:via-slate-900 dark:to-slate-900">
+        <Toolbar slideIn className="border-primary-200 dark:border-primary-800/60 bg-gradient-to-r from-primary-50/80 via-white to-white dark:from-primary-950/40 dark:via-surface-900 dark:to-surface-900">
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-full bg-primary-600 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
               {selectedIds.size}
             </div>
-            <div className="text-sm text-slate-700 dark:text-slate-200">
+            <div className="text-sm text-surface-700 dark:text-surface-200">
               {selectedIds.size} selected
             </div>
             <div className="ml-auto flex items-center gap-2">
@@ -713,7 +713,7 @@ export default function Competitors() {
               ))}
             </Select>
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 whitespace-nowrap">Belt</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-surface-600 whitespace-nowrap">Belt</span>
               <div className="flex-1 overflow-x-auto flex-nowrap flex items-center gap-1">
                 {aggregates && Object.entries(aggregates.byBelt || {}).map(([belt, count]) => {
                   const active = beltFilter.includes(belt);
@@ -725,7 +725,7 @@ export default function Competitors() {
                       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-all flex-shrink-0 ${
                         active
                           ? 'bg-primary-600 text-white shadow-sm'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          : 'bg-surface-100 dark:bg-surface-900 text-surface-700 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-800'
                       }`}
                     >
                       {belt} <span className={`tabular-nums ${active ? 'opacity-80' : 'opacity-60'}`}>{String(count)}</span>
@@ -738,7 +738,7 @@ export default function Competitors() {
 
           {/* Age range row */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Age</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-surface-600">Age</span>
             <Select
               aria-label="Minimum age filter"
               value={ageMin}
@@ -755,7 +755,7 @@ export default function Competitors() {
               <option value="18">18+</option>
               <option value="36">36+</option>
             </Select>
-            <span className="text-xs text-slate-600">–</span>
+            <span className="text-xs text-surface-600">–</span>
             <Select
               aria-label="Maximum age filter"
               value={ageMax}
@@ -778,7 +778,7 @@ export default function Competitors() {
                   setSearch(''); setBeltFilter([]); setGenderFilter('');
                   setAgeMin(''); setAgeMax(''); setSchoolFilter('');
                 }}
-                className="ml-auto text-xs text-slate-600 hover:text-slate-900 dark:hover:text-white flex items-center gap-1"
+                className="ml-auto text-xs text-surface-600 hover:text-surface-900 dark:hover:text-white flex items-center gap-1"
               >
                 <X className="h-3 w-3" /> Clear all
               </button>
@@ -800,7 +800,7 @@ export default function Competitors() {
                   <div key={c.id} className="mobile-card">
                     <div className="mobile-card-header">
                       <div>
-                        <div className="font-semibold text-gray-900 dark:text-white">
+                        <div className="font-semibold text-surface-900 dark:text-white">
                           {c.firstName} {c.lastName}
                         </div>
                         <span
@@ -814,14 +814,14 @@ export default function Competitors() {
                         <button
                           onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
                           aria-label={`Edit ${c.firstName} ${c.lastName}`}
-                          className="p-2 text-gray-600 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                          className="p-2 text-surface-600 hover:text-primary-600 hover:bg-surface-100 dark:hover:bg-surface-800 rounded-lg transition-colors"
                         >
                           <Edit className="h-5 w-5" />
                         </button>
                         <button
                           onClick={() => setDeleteTarget(c)}
                           aria-label={`Delete ${c.firstName} ${c.lastName}`}
-                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                          className="p-2 text-surface-600 hover:text-danger hover:bg-danger/10 dark:hover:bg-danger/20 rounded-lg transition-colors"
                         >
                           <Trash2 className="h-5 w-5" />
                         </button>
@@ -829,20 +829,20 @@ export default function Competitors() {
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm mt-3">
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Gender</span>
-                        <span className="text-gray-900 dark:text-white">{c.gender === 'M' ? 'Male' : 'Female'}</span>
+                        <span className="text-surface-600">Gender</span>
+                        <span className="text-surface-900 dark:text-white">{c.gender === 'M' ? 'Male' : 'Female'}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Age</span>
-                        <span className="text-gray-900 dark:text-white">{calculateAge(c.dateOfBirth)}</span>
+                        <span className="text-surface-600">Age</span>
+                        <span className="text-surface-900 dark:text-white">{calculateAge(c.dateOfBirth)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Weight</span>
-                        <span className="text-gray-900 dark:text-white">{c.weightLbs ? `${c.weightLbs} lbs` : '-'}</span>
+                        <span className="text-surface-600">Weight</span>
+                        <span className="text-surface-900 dark:text-white">{c.weightLbs ? `${c.weightLbs} lbs` : '-'}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">School</span>
-                        <span className="text-gray-900 dark:text-white truncate max-w-[100px]">{c.schoolDojang || '-'}</span>
+                        <span className="text-surface-600">School</span>
+                        <span className="text-surface-900 dark:text-white truncate max-w-[100px]">{c.schoolDojang || '-'}</span>
                       </div>
                     </div>
                   </div>
@@ -854,7 +854,7 @@ export default function Competitors() {
                 <DataTable>
                   <TableHead>
                     <tr>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left w-10">
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-left w-10">
                         <input
                           type="checkbox"
                           aria-label={selectedIds.size === filteredCompetitors?.length ? "Deselect all competitors" : "Select all competitors"}
@@ -867,16 +867,16 @@ export default function Competitors() {
                               setSelectedIds(new Set());
                             }
                           }}
-                          className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                          className="h-4 w-4 rounded border-surface-300 text-primary-600 focus:ring-primary-500"
                         />
                       </th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Name</th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left hidden lg:table-cell">School</th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-right w-12">Age</th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-right w-16">
-                        Weight <span className="text-slate-600 dark:text-slate-500 normal-case tracking-normal">(lbs)</span>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-left">Name</th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-left hidden lg:table-cell">School</th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-right w-12">Age</th>
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-right w-16">
+                        Weight <span className="text-surface-600 dark:text-surface-500 normal-case tracking-normal">(lbs)</span>
                       </th>
-                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-right w-16">
+                      <th className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-right w-16">
                         <span className="sr-only">Actions</span>
                       </th>
                     </tr>
@@ -886,7 +886,7 @@ export default function Competitors() {
                       <TableRow
                         key={c.id}
                         onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
-                        className={`border-b border-slate-100 dark:border-slate-800/60 cursor-pointer ${selectedIds.has(c.id) ? 'row-selected' : ''}`}
+                        className={`border-b border-surface-100 dark:border-surface-800/60 cursor-pointer ${selectedIds.has(c.id) ? 'row-selected' : ''}`}
                       >
                         <TableCell className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
                           <input
@@ -899,7 +899,7 @@ export default function Competitors() {
                               else next.delete(c.id);
                               setSelectedIds(next);
                             }}
-                            className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                            className="h-4 w-4 rounded border-surface-300 text-primary-600 focus:ring-primary-500"
                           />
                         </TableCell>
                         <TableCell className="px-2 py-2">
@@ -908,7 +908,7 @@ export default function Competitors() {
                               {c.firstName?.[0]}{c.lastName?.[0]}
                             </div>
                             <div className="min-w-0">
-                              <div className="text-sm font-medium text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                              <div className="text-sm font-medium text-surface-900 dark:text-white truncate flex items-center gap-1.5">
                                 <span className="truncate">{c.firstName} {c.lastName}</span>
                                 {isTestData(c) && (
                                   <Badge variant="warning" size="sm" title="Row seeded by Playwright e2e test">
@@ -920,24 +920,24 @@ export default function Competitors() {
                                 <span className={`pill ${getBeltColor(c.belt)} text-[10px]`}>
                                   {c.belt}{c.danRank && ` ${c.danRank}D`}
                                 </span>
-                                <span className="text-[10px] text-slate-600 lg:hidden truncate max-w-[140px]" title={c.schoolDojang || ''}>{c.schoolDojang || '—'}</span>
+                                <span className="text-[10px] text-surface-600 lg:hidden truncate max-w-[140px]" title={c.schoolDojang || ''}>{c.schoolDojang || '—'}</span>
                               </div>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell
-                          className="px-2 py-2 text-sm text-slate-600 dark:text-slate-400 max-w-[160px] truncate hidden lg:table-cell"
+                          className="px-2 py-2 text-sm text-surface-600 dark:text-surface-400 max-w-[160px] truncate hidden lg:table-cell"
                           title={c.schoolDojang || ''}
                         >
                           {c.schoolDojang || '—'}
                         </TableCell>
-                        <TableCell className="px-2 py-2 text-sm text-slate-600 dark:text-slate-300 tabular-nums text-right">{calculateAge(c.dateOfBirth)}</TableCell>
-                        <TableCell className="px-2 py-2 text-sm text-slate-600 dark:text-slate-300 tabular-nums text-right">{c.weightLbs ? `${c.weightLbs}` : <span className="text-slate-300">—</span>}</TableCell>
+                        <TableCell className="px-2 py-2 text-sm text-surface-600 dark:text-surface-300 tabular-nums text-right">{calculateAge(c.dateOfBirth)}</TableCell>
+                        <TableCell className="px-2 py-2 text-sm text-surface-600 dark:text-surface-300 tabular-nums text-right">{c.weightLbs ? `${c.weightLbs}` : <span className="text-surface-300">—</span>}</TableCell>
                         <TableCell className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
                             <Link to={`/competitors/${c.id}/profile`} title="View Profile">
                               <IconButton
-                                icon={<Users className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />}
+                                icon={<Users className="h-3.5 w-3.5 text-info dark:text-info" />}
                                 label={`View profile for ${c.firstName} ${c.lastName}`}
                                 variant="primary"
                                 size="sm"
@@ -983,7 +983,7 @@ export default function Competitors() {
           )}
         </CardBody>
         {data?.total > 0 && (
-          <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 flex items-center justify-between">
+          <div className="px-4 py-3 border-t border-surface-200 dark:border-surface-700 text-sm text-surface-500 dark:text-surface-400 flex items-center justify-between">
             <span>
               Showing {filteredCompetitors?.length || 0} of {data.total} competitors
             </span>
@@ -1009,7 +1009,7 @@ export default function Competitors() {
           <>
             <span className="block"><span className="font-semibold">{deleteTarget?.firstName} {deleteTarget?.lastName}</span> will be removed from any tournaments they're registered in. They go to the <span className="font-semibold text-primary-600 dark:text-primary-400">Trash</span> for 7 days, then are permanently purged.</span>
             {deleteError && (
-              <span role="alert" aria-live="assertive" className="mt-3 block rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+              <span role="alert" aria-live="assertive" className="mt-3 block rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger dark:border-danger/50 dark:bg-danger/20 dark:text-danger">
                 {deleteError} You can try again or cancel.
               </span>
             )}
@@ -1082,7 +1082,7 @@ export default function Competitors() {
             className="space-y-4"
           >
             {formError && (
-              <div role="alert" aria-live="assertive" className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300 flex items-start gap-2">
+              <div role="alert" aria-live="assertive" className="rounded-lg border border-danger/30 dark:border-danger/50 bg-danger/10 dark:bg-danger/20 px-3 py-2 text-sm text-danger dark:text-danger flex items-start gap-2">
                 <span className="font-semibold">⚠</span>
                 <span>{formError}</span>
               </div>
@@ -1090,7 +1090,7 @@ export default function Competitors() {
             <div className="form-grid">
               <div>
                 <Label>
-                  First Name <span className="text-red-500">*</span>
+                  First Name <span className="text-danger">*</span>
                 </Label>
                 <Input
                   type="text"
@@ -1101,7 +1101,7 @@ export default function Competitors() {
               </div>
               <div>
                 <Label>
-                  Last Name <span className="text-red-500">*</span>
+                  Last Name <span className="text-danger">*</span>
                 </Label>
                 <Input
                   type="text"
@@ -1115,7 +1115,7 @@ export default function Competitors() {
             <div className="form-grid">
               <div>
                 <Label>
-                  Gender <span className="text-red-500">*</span>
+                  Gender <span className="text-danger">*</span>
                 </Label>
                 <Select
                   value={formData.gender}
@@ -1128,7 +1128,7 @@ export default function Competitors() {
               </div>
               <div>
                 <Label>
-                  Date of Birth <span className="text-red-500">*</span>
+                  Date of Birth <span className="text-danger">*</span>
                 </Label>
                 <Input
                   type="date"
@@ -1142,7 +1142,7 @@ export default function Competitors() {
             <div className="form-grid">
               <div>
                 <Label>
-                  Belt <span className="text-red-500">*</span>
+                  Belt <span className="text-danger">*</span>
                 </Label>
                 <Select
                   value={formData.belt}
@@ -1177,7 +1177,7 @@ export default function Competitors() {
             <div className="form-grid">
               <div>
                 <Label>
-                  Weight (lbs) <span className="text-red-500">*</span>
+                  Weight (lbs) <span className="text-danger">*</span>
                 </Label>
                 <Input
                   type="number"
@@ -1229,8 +1229,8 @@ export default function Competitors() {
           }}
           title={
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <FileSpreadsheet className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <div className="p-2 bg-success/10 dark:bg-success/20 rounded-lg">
+                <FileSpreadsheet className="h-5 w-5 text-success dark:text-success" />
               </div>
               <span>Import Competitors</span>
             </div>
@@ -1258,12 +1258,12 @@ export default function Competitors() {
           }
         >
           {importError && (
-            <div role="alert" aria-live="assertive" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+            <div role="alert" aria-live="assertive" className="mb-4 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger dark:border-danger/50 dark:bg-danger/20 dark:text-danger">
               {importError}
             </div>
           )}
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-surface-600">
               Found {importData?.length} rows. Map the columns below:
             </p>
             <button
@@ -1293,7 +1293,7 @@ export default function Competitors() {
               <div key={key}>
                 <Label className="text-xs sm:text-sm">
                   {label}
-                  {required && <span className="text-red-500">*</span>}
+                  {required && <span className="text-danger">*</span>}
                 </Label>
                 <Select
                   value={(columnMapping as unknown as Record<string, string>)[key] || ''}
@@ -1315,7 +1315,7 @@ export default function Competitors() {
 
           {importData && importData.length > 0 && (
             <div className="mt-6">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">
+              <h3 className="text-sm font-medium text-surface-700 mb-2">
                 Preview (first 3 rows):
               </h3>
               <div className="overflow-x-auto scroll-hint -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -1323,7 +1323,7 @@ export default function Competitors() {
                   <TableHead>
                     <tr>
                       {Object.keys(importData[0]).slice(0, 4).map((key) => (
-                        <th key={key} className="px-2 py-1 text-left whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                        <th key={key} className="px-2 py-1 text-left whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400">
                           {key.length > 12 ? key.substring(0, 12) + '...' : key}
                         </th>
                       ))}

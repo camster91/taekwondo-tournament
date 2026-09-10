@@ -433,26 +433,26 @@ export default function TournamentDetail() {
 
   const getBeltColor = (belt: string) => {
     const lower = belt.toLowerCase();
-    if (lower.includes('black')) return 'bg-gray-900 text-white';
-    if (lower.includes('red')) return 'bg-red-500 text-white';
-    if (lower.includes('blue')) return 'bg-blue-500 text-white';
-    if (lower.includes('green')) return 'bg-green-500 text-white';
-    if (lower.includes('yellow')) return 'bg-yellow-400 text-gray-900';
-    if (lower.includes('white')) return 'bg-white text-gray-900 border';
-    return 'bg-gray-200';
+    if (lower.includes('black')) return 'bg-surface-950 text-white';
+    if (lower.includes('red')) return 'bg-danger text-white';
+    if (lower.includes('blue')) return 'bg-info text-white';
+    if (lower.includes('green')) return 'bg-success text-white';
+    if (lower.includes('yellow')) return 'bg-warning text-surface-900';
+    if (lower.includes('white')) return 'bg-white text-surface-900 border';
+    return 'bg-surface-200';
   };
 
   // P2-2: Payment status badge
   const getPaymentBadge = (status: string | null | undefined) => {
     switch (status) {
       case 'paid':
-        return { text: 'Paid', className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' };
+        return { text: 'Paid', className: 'bg-success/10 text-success dark:bg-success/20 dark:text-success' };
       case 'pending':
-        return { text: 'Pending', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' };
+        return { text: 'Pending', className: 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning' };
       case 'waived':
-        return { text: 'Waived', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' };
+        return { text: 'Waived', className: 'bg-info/10 text-info dark:bg-info/30 dark:text-info' };
       case 'failed':
-        return { text: 'Failed', className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' };
+        return { text: 'Failed', className: 'bg-danger/10 text-danger dark:bg-danger/20 dark:text-danger' };
       case 'not_required':
       default:
         return { text: '', className: '' }; // Don't show badge for not_required
@@ -496,7 +496,7 @@ export default function TournamentDetail() {
       <div>
         <Link
           to="/tournaments"
-          className="inline-flex items-center text-sm text-gray-600 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+          className="inline-flex items-center text-sm text-surface-600 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300"
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
           Back to Tournaments
@@ -560,60 +560,60 @@ export default function TournamentDetail() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link
           to={`/tournaments/${id}/director`}
-          className="group flex items-start gap-4 p-4 rounded-xl border-2 border-primary-200 dark:border-primary-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
+          className="group flex items-start gap-4 p-4 rounded-xl border-2 border-primary-200 dark:border-primary-800 bg-white dark:bg-surface-950 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
           <div className="flex-shrink-0 bg-primary-600 p-3 rounded-lg">
             <LayoutDashboard className="h-6 w-6 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-900 dark:text-slate-100">Director Dashboard</p>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Tournament control center</p>
+            <p className="font-semibold text-surface-900 dark:text-surface-100">Director Dashboard</p>
+            <p className="text-sm text-surface-600 dark:text-surface-400 mt-0.5">Tournament control center</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-primary-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-surface-600 group-hover:text-primary-600 transition-colors flex-shrink-0" />
         </Link>
 
         <Link
           to={`/checkin/${id}`}
-          className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
+          className="group flex items-start gap-4 p-4 rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-950 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="flex-shrink-0 bg-blue-500 p-3 rounded-lg">
+          <div className="flex-shrink-0 bg-info p-3 rounded-lg">
             <ClipboardCheck className="h-6 w-6 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-900 dark:text-slate-100">Check-In</p>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Verify competitor attendance</p>
+            <p className="font-semibold text-surface-900 dark:text-surface-100">Check-In</p>
+            <p className="text-sm text-surface-600 dark:text-surface-400 mt-0.5">Verify competitor attendance</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-blue-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-surface-600 group-hover:text-info transition-colors flex-shrink-0" />
         </Link>
 
         <Link
           to={`/scorekeeper/${id}`}
-          className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
+          className="group flex items-start gap-4 p-4 rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-950 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="flex-shrink-0 bg-green-500 p-3 rounded-lg">
+          <div className="flex-shrink-0 bg-success p-3 rounded-lg">
             <Timer className="h-6 w-6 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-900 dark:text-slate-100">Scorekeeper</p>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Record match results</p>
+            <p className="font-semibold text-surface-900 dark:text-surface-100">Scorekeeper</p>
+            <p className="text-sm text-surface-600 dark:text-surface-400 mt-0.5">Record match results</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-green-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-surface-600 group-hover:text-success transition-colors flex-shrink-0" />
         </Link>
 
         <a
           href={`/api/brackets/tournament/${id}/pdf`}
           target="_blank"
           rel="noopener noreferrer"
-          className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
+          className="group flex items-start gap-4 p-4 rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-950 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="flex-shrink-0 bg-purple-500 p-3 rounded-lg">
+          <div className="flex-shrink-0 bg-accent-500 p-3 rounded-lg">
             <FileDown className="h-6 w-6 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-900 dark:text-slate-100">Export Brackets</p>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Download all bracket PDFs</p>
+            <p className="font-semibold text-surface-900 dark:text-surface-100">Export Brackets</p>
+            <p className="text-sm text-surface-600 dark:text-surface-400 mt-0.5">Download all bracket PDFs</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-purple-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-surface-600 group-hover:text-accent-600 transition-colors flex-shrink-0" />
         </a>
 
         {tournament.publicSlug && (
@@ -622,46 +622,46 @@ export default function TournamentDetail() {
             target="_blank"
             rel="noopener noreferrer"
             download
-            className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
+            className="group flex items-start gap-4 p-4 rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-950 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
           >
             <div className="flex-shrink-0 bg-pink-500 p-3 rounded-lg">
               <FileDown className="h-6 w-6 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-slate-900 dark:text-slate-100">QR Code Poster</p>
-              <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Printable venue signage with QR codes</p>
+              <p className="font-semibold text-surface-900 dark:text-surface-100">QR Code Poster</p>
+              <p className="text-sm text-surface-600 dark:text-surface-400 mt-0.5">Printable venue signage with QR codes</p>
             </div>
-            <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-pink-600 transition-colors flex-shrink-0" />
+            <ArrowRight className="h-5 w-5 text-surface-600 group-hover:text-pink-600 transition-colors flex-shrink-0" />
           </a>
         )}
 
         <Link
           to={`/display/${id}`}
           target="_blank"
-          className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
+          className="group flex items-start gap-4 p-4 rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-950 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="flex-shrink-0 bg-yellow-500 p-3 rounded-lg">
+          <div className="flex-shrink-0 bg-warning p-3 rounded-lg">
             <Monitor className="h-6 w-6 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-900 dark:text-slate-100">Live Scoreboard</p>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Public display for spectators</p>
+            <p className="font-semibold text-surface-900 dark:text-surface-100">Live Scoreboard</p>
+            <p className="text-sm text-surface-600 dark:text-surface-400 mt-0.5">Public display for spectators</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-yellow-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-surface-600 group-hover:text-warning transition-colors flex-shrink-0" />
         </Link>
 
         <Link
           to={`/tournaments/${id}/results`}
-          className="group flex items-start gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
+          className="group flex items-start gap-4 p-4 rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-950 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
-          <div className="flex-shrink-0 bg-red-500 p-3 rounded-lg">
+          <div className="flex-shrink-0 bg-danger p-3 rounded-lg">
             <Medal className="h-6 w-6 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-900 dark:text-slate-100">Results</p>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">View standings and medals</p>
+            <p className="font-semibold text-surface-900 dark:text-surface-100">Results</p>
+            <p className="text-sm text-surface-600 dark:text-surface-400 mt-0.5">View standings and medals</p>
           </div>
-          <ArrowRight className="h-5 w-5 text-slate-600 group-hover:text-red-600 transition-colors flex-shrink-0" />
+          <ArrowRight className="h-5 w-5 text-surface-600 group-hover:text-danger transition-colors flex-shrink-0" />
         </Link>
       </div>
 
@@ -717,21 +717,21 @@ export default function TournamentDetail() {
             return (
               <div className={`p-4 rounded-lg border ${
                 isAtLimit 
-                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' 
-                  : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                  ? 'bg-danger/10 dark:bg-danger/20 border-danger/30 dark:border-danger/50' 
+                  : 'bg-warning/10 dark:bg-warning/20 border-warning/30 dark:border-warning'
               }`}>
                 <div className="flex items-start gap-3">
                   <AlertTriangle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${
-                    isAtLimit ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'
+                    isAtLimit ? 'text-danger dark:text-danger' : 'text-warning dark:text-warning'
                   }`} />
                   <div className="flex-1 min-w-0">
                     <h4 className={`font-medium mb-1 ${
-                      isAtLimit ? 'text-red-900 dark:text-red-100' : 'text-amber-900 dark:text-amber-100'
+                      isAtLimit ? 'text-danger dark:text-danger/10' : 'text-warning dark:text-warning/10'
                     }`}>
                       {isAtLimit ? 'Competitor Limit Reached' : 'Approaching Competitor Limit'}
                     </h4>
                     <p className={`text-sm ${
-                      isAtLimit ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'
+                      isAtLimit ? 'text-danger dark:text-danger' : 'text-warning dark:text-warning/30'
                     }`}>
                       Your {limits.name} plan allows {limits.competitors} competitors per tournament. 
                       You have {current} registered{isAtLimit ? ' and cannot add more until you upgrade' : ''}.
@@ -783,9 +783,9 @@ export default function TournamentDetail() {
 
       {/* Tournament Status Controls */}
       {tournament.status === 'registration' ? (
-        <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+        <div className="p-4 bg-success/10 dark:bg-success/20 border border-success/30 dark:border-success rounded-lg">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex items-center gap-2 text-green-700 dark:text-green-300 flex-1 min-w-0">
+            <div className="flex items-center gap-2 text-success dark:text-success/30 flex-1 min-w-0">
               <Globe className="h-5 w-5 flex-shrink-0" />
               <span className="font-medium whitespace-nowrap">Open for Registration</span>
               <a
@@ -793,7 +793,7 @@ export default function TournamentDetail() {
                 target="_blank"
                 rel="noopener noreferrer"
                 title={registrationUrl}
-                className="hidden sm:inline-flex text-sm font-mono text-green-700/80 dark:text-green-300/80 hover:text-green-900 dark:hover:text-green-100 hover:underline truncate min-w-0"
+                className="hidden sm:inline-flex text-sm font-mono text-success/80 dark:text-success/30/80 hover:text-success dark:hover:text-success/10 hover:underline truncate min-w-0"
               >
                 {registrationUrl}
               </a>
@@ -811,7 +811,7 @@ export default function TournamentDetail() {
                   setShowCloseRegistrationConfirm(true);
                 }}
                 loading={updateStatusMutation.isPending}
-                className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                className="text-danger hover:bg-danger/10 dark:hover:bg-danger/20"
               >
                 <Lock className="h-3.5 w-3.5" />
                 Close Registration
@@ -832,8 +832,8 @@ export default function TournamentDetail() {
           </div>
         </div>
       ) : tournament.status === 'active' || tournament.status === 'in_progress' || tournament.status === 'brackets' ? (
-        <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
-          <p className="text-sm text-yellow-800 dark:text-yellow-300 flex-1">
+        <div className="p-4 bg-warning/10 dark:bg-warning/20 border border-warning/30 dark:border-warning rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+          <p className="text-sm text-warning dark:text-warning/30 flex-1">
             Tournament is active. Mark as completed when all divisions are finished.
           </p>
           <div className="flex gap-2 flex-shrink-0">
@@ -858,8 +858,8 @@ export default function TournamentDetail() {
           </div>
         </div>
       ) : tournament.status === 'completed' ? (
-        <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
-          <p className="text-sm text-gray-600 dark:text-gray-400 flex-1">
+        <div className="p-4 bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+          <p className="text-sm text-surface-600 dark:text-surface-400 flex-1">
             This tournament is completed.
           </p>
           <Button
@@ -872,8 +872,8 @@ export default function TournamentDetail() {
           </Button>
         </div>
       ) : (
-        <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
-          <p className="text-sm text-gray-600 dark:text-gray-400 flex-1">
+        <div className="p-4 bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+          <p className="text-sm text-surface-600 dark:text-surface-400 flex-1">
             Open this tournament for public self-registration to share a signup link with competitors.
           </p>
           <Button
@@ -949,7 +949,7 @@ export default function TournamentDetail() {
                   <div key={reg.id}>
                     <div className="flex items-start justify-between mb-2">
                       <div>
-                        <div className="font-semibold text-gray-900 dark:text-white">
+                        <div className="font-semibold text-surface-900 dark:text-white">
                           {reg.competitor.firstName} {reg.competitor.lastName}
                         </div>
                         <span
@@ -970,25 +970,25 @@ export default function TournamentDetail() {
                         onClick={() => openRegistrationRemoval(reg)}
                       />
                     </div>
-                    <div className="text-sm text-gray-600 space-y-1">
+                    <div className="text-sm text-surface-600 space-y-1">
                       <div className="flex justify-between">
                         <span>Age</span>
-                        <span className="text-gray-900 dark:text-white">{reg.ageAtTournament || '-'}</span>
+                        <span className="text-surface-900 dark:text-white">{reg.ageAtTournament || '-'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Weight</span>
-                        <span className="text-gray-900 dark:text-white">
+                        <span className="text-surface-900 dark:text-white">
                           {reg.competitor.weightLbs ? `${reg.competitor.weightLbs} lbs` : '-'}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span>School</span>
-                        <span className="text-gray-900 dark:text-white truncate ml-4">
+                        <span className="text-surface-900 dark:text-white truncate ml-4">
                           {reg.competitor.schoolDojang || '-'}
                         </span>
                       </div>
                     </div>
-                    <div className="flex gap-4 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                    <div className="flex gap-4 mt-3 pt-3 border-t border-surface-100 dark:border-surface-700">
                       <button
                         disabled={updateRegistrationMutation.isPending || removeRegistrationMutation.isPending}
                         onClick={() =>
@@ -1002,8 +1002,8 @@ export default function TournamentDetail() {
                         }
                         className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.patterns
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
+                            ? 'bg-success/10 text-success dark:bg-success/20 dark:text-success'
+                            : 'bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-400'
                         }`}
                       >
                         {reg.patterns ? '✓ ' : ''}Patterns
@@ -1021,8 +1021,8 @@ export default function TournamentDetail() {
                         }
                         className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.sparring
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
+                            ? 'bg-success/10 text-success dark:bg-success/20 dark:text-success'
+                            : 'bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-400'
                         }`}
                       >
                         {reg.sparring ? '✓ ' : ''}Sparring
@@ -1037,21 +1037,21 @@ export default function TournamentDetail() {
                 <DataTable>
                   <TableHead>
                     <tr>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Name</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Age</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Belt</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">Weight</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-left">School</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-center">Payment</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-center">Patterns</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 text-center">Sparring</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-left">Name</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-left">Age</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-left">Belt</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-left">Weight</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-left">School</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-center">Payment</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-center">Patterns</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-center">Sparring</th>
                       <th className="px-4 py-2.5 w-10"></th>
                     </tr>
                   </TableHead>
-                  <TableBody className="bg-white dark:bg-slate-800">
+                  <TableBody className="bg-white dark:bg-surface-900">
                     {filteredRegistrations.map((reg) => (
                       <TableRow key={reg.id}>
-                        <TableCell className="font-medium text-slate-900 dark:text-white">
+                        <TableCell className="font-medium text-surface-900 dark:text-white">
                           {reg.competitor.firstName} {reg.competitor.lastName}
                         </TableCell>
                         <TableCell>{reg.ageAtTournament || '-'}</TableCell>
@@ -1079,7 +1079,7 @@ export default function TournamentDetail() {
                                 {badge.text}
                               </span>
                             ) : (
-                              <span className="text-gray-400 text-xs">—</span>
+                              <span className="text-surface-400 text-xs">—</span>
                             );
                           })()}
                         </TableCell>
@@ -1167,7 +1167,7 @@ export default function TournamentDetail() {
           <>
             <span className="block">Remove {deleteTarget?.competitor.firstName} {deleteTarget?.competitor.lastName} from this tournament?</span>
             {removeError && (
-              <span role="alert" aria-live="assertive" className="mt-3 block rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+              <span role="alert" aria-live="assertive" className="mt-3 block rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger dark:border-danger/50 dark:bg-danger/20 dark:text-danger">
                 {removeError} You can try again or cancel.
               </span>
             )}
@@ -1187,7 +1187,7 @@ export default function TournamentDetail() {
           <>
             <span className="block">Are you sure you want to close registration? No new public signups will be accepted.</span>
             {closeStatusError && (
-              <span role="alert" aria-live="assertive" className="mt-3 block rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+              <span role="alert" aria-live="assertive" className="mt-3 block rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger dark:border-danger/50 dark:bg-danger/20 dark:text-danger">
                 {closeStatusError} You can try again or cancel.
               </span>
             )}
@@ -1214,7 +1214,7 @@ export default function TournamentDetail() {
           panelClassName="max-h-[90vh]"
           noBodyPadding
         >
-              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="p-6 border-b border-surface-200 dark:border-surface-700">
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div>
                     <label htmlFor="tournament-search-add-competitors" className="sr-only">
@@ -1238,9 +1238,9 @@ export default function TournamentDetail() {
                         checked={registerPatterns}
                         disabled={bulkRegisterMutation.isPending}
                         onChange={(e) => setRegisterPatterns(e.target.checked)}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        className="rounded border-surface-300 text-primary-600 focus:ring-primary-500"
                       />
-                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Patterns</span>
+                      <span className="ml-2 text-sm text-surface-700 dark:text-surface-300">Patterns</span>
                     </label>
                     <label className="flex items-center cursor-pointer">
                       <input
@@ -1248,14 +1248,14 @@ export default function TournamentDetail() {
                         checked={registerSparring}
                         disabled={bulkRegisterMutation.isPending}
                         onChange={(e) => setRegisterSparring(e.target.checked)}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        className="rounded border-surface-300 text-primary-600 focus:ring-primary-500"
                       />
-                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Sparring</span>
+                      <span className="ml-2 text-sm text-surface-700 dark:text-surface-300">Sparring</span>
                     </label>
                   </div>
                 </div>
               </div>
-              <div className="p-4 overflow-y-auto max-h-96 bg-gray-50 dark:bg-gray-900/50">
+              <div className="p-4 overflow-y-auto max-h-96 bg-surface-50 dark:bg-surface-950/50">
                 {filteredAvailable.length > 0 ? (
                   <div className="space-y-1">
                     <div className="flex items-center justify-between mb-3">
@@ -1275,7 +1275,7 @@ export default function TournamentDetail() {
                           : `Select All (${filteredAvailable.length})`}
                       </button>
                       {modalSearch && (
-                        <span className="text-xs text-gray-600">
+                        <span className="text-xs text-surface-600">
                           Showing {filteredAvailable.length} of {availableCompetitors.length}
                         </span>
                       )}
@@ -1286,7 +1286,7 @@ export default function TournamentDetail() {
                         className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${
                           selectedCompetitors.includes(c.id)
                             ? 'bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800'
-                            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
+                            : 'bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 hover:border-primary-300 dark:hover:border-primary-600'
                         }`}
                       >
                         <input
@@ -1300,9 +1300,9 @@ export default function TournamentDetail() {
                                 : selectedCompetitors.filter((id) => id !== c.id)
                             )
                           }
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          className="rounded border-surface-300 text-primary-600 focus:ring-primary-500"
                         />
-                        <span className="ml-3 flex-1 font-medium text-gray-900 dark:text-white">
+                        <span className="ml-3 flex-1 font-medium text-surface-900 dark:text-white">
                           {c.firstName} {c.lastName}
                         </span>
                         <span
@@ -1313,7 +1313,7 @@ export default function TournamentDetail() {
                           {c.belt}
                         </span>
                         {c.schoolDojang && (
-                          <span className="ml-2 text-sm text-gray-600 dark:text-gray-400 hidden sm:inline truncate max-w-[120px]">
+                          <span className="ml-2 text-sm text-surface-600 dark:text-surface-400 hidden sm:inline truncate max-w-[120px]">
                             {c.schoolDojang}
                           </span>
                         )}
@@ -1335,9 +1335,9 @@ export default function TournamentDetail() {
                   />
                 )}
               </div>
-              <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 space-y-3">
+              <div className="p-4 border-t border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 space-y-3">
                 {bulkRegisterError && (
-                  <div role="alert" aria-live="assertive" className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                  <div role="alert" aria-live="assertive" className="w-full rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger dark:border-danger/50 dark:bg-danger/20 dark:text-danger">
                     <div className="flex items-start gap-2">
                       <div className="flex-1">
                         {bulkRegisterError} Your selections are preserved; you can try again or cancel.
@@ -1359,8 +1359,8 @@ export default function TournamentDetail() {
                   </div>
                 )}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
-                    <span className="font-semibold text-gray-900 dark:text-white">{selectedCompetitors.length}</span> competitors selected
+                  <span className="text-sm text-surface-600 dark:text-surface-400">
+                    <span className="font-semibold text-surface-900 dark:text-white">{selectedCompetitors.length}</span> competitors selected
                   </span>
                   <div className="flex gap-3 w-full sm:w-auto">
                   <Button
@@ -1444,9 +1444,9 @@ function BroadcastModal({
     <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-label="Email registered parents">
       <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={onClose} />
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+        <div className="relative bg-white dark:bg-surface-900 rounded-lg shadow-xl max-w-2xl w-full">
+          <div className="p-6 border-b border-surface-200 dark:border-surface-700 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-surface-900 dark:text-white flex items-center gap-2">
               <Mail className="h-5 w-5 text-primary-500" />
               Email registered parents
             </h2>
@@ -1455,30 +1455,30 @@ function BroadcastModal({
           <div className="p-6 space-y-4">
             <div className="rounded-md bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700 p-3 text-sm text-primary-900 dark:text-primary-200">
               <strong>{recipientCount}</strong> parent{recipientCount === 1 ? '' : 's'} have an email on file.
-              {testMode && <span className="ml-1 text-amber-700 dark:text-amber-300">Test mode: no one will receive this until you uncheck "Send as test".</span>}
+              {testMode && <span className="ml-1 text-warning dark:text-warning/30">Test mode: no one will receive this until you uncheck "Send as test".</span>}
             </div>
             <div>
-              <label htmlFor="bc-subject" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subject</label>
+              <label htmlFor="bc-subject" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Subject</label>
               <input
                 id="bc-subject"
                 type="text"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 placeholder="Reminder: Tournament starts Saturday at 9am"
-                className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+                className="w-full h-10 px-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-950 text-sm text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
               />
             </div>
             <div>
-              <label htmlFor="bc-body" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Message</label>
+              <label htmlFor="bc-body" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Message</label>
               <textarea
                 id="bc-body"
                 rows={8}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder={'Hi {{parent_first_name}},\n\n{{competitor_first_name}} is registered for {{tournament_name}} on {{tournament_date}} at {{tournament_location}}.\n\nPlease arrive 30 minutes early.'}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 font-mono placeholder:text-slate-400 placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+                className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-950 text-sm text-surface-900 dark:text-surface-100 font-mono placeholder:text-surface-400 placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
               />
-              <details className="text-xs text-gray-500 mt-1">
+              <details className="text-xs text-surface-500 mt-1">
                 <summary className="cursor-pointer font-medium">Available merge fields</summary>
                 <div className="mt-1 font-mono">
                   {`{{tournament_name}}  {{tournament_date}}  {{tournament_location}}`}<br/>
@@ -1487,16 +1487,16 @@ function BroadcastModal({
                 </div>
               </details>
             </div>
-            <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <label className="flex items-start gap-2 text-sm text-surface-700 dark:text-surface-300">
               <input
                 type="checkbox"
                 checked={testMode}
                 onChange={(e) => setTestMode(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                className="mt-1 h-4 w-4 rounded border-surface-300 text-primary-600 focus:ring-primary-500"
               />
               <span>
                 <span className="font-medium">Send as test (no emails go out)</span>
-                <span className="block text-xs text-gray-500">Recommended: preview the merge before blasting {recipientCount} parents.</span>
+                <span className="block text-xs text-surface-500">Recommended: preview the merge before blasting {recipientCount} parents.</span>
               </span>
             </label>
 
@@ -1506,8 +1506,8 @@ function BroadcastModal({
                 aria-live="polite"
                 className={`rounded-md p-3 text-sm flex items-start gap-2 ${
                   result.failures > 0
-                    ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-300'
-                    : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-green-800 dark:text-green-300'
+                    ? 'bg-warning/10 dark:bg-warning/20 border border-warning/30 dark:border-warning text-warning dark:text-warning/30'
+                    : 'bg-success/10 dark:bg-success/20 border border-success/30 dark:border-success text-success dark:text-success/30'
                 }`}
               >
                 <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
@@ -1518,12 +1518,12 @@ function BroadcastModal({
               </div>
             )}
             {mutation.error && (
-              <div role="alert" className="rounded-md p-3 text-sm bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300">
+              <div role="alert" className="rounded-md p-3 text-sm bg-danger/10 dark:bg-danger/20 border border-danger/30 dark:border-danger text-danger dark:text-danger">
                 {mutation.error.message}
               </div>
             )}
           </div>
-          <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row gap-3">
+          <div className="p-6 border-t border-surface-200 dark:border-surface-700 flex flex-col sm:flex-row gap-3">
             <Button variant="secondary" className="flex-1 sm:flex-none" onClick={onClose}>Close</Button>
             <Button
               variant="primary"
@@ -1613,43 +1613,43 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
         title="Tournament day"
         description="Live operational view · auto-refreshes every 10s"
         action={
-          <span className="flex items-center gap-1.5 text-xs text-slate-600">
+          <span className="flex items-center gap-1.5 text-xs text-surface-600">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
           </span>
         }
       />
       <CardBody className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {/* Check-in card with progress bar */}
-        <div className="lg:col-span-2 p-4 rounded-xl bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-slate-900/20 border border-slate-200/60 dark:border-slate-800">
+        <div className="lg:col-span-2 p-4 rounded-xl bg-gradient-to-br from-surface-50 to-white dark:from-surface-900/40 dark:to-surface-900/20 border border-surface-200/60 dark:border-surface-800">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Check-in</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-surface-600">Check-in</div>
               <div className="text-2xl font-bold tabular-nums mt-0.5">
-                <span className="text-slate-900 dark:text-white">{data.checkIn.checkedIn}</span>
-                <span className="text-slate-600"> / {data.checkIn.total}</span>
+                <span className="text-surface-900 dark:text-white">{data.checkIn.checkedIn}</span>
+                <span className="text-surface-600"> / {data.checkIn.total}</span>
               </div>
             </div>
             <div className="text-right">
-              <div className="text-3xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+              <div className="text-3xl font-bold tabular-nums text-success dark:text-emerald-400">
                 {checkInPct}%
               </div>
-              <div className="text-[10px] text-slate-600 uppercase tracking-wider">complete</div>
+              <div className="text-[10px] text-surface-600 uppercase tracking-wider">complete</div>
             </div>
           </div>
-          <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+          <div className="h-2 bg-surface-200 dark:bg-surface-900 rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-700"
               style={{ width: `${checkInPct}%` }}
             />
           </div>
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-600">
-            <span><strong className="text-slate-900 dark:text-white tabular-nums">{data.checkIn.checkedIn}</strong> checked in</span>
-            <span className="text-slate-300">·</span>
-            <span><strong className="text-amber-600 dark:text-amber-400 tabular-nums">{data.checkIn.notCheckedIn}</strong> not yet</span>
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-surface-600">
+            <span><strong className="text-surface-900 dark:text-white tabular-nums">{data.checkIn.checkedIn}</strong> checked in</span>
+            <span className="text-surface-300">·</span>
+            <span><strong className="text-warning dark:text-warning tabular-nums">{data.checkIn.notCheckedIn}</strong> not yet</span>
             {data.checkIn.weightMismatches > 0 && (
               <>
-                <span className="text-slate-300">·</span>
-                <span className="text-red-600 dark:text-red-400 font-medium">
+                <span className="text-surface-300">·</span>
+                <span className="text-danger dark:text-danger font-medium">
                   <AlertTriangle className="inline h-3 w-3 mr-0.5" />
                   {data.checkIn.weightMismatches} weight {data.checkIn.weightMismatches === 1 ? 'mismatch' : 'mismatches'}
                 </span>
@@ -1659,11 +1659,11 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
         </div>
 
         {/* Matches stat */}
-        <div className="p-4 rounded-xl bg-gradient-to-br from-primary-50 to-white dark:from-primary-950/30 dark:to-slate-900/20 border border-primary-200/60 dark:border-primary-900/40">
+        <div className="p-4 rounded-xl bg-gradient-to-br from-primary-50 to-white dark:from-primary-950/30 dark:to-surface-900/20 border border-primary-200/60 dark:border-primary-900/40">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-primary-600 dark:text-primary-400">Matches</div>
           <div className="text-2xl font-bold tabular-nums mt-0.5">
-            <span className="text-slate-900 dark:text-white">{data.matches.completed}</span>
-            <span className="text-slate-600"> / {data.matches.total}</span>
+            <span className="text-surface-900 dark:text-white">{data.matches.completed}</span>
+            <span className="text-surface-600"> / {data.matches.total}</span>
           </div>
           <div className="mt-2 h-1.5 bg-primary-100 dark:bg-primary-950 rounded-full overflow-hidden">
             <div
@@ -1671,23 +1671,23 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
               style={{ width: `${data.matches.total > 0 ? (data.matches.completed / data.matches.total) * 100 : 0}%` }}
             />
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-600">
             {data.matches.inProgress > 0 && (
-              <span className="text-amber-600 dark:text-amber-400 font-medium">
+              <span className="text-warning dark:text-warning font-medium">
                 {data.matches.inProgress} live
               </span>
             )}
             <span>{data.matches.ready} ready</span>
-            <span className="text-slate-600">{data.matches.pending} pending</span>
+            <span className="text-surface-600">{data.matches.pending} pending</span>
           </div>
         </div>
       </CardBody>
 
       {/* By ring + Up next */}
       {data.upNext && data.upNext.length > 0 && (
-        <div className="border-t border-slate-200 dark:border-slate-800 px-5 py-4">
+        <div className="border-t border-surface-200 dark:border-surface-800 px-5 py-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Up next by ring</h3>
+            <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Up next by ring</h3>
             <Link
               to={`/display/${tournamentId}`}
               target="_blank"
@@ -1698,13 +1698,13 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {data.upNext.map((u) => (
-              <div key={u.ring} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
+              <div key={u.ring} className="p-3 rounded-lg bg-surface-50 dark:bg-surface-900/40 border border-surface-200/60 dark:border-surface-800">
                 <div className="flex items-center gap-2 mb-1.5">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Ring {u.ring}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-surface-600">Ring {u.ring}</span>
                 </div>
-                <div className="text-xs text-slate-600 dark:text-slate-300 truncate">{u.division}</div>
-                <div className="text-[11px] text-slate-600 mt-0.5">Match #{u.matchNumber}</div>
+                <div className="text-xs text-surface-600 dark:text-surface-300 truncate">{u.division}</div>
+                <div className="text-[11px] text-surface-600 mt-0.5">Match #{u.matchNumber}</div>
               </div>
             ))}
           </div>
@@ -1713,25 +1713,25 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
 
       {/* Weight mismatch alert list */}
       {data.checkIn.weightMismatchDetails && data.checkIn.weightMismatchDetails.length > 0 && (
-        <div className="border-t border-slate-200 dark:border-slate-800 px-5 py-4 bg-red-50/30 dark:bg-red-950/10">
+        <div className="border-t border-surface-200 dark:border-surface-800 px-5 py-4 bg-danger/10/30 dark:bg-danger/10">
           <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="h-4 w-4 text-red-500" />
-            <h3 className="text-sm font-semibold text-red-700 dark:text-red-300">Weight mismatches to review</h3>
+            <AlertTriangle className="h-4 w-4 text-danger" />
+            <h3 className="text-sm font-semibold text-danger dark:text-danger">Weight mismatches to review</h3>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             {data.checkIn.weightMismatchDetails.map((m) => (
-              <div key={m.registrationId} className="flex items-center justify-between px-3 py-2 rounded-md bg-white dark:bg-slate-900 border border-red-200/60 dark:border-red-900/40">
+              <div key={m.registrationId} className="flex items-center justify-between px-3 py-2 rounded-md bg-white dark:bg-surface-950 border border-danger/30/60 dark:border-danger/40">
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-slate-900 dark:text-white truncate">{m.name}</div>
-                  <div className="text-slate-600 truncate">{m.school || '—'}</div>
+                  <div className="font-medium text-surface-900 dark:text-white truncate">{m.name}</div>
+                  <div className="text-surface-600 truncate">{m.school || '—'}</div>
                 </div>
                 <div className="text-right tabular-nums ml-2">
-                  <div className="text-[11px] text-slate-600">
+                  <div className="text-[11px] text-surface-600">
                     <span className="line-through opacity-60">{m.weightAtRegistration}</span>
                     {' → '}
-                    <span className="text-slate-900 dark:text-white">{m.checkInWeight}</span>
+                    <span className="text-surface-900 dark:text-white">{m.checkInWeight}</span>
                   </div>
-                  <div className={`text-[11px] font-semibold ${m.delta > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                  <div className={`text-[11px] font-semibold ${m.delta > 0 ? 'text-warning dark:text-warning' : 'text-info dark:text-info'}`}>
                     {m.delta > 0 ? '+' : ''}{m.delta.toFixed(1)} lbs
                   </div>
                 </div>

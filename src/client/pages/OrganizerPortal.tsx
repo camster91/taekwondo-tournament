@@ -66,7 +66,7 @@ export default function OrganizerPortal() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-surface-50 to-surface-100 dark:from-surface-900 dark:to-surface-800">
         <Spinner size="lg" />
       </div>
     );
@@ -74,10 +74,10 @@ export default function OrganizerPortal() {
 
   if (error || !organization) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-surface-50 to-surface-100 dark:from-surface-900 dark:to-surface-800 px-4">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Events Not Found</h1>
-          <p className="mt-2 text-slate-600 dark:text-slate-400">
+          <h1 className="text-2xl font-bold text-surface-900 dark:text-white">Events Not Found</h1>
+          <p className="mt-2 text-surface-600 dark:text-surface-400">
             We couldn't find any published events for this organizer.
           </p>
           <Link
@@ -94,9 +94,9 @@ export default function OrganizerPortal() {
   const brandColor = organization.brandPrimaryColor || '#DC2626';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+    <div className="min-h-screen bg-gradient-to-br from-surface-50 to-surface-100 dark:from-surface-900 dark:to-surface-800">
       {/* Header */}
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-700 dark:bg-slate-800/80">
+      <header className="border-b border-surface-200 bg-white/80 backdrop-blur dark:border-surface-700 dark:bg-surface-900/80">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center gap-4">
             {organization.brandLogoUrl && (
@@ -107,10 +107,10 @@ export default function OrganizerPortal() {
               />
             )}
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              <h1 className="text-2xl font-bold text-surface-900 dark:text-white">
                 {organization.name}
               </h1>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
+              <p className="text-sm text-surface-600 dark:text-surface-400">
                 Tournament Events
               </p>
             </div>
@@ -121,12 +121,12 @@ export default function OrganizerPortal() {
       {/* Events Grid */}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {events.length === 0 ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-12 text-center dark:border-slate-700 dark:bg-slate-800">
-            <Calendar className="mx-auto h-12 w-12 text-slate-400" />
-            <h2 className="mt-4 text-lg font-semibold text-slate-900 dark:text-white">
+          <div className="rounded-lg border border-surface-200 bg-white p-12 text-center dark:border-surface-700 dark:bg-surface-900">
+            <Calendar className="mx-auto h-12 w-12 text-surface-400" />
+            <h2 className="mt-4 text-lg font-semibold text-surface-900 dark:text-white">
               No Upcoming Events
             </h2>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+            <p className="mt-2 text-sm text-surface-600 dark:text-surface-400">
               Check back soon for upcoming tournament events.
             </p>
           </div>
@@ -136,7 +136,7 @@ export default function OrganizerPortal() {
               <Link
                 key={event.id}
                 to={`/events/${orgSlug}/${event.slug}`}
-                className="group relative overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-all hover:shadow-lg dark:border-slate-700 dark:bg-slate-800"
+                className="group relative overflow-hidden rounded-lg border border-surface-200 bg-white shadow-sm transition-all hover:shadow-lg dark:border-surface-700 dark:bg-surface-900"
               >
                 {/* Status Badge */}
                 {event.status === 'registration' && (
@@ -149,13 +149,13 @@ export default function OrganizerPortal() {
                 )}
 
                 <div className="p-6">
-                  <h3 className="text-lg font-semibold text-slate-900 group-hover:text-primary-600 dark:text-white dark:group-hover:text-primary-400">
+                  <h3 className="text-lg font-semibold text-surface-900 group-hover:text-primary-600 dark:text-white dark:group-hover:text-primary-400">
                     {event.name}
                   </h3>
 
                   <div className="mt-4 space-y-2">
                     {/* Date */}
-                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                    <div className="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
                       <Calendar className="h-4 w-4" />
                       <span>{new Date(event.date).toLocaleDateString('en-US', {
                         weekday: 'short',
@@ -167,14 +167,14 @@ export default function OrganizerPortal() {
 
                     {/* Location */}
                     {event.location && (
-                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                      <div className="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
                         <MapPin className="h-4 w-4" />
                         <span>{event.location}</span>
                       </div>
                     )}
 
                     {/* Registration Count */}
-                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                    <div className="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
                       <Users className="h-4 w-4" />
                       <span>{event.registrationCount} registered</span>
                     </div>

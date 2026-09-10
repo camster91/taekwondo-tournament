@@ -18,25 +18,25 @@ function LegalShell({ title, children }: { title: string; children: React.ReactN
   }, [title]);
 
   return (
-    <main className="min-h-screen bg-[#f7f5f0] text-slate-900">
-      <div className="relative overflow-hidden border-b border-slate-900/10 bg-[#0c1d28] text-white">
+    <main className="min-h-screen bg-[#f7f5f0] text-surface-900">
+      <div className="relative overflow-hidden border-b border-surface-900/10 bg-[#0c1d28] text-white">
         <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, #e8a73c 0, transparent 30%), radial-gradient(circle at 85% 30%, #5b8c84 0, transparent 35%)' }} />
         <div className="relative mx-auto flex max-w-5xl items-center justify-between px-5 py-6 sm:px-8">
-          <Link to="/" aria-label="Bowin home" className="rounded focus:outline-none focus:ring-2 focus:ring-amber-300">
+          <Link to="/" aria-label="Bowin home" className="rounded focus:outline-none focus:ring-2 focus:ring-warning/30">
             <BowinLogo inverse showDescriptor />
           </Link>
-          <Link to="/" className="text-sm font-semibold text-white/85 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-amber-300">
+          <Link to="/" className="text-sm font-semibold text-white/85 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-warning/30">
             Back to Bowin
           </Link>
         </div>
         <div className="relative mx-auto max-w-5xl px-5 pb-14 pt-8 sm:px-8 sm:pb-16">
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Legal</p>
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-warning/30">Legal</p>
           <h1 className="max-w-3xl font-serif text-4xl font-semibold tracking-tight sm:text-5xl">{title}</h1>
           <p className="mt-5 text-sm text-white/70">Effective {effectiveDate}</p>
         </div>
       </div>
       <article className="mx-auto max-w-4xl px-5 py-12 sm:px-8 sm:py-16">
-        <div className="rounded-3xl border border-slate-900/10 bg-white px-6 py-8 shadow-[0_20px_70px_rgba(12,29,40,0.08)] sm:px-12 sm:py-12">
+        <div className="rounded-3xl border border-surface-900/10 bg-white px-6 py-8 shadow-[0_20px_70px_rgba(12,29,40,0.08)] sm:px-12 sm:py-12">
           {children}
         </div>
       </article>
@@ -46,21 +46,21 @@ function LegalShell({ title, children }: { title: string; children: React.ReactN
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border-t border-slate-200 py-8 first:border-t-0 first:pt-0">
-      <h2 className="font-serif text-2xl font-semibold tracking-tight text-slate-950">{title}</h2>
-      <div className="mt-4 space-y-4 text-[15px] leading-7 text-slate-700">{children}</div>
+    <section className="border-t border-surface-200 py-8 first:border-t-0 first:pt-0">
+      <h2 className="font-serif text-2xl font-semibold tracking-tight text-surface-950">{title}</h2>
+      <div className="mt-4 space-y-4 text-[15px] leading-7 text-surface-700">{children}</div>
     </section>
   );
 }
 
 function LegalList({ children }: { children: React.ReactNode }) {
-  return <ul className="list-disc space-y-2 pl-5 marker:text-amber-700">{children}</ul>;
+  return <ul className="list-disc space-y-2 pl-5 marker:text-warning">{children}</ul>;
 }
 
 function PrivacyNotice() {
   return (
     <LegalShell title="Privacy Notice">
-      <p className="mb-8 rounded-2xl bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-950">
+      <p className="mb-8 rounded-2xl bg-warning/10 px-5 py-4 text-sm leading-6 text-warning">
         Bowin is tournament-management software for martial-arts event organizers. This notice explains how {operator} handles personal information through Bowin.
       </p>
       <Section title="1. Scope and roles">
@@ -122,7 +122,7 @@ function PrivacyNotice() {
 function TournamentTerms() {
   return (
     <LegalShell title="Tournament Platform Terms">
-      <p className="mb-8 rounded-2xl bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-950">These terms govern an organizer's access to and use of Bowin. They are not a participant waiver or release.</p>
+      <p className="mb-8 rounded-2xl bg-warning/10 px-5 py-4 text-sm leading-6 text-warning">These terms govern an organizer's access to and use of Bowin. They are not a participant waiver or release.</p>
       <Section title="1. Agreement and scope">
         <p>These Tournament Platform Terms govern an organizer's access to and use of Bowin. By creating an organizer account, accepting an order form, or using Bowin for an event, the organizer agrees to these terms on behalf of itself and its authorized users.</p>
         <p>If an order form, pilot agreement, or other signed agreement conflicts with these terms, that signed agreement controls to the extent of the conflict.</p>

@@ -107,11 +107,11 @@ export default function CheckRegistration() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+    <div className="min-h-screen bg-surface-50 dark:bg-surface-950 py-12 px-4">
       <div className="max-w-md mx-auto">
         <Link
           to="/register"
-          className="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4"
+          className="inline-flex items-center text-sm text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to register
@@ -120,10 +120,10 @@ export default function CheckRegistration() {
           <CardBody className="p-8">
             <div className="text-center mb-6">
               <Search className="h-12 w-12 text-primary-500 mx-auto mb-3" aria-hidden="true" />
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              <h1 className="text-2xl font-bold text-surface-900 dark:text-white mb-2">
                 Look up your registration
               </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-surface-600 dark:text-surface-400">
                 Enter the tournament and your kid's details to find your confirmation code.
               </p>
             </div>
@@ -141,7 +141,7 @@ export default function CheckRegistration() {
                   required
                   aria-required="true"
                   disabled={tournamentsLoading || Boolean(tournamentsError)}
-                  className="h-10 px-3 pr-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all appearance-none w-full"
+                  className="h-10 px-3 pr-10 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-950 text-sm text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all appearance-none w-full"
                 >
                   <option value="">-- Select a Tournament --</option>
                   {tournaments.map((t) => (
@@ -201,7 +201,7 @@ export default function CheckRegistration() {
                   id="lookup-error"
                   role="alert"
                   tabIndex={-1}
-                  className="flex items-start gap-2 p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300"
+                  className="flex items-start gap-2 p-3 rounded-md bg-danger/10 dark:bg-danger/20 border border-danger/30 dark:border-danger/50 text-sm text-danger dark:text-danger"
                 >
                   <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
                   <span>{error}</span>
@@ -221,21 +221,21 @@ export default function CheckRegistration() {
             </form>
 
             {result?.registered && result.confirmationCode && (
-              <div className="mt-6 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg p-5">
+              <div className="mt-6 bg-success/10 dark:bg-success/20 border border-success/30 dark:border-success rounded-lg p-5">
                 <div className="flex items-center gap-2 mb-3">
-                  <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" aria-hidden="true" />
-                  <p className="font-medium text-green-800 dark:text-green-200">Registration found</p>
+                  <CheckCircle2 className="h-5 w-5 text-success dark:text-success" aria-hidden="true" />
+                  <p className="font-medium text-success dark:text-success/20">Registration found</p>
                 </div>
-                <p className="text-xs font-medium uppercase tracking-wider text-green-700 dark:text-green-300 mb-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-success dark:text-success/30 mb-2">
                   Confirmation code
                 </p>
                 <code
                   data-testid="lookup-confirmation-code"
-                  className="block text-2xl font-mono font-bold text-green-900 dark:text-green-100 tracking-widest text-center select-all"
+                  className="block text-2xl font-mono font-bold text-success dark:text-success/10 tracking-widest text-center select-all"
                 >
                   {result.confirmationCode}
                 </code>
-                <p className="text-xs text-green-700 dark:text-green-300 mt-3 text-center">
+                <p className="text-xs text-success dark:text-success/30 mt-3 text-center">
                   Bring this code to check-in on tournament day.
                 </p>
               </div>

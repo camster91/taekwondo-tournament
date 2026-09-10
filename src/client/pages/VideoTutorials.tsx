@@ -64,7 +64,7 @@ export default function VideoTutorials() {
         <div className="mb-6">
           <Link
             to="/dashboard"
-            className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+            className="inline-flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Dashboard
@@ -91,11 +91,11 @@ export default function VideoTutorials() {
                     </div>
                   ) : (
                     <div className="text-center p-6">
-                      <Icon className="h-16 w-16 mx-auto mb-3 text-slate-400 dark:text-slate-600" />
-                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                      <Icon className="h-16 w-16 mx-auto mb-3 text-surface-400 dark:text-surface-600" />
+                      <p className="text-sm font-medium text-surface-600 dark:text-surface-400">
                         Video coming soon
                       </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                      <p className="text-xs text-surface-500 dark:text-surface-500 mt-1">
                         This tutorial is being prepared
                       </p>
                     </div>
@@ -104,15 +104,15 @@ export default function VideoTutorials() {
 
                 <div className="p-5">
                   <div className="flex items-start justify-between gap-3 mb-2">
-                    <h3 className="font-semibold text-slate-900 dark:text-white leading-snug">
+                    <h3 className="font-semibold text-surface-900 dark:text-white leading-snug">
                       {tutorial.title}
                     </h3>
-                    <span className="flex-shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+                    <span className="flex-shrink-0 text-xs font-medium text-surface-500 dark:text-surface-400 bg-surface-100 dark:bg-surface-900 px-2 py-1 rounded">
                       {tutorial.duration}
                     </span>
                   </div>
 
-                  <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-4">
+                  <p className="text-sm text-surface-600 dark:text-surface-400 leading-relaxed mb-4">
                     {tutorial.description}
                   </p>
 
@@ -133,15 +133,15 @@ export default function VideoTutorials() {
           })}
         </div>
 
-        <div className="mt-12 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-6">
-          <h2 className="font-semibold text-amber-900 dark:text-amber-100 mb-2">Need help now?</h2>
-          <p className="text-sm text-amber-800 dark:text-amber-200 mb-4">
+        <div className="mt-12 bg-warning/10 dark:bg-warning/20 border border-warning/30 dark:border-warning rounded-lg p-6">
+          <h2 className="font-semibold text-warning dark:text-warning/10 mb-2">Need help now?</h2>
+          <p className="text-sm text-warning dark:text-warning/20 mb-4">
             Can't find what you're looking for? Check our Help Center for written guides, or contact support.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link
               to="/help"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-100 text-sm font-medium rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-warning/10 dark:bg-warning/50 text-warning dark:text-warning/10 text-sm font-medium rounded-lg hover:bg-warning/20 dark:hover:bg-warning transition-colors"
             >
               Browse Help Center
             </Link>

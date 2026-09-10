@@ -140,9 +140,9 @@ const RULE_TYPE_OPTIONS = [
 ];
 
 const ENFORCEMENT_OPTIONS = [
-  { value: 'hard', label: 'Hard', color: 'text-red-600' },
-  { value: 'soft', label: 'Soft', color: 'text-yellow-600' },
-  { value: 'info', label: 'Info', color: 'text-blue-600' },
+  { value: 'hard', label: 'Hard', color: 'text-danger' },
+  { value: 'soft', label: 'Soft', color: 'text-warning' },
+  { value: 'info', label: 'Info', color: 'text-info' },
 ];
 
 const RULE_PARAM_FIELDS: Record<string, { key: string; label: string; type: string; placeholder: string }[]> = {
@@ -170,9 +170,9 @@ const RULE_PARAM_FIELDS: Record<string, { key: string; label: string; type: stri
 
 function EnforcementBadge({ level }: { level: string }) {
   const styles: Record<string, string> = {
-    hard: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-    soft: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-    info: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+    hard: 'bg-danger/10 text-danger dark:bg-danger/20 dark:text-danger',
+    soft: 'bg-warning/10 text-warning dark:bg-warning/30 dark:text-warning',
+    info: 'bg-info/10 text-info dark:bg-info/30 dark:text-info',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${styles[level] || styles.info}`}>
@@ -182,11 +182,11 @@ function EnforcementBadge({ level }: { level: string }) {
 }
 
 function scoreToGrade(score: number): { grade: string; color: string } {
-  if (score >= 90) return { grade: 'A', color: 'text-green-600 dark:text-green-400' };
-  if (score >= 80) return { grade: 'B', color: 'text-blue-600 dark:text-blue-400' };
-  if (score >= 70) return { grade: 'C', color: 'text-yellow-600 dark:text-yellow-400' };
+  if (score >= 90) return { grade: 'A', color: 'text-success dark:text-success' };
+  if (score >= 80) return { grade: 'B', color: 'text-info dark:text-info' };
+  if (score >= 70) return { grade: 'C', color: 'text-warning dark:text-warning' };
   if (score >= 60) return { grade: 'D', color: 'text-orange-600 dark:text-orange-400' };
-  return { grade: 'F', color: 'text-red-600 dark:text-red-400' };
+  return { grade: 'F', color: 'text-danger dark:text-danger' };
 }
 
 // ---------------------------------------------------------------------------
@@ -391,16 +391,16 @@ export default function FairnessRules() {
         <div className="flex items-center gap-3">
           <Link
             to={`/tournaments/${tournamentId}`}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            className="text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200"
           >
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-surface-900 dark:text-white flex items-center gap-2">
               <Shield className="h-6 w-6 text-primary-500" />
               Fairness Rules
             </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-sm text-surface-500 dark:text-surface-400">
               Manage rules that govern fair matchmaking and division balance
             </p>
           </div>
@@ -413,7 +413,7 @@ export default function FairnessRules() {
       <div className="card">
         <div className="card-body">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Active Rules</h2>
+            <h2 className="text-lg font-semibold text-surface-900 dark:text-white">Active Rules</h2>
             {rules && rules.length === 0 && (
               <button
                 onClick={() => initDefaultsMutation.mutate()}
@@ -464,25 +464,25 @@ export default function FairnessRules() {
                   key={rule.id}
                   className={`border rounded-lg p-4 transition-colors ${
                     rule.enabled
-                      ? 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-                      : 'border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 opacity-60'
+                      ? 'border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900'
+                      : 'border-surface-100 dark:border-surface-800 bg-surface-50 dark:bg-surface-950 opacity-60'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-medium text-gray-900 dark:text-white">
+                        <h3 className="font-medium text-surface-900 dark:text-white">
                           {rule.name}
                         </h3>
                         <EnforcementBadge level={rule.enforcementLevel} />
                         {rule.category && (
-                          <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                          <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-surface-100 text-surface-600 dark:bg-surface-800 dark:text-surface-300">
                             {rule.category}
                           </span>
                         )}
                       </div>
                       {rule.description && (
-                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">
                           {rule.description}
                         </p>
                       )}
@@ -495,18 +495,18 @@ export default function FairnessRules() {
                             enabled: !rule.enabled,
                           })
                         }
-                        className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                        className="p-1 rounded hover:bg-surface-100 dark:hover:bg-surface-800"
                         title={rule.enabled ? 'Disable rule' : 'Enable rule'}
                       >
                         {rule.enabled ? (
-                          <ToggleRight className="h-6 w-6 text-green-500" />
+                          <ToggleRight className="h-6 w-6 text-success" />
                         ) : (
-                          <ToggleLeft className="h-6 w-6 text-gray-400" />
+                          <ToggleLeft className="h-6 w-6 text-surface-400" />
                         )}
                       </button>
                       <button
                         onClick={() => setDeleteTarget(rule)}
-                        className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        className="p-1 rounded text-danger hover:text-danger hover:bg-danger/10 dark:hover:bg-danger/20"
                         title="Delete rule"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -525,17 +525,17 @@ export default function FairnessRules() {
       {/* ================================================================== */}
       <div className="card">
         <div className="card-body">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          <h2 className="text-lg font-semibold text-surface-900 dark:text-white mb-4">
             Add Rule
           </h2>
 
           {/* Natural Language Input */}
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-purple-500" />
+            <h3 className="text-sm font-medium text-surface-700 dark:text-surface-300 mb-2 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-accent-500" />
               Natural Language Input
             </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            <p className="text-xs text-surface-500 dark:text-surface-400 mb-3">
               Describe a rule in plain English and we will parse it automatically.
             </p>
             <NaturalLanguageInput
@@ -545,16 +545,16 @@ export default function FairnessRules() {
 
             {/* Parse result */}
             {parseResult && (
-              <div className="mt-4 border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
+              <div className="mt-4 border rounded-lg p-4 bg-surface-50 dark:bg-surface-900 dark:border-surface-700">
                 {parseResult.confidence < 0.5 ? (
                   <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
+                    <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      <p className="text-sm font-medium text-surface-900 dark:text-white">
                         Could not parse this rule
                       </p>
                       {parseResult.suggestion && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
                           Suggestion: {parseResult.suggestion}
                         </p>
                       )}
@@ -569,34 +569,34 @@ export default function FairnessRules() {
                 ) : (
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      <p className="text-sm font-medium text-surface-900 dark:text-white">
                         Parsed Rule
                       </p>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                      <span className="text-xs text-surface-500 dark:text-surface-400">
                         Confidence: {Math.round(parseResult.confidence * 100)}%
                       </span>
                     </div>
                     <div className="space-y-2 text-sm">
                       <div className="flex gap-2">
-                        <span className="text-gray-500 dark:text-gray-400 w-28 shrink-0">Name:</span>
-                        <span className="text-gray-900 dark:text-white">{parseResult.name}</span>
+                        <span className="text-surface-500 dark:text-surface-400 w-28 shrink-0">Name:</span>
+                        <span className="text-surface-900 dark:text-white">{parseResult.name}</span>
                       </div>
                       <div className="flex gap-2">
-                        <span className="text-gray-500 dark:text-gray-400 w-28 shrink-0">Type:</span>
-                        <span className="text-gray-900 dark:text-white">{parseResult.ruleType}</span>
+                        <span className="text-surface-500 dark:text-surface-400 w-28 shrink-0">Type:</span>
+                        <span className="text-surface-900 dark:text-white">{parseResult.ruleType}</span>
                       </div>
                       <div className="flex gap-2">
-                        <span className="text-gray-500 dark:text-gray-400 w-28 shrink-0">Enforcement:</span>
+                        <span className="text-surface-500 dark:text-surface-400 w-28 shrink-0">Enforcement:</span>
                         <EnforcementBadge level={parseResult.enforcementLevel} />
                       </div>
                       <div className="flex gap-2">
-                        <span className="text-gray-500 dark:text-gray-400 w-28 shrink-0">Description:</span>
-                        <span className="text-gray-900 dark:text-white">{parseResult.description}</span>
+                        <span className="text-surface-500 dark:text-surface-400 w-28 shrink-0">Description:</span>
+                        <span className="text-surface-900 dark:text-white">{parseResult.description}</span>
                       </div>
                       {Object.keys(parseResult.parameters).length > 0 && (
                         <div className="flex gap-2">
-                          <span className="text-gray-500 dark:text-gray-400 w-28 shrink-0">Parameters:</span>
-                          <span className="text-gray-900 dark:text-white font-mono text-xs">
+                          <span className="text-surface-500 dark:text-surface-400 w-28 shrink-0">Parameters:</span>
+                          <span className="text-surface-900 dark:text-white font-mono text-xs">
                             {JSON.stringify(parseResult.parameters)}
                           </span>
                         </div>
@@ -650,10 +650,10 @@ export default function FairnessRules() {
           {/* Divider */}
           <div className="relative mb-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+              <div className="w-full border-t border-surface-200 dark:border-surface-700" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="bg-white dark:bg-gray-800 px-2 text-gray-500 dark:text-gray-400">
+              <span className="bg-white dark:bg-surface-900 px-2 text-surface-500 dark:text-surface-400">
                 or
               </span>
             </div>
@@ -669,14 +669,14 @@ export default function FairnessRules() {
               Manual Rule Builder
             </button>
           ) : (
-            <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4 flex items-center gap-2">
+            <div className="border rounded-lg p-4 bg-surface-50 dark:bg-surface-900 dark:border-surface-700">
+              <h3 className="text-sm font-medium text-surface-700 dark:text-surface-300 mb-4 flex items-center gap-2">
                 <Plus className="h-4 w-4" />
                 Manual Rule Builder
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
                     Rule Type
                   </label>
                   <select
@@ -695,7 +695,7 @@ export default function FairnessRules() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
                     Enforcement Level
                   </label>
                   <select
@@ -719,7 +719,7 @@ export default function FairnessRules() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   {RULE_PARAM_FIELDS[manualRuleType].map((field) => (
                     <div key={field.key}>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
                         {field.label}
                       </label>
                       <input
@@ -773,7 +773,7 @@ export default function FairnessRules() {
       <div className="card">
         <div className="card-body">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-lg font-semibold text-surface-900 dark:text-white">
               Fairness Evaluation
             </h2>
             <button
@@ -793,14 +793,14 @@ export default function FairnessRules() {
           {evaluateMutation.isPending && (
             <div className="flex items-center justify-center py-12">
               <Spinner size="lg" className="text-primary-500" />
-              <span className="ml-3 text-gray-500 dark:text-gray-400">Evaluating fairness...</span>
+              <span className="ml-3 text-surface-500 dark:text-surface-400">Evaluating fairness...</span>
             </div>
           )}
 
           {evaluationResult && !evaluateMutation.isPending && (
             <div className="space-y-6">
               {/* Score + Pass/Fail */}
-              <div className="flex flex-col sm:flex-row items-center gap-6 p-6 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="flex flex-col sm:flex-row items-center gap-6 p-6 bg-surface-50 dark:bg-surface-900 rounded-lg">
                 <div className="text-center">
                   <div className={`text-6xl font-bold ${scoreToGrade(evaluationResult.score).color}`}>
                     {Math.round(evaluationResult.score)}
@@ -813,28 +813,28 @@ export default function FairnessRules() {
                   <div className="flex items-center gap-2 mb-2">
                     {evaluationResult.passed ? (
                       <>
-                        <CheckCircle className="h-6 w-6 text-green-500" />
-                        <span className="text-lg font-semibold text-green-700 dark:text-green-400">
+                        <CheckCircle className="h-6 w-6 text-success" />
+                        <span className="text-lg font-semibold text-success dark:text-success">
                           Evaluation Passed
                         </span>
                       </>
                     ) : (
                       <>
-                        <AlertCircle className="h-6 w-6 text-red-500" />
-                        <span className="text-lg font-semibold text-red-700 dark:text-red-400">
+                        <AlertCircle className="h-6 w-6 text-danger" />
+                        <span className="text-lg font-semibold text-danger dark:text-danger">
                           Evaluation Failed
                         </span>
                       </>
                     )}
                   </div>
                   <div className="flex gap-4 text-sm">
-                    <span className="text-red-600 dark:text-red-400">
+                    <span className="text-danger dark:text-danger">
                       {violations.length} violation{violations.length !== 1 ? 's' : ''}
                     </span>
-                    <span className="text-yellow-600 dark:text-yellow-400">
+                    <span className="text-warning dark:text-warning">
                       {warnings.length} warning{warnings.length !== 1 ? 's' : ''}
                     </span>
-                    <span className="text-blue-600 dark:text-blue-400">
+                    <span className="text-info dark:text-info">
                       {infos.length} info
                     </span>
                   </div>
@@ -845,10 +845,10 @@ export default function FairnessRules() {
               {violations.length > 0 && (
                 <IssueSection
                   title="Violations"
-                  icon={<AlertCircle className="h-5 w-5 text-red-500" />}
+                  icon={<AlertCircle className="h-5 w-5 text-danger" />}
                   issues={violations}
-                  borderColor="border-red-200 dark:border-red-900/50"
-                  bgColor="bg-red-50 dark:bg-red-900/10"
+                  borderColor="border-danger/30 dark:border-danger/50"
+                  bgColor="bg-danger/10 dark:bg-danger/10"
                   expanded={expandedSections.violations}
                   onToggle={() => toggleSection('violations')}
                 />
@@ -858,10 +858,10 @@ export default function FairnessRules() {
               {warnings.length > 0 && (
                 <IssueSection
                   title="Warnings"
-                  icon={<AlertTriangle className="h-5 w-5 text-yellow-500" />}
+                  icon={<AlertTriangle className="h-5 w-5 text-warning" />}
                   issues={warnings}
-                  borderColor="border-yellow-200 dark:border-yellow-900/50"
-                  bgColor="bg-yellow-50 dark:bg-yellow-900/10"
+                  borderColor="border-warning/30 dark:border-warning/50"
+                  bgColor="bg-warning/10 dark:bg-warning/10"
                   expanded={expandedSections.warnings}
                   onToggle={() => toggleSection('warnings')}
                 />
@@ -871,10 +871,10 @@ export default function FairnessRules() {
               {infos.length > 0 && (
                 <IssueSection
                   title="Info"
-                  icon={<Info className="h-5 w-5 text-blue-500" />}
+                  icon={<Info className="h-5 w-5 text-info" />}
                   issues={infos}
-                  borderColor="border-blue-200 dark:border-blue-900/50"
-                  bgColor="bg-blue-50 dark:bg-blue-900/10"
+                  borderColor="border-info/30 dark:border-info/50"
+                  bgColor="bg-info/10 dark:bg-info/10"
                   expanded={expandedSections.info}
                   onToggle={() => toggleSection('info')}
                 />
@@ -882,8 +882,8 @@ export default function FairnessRules() {
 
               {evaluationResult.issues.length === 0 && (
                 <div className="text-center py-8">
-                  <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
-                  <p className="text-gray-700 dark:text-gray-300 font-medium">
+                  <CheckCircle className="h-12 w-12 text-success mx-auto mb-3" />
+                  <p className="text-surface-700 dark:text-surface-300 font-medium">
                     No issues found. All rules passed.
                   </p>
                 </div>
@@ -892,7 +892,7 @@ export default function FairnessRules() {
           )}
 
           {!evaluationResult && !evaluateMutation.isPending && (
-            <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+            <div className="text-center py-12 text-surface-500 dark:text-surface-400">
               <Shield className="h-12 w-12 mx-auto mb-3 opacity-30" />
               <p>Run an evaluation to check tournament fairness against configured rules.</p>
             </div>
@@ -944,36 +944,36 @@ function IssueSection({
       >
         <div className="flex items-center gap-2">
           {icon}
-          <span className="font-medium text-gray-900 dark:text-white">
+          <span className="font-medium text-surface-900 dark:text-white">
             {title} ({issues.length})
           </span>
         </div>
         {expanded ? (
-          <ChevronUp className="h-4 w-4 text-gray-500" />
+          <ChevronUp className="h-4 w-4 text-surface-500" />
         ) : (
-          <ChevronDown className="h-4 w-4 text-gray-500" />
+          <ChevronDown className="h-4 w-4 text-surface-500" />
         )}
       </button>
       {expanded && (
-        <div className="divide-y divide-gray-100 dark:divide-gray-700">
+        <div className="divide-y divide-surface-100 dark:divide-surface-700">
           {issues.map((issue, idx) => (
             <div key={idx} className="p-4">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
+              <p className="text-sm font-medium text-surface-900 dark:text-white">
                 {issue.ruleName}
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
                 {issue.description}
               </p>
               {issue.affectedCompetitors && issue.affectedCompetitors.length > 0 && (
                 <div className="mt-2">
-                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  <p className="text-xs font-medium text-surface-500 dark:text-surface-400 mb-1">
                     Affected Competitors:
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {issue.affectedCompetitors.map((name, i) => (
                       <span
                         key={i}
-                        className="inline-flex items-center px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                        className="inline-flex items-center px-2 py-0.5 text-xs rounded bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-300"
                       >
                         {name}
                       </span>
@@ -982,7 +982,7 @@ function IssueSection({
                 </div>
               )}
               {issue.suggestion && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
+                <p className="text-xs text-surface-500 dark:text-surface-400 mt-2 italic">
                   Suggestion: {issue.suggestion}
                 </p>
               )}
