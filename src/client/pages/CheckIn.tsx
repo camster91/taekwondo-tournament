@@ -35,6 +35,7 @@ import {
   updateSearchParams,
 } from '../utils/url-state';
 import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner';
+import DirectorOverrideDialog, { type DirectorOverrideParams } from '../components/DirectorOverrideDialog';
 
 interface Registration {
   id: string;
@@ -93,6 +94,8 @@ export default function CheckIn() {
   const [failedBulkIds, setFailedBulkIds] = useState<string[]>([]);
   const [failedBulkErrors, setFailedBulkErrors] = useState<Record<string, string>>({});
   const [uncertainBulkIds, setUncertainBulkIds] = useState<string[]>([]);
+  const [directorOverrideParams, setDirectorOverrideParams] = useState<DirectorOverrideParams | null>(null);
+  const [directorOverrideLoading, setDirectorOverrideLoading] = useState(false);
 
   // Sync filters to URL when they change
   useEffect(() => {
@@ -291,6 +294,18 @@ export default function CheckIn() {
 
   const handleQuickCheckIn = (registration: Registration) => {
     if (registration.sparring) {
+      // Sparring competitor without registered weight triggers director override (#139)
+      if (!registration.weightAtRegistration) {
+        setDirectorOverrideParams({
+          type: 'check-in',
+          competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+          reason: 'No weight recorded at registration. Cannot assign to sparring division without weigh-in.',
+          currentWeight: undefined,
+          requireWeightOverride: true,
+        });
+        setSelectedRegistration(registration);
+        return;
+      }
       setSelectedRegistration(registration);
       setCheckInWeight(registration.weightAtRegistration?.toString() || '');
     } else {
@@ -419,6 +434,29 @@ export default function CheckIn() {
       toast.error('Delivery is uncertain. Refresh and verify the server registration; retry is disabled for this local copy.');
     } else if (result.outcome === 'persistence_failed_before_send') {
       toast.error('This device could not safely prepare the retry, so nothing was sent. Free device storage and try again.');
+    }
+  };
+
+  const handleDirectorOverrideConfirm = async (result: { overrideWeight?: number; overrideReason: string }) => {
+    if (!selectedRegistration) return;
+    
+    setDirectorOverrideLoading(true);
+    try {
+      // For check-in overrides with weight, proceed with check-in using override weight
+      if (directorOverrideParams?.type === 'check-in' && result.overrideWeight) {
+        await checkInMutation.mutateAsync({
+          registrationId: selectedRegistration.id,
+          weight: result.overrideWeight,
+        });
+        toast.success(`Director override: ${selectedRegistration.competitor.firstName} ${selectedRegistration.competitor.lastName} checked in at ${result.overrideWeight} lbs`);
+      }
+      setDirectorOverrideParams(null);
+      setSelectedRegistration(null);
+      setCheckInWeight('');
+    } catch (error) {
+      toast.error('Director override failed. Check connection and try again.');
+    } finally {
+      setDirectorOverrideLoading(false);
     }
   };
 
@@ -809,6 +847,18 @@ export default function CheckIn() {
         </>}
         confirmText="Discard local change"
         variant="danger"
+      />
+
+      {/* Director Override Dialog (#139) */}
+      <DirectorOverrideDialog
+        isOpen={directorOverrideParams !== null}
+        onClose={() => {
+          setDirectorOverrideParams(null);
+          setSelectedRegistration(null);
+        }}
+        onConfirm={handleDirectorOverrideConfirm}
+        params={directorOverrideParams}
+        isLoading={directorOverrideLoading}
       />
     </div>
   );
