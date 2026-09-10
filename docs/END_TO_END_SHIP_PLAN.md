@@ -63,14 +63,14 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 
 | ID | Issue/PR | Task | Acceptance Criteria | Effort |
 |----|----------|------|---------------------|--------|
-| P0-1 | #TBD | **✅ VERIFY: JWT token revocation** | Confirm logout invalidates tokens via `tokenVersion` bump (ALREADY IMPLEMENTED in auth.ts); test isActive flip kills sessions | S (verify) |
-| P0-2 | #TBD | **✅ VERIFY: HttpOnly cookies** | Confirm SESSION_COOKIE with httpOnly:true + CSRF protection (ALREADY IMPLEMENTED in auth.ts); test auth flow end-to-end | S (verify) |
-| P0-3 | #TBD | **Uptime monitoring** | Add UptimeRobot/Pingdom for /api/health/ready; 5xx rate alerts to email/Slack | S |
-| P0-4 | #TBD | **Error tracking** | Integrate Sentry (server + client); capture user context, breadcrumbs | S |
-| P0-5 | #TBD | **Database backups** | Automate daily encrypted backups to off-host storage; test restore drill | M |
-| P0-6 | #TBD | **✅ Privacy policy v1** | Legal.tsx published at /legal/privacy; linked from footer + public registration — **SHIPPED** (pending counsel approval of copy) | M (legal review) |
-| P0-7 | #TBD | **✅ Terms of service v1** | Legal.tsx published at /legal/terms; linked from footer + public registration — **SHIPPED** (pending counsel approval of copy) | M (legal review) |
-| P0-8 | #TBD | **Parental consent flow** | Public registration requires parent/guardian checkbox + email for minors | M |
+| P0-1 | #237 | **✅ VERIFIED: JWT token revocation** | Logout invalidates tokens via `tokenVersion` bump; isActive flip kills sessions — **FULLY TESTED** (auth-session-invalidation.test.ts + auth-token-version.test.ts, 8 regression tests) | S (verify) |
+| P0-2 | #237 | **✅ VERIFIED: HttpOnly cookies + CSRF** | SESSION_COOKIE with httpOnly:true + double-submit CSRF protection on mutations; Bearer tokens exempt — **FULLY TESTED** (auth-csrf-protection.test.ts, 11 tests covering cookie attributes, CSRF gates, Bearer exemption) | S (verify) |
+| P0-3 | #TBD | **Uptime monitoring** | Add UptimeRobot/Pingdom for /api/health/ready; 5xx rate alerts to email/Slack — **Cameron-gated: requires account signup** | S |
+| P0-4 | #TBD | **Error tracking** | Integrate Sentry (server + client); capture user context, breadcrumbs — **Cameron-gated: requires account signup** | S |
+| P0-5 | #TBD | **Database backups** | Automate daily encrypted backups to off-host storage; test restore drill — **Cameron-gated: VPS setup** | M |
+| P0-6 | #232 | **✅ Privacy policy v1** | Legal.tsx published at /legal/privacy; linked from footer + public registration — **SHIPPED** in PR #232 (pending counsel approval of copy) | M (legal review) |
+| P0-7 | #232 | **✅ Terms of service v1** | Legal.tsx published at /legal/terms; linked from footer + public registration — **SHIPPED** in PR #232 (pending counsel approval of copy) | M (legal review) |
+| P0-8 | #232 | **✅ VERIFIED: Parental consent flow** | Public registration requires guardianAttested checkbox for minors (age < 18); parent email required and verified via email link with 48h TTL — **FULLY IMPLEMENTED** (ParentalConsentVerification model + service + routes in PR #232) | M |
 
 **Exit criteria:**  
 - 1 pilot tournament completes with no security incidents, no data loss, and documented recovery time < 5 min.
@@ -90,11 +90,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P1-2 | #226 | **✅ Org-level access control** | Wire `requireTournamentAccess()` into all mutation routes; test isolation — **VERIFIED COMPLETE** (21 inline checks + middleware, 12 regression tests) | S |
 | P1-3 | #224 | **✅ User audit log** | Track login, role change, org invite, tournament create/delete — **SHIPPED** in PR #224 | S |
 | **Billing & Payments** | | | | |
-<<<<<<< HEAD
-| P1-4 | #TBD | **✅ Stripe plan selection** | `/organization` shows plan tiers (annual + per-event); Checkout flow for all tiers — **SHIPPED** in this PR | L |
-=======
-| P1-4 | #223,billing | **✅ Stripe plan selection** | `/organization` shows plan tiers; Checkout flow for annual/per-event purchase — **SHIPPED** (billing.ts routes + OrganizationSettings.tsx UI exist, awaiting Cameron Stripe product setup) | L |
->>>>>>> a052dfe (feat(pilot-residuals): P1-16 live chat, P0-6/7 legal links, P1-15 video tutorial slots)
+| P1-4 | #223,#235 | **✅ Stripe plan selection** | `/organization` shows plan tiers (annual + per-event); Checkout flow for all tiers — **SHIPPED** in PRs #223, #235 (billing.ts routes + OrganizationSettings.tsx UI exist, awaiting Cameron Stripe product setup) | L |
 | P1-5 | #223 | **✅ Usage metering** | Track competitors/event for per-event pricing; show usage in org settings — **SHIPPED** in PR #223 | M |
 | P1-6 | #TBD | **✅ READY (Cameron config)** | Billing portal — code complete in billing.ts + OrganizationSettings.tsx; needs Cameron Stripe dashboard config + validation | S (config) |
 | P1-7 | #223 | **✅ Trial enforcement** | Limit free tier to 1 event + 30 competitors; upgrade gate with clear CTA — **SHIPPED** in PR #223 | M |
