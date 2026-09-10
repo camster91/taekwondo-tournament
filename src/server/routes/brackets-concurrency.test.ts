@@ -66,18 +66,14 @@ const currentMatch = {
   competitor1Id: 'registration-1',
   competitor2Id: 'registration-2',
   winnerId: null,
-  score1: null,
-  score2: null,
-  status: 'ready',
-  notes: null,
+  scores: null,\n  status: 'ready',
   updatedAt: new Date('2026-08-07T12:00:00.000Z'),
 };
 
 const updatedMatch = {
   ...currentMatch,
   winnerId: 'registration-1',
-  score1: '5',
-  score2: '2',
+  scores: { score1: '5', score2: '2' },
   status: 'completed',
   bracket: { id: 'bracket-1' },
 };
@@ -123,8 +119,7 @@ describe.skip('PUT /match/:matchId concurrency safety', () => {
       params: { matchId: 'match-1' },
       body: {
         winnerId: 'registration-1',
-        score1: '5',
-        score2: '2',
+        scores: { score1: '5', score2: '2' },
         status: 'completed',
       },
       user: { id: 'scorekeeper-1', email: 'scorekeeper@example.com' },
@@ -137,10 +132,9 @@ describe.skip('PUT /match/:matchId concurrency safety', () => {
       where: { id: 'match-1', updatedAt: currentMatch.updatedAt },
       data: {
         winnerId: 'registration-1',
-        score1: '5',
-        score2: '2',
+        // The handler stringifies the scores object before writing.
+        scores: JSON.stringify({ score1: '5', score2: '2' }),
         status: 'completed',
-        notes: undefined,
       },
     });
     expect(state.advanceInsideTransaction).toBe(true);
@@ -160,8 +154,8 @@ describe.skip('PUT /match/:matchId concurrency safety', () => {
       params: { matchId: 'match-1' },
       body: {
         winnerId: 'registration-1',
-        score1: '2',
-        score2: '5',
+        // SH-4: scores carries the numeric payload.
+        scores: { score1: '2', score2: '5' },
         status: 'completed',
       },
       user: { id: 'scorekeeper-1', email: 'scorekeeper@example.com' },
@@ -173,8 +167,12 @@ describe.skip('PUT /match/:matchId concurrency safety', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      error: 'Winner contradicts the recorded score. Add notes explaining the override.',
+      error: 'Winner contradicts the recorded score. Set manualOverride=true with an overrideReason, or correct the scores.',
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
+
+
+
+

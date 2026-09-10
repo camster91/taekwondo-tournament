@@ -103,7 +103,7 @@ beforeAll(async () => {
             roundNumber: 1,
             bracketType: 'winners',
             status: 'pending',
-            ringNumber: 1,
+            ring: '1',
           },
         ],
       },
@@ -267,3 +267,4 @@ describe('Divisions-with-matches Contract', () => {
     await prisma.division.delete({ where: { id: minimal.id } });
   });
 });
+

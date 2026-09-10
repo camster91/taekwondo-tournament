@@ -30,6 +30,35 @@ export interface MatchCompetitorSlot {
   };
 }
 
+/**
+ * Parsed `Match.scores` JSON payload. The DB stores `scores` as a JSON
+ * string; this is the shape that lives inside it for completed
+ * matches. The struct may also carry `bye: true` (round advance
+ * from a single-competitor bracket) or `manualOverride` /
+ * `overrideReason` (the legacy `notes` override moved here in SH-4).
+ */
+export interface ApiMatchScoreObject {
+  score1?: string;
+  score2?: string;
+  bye?: boolean;
+  manualOverride?: boolean;
+  overrideReason?: string;
+}
+
+/** Parsed helper that JSON.parses the raw `scores` field if present. */
+export function parseMatchScores(raw: string | null | undefined): ApiMatchScoreObject | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      return parsed as ApiMatchScoreObject;
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
 /** A bracket match as returned by /api/divisions/tournament/:id?withMatches=true. */
 export interface ApiMatch {
   id: string;
@@ -37,12 +66,15 @@ export interface ApiMatch {
   roundNumber: number;
   bracketType: 'winners' | 'losers' | 'finals';
   status: MatchStatus;
-  ringNumber?: number | null;
+  // SH-4: schema renamed `ringNumber` (Int) to `ring` (String,
+  // e.g. "A", "B", "1", "2") and `score1`/`score2` columns were
+  // collapsed into a single `scores` JSON string. The helper
+  // `parseMatchScores` above extracts the per-competitor values.
+  ring?: string | null;
+  scores?: string | null;
   competitor1?: MatchCompetitorSlot | null;
   competitor2?: MatchCompetitorSlot | null;
   winner?: MatchCompetitorSlot | null;
-  score1?: string | null;
-  score2?: string | null;
   startedAt?: string | null;
   updatedAt?: string | null;
   videoUrl?: string | null;

@@ -12,7 +12,7 @@ interface Match {
   competitor2Name: string | null;
   competitor1School: string | null;
   competitor2School: string | null;
-  ringNumber: number | null;
+  ring: number | null;
 }
 
 interface Division {
@@ -24,7 +24,7 @@ interface Division {
       id: string;
       matchNumber: number;
       status: string;
-      ringNumber: number | null;
+      ring: number | null;
       competitor1?: {
         competitor: {
           firstName: string;
@@ -47,7 +47,7 @@ interface ScoreboardData {
   divisions: Division[];
   displaySettings?: {
     mode?: string;
-    ringNumber?: number;
+    ring?: number;
   };
 }
 
@@ -130,7 +130,7 @@ function AnnouncerView() {
           : null,
         competitor1School: match.competitor1?.competitor.schoolDojang || null,
         competitor2School: match.competitor2?.competitor.schoolDojang || null,
-        ringNumber: match.ringNumber,
+        ring: match.ring,
         divisionName: division.name,
       });
     });
@@ -138,18 +138,18 @@ function AnnouncerView() {
 
   // Filter for display
   const displayMode = scoreboardData.displaySettings?.mode || 'all';
-  const displayRingNumber = scoreboardData.displaySettings?.ringNumber;
+  const displayRingNumber = scoreboardData.displaySettings?.ring;
   
   let filteredMatches = allMatches;
   if (displayMode === 'single-ring' && displayRingNumber) {
-    filteredMatches = allMatches.filter((m) => m.ringNumber === displayRingNumber);
+    filteredMatches = allMatches.filter((m) => m.ring === displayRingNumber);
   }
 
   // NOW COMPETING (in_progress)
   const nowCompeting = filteredMatches
     .filter((m) => m.status === 'in_progress')
     .sort((a, b) => {
-      if (a.ringNumber !== b.ringNumber) return (a.ringNumber || 999) - (b.ringNumber || 999);
+      if (a.ring !== b.ring) return (a.ring || 999) - (b.ring || 999);
       return a.matchNumber - b.matchNumber;
     });
 
@@ -157,26 +157,26 @@ function AnnouncerView() {
   const readyMatches = filteredMatches.filter((m) => m.status === 'ready');
   const upNextByRing = new Map<number, typeof filteredMatches[0]>();
   readyMatches.forEach((m) => {
-    const ring = m.ringNumber || 0;
+    const ring = m.ring || 0;
     const existing = upNextByRing.get(ring);
     if (!existing || m.matchNumber < existing.matchNumber) {
       upNextByRing.set(ring, m);
     }
   });
-  const upNext = Array.from(upNextByRing.values()).sort((a, b) => (a.ringNumber || 0) - (b.ringNumber || 0));
+  const upNext = Array.from(upNextByRing.values()).sort((a, b) => (a.ring || 0) - (b.ring || 0));
 
   // ON DECK (ready, second-lowest match number per ring, excluding upNext)
   const upNextIds = new Set(upNext.map((m) => m.id));
   const onDeckByRing = new Map<number, typeof filteredMatches[0]>();
   readyMatches.forEach((m) => {
     if (upNextIds.has(m.id)) return;
-    const ring = m.ringNumber || 0;
+    const ring = m.ring || 0;
     const existing = onDeckByRing.get(ring);
     if (!existing || m.matchNumber < existing.matchNumber) {
       onDeckByRing.set(ring, m);
     }
   });
-  const onDeck = Array.from(onDeckByRing.values()).sort((a, b) => (a.ringNumber || 0) - (b.ringNumber || 0));
+  const onDeck = Array.from(onDeckByRing.values()).sort((a, b) => (a.ring || 0) - (b.ring || 0));
 
   const brandColor = tournament.brandPrimaryColor || '#DC2626';
 
@@ -223,7 +223,7 @@ function AnnouncerView() {
                 <div key={match.id} className="bg-surface-900 rounded-xl p-10 border-4 shadow-2xl" style={{ borderColor: brandColor }}>
                   <div className="flex items-center justify-between mb-6">
                     <span className="text-2xl font-black px-4 py-2 rounded-lg" style={{ backgroundColor: brandColor, color: '#fff' }}>
-                      RING {match.ringNumber || '?'}
+                      RING {match.ring || '?'}
                     </span>
                     <span className="text-surface-400 text-lg font-semibold">Match {match.matchNumber}</span>
                   </div>
@@ -264,7 +264,7 @@ function AnnouncerView() {
                 <div key={match.id} className="bg-surface-900 rounded-xl p-10 border-4 border-warning shadow-2xl">
                   <div className="flex items-center justify-between mb-6">
                     <span className="text-2xl font-black px-4 py-2 rounded-lg bg-warning text-surface-900">
-                      RING {match.ringNumber || '?'}
+                      RING {match.ring || '?'}
                     </span>
                     <span className="text-surface-400 text-lg font-semibold">Match {match.matchNumber}</span>
                   </div>
@@ -305,7 +305,7 @@ function AnnouncerView() {
                 <div key={match.id} className="bg-surface-900 rounded-xl p-8 border-4 border-info shadow-lg">
                   <div className="flex items-center justify-between mb-5">
                     <span className="text-xl font-bold px-3 py-1 rounded-lg bg-info text-white">
-                      RING {match.ringNumber || '?'}
+                      RING {match.ring || '?'}
                     </span>
                     <span className="text-surface-400 text-base font-semibold">Match {match.matchNumber}</span>
                   </div>
@@ -339,3 +339,4 @@ function AnnouncerView() {
 }
 
 export default AnnouncerView;
+

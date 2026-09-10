@@ -113,8 +113,11 @@ export function buildShowcaseFixture(now: Date = new Date()) {
       let competitor1Id = match.competitor1Id;
       let competitor2Id = match.competitor2Id;
       let winnerId: string | null = null;
-      let score1: string | null = null;
-      let score2: string | null = null;
+      // SH-4: legacy `score1`/`score2` columns are gone. The schema
+      // now stores a `scores` JSON payload; we emit the same numbers
+      // as a JSON string for the demo seed so the showcase still
+      // shows realistic results.
+      let scoresJson: string | null = null;
       if (groupIndex === 0) {
         const [r1, r2, r3, r4] = group.map((registration) => registration.id);
         const completedProgression: Record<number, [string, string, string]> = {
@@ -125,8 +128,7 @@ export function buildShowcaseFixture(now: Date = new Date()) {
         if (result) {
           [competitor1Id, competitor2Id, winnerId] = result;
           status = 'completed';
-          score1 = '8';
-          score2 = '5';
+          scoresJson = JSON.stringify({ score1: '8', score2: '5' });
         } else {
           competitor1Id = null;
           competitor2Id = null;
@@ -148,17 +150,19 @@ export function buildShowcaseFixture(now: Date = new Date()) {
         [competitor1Id, competitor2Id] = state.slots;
         winnerId = state.winner ?? null;
         if (status === 'completed') {
-          score1 = '8';
-          score2 = '5';
+          scoresJson = JSON.stringify({ score1: '8', score2: '5' });
         }
       }
       const isScheduled = status !== 'pending';
       matches.push({
         id: id(400 + matches.length), bracketId, roundNumber: match.round, matchNumber: match.matchNumber,
         bracketType: match.bracketType, competitor1Id, competitor2Id,
-        winnerId, score1, score2, status,
-        ringNumber: isScheduled ? (matches.length % 4) + 1 : null,
-        scheduledTime: isScheduled ? new Date(scheduleBase.getTime() + matches.length * 10 * 60_000) : null,
+        winnerId, scores: scoresJson, status,
+        // SH-4: ring is a free-form string. The rotation (1..4)
+        // we used for the legacy int ring is preserved as a
+        // stringified label.
+        ring: isScheduled ? String((matches.length % 4) + 1) : null,
+        scheduledAt: isScheduled ? new Date(scheduleBase.getTime() + matches.length * 10 * 60_000) : null,
       });
     });
   });

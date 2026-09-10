@@ -393,7 +393,7 @@ export default function Schedule() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           delayType,
-          ringNumber: delayType === 'ring' ? delayRing : undefined,
+          ring: delayType === 'ring' ? delayRing : undefined,
           divisionId: delayType === 'division' ? delayDivisionId : undefined,
           delayMinutes,
           reason: delayReason,
@@ -421,7 +421,7 @@ export default function Schedule() {
         body: JSON.stringify({
           delayInput: {
             delayType,
-            ringNumber: delayType === 'ring' ? delayRing : undefined,
+            ring: delayType === 'ring' ? delayRing : undefined,
             divisionId: delayType === 'division' ? delayDivisionId : undefined,
             delayMinutes,
             reason: delayReason,
@@ -1281,3 +1281,4 @@ export default function Schedule() {
     </div>
   );
 }
+

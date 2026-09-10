@@ -123,7 +123,7 @@ interface SOSAlert {
   category: string;
   title: string;
   description: string | null;
-  ringNumber: number | null;
+  ring: number | null;
   divisionId: string | null;
   resolved: boolean;
   resolvedAt: string | null;
@@ -189,7 +189,7 @@ export default function DirectorDashboard() {
     mutationFn: async () => {
       const payload =
         displayMode === 'all' ? {}
-        : displayMode === 'ring' ? { mode: 'ring', ringNumber: displayRing }
+        : displayMode === 'ring' ? { mode: 'ring', ring: displayRing }
         : { mode: 'featured', featuredMatchId: displayMatchId };
       const res = await fetch(`/api/tournaments/${tournamentId}`, {
         method: 'PUT',
@@ -239,7 +239,7 @@ export default function DirectorDashboard() {
 
       const ringMap = new Map<string, ApiMatch[]>();
       matches.forEach((m) => {
-        const ring = m.ringNumber != null ? `Ring ${m.ringNumber}` : null;
+        const ring = m.ring != null ? `Ring ${m.ring}` : null;
         if (!ring) return;
         if (!ringMap.has(ring)) ringMap.set(ring, []);
         ringMap.get(ring)!.push(m);
@@ -442,7 +442,7 @@ export default function DirectorDashboard() {
 
   // P2-10: Create SOS alert mutation
   const createSOSAlert = useMutation({
-    mutationFn: async (data: { severity: string; category: string; title: string; description?: string; ringNumber?: number }) => {
+    mutationFn: async (data: { severity: string; category: string; title: string; description?: string; ring?: number }) => {
       const response = await fetch(`/api/sos-alerts/tournament/${tournamentId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -760,7 +760,7 @@ export default function DirectorDashboard() {
                       }`}
                     >
                       {alert.title}
-                      {alert.ringNumber && ` (Ring ${alert.ringNumber})`}
+                      {alert.ring && ` (Ring ${alert.ring})`}
                     </h3>
                     {alert.description && (
                       <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">{alert.description}</p>
@@ -862,7 +862,7 @@ export default function DirectorDashboard() {
                           category: alertCategory,
                           title: alertTitle.trim(),
                           description: alertDescription.trim() || undefined,
-                          ringNumber: alertCategory === 'ring' ? alertRingNumber || undefined : undefined,
+                          ring: alertCategory === 'ring' ? alertRingNumber || undefined : undefined,
                         });
                       }
                     }}
@@ -1206,3 +1206,4 @@ export default function DirectorDashboard() {
     </div>
   );
 }
+

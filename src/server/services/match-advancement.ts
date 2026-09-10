@@ -242,9 +242,12 @@ export async function handleByeMatches(
         await prisma.match.update({
           where: { id: match.id },
           data: {
+            // SH-4: `notes` column is gone; encode the BYE marker in
+            // the `scores` JSON payload so downstream consumers can
+            // still detect it.
             winnerId,
             status: 'completed',
-            notes: 'BYE',
+            scores: JSON.stringify({ bye: true }),
           },
         });
 

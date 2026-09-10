@@ -23,7 +23,7 @@ interface Match {
   matchNumber: number;
   roundNumber: number;
   bracketType: string;
-  ringNumber?: number | null;
+  ring?: number | null;
   scheduledTime?: string | null;
   status: string;
   score1: number | null;
@@ -80,12 +80,12 @@ export default function ParentScoreboard() {
 
   const { data: scoreboardData, isLoading: scoreboardLoading, error: scoreboardError, refetch: retryScoreboard, dataUpdatedAt: scoreboardUpdatedAt } = useQuery<{
     divisions: Division[];
-    displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
+    displaySettings: { mode?: string; ring?: number; featuredMatchId?: string };
   }>({
     queryKey: ['parent-scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
       const payload = await fetchJson<unknown>(fetch, buildScoreboardApiUrl(tournamentId || '', publicKey));
-      return parseParentScoreboardPayload(payload) as { divisions: Division[]; displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string } };
+      return parseParentScoreboardPayload(payload) as { divisions: Division[]; displaySettings: { mode?: string; ring?: number; featuredMatchId?: string } };
     },
     refetchInterval: 5_000,
     refetchIntervalInBackground: false,
@@ -119,9 +119,9 @@ export default function ParentScoreboard() {
   }, [divisions]);
 
   const modeRing = Number(displaySettings?.mode?.match(/^ring:(\d+)$/)?.[1] || 0) || undefined;
-  const configuredRing = displaySettings?.ringNumber ?? modeRing;
+  const configuredRing = displaySettings?.ring ?? modeRing;
   const visibleMatches = configuredRing
-    ? allMatches.filter((match) => match.ringNumber === configuredRing)
+    ? allMatches.filter((match) => match.ring === configuredRing)
     : allMatches;
   const nowCompeting = visibleMatches
     .filter((m) => m.status === 'in_progress')
@@ -406,3 +406,4 @@ function EmptyBlock({ message }: { message: string }) {
     </div>
   );
 }
+

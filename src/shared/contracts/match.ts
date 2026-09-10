@@ -53,16 +53,18 @@ export const apiMatchSchema = z.object({
   roundNumber: z.number().int().min(1),
   bracketType: bracketTypeSchema,
   status: matchStatusSchema,
-  ringNumber: z.number().int().min(1).nullable().optional(),
+  // SH-4: `ringNumber` (Int) became `ring` (String), `score1`/`score2`
+  // collapsed into a single `scores` JSON string column, and `notes`
+  // was dropped. Clients should parse `scores` via the helper in
+  // `client/utils/api-types.ts`.
+  ring: z.string().min(1).max(20).nullable().optional(),
   competitor1: matchCompetitorSlotSchema,
   competitor2: matchCompetitorSlotSchema,
   winner: matchCompetitorSlotSchema,
-  score1: z.string().nullable().optional(),
-  score2: z.string().nullable().optional(),
+  scores: z.string().nullable().optional(),
   startedAt: z.string().datetime().nullable().optional(),
   updatedAt: z.string().datetime().nullable().optional(),
   videoUrl: z.string().url().max(2048).nullable().optional(),
-  notes: z.string().max(500).nullable().optional(),
   // Internal client-side helpers used by DirectorDashboard after flatMap.
   // Not returned by server; marked optional for backward compat.
   _divisionId: z.string().uuid().optional(),

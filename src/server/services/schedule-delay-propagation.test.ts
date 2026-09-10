@@ -101,7 +101,7 @@ describe('schedule-delay-propagation', () => {
       const delayInput: ScheduleDelayInput = {
         tournamentId: 'tournament-1',
         delayType: 'ring',
-        ringNumber: 1,
+        ring: '',
         delayMinutes: 15,
         reason: 'Equipment issue',
       };
@@ -158,7 +158,7 @@ describe('schedule-delay-propagation', () => {
       const delayInput: ScheduleDelayInput = {
         tournamentId: 'tournament-1',
         delayType: 'ring',
-        ringNumber: 1,
+        ring: '',
         delayMinutes: 15,
         reason: 'Test',
       };
@@ -201,7 +201,7 @@ describe('schedule-delay-propagation', () => {
       const delayInput: ScheduleDelayInput = {
         tournamentId: 'tournament-1',
         delayType: 'ring',
-        ringNumber: 1,
+        ring: '',
         delayMinutes: 30,
         reason: 'Test',
       };
@@ -298,7 +298,7 @@ describe('schedule-delay-propagation', () => {
       const delayInput: ScheduleDelayInput = {
         tournamentId: 'tournament-1',
         delayType: 'ring',
-        ringNumber: 1,
+        ring: '',
         delayMinutes: 15,
         reason: 'Test',
       };
@@ -331,7 +331,7 @@ describe('schedule-delay-propagation', () => {
       const delayInput: ScheduleDelayInput = {
         tournamentId: 'tournament-1',
         delayType: 'ring',
-        ringNumber: 2,
+        ring: '',
         delayMinutes: 25,
         reason: 'Ring 2 only delay',
       };
@@ -385,7 +385,7 @@ describe('schedule-delay-propagation', () => {
       const delayInput: ScheduleDelayInput = {
         tournamentId: 'tournament-1',
         delayType: 'ring',
-        ringNumber: 1,
+        ring: '',
         delayMinutes: 15,
         reason: 'Test',
       };
@@ -432,7 +432,7 @@ describe('schedule-delay-propagation', () => {
       const delayInput: ScheduleDelayInput = {
         tournamentId: 'tournament-1',
         delayType: 'ring',
-        ringNumber: 1,
+        ring: '',
         delayMinutes: 15,
         reason: 'Test',
       };
@@ -526,3 +526,5 @@ describe('schedule-delay-propagation', () => {
     });
   });
 });
+
+

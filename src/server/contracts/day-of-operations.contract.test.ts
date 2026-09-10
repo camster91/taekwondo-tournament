@@ -37,7 +37,7 @@ describe('Day-of Operations Contract', () => {
                 roundNumber: 1,
                 bracketType: 'winners',
                 status: 'completed',
-                ringNumber: 1,
+                ring: '1',
                 competitor1: {
                   id: '123e4567-e89b-12d3-a456-426614174003',
                   competitor: {
@@ -62,8 +62,8 @@ describe('Day-of Operations Contract', () => {
                     schoolDojang: 'Test Dojang',
                   },
                 },
-                score1: '12',
-                score2: '8',
+                scores: JSON.stringify({ score1: '12', score2: '8' }),
+                ,
                 startedAt: '2026-12-01T10:00:00Z',
                 updatedAt: '2026-12-01T10:05:00Z',
               },
@@ -73,7 +73,7 @@ describe('Day-of Operations Contract', () => {
       ],
       ringStatus: [
         {
-          ringNumber: 1,
+          ring: '1',
           currentMatchId: '123e4567-e89b-12d3-a456-426614174002',
           currentDivisionId: '123e4567-e89b-12d3-a456-426614174000',
           currentDivisionName: 'BB Males Sparring Heavy',
@@ -103,7 +103,7 @@ describe('Day-of Operations Contract', () => {
           category: 'ring',
           message: 'Ring 1 running 15 minutes behind schedule',
           divisionId: null,
-          ringNumber: 1,
+          ring: '1',
           timestamp: '2026-12-01T10:30:00Z',
         },
       ],
@@ -118,7 +118,7 @@ describe('Day-of Operations Contract', () => {
 
   it('validates ring status shape', () => {
     const ringStatus = {
-      ringNumber: 2,
+      ring: '1',
       currentMatchId: null,
       currentDivisionId: null,
       currentDivisionName: null,
@@ -154,7 +154,7 @@ describe('Day-of Operations Contract', () => {
       category: 'ring', // Use valid category from enum
       message: 'Injury reported in Ring 3',
       divisionId: '123e4567-e89b-12d3-a456-426614174000',
-      ringNumber: 3,
+      ring: '1',
       timestamp: '2026-12-01T11:00:00Z',
     };
 
@@ -163,7 +163,7 @@ describe('Day-of Operations Contract', () => {
 
   it('rejects invalid ring status enum values', () => {
     const invalidStatus = {
-      ringNumber: 1,
+      ring: '1',
       currentMatchId: null,
       currentDivisionId: null,
       currentDivisionName: null,
@@ -183,7 +183,7 @@ describe('Day-of Operations Contract', () => {
       category: 'other',
       message: 'Test',
       divisionId: null,
-      ringNumber: null,
+      ring: null,
       timestamp: '2026-12-01T10:00:00Z',
     };
 
@@ -205,3 +205,7 @@ describe('Day-of Operations Contract', () => {
     expect(() => dayOfOperationsResponseSchema.parse(minimal)).not.toThrow();
   });
 });
+
+
+
+

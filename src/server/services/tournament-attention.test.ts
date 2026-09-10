@@ -20,8 +20,8 @@ describe('tournament attention command centre', () => {
             { registrationId: 'r1', checkedIn: false }, { registrationId: 'r2', checkedIn: true },
           ],
           bracket: { id: 'b1', matches: [
-            { id: 'm1', status: 'ready', competitor1Id: 'r1', competitor2Id: 'r2', ringNumber: 1, scheduledTime: new Date(now.getTime() - 60_000), updatedAt: now },
-            { id: 'm2', status: 'ready', competitor1Id: 'r2', competitor2Id: 'r1', ringNumber: 1, scheduledTime: new Date(now.getTime() - 60_000), updatedAt: now },
+            { id: 'm1', status: 'ready', competitor1Id: 'r1', competitor2Id: 'r2', ring: '', scheduledAt: new Date(now.getTime() - 60_000), updatedAt: now },
+            { id: 'm2', status: 'ready', competitor1Id: 'r2', competitor2Id: 'r1', ring: '', scheduledAt: new Date(now.getTime() - 60_000), updatedAt: now },
           ] },
         },
         {
@@ -29,7 +29,7 @@ describe('tournament attention command centre', () => {
             { registrationId: 'r3', checkedIn: true }, { registrationId: 'r4', checkedIn: true },
           ],
           bracket: { id: 'b2', matches: [
-            { id: 'm3', status: 'pending', competitor1Id: null, competitor2Id: null, ringNumber: null, scheduledTime: null, updatedAt: now },
+            { id: 'm3', status: 'pending', competitor1Id: null, competitor2Id: null, ring: null, scheduledAt: null, updatedAt: now },
           ] },
         },
       ],
@@ -56,8 +56,8 @@ describe('tournament attention command centre', () => {
   it('does not call a pre-live or future scheduled ring idle', () => {
     const division = {
       id: 'd1', name: 'Patterns', assignments: [], bracket: { id: 'b1', matches: [{
-        id: 'm1', status: 'ready', competitor1Id: 'r1', competitor2Id: 'r2', ringNumber: 1,
-        scheduledTime: new Date(now.getTime() + 60 * 60_000), updatedAt: now,
+        id: 'm1', status: 'ready', competitor1Id: 'r1', competitor2Id: 'r2', ring: '',
+        scheduledAt: new Date(now.getTime() + 60 * 60_000), updatedAt: now,
       }] },
     };
     expect(buildTournamentAttention({ tournament: { id: 't1', status: 'brackets', publicSlug: null }, now, divisions: [division], incidents: [] })
@@ -68,8 +68,8 @@ describe('tournament attention command centre', () => {
 
   it('does not classify normal same-ring cadence as a schedule conflict', () => {
     const match = (id: string, offset: number) => ({
-      id, status: 'ready', competitor1Id: `${id}-a`, competitor2Id: `${id}-b`, ringNumber: 1,
-      scheduledTime: new Date(now.getTime() + offset), updatedAt: now,
+      id, status: 'ready', competitor1Id: `${id}-a`, competitor2Id: `${id}-b`, ring: '',
+      scheduledAt: new Date(now.getTime() + offset), updatedAt: now,
     });
     const alerts = buildTournamentAttention({
       tournament: { id: 't1', status: 'in_progress', publicSlug: null }, now,
@@ -92,13 +92,13 @@ describe('tournament attention command centre', () => {
       tournament: { id: 't1', status: 'in_progress', publicSlug: null }, now,
       divisions: [{
         id: 'd1', name: 'Sparring', assignments: [], bracket: { id: 'b1', matches: [{
-          id: 'm1', status: 'in_progress', competitor1Id: 'r1', competitor2Id: 'r2', ringNumber: 2,
-          scheduledTime: new Date(now.getTime() - 15 * 60_000), updatedAt: new Date(now.getTime() - 11 * 60_000),
+          id: 'm1', status: 'in_progress', competitor1Id: 'r1', competitor2Id: 'r2', ring: '',
+          scheduledAt: new Date(now.getTime() - 15 * 60_000), updatedAt: new Date(now.getTime() - 11 * 60_000),
         }] },
       }], incidents: [],
     });
     expect(alerts).toContainEqual(expect.objectContaining({
-      kind: 'ring_delay', affected: expect.objectContaining({ matchIds: ['m1'], ringNumbers: [2] }),
+      kind: 'ring_delay', affected: expect.objectContaining({ matchIds: ['m1'], rings: ['2'] }),
     }));
   });
 
@@ -134,3 +134,7 @@ describe('tournament attention command centre', () => {
     ]));
   });
 });
+
+
+
+

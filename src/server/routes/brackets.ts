@@ -43,20 +43,53 @@ const getParam = (param: string | string[] | undefined): string => {
   return param || '';
 };
 
+// SH-4: schema-aligned `scores` column is a JSON string. The PDF
+// renderers want narrow `score1`/`score2` numbers; this parser extracts
+// them safely. Anything other than score1/score2 (override flags
+// etc.) is intentionally NOT surfaced to the PDF. Hoisted to module
+// scope so both single-division and batch renderers can share it.
+const parseScoresForPdf = (raw: string | null | undefined): { score1: number | null; score2: number | null } => {
+  if (raw === null || raw === undefined || raw === '') return { score1: null, score2: null };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { score1: null, score2: null };
+  }
+  if (!parsed || typeof parsed !== 'object') return { score1: null, score2: null };
+  const obj = parsed as Record<string, unknown>;
+  const toNum = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  return { score1: toNum(obj.score1), score2: toNum(obj.score2) };
+};
+
 // Validation schemas
-const matchResultSchema = z.object({
-  winnerId: z.string().uuid().nullable().optional(),
+// SH-4: Match result body uses the schema-aligned `scores` (JSON)
+// instead of the legacy `score1`/`score2` columns. `notes` is gone;
+// the override flow now lives inside the scores JSON (manualOverride
+// + overrideReason) so the whole payload is still a single object.
+const matchScoreObjectSchema = z.object({
   // Scores must look like "5", "12", or "0" — at most 3 digits, no
   // negatives, no decimals, no letters. Stops a scorekeeper from
   // submitting "<script>" or 9999 by accident and lets the client
   // assume the value is safe to render verbatim.
   score1: z.string().regex(/^\d{1,3}$/, 'Score must be 0-999').optional(),
   score2: z.string().regex(/^\d{1,3}$/, 'Score must be 0-999').optional(),
+  // Override mechanism: when a winner is submitted that contradicts
+  // the numeric scores, the scorekeeper must set manualOverride=true
+  // and provide a reason. Both fields are optional; only the
+  // combination matters for the validation gate below.
+  manualOverride: z.boolean().optional(),
+  overrideReason: z.string().max(500, 'Override reason must be 500 characters or fewer').optional(),
+}).strict();
+
+const matchResultSchema = z.object({
+  winnerId: z.string().uuid().nullable().optional(),
+  scores: matchScoreObjectSchema.optional(),
   status: z.enum(['pending', 'ready', 'in_progress', 'completed', 'bye']).optional(),
-  // Notes are shown in the bracket detail panel and on the PDF export,
-  // so we cap length to keep both renderers fast and prevent a single
-  // match from bloating the PDF.
-  notes: z.string().max(500, 'Notes must be 500 characters or fewer').optional(),
 });
 
 // P2-9: Video URL validation schema
@@ -354,7 +387,7 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
     return res.status(access.status || 403).json({ error: access.error });
   }
 
-  const { winnerId, score1, score2, status, notes } = req.body;
+  const { winnerId, scores, status } = req.body;
   const user = req.user;
 
   // Get current match state for audit log
@@ -382,20 +415,38 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
   if (
     status === 'completed' &&
     winnerId &&
-    score1 !== undefined &&
-    score2 !== undefined
+    scores?.score1 !== undefined &&
+    scores?.score2 !== undefined
   ) {
-    const numericScore1 = Number(score1);
-    const numericScore2 = Number(score2);
+    const numericScore1 = Number(scores.score1);
+    const numericScore2 = Number(scores.score2);
     const scoreWinnerId = numericScore1 > numericScore2
       ? currentMatch.competitor1Id
       : numericScore2 > numericScore1
         ? currentMatch.competitor2Id
         : null;
 
-    if (scoreWinnerId !== winnerId && !notes?.trim()) {
+    // SH-4: the legacy `notes` field is gone. To override the score
+    // (i.e. submit a winner that doesn't match the recorded numbers),
+    // the scorekeeper must set `manualOverride: true` and supply a
+    // `overrideReason`. Either way, the payload must be coherent:
+    // manualOverride requires a non-empty reason.
+    if (scoreWinnerId !== winnerId) {
+      if (!scores.manualOverride) {
+        return res.status(400).json({
+          error: 'Winner contradicts the recorded score. Set manualOverride=true with an overrideReason, or correct the scores.',
+        });
+      }
+      if (!scores.overrideReason || !scores.overrideReason.trim()) {
+        return res.status(400).json({
+          error: 'manualOverride requires a non-empty overrideReason explaining the discrepancy.',
+        });
+      }
+    } else if (scores.manualOverride && (!scores.overrideReason || !scores.overrideReason.trim())) {
+      // Scores already agree with the winner — refuse the override so
+      // we never persist an empty reason.
       return res.status(400).json({
-        error: 'Winner contradicts the recorded score. Add notes explaining the override.',
+        error: 'manualOverride requires a non-empty overrideReason explaining the discrepancy.',
       });
     }
   }
@@ -444,11 +495,13 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
         updatedAt: currentMatch.updatedAt,
       },
       data: {
+        // SH-4: server now stores a single `scores` JSON column. The
+        // client posts `scores: { score1, score2, manualOverride?,
+        // overrideReason? }`; we stringify the whole object so the
+        // override metadata survives a round-trip.
         winnerId,
-        score1,
-        score2,
+        scores: scores === undefined ? undefined : JSON.stringify(scores),
         status,
-        notes,
       },
     });
 
@@ -482,10 +535,9 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
         previousState: JSON.stringify(currentMatch),
         newState: JSON.stringify({
           winnerId: updated.winnerId,
-          score1: updated.score1,
-          score2: updated.score2,
+          // SH-4: `scores` is the new JSON column. `notes` is gone.
+          scores: updated.scores,
           status: updated.status,
-          notes: updated.notes,
         }),
         userId: user?.id,
         userEmail: user?.email,
@@ -724,12 +776,13 @@ router.post('/match/:matchId/undo', authenticate, async (req: AuthenticatedReque
   // which downstream slots this result populated.
   const match = await prisma.match.update({
     where: { id: getParam(req.params.matchId) },
+    // SH-4: legacy `score1`/`score2`/`notes` are gone. The
+    // `previousState` JSON was written by the audit log above with
+    // the new `scores` field.
     data: {
       winnerId: previousState.winnerId,
-      score1: previousState.score1,
-      score2: previousState.score2,
+      scores: previousState.scores,
       status: previousState.status,
-      notes: previousState.notes,
     },
     include: {
       competitor1: { include: { competitor: true } },
@@ -1082,45 +1135,45 @@ router.get('/division/:divisionId/pdf', authenticate, async (req: AuthenticatedR
     weightClass: division.weightClass,
   };
 
-  // `m.score1` / `m.score2` come from the DB as `String?` (per the
-  // schema). `BracketMatch` declares them as `number | null` because
-  // the regex-validated Zod schema on the write path already enforces
-  // numeric strings — so a `Number(...)` parse here is safe and the
-  // narrower typing matches what the PDF renderer expects.
-  const toScore = (s: string | null | undefined): number | null => {
-    if (s === null || s === undefined || s === '') return null;
-    const n = Number(s);
-    return Number.isFinite(n) ? n : null;
-  };
-  const matches: BracketMatch[] = division.bracket.matches.map((m) => ({
-    matchNumber: m.matchNumber,
-    round: m.roundNumber,
-    bracketType: m.bracketType as 'winners' | 'losers' | 'finals',
-    competitor1: m.competitor1
-      ? {
-          id: m.competitor1.id,
-          name: `${m.competitor1.competitor.firstName} ${m.competitor1.competitor.lastName}`,
-          school: m.competitor1.competitor.schoolDojang || '',
-        }
-      : null,
-    competitor2: m.competitor2
-      ? {
-          id: m.competitor2.id,
-          name: `${m.competitor2.competitor.firstName} ${m.competitor2.competitor.lastName}`,
-          school: m.competitor2.competitor.schoolDojang || '',
-        }
-      : null,
-    winner: m.winner
-      ? {
-          id: m.winner.id,
-          name: `${m.winner.competitor.firstName} ${m.winner.competitor.lastName}`,
-          school: m.winner.competitor.schoolDojang || '',
-        }
-      : null,
-    score1: toScore(m.score1),
-    score2: toScore(m.score2),
-    status: m.status,
-  }));
+  // SH-4: `m.scores` is the schema-aligned JSON string column. Parse
+  // it via the module-level `parseScoresForPdf` helper to extract
+  // score1/score2 (the values are regex-validated numeric strings on
+  // the write path, so `Number(...)` is safe and the narrower
+  // `number | null` typing matches what the PDF renderer expects).
+  // Anything other than score1/score2 (override flags etc.) is
+  // intentionally NOT surfaced to the PDF.
+  const matches: BracketMatch[] = division.bracket.matches.map((m) => {
+    const parsedScores = parseScoresForPdf(m.scores);
+    return {
+      matchNumber: m.matchNumber,
+      round: m.roundNumber,
+      bracketType: m.bracketType as 'winners' | 'losers' | 'finals',
+      competitor1: m.competitor1
+        ? {
+            id: m.competitor1.id,
+            name: `${m.competitor1.competitor.firstName} ${m.competitor1.competitor.lastName}`,
+            school: m.competitor1.competitor.schoolDojang || '',
+          }
+        : null,
+      competitor2: m.competitor2
+        ? {
+            id: m.competitor2.id,
+            name: `${m.competitor2.competitor.firstName} ${m.competitor2.competitor.lastName}`,
+            school: m.competitor2.competitor.schoolDojang || '',
+          }
+        : null,
+      winner: m.winner
+        ? {
+            id: m.winner.id,
+            name: `${m.winner.competitor.firstName} ${m.winner.competitor.lastName}`,
+            school: m.winner.competitor.schoolDojang || '',
+          }
+        : null,
+      score1: parsedScores.score1,
+      score2: parsedScores.score2,
+      status: m.status,
+    };
+  });
 
   const pdf = generateBracketPDF({
     tournament: tournamentInfo,
@@ -1241,8 +1294,8 @@ router.get('/tournament/:tournamentId/pdf', authenticate, requireTournamentAcces
                 school: m.winner.competitor.schoolDojang || '',
               }
             : null,
-          score1: m.score1,
-          score2: m.score2,
+          score1: parseScoresForPdf(m.scores).score1,
+          score2: parseScoresForPdf(m.scores).score2,
           status: m.status,
         })) as BracketMatch[],
         positions,

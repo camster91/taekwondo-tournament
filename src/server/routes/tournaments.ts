@@ -1850,7 +1850,9 @@ router.get('/:id/day-of', authenticate, requireTournamentAccess('viewer'), async
         id: true,
         matchNumber: true,
         status: true,
-        ringNumber: true,
+        // SH-4: schema renamed `ringNumber` (Int) to `ring` (String,
+        // e.g. "A", "B", "1", "2"). Select the new column.
+        ring: true,
         bracket: { select: { id: true, divisionId: true } },
       },
     }),
@@ -1884,26 +1886,30 @@ router.get('/:id/day-of', authenticate, requireTournamentAccess('viewer'), async
   };
 
   // By ring: how many matches are scheduled per ring, how many in-progress
-  // Matches with null ringNumber are NOT bucketed into a default ring (the
-  // previous `|| 1` fallback miscounted unassigned matches into Ring 1 and
-  // made "Up next by ring" lie about which ring was busy). Closes #30
+  // Matches with a null/empty `ring` are NOT bucketed into a default ring.
+  // The previous `|| 1` fallback miscounted unassigned matches into Ring 1
+  // and made "Up next by ring" lie about which ring was busy. Closes #30
   // (the public scoreboard fix shipped in fa278b6 applied the same logic
   // on the client; this is the server side).
-  const byRing: Record<number, { total: number; inProgress: number; completed: number }> = {};
+  //
+  // SH-4: keys are now strings (the schema column `ring` is TEXT, e.g.
+  // "A", "B", "1", "2") instead of integers. The backfill below
+  // converts configured ring numbers into the same string key space.
+  const byRing: Record<string, { total: number; inProgress: number; completed: number }> = {};
   for (const m of matches) {
-    if (m.ringNumber == null) continue;
-    const ring = m.ringNumber;
-    if (!byRing[ring]) byRing[ring] = { total: 0, inProgress: 0, completed: 0 };
-    byRing[ring].total++;
-    if (m.status === 'in_progress') byRing[ring].inProgress++;
-    else if (m.status === 'completed') byRing[ring].completed++;
+    if (m.ring == null || m.ring === '') continue;
+    if (!byRing[m.ring]) byRing[m.ring] = { total: 0, inProgress: 0, completed: 0 };
+    byRing[m.ring].total++;
+    if (m.status === 'in_progress') byRing[m.ring].inProgress++;
+    else if (m.status === 'completed') byRing[m.ring].completed++;
   }
 
   // Backfill from configured ring count (tournament.settings.rings.count).
   // Without this, a brand-new tournament with no matches routed to a ring
   // yet shows an empty byRing / upNext list even though rings 1..N are
   // configured in the Schedule page. Same fix as the DirectorDashboard
-  // backfill in 320bac8.
+  // backfill in 320bac8. SH-4: keys are stringified for the new ring
+  // string key space.
   let configuredRingCount = 0;
   try {
     const settings = tournament.settings ? JSON.parse(tournament.settings) : null;
@@ -1912,14 +1918,15 @@ router.get('/:id/day-of', authenticate, requireTournamentAccess('viewer'), async
     configuredRingCount = 0;
   }
   for (let i = 1; i <= configuredRingCount; i++) {
-    if (!byRing[i]) byRing[i] = { total: 0, inProgress: 0, completed: 0 };
+    const key = String(i);
+    if (!byRing[key]) byRing[key] = { total: 0, inProgress: 0, completed: 0 };
   }
 
   // Up next per ring: next ready match (smallest matchNumber per ring)
-  const upNext: Array<{ ring: number; matchId: string; matchNumber: number; division: string }> = [];
-  for (const ring of Object.keys(byRing).map(Number)) {
+  const upNext: Array<{ ring: string; matchId: string; matchNumber: number; division: string }> = [];
+  for (const ring of Object.keys(byRing)) {
     const nextMatch = matches
-      .filter((m) => m.ringNumber === ring && m.status === 'ready')
+      .filter((m) => m.ring === ring && m.status === 'ready')
       .sort((a, b) => a.matchNumber - b.matchNumber)[0];
     if (nextMatch) {
       const div = divisions.find((d) => d.id === nextMatch.bracket.divisionId);
@@ -1980,7 +1987,10 @@ router.put(
 
     await prisma.match.updateMany({
       where: { bracketId: bracket.id },
-      data: { ringNumber: ring },
+      // SH-4: the schema column is `ring` (String), not `ringNumber`
+      // (Int). The Zod validator on this route already accepts the
+      // string form.
+      data: { ring },
     });
 
     res.json({ success: true, divisionId, ring });
@@ -2071,7 +2081,8 @@ router.post(
   validateRequest(
     z.object({
       delayType: z.enum(['ring', 'division']),
-      ringNumber: z.number().int().min(1).optional(),
+      // SH-4: ring identifier is a free-form string (matches Match.ring).
+      ring: z.string().min(1).max(20).optional(),
       divisionId: z.string().uuid().optional(),
       delayMinutes: z.number().int().min(1).max(480), // Max 8 hours
       reason: z.string().min(1).max(500),
@@ -2082,7 +2093,7 @@ router.post(
     const tournamentId = getParam(req.params.id);
     const delayInput = req.body as {
       delayType: 'ring' | 'division';
-      ringNumber?: number;
+      ring?: string;
       divisionId?: string;
       delayMinutes: number;
       reason: string;
@@ -2114,7 +2125,8 @@ router.post(
     z.object({
       delayInput: z.object({
         delayType: z.enum(['ring', 'division']),
-        ringNumber: z.number().int().min(1).optional(),
+        // SH-4: ring identifier is a free-form string (matches Match.ring).
+        ring: z.string().min(1).max(20).optional(),
         divisionId: z.string().uuid().optional(),
         delayMinutes: z.number().int().min(1).max(480),
         reason: z.string().min(1).max(500),

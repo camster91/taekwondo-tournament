@@ -25,7 +25,9 @@ function operation(targetId: string): OfflineOperation {
     ownerId: 'user-1',
     targetId,
     createdAt: '2026-08-07T12:00:00.000Z',
-    payload: { winnerId: 'registration-1', score1: '5', score2: '2' },
+    // SH-4: the offline queue payload uses the new schema-aligned
+    // `scores` JSON shape (score1/score2 are nested inside it).
+    payload: { winnerId: 'registration-1', scores: { score1: '5', score2: '2' } },
     status: 'pending',
   };
 }

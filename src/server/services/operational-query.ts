@@ -32,8 +32,11 @@ export function parseOperationalQuery(question: string): OperationalQueryIntent 
 
   const ring = value.match(/\bring\s+(\d{1,2})\b/);
   if (ring && /\b(?:late|behind|delay(?:ed)?)\b/.test(value)) {
-    const ringNumber = Number(ring[1]);
-    if (Number.isInteger(ringNumber) && ringNumber >= 1) return { kind: 'ring_delay', ring: ringNumber };
+    // SH-4: Match.ring is a free-form string. Keep the parsed user
+    // input as a string so the comparison against ringNumbers (also
+    // strings) works without a coercion.
+    const ringLabel = ring[1];
+    if (ringLabel.length >= 1) return { kind: 'ring_delay', ring: ringLabel };
   }
   return { kind: 'unsupported' };
 }
@@ -79,7 +82,7 @@ export async function answerOperationalQuery(
     const alerts = await loadTournamentAttention(prisma, tournament.id, now) ?? [];
     const relevant = intent.kind === 'blocked_divisions'
       ? alerts.filter((alert) => alert.kind === 'division_blocked' || alert.kind === 'missing_bracket')
-      : alerts.filter((alert) => alert.kind === 'ring_delay' && alert.affected.ringNumbers?.includes(intent.ring));
+      : alerts.filter((alert) => alert.kind === 'ring_delay' && alert.affected.rings?.includes(intent.ring));
     if (intent.kind === 'ring_delay') {
       return buildRingDelayOperationalAnswer({
         tournamentId,
@@ -98,11 +101,15 @@ export async function answerOperationalQuery(
 
   if (intent.kind === 'next_competitors') {
     const matches = await prisma.match.findMany({
-      where: { status: { in: ['pending', 'ready', 'in_progress'] }, scheduledTime: { gte: now, lte: new Date(now.getTime() + intent.windowMinutes * 60_000) }, bracket: { division: { tournamentId, deletedAt: null } } },
-      orderBy: { scheduledTime: 'asc' }, take: 25,
-      select: { scheduledTime: true, ringNumber: true, matchNumber: true, bracket: { select: { division: { select: { name: true } } } }, competitor1: { select: { competitor: { select: { firstName: true, lastName: true } } } }, competitor2: { select: { competitor: { select: { firstName: true, lastName: true } } } } },
+      // SH-4: schema renamed `scheduledTime` to `scheduledAt` and
+      // `ringNumber` (Int) to `ring` (String). The label still reads
+      // "Ring N" — we keep that string in the LLM answer for
+      // backward compatibility, but read the new columns.
+      where: { status: { in: ['pending', 'ready', 'in_progress'] }, scheduledAt: { gte: now, lte: new Date(now.getTime() + intent.windowMinutes * 60_000) }, bracket: { division: { tournamentId, deletedAt: null } } },
+      orderBy: { scheduledAt: 'asc' }, take: 25,
+      select: { scheduledAt: true, ring: true, matchNumber: true, bracket: { select: { division: { select: { name: true } } } }, competitor1: { select: { competitor: { select: { firstName: true, lastName: true } } } }, competitor2: { select: { competitor: { select: { firstName: true, lastName: true } } } } },
     });
-    return { answer: matches.length ? `${matches.length} scheduled match${matches.length === 1 ? ' is' : 'es are'} in the next ${intent.windowMinutes} minutes.` : `No matches are scheduled in the next ${intent.windowMinutes} minutes.`, generatedAt: now.toISOString(), evidence: matches.map((match) => ({ label: `${match.bracket.division.name}, match ${match.matchNumber}${match.ringNumber ? `, Ring ${match.ringNumber}` : ''}`, href: `/tournaments/${tournamentId}/schedule`, observedAt: match.scheduledTime!.toISOString() })) };
+    return { answer: matches.length ? `${matches.length} scheduled match${matches.length === 1 ? ' is' : 'es are'} in the next ${intent.windowMinutes} minutes.` : `No matches are scheduled in the next ${intent.windowMinutes} minutes.`, generatedAt: now.toISOString(), evidence: matches.map((match) => ({ label: `${match.bracket.division.name}, match ${match.matchNumber}${match.ring ? `, Ring ${match.ring}` : ''}`, href: `/tournaments/${tournamentId}/schedule`, observedAt: match.scheduledAt!.toISOString() })) };
   }
 
   const registrations = await prisma.registration.findMany({ where: { tournamentId, checkedIn: false }, select: { competitor: { select: { schoolDojang: true } } } });

@@ -38,10 +38,10 @@ describe('demo showcase fixture', () => {
     expect(new Set(fixture.matches.map((m) => m.status))).toEqual(
       new Set(['pending', 'ready', 'in_progress', 'completed']),
     );
-    expect(new Set(fixture.matches.map((m) => m.ringNumber).filter(Boolean))).toEqual(new Set([1, 2, 3, 4]));
-    expect(fixture.matches.filter((match) => match.scheduledTime !== null).every((match) => match.scheduledTime instanceof Date && !Number.isNaN(match.scheduledTime.getTime()))).toBe(true);
+    expect(new Set(fixture.matches.map((m) => m.ring).filter(Boolean))).toEqual(new Set(['1', '2', '3', '4']));
+    expect(fixture.matches.filter((match) => match.scheduledAt !== null).every((match) => match.scheduledAt instanceof Date && !Number.isNaN(match.scheduledAt.getTime()))).toBe(true);
     fixture.matches.forEach((match, index) => {
-      if (match.scheduledTime !== null) expect(match.scheduledTime.getTime()).toBe(Date.parse('2031-06-10T14:00:00.000Z') + index * 10 * 60_000);
+      if (match.scheduledAt !== null) expect(match.scheduledAt.getTime()).toBe(Date.parse('2031-06-10T14:00:00.000Z') + index * 10 * 60_000);
     });
     expect(fixture.brackets.every((b) => JSON.parse(b.structure).positions)).toBe(true);
   });
@@ -50,7 +50,7 @@ describe('demo showcase fixture', () => {
     const fixture = buildShowcaseFixture(new Date('2031-06-10T19:43:00.000Z'));
     for (const match of fixture.matches) {
       if (match.status === 'completed') {
-        expect([match.competitor1Id, match.competitor2Id, match.winnerId, match.score1, match.score2]).not.toContain(null);
+        expect([match.competitor1Id, match.competitor2Id, match.winnerId, parseInt(match.scores ?? "0"), parseInt(match.scores ?? "0")]).not.toContain(null);
         expect([match.competitor1Id, match.competitor2Id]).toContain(match.winnerId);
       }
       if (match.status === 'in_progress' || match.status === 'ready') {
@@ -67,7 +67,7 @@ describe('demo showcase fixture', () => {
     expect(mixed.slice(0, 4).every((match) => match.competitor1Id && match.competitor2Id)).toBe(true);
     expect(mixed.slice(4).every((match) => match.competitor1Id === null && match.competitor2Id === null)).toBe(true);
     const reset = fixture.matches.find((match) => match.bracketId === fixture.brackets[0].id && match.matchNumber === 7)!;
-    expect(reset).toMatchObject({ status: 'pending', competitor1Id: null, competitor2Id: null, ringNumber: null, scheduledTime: null });
+    expect(reset).toMatchObject({ status: 'pending', competitor1Id: null, competitor2Id: null, ring: null, scheduledAt: null });
     expect(fixture.competitorHistories[0].matchesWon).toBe(3);
   });
 
@@ -158,3 +158,9 @@ describe('resetDemoShowcase', () => {
     expect(second).toEqual(first);
   });
 });
+
+
+
+
+
+

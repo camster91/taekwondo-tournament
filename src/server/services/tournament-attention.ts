@@ -16,8 +16,8 @@ interface AttentionMatch {
   status: string;
   competitor1Id: string | null;
   competitor2Id: string | null;
-  ringNumber: number | null;
-  scheduledTime: Date | null;
+  ring: number | null;
+  scheduledAt: Date | null;
   updatedAt: Date;
 }
 
@@ -60,7 +60,7 @@ export interface TournamentAttentionAlert {
     matchIds?: string[];
     registrationIds?: string[];
     incidentIds?: string[];
-    ringNumbers?: number[];
+    rings?: number[];
   };
 }
 
@@ -101,9 +101,9 @@ export function buildTournamentAttention(input: TournamentAttentionInput): Tourn
     division.assignments.map((assignment) => [assignment.registrationId, assignment.checkedIn] as const),
   ));
   const soonRows = matchRows.filter(({ match }) =>
-    Boolean(match.scheduledTime)
-    && match.scheduledTime!.getTime() >= now.getTime() - CONFLICT_MS
-    && match.scheduledTime!.getTime() <= now.getTime() + SOON_MS
+    Boolean(match.scheduledAt)
+    && match.scheduledAt!.getTime() >= now.getTime() - CONFLICT_MS
+    && match.scheduledAt!.getTime() <= now.getTime() + SOON_MS
     && ['pending', 'ready', 'in_progress'].includes(match.status),
   );
   const uncheckedIds = unique(soonRows.flatMap(({ match }) =>
@@ -120,7 +120,7 @@ export function buildTournamentAttention(input: TournamentAttentionInput): Tourn
       recommendation: 'Confirm arrival and weigh-in before calling these matches.',
       href: `/checkin/${tournament.id}`,
       affected: { ...base, registrationIds: uncheckedIds, matchIds: affectedRows.map(({ match }) => match.id) },
-      affectedLabels: affectedRows.map(({ division, match }) => `${division.name}, match ${match.matchNumber ?? match.id.slice(0, 8)}${match.ringNumber ? `, Ring ${match.ringNumber}` : ''}`),
+      affectedLabels: affectedRows.map(({ division, match }) => `${division.name}, match ${match.matchNumber ?? match.id.slice(0, 8)}${match.ring ? `, Ring ${match.ring}` : ''}`),
     });
   }
 
@@ -129,10 +129,10 @@ export function buildTournamentAttention(input: TournamentAttentionInput): Tourn
     for (let j = i + 1; j < soonRows.length; j += 1) {
       const a = soonRows[i]!.match;
       const b = soonRows[j]!.match;
-      const sameRing = a.ringNumber !== null && a.ringNumber === b.ringNumber;
+      const sameRing = a.ring !== null && a.ring === b.ring;
       const aPeople = [a.competitor1Id, a.competitor2Id].filter(Boolean);
       const sharedAthlete = aPeople.some((id) => id === b.competitor1Id || id === b.competitor2Id);
-      if (Math.abs(a.scheduledTime!.getTime() - b.scheduledTime!.getTime()) < CONFLICT_MS && (sameRing || sharedAthlete)) {
+      if (Math.abs(a.scheduledAt!.getTime() - b.scheduledAt!.getTime()) < CONFLICT_MS && (sameRing || sharedAthlete)) {
         conflictingIds.add(a.id);
         conflictingIds.add(b.id);
       }
@@ -146,18 +146,18 @@ export function buildTournamentAttention(input: TournamentAttentionInput): Tourn
       summary: `${conflictingIds.size} matches overlap on a ring or share an athlete within five minutes.`,
       recommendation: 'Adjust the affected match times or ring assignments before calling competitors.',
       href: href('schedule'),
-      affected: { ...base, matchIds: [...conflictingIds], ringNumbers: unique(conflicts.flatMap(({ match }) => match.ringNumber === null ? [] : [match.ringNumber])) },
-      affectedLabels: conflicts.map(({ division, match }) => `${division.name}, match ${match.matchNumber ?? match.id.slice(0, 8)}${match.ringNumber ? `, Ring ${match.ringNumber}` : ''}`),
+      affected: { ...base, matchIds: [...conflictingIds], rings: unique(conflicts.flatMap(({ match }) => match.ring === null ? [] : [match.ring])) },
+      affectedLabels: conflicts.map(({ division, match }) => `${division.name}, match ${match.matchNumber ?? match.id.slice(0, 8)}${match.ring ? `, Ring ${match.ring}` : ''}`),
     });
   }
 
-  const readyByRing = new Map<number, string[]>();
-  const activeRings = new Set(matchRows.filter(({ match }) => match.status === 'in_progress' && match.ringNumber !== null).map(({ match }) => match.ringNumber!));
+  const readyByRing = new Map<string, string[]>();
+  const activeRings = new Set(matchRows.filter(({ match }) => match.status === 'in_progress' && match.ring !== null).map(({ match }) => match.ring!));
   for (const { match } of matchRows) {
-    const due = !match.scheduledTime || match.scheduledTime.getTime() <= now.getTime();
+    const due = !match.scheduledAt || match.scheduledAt.getTime() <= now.getTime();
     if (!['active', 'in_progress'].includes(tournament.status) || match.status !== 'ready' || !due
-      || match.ringNumber === null || activeRings.has(match.ringNumber)) continue;
-    readyByRing.set(match.ringNumber, [...(readyByRing.get(match.ringNumber) ?? []), match.id]);
+      || match.ring === null || activeRings.has(match.ring)) continue;
+    readyByRing.set(match.ring, [...(readyByRing.get(match.ring) ?? []), match.id]);
   }
   if (readyByRing.size) {
     const rings = [...readyByRing.keys()].sort((a, b) => a - b);
@@ -167,7 +167,7 @@ export function buildTournamentAttention(input: TournamentAttentionInput): Tourn
       summary: `${rings.length} ring${rings.length === 1 ? '' : 's'} have ready matches but no match in progress.`,
       recommendation: 'Confirm ring staff are ready, then call the next assigned match.',
       href: href('schedule'),
-      affected: { ...base, ringNumbers: rings, matchIds: rings.flatMap((ring) => readyByRing.get(ring) ?? []) },
+      affected: { ...base, rings: rings, matchIds: rings.flatMap((ring) => readyByRing.get(ring) ?? []) },
       affectedLabels: rings.map((ring) => `Ring ${ring}`),
     });
   }
@@ -185,9 +185,9 @@ export function buildTournamentAttention(input: TournamentAttentionInput): Tourn
       affected: {
         ...base,
         matchIds: delayed.map(({ match }) => match.id),
-        ringNumbers: unique(delayed.flatMap(({ match }) => match.ringNumber === null ? [] : [match.ringNumber])),
+        rings: unique(delayed.flatMap(({ match }) => match.ring === null ? [] : [match.ring])),
       },
-      affectedLabels: delayed.map(({ division, match }) => `${division.name}, match ${match.matchNumber ?? match.id.slice(0, 8)}${match.ringNumber ? `, Ring ${match.ringNumber}` : ''}`),
+      affectedLabels: delayed.map(({ division, match }) => `${division.name}, match ${match.matchNumber ?? match.id.slice(0, 8)}${match.ring ? `, Ring ${match.ring}` : ''}`),
     });
   }
 
@@ -266,8 +266,8 @@ export async function loadTournamentAttention(
                   status: true,
                   competitor1Id: true,
                   competitor2Id: true,
-                  ringNumber: true,
-                  scheduledTime: true,
+                  ring: true,
+                  scheduledAt: true,
                   updatedAt: true,
                 },
               },
@@ -300,3 +300,9 @@ export async function loadTournamentAttention(
   });
 }
 import type { PrismaClient } from '@prisma/client';
+
+
+
+
+
+

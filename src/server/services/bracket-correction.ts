@@ -20,12 +20,16 @@ export interface BracketCorrectionMatch {
   competitor1Id: string | null;
   competitor2Id: string | null;
   winnerId?: string | null;
-  score1?: string | null;
-  score2?: string | null;
-  status: string;
-  notes?: string | null;
-  scheduledTime?: string | null;
-  ringNumber?: number | null;
+  // SH-4: legacy `score1`/`score2`/`notes`/`ringNumber` fields were
+  // replaced by the schema-aligned columns. `scores` is the JSON
+  // payload (string form on the wire, parsed at the renderer).
+  // `scheduledTime` was renamed to `scheduledAt`; `ringNumber` is now
+  // a free-form ring label stored as `ring` on the schema. The local
+  // snapshot mirrors the schema so the version hash and restore path
+  // stay consistent with what the DB actually stores.
+  scores?: string | null;
+  ring?: string | null;
+  scheduledAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -80,7 +84,10 @@ export interface BracketCorrectionImpact {
   completedMatchesRemoved: number;
   inProgressMatchesBlocked: number;
   scoredMatchesRemoved: number;
-  notesRemoved: number;
+  // SH-4: `notesRemoved` is gone. The legacy `notes` column was
+  // dropped from the schema; the new `scores` JSON may contain
+  // structured override metadata (manualOverride + overrideReason)
+  // but those are surfaced via scoredMatchesRemoved.
   matchAuditRowsRemoved: number;
   matchupHistoryRowsRemoved: number;
   oldByeCount: number;
@@ -187,8 +194,12 @@ export function buildBracketCorrectionImpact(
     newMatchCount: proposed.matches.length,
     completedMatchesRemoved: oldMatches.filter((match) => match.status === 'completed').length,
     inProgressMatchesBlocked: oldMatches.filter((match) => match.status === 'in_progress').length,
-    scoredMatchesRemoved: oldMatches.filter((match) => match.score1 !== null && match.score1 !== undefined || match.score2 !== null && match.score2 !== undefined).length,
-    notesRemoved: oldMatches.filter((match) => Boolean(match.notes)).length,
+    // SH-4: `scores` is now a JSON string. Treat any non-empty value
+    // (even invalid JSON) as a recorded score — the bracket was in
+    // use and downstream matches may have already inherited the
+    // winner, so a non-null payload means the snapshot has scoring
+    // data we are about to drop.
+    scoredMatchesRemoved: oldMatches.filter((match) => match.scores !== null && match.scores !== undefined && match.scores !== '').length,
     matchAuditRowsRemoved: snapshot.matchAuditCount,
     matchupHistoryRowsRemoved: snapshot.matchupHistoryCount,
     oldByeCount: oldMatches.filter(isBye).length,
@@ -334,7 +345,9 @@ export async function undoBracketCorrection(
           updatedAt: new Date(before.bracket.updatedAt),
         } });
         if (before.bracket.matches.length > 0) {
-          await tx.match.createMany({ data: before.bracket.matches.map((match) => restoreDateFields(match as unknown as Record<string, unknown>, ['scheduledTime', 'createdAt', 'updatedAt'])) as unknown as Prisma.MatchCreateManyInput[] });
+          // SH-4: `scheduledTime` was renamed to `scheduledAt` in the
+          // schema; restore path uses the schema name.
+          await tx.match.createMany({ data: before.bracket.matches.map((match) => restoreDateFields(match as unknown as Record<string, unknown>, ['scheduledAt', 'createdAt', 'updatedAt'])) as unknown as Prisma.MatchCreateManyInput[] });
         }
       }
       if (before.matchAuditRows.length > 0) {

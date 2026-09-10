@@ -66,7 +66,7 @@ interface SchoolData {
       score1: string | null;
       score2: string | null;
       winnerId: string | null;
-      ringNumber: number | null;
+      ring: number | null;
       divisionId: string;
       divisionName: string;
       competitor1Name: string | null;
@@ -82,7 +82,7 @@ interface SchoolData {
       id: string;
       matchNumber: number;
       status: string;
-      ringNumber: number | null;
+      ring: number | null;
       divisionName: string;
     } | null;
   }>;
@@ -90,7 +90,7 @@ interface SchoolData {
     id: string;
     matchNumber: number;
     status: string;
-    ringNumber: number | null;
+    ring: number | null;
     divisionName: string;
     competitorName: string;
     opponentName: string | null;
@@ -494,9 +494,9 @@ export default function SchoolPortal() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {match.ringNumber && (
+                      {match.ring && (
                         <Badge variant="info" size="sm">
-                          Ring {match.ringNumber}
+                          Ring {match.ring}
                         </Badge>
                       )}
                       <StatusBadge status={match.status} />
@@ -651,9 +651,9 @@ export default function SchoolPortal() {
                                   #{comp.nextMatch.matchNumber}
                                 </span>
                               </div>
-                              {comp.nextMatch.ringNumber && (
+                              {comp.nextMatch.ring && (
                                 <span className="text-xs text-surface-500 mt-1 block">
-                                  Ring {comp.nextMatch.ringNumber}
+                                  Ring {comp.nextMatch.ring}
                                 </span>
                               )}
                             </div>
@@ -752,9 +752,9 @@ export default function SchoolPortal() {
                             Match #{comp.nextMatch.matchNumber}
                           </span>
                           <StatusBadge status={comp.nextMatch.status} />
-                          {comp.nextMatch.ringNumber && (
+                          {comp.nextMatch.ring && (
                             <Badge variant="info" size="sm">
-                              Ring {comp.nextMatch.ringNumber}
+                              Ring {comp.nextMatch.ring}
                             </Badge>
                           )}
                         </div>
@@ -779,3 +779,4 @@ export default function SchoolPortal() {
     </div>
   );
 }
+

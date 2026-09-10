@@ -47,6 +47,7 @@ import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner';
 import PendingOperationsPanel from '../components/PendingOperationsPanel';
 
 import type { ApiMatch, ApiDivision, ApiTournamentSummary } from '../../shared/contracts';
+import { parseMatchScores } from '../utils/api-types';
 
 // Scorekeeper uses the full match shape from the contract, plus winnerId
 // which is derived client-side (winnerId = winner?.id ?? null)
@@ -68,9 +69,15 @@ type ResultType = 'win' | 'dq' | 'forfeit' | 'injury';
 interface ScoreSubmission {
   matchId: string;
   winnerId: string;
-  score1: string;
-  score2: string;
-  notes: string;
+  // SH-4: server now expects `scores` (JSON), not top-level
+  // `score1`/`score2`/`notes` fields. The override flow moved into
+  // the scores object as `manualOverride` / `overrideReason`.
+  scores: {
+    score1?: string;
+    score2?: string;
+    manualOverride?: boolean;
+    overrideReason?: string;
+  };
 }
 
 /**
@@ -250,7 +257,7 @@ export default function Scorekeeper() {
 
   const availableRings = useMemo(() => Array.from(new Set(
     (divisions || []).flatMap((division) => division.bracket?.matches || [])
-      .map((match) => match.ringNumber)
+      .map((match) => match.ring)
       .filter((ring): ring is number => ring != null),
   )).sort((a, b) => a - b), [divisions]);
   const stagedScoreIds = useMemo(
@@ -263,7 +270,7 @@ export default function Scorekeeper() {
     const div = divisions?.find((d) => d.id === selectedDivision);
     return div?.bracket?.matches
       ?.filter((m) => (m.status === 'ready' || m.status === 'in_progress')
-        && (selectedRing == null || m.ringNumber === selectedRing)
+        && (selectedRing == null || m.ring === selectedRing)
         && !stagedScoreIds.has(m.id))
       .sort((a, b) => a.matchNumber - b.matchNumber) || [];
   }, [divisions, selectedDivision, selectedRing, stagedScoreIds]);
@@ -306,10 +313,9 @@ export default function Scorekeeper() {
     try {
       offlineOperations.enqueue(makeScoreOperation(user.id, tournamentId, data.matchId, {
         winnerId: data.winnerId,
-        score1: data.score1,
-        score2: data.score2,
+        // SH-4: payload now mirrors the new server request body.
+        scores: data.scores,
         status: 'completed',
-        notes: data.notes,
       }, deliveryUncertain ? 'delivery_uncertain' : 'pending'));
     } catch {
       if (deliveryUncertain) {
@@ -318,7 +324,7 @@ export default function Scorekeeper() {
         const name = (entry: Match['competitor1']) => entry ? `${entry.competitor.firstName} ${entry.competitor.lastName}` : 'TBD';
         const winner = match?.competitor1?.id === data.winnerId ? name(match.competitor1) : match?.competitor2?.id === data.winnerId ? name(match.competitor2) : `Registration #${data.winnerId.slice(0, 8)}`;
         const target = match ? `${division?.name || 'Division'}, match #${match.matchNumber} (${name(match.competitor1)} vs ${name(match.competitor2)})` : `Match #${data.matchId.slice(0, 8)}`;
-        setUnpersistedDeliveryWarning(`${target} may already be saved on the server. Attempted winner: ${winner}, score ${data.score1 || '0'}–${data.score2 || '0'}, sent ${new Date().toLocaleTimeString()}. This device could not retain the safety record. Do not resubmit it. Review the refreshed match first.`);
+        setUnpersistedDeliveryWarning(`${target} may already be saved on the server. Attempted winner: ${winner}, score ${data.scores.score1 || '0'}–${data.scores.score2 || '0'}, sent ${new Date().toLocaleTimeString()}. This device could not retain the safety record. Do not resubmit it. Review the refreshed match first.`);
         void queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
         finishResultEntry(true);
         setAnnounce('Result delivery is uncertain. Do not resubmit it; review the refreshed match first.');
@@ -358,10 +364,9 @@ export default function Scorekeeper() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           winnerId: data.winnerId,
-          score1: data.score1,
-          score2: data.score2,
+          // SH-4: payload now mirrors the new server request body.
+          scores: data.scores,
           status: 'completed',
-          notes: data.notes,
         }),
       });
       if (!res.ok) {
@@ -556,12 +561,19 @@ export default function Scorekeeper() {
       noteText = noteText ? `${noteText}. ${notes}` : notes;
     }
 
-    const submission = {
+    const submission: ScoreSubmission = {
+      // SH-4: `submission` carries the new `scores` JSON shape. The
+      // override flag is only set when the result type is not a normal
+      // win AND we have a note explaining the discrepancy.
       matchId: currentMatch.id,
       winnerId: selectedWinner,
-      score1,
-      score2,
-      notes: noteText,
+      scores: {
+        score1,
+        score2,
+        ...(isOverride
+          ? { manualOverride: true, overrideReason: noteText }
+          : {}),
+      },
     };
     if (shouldQueueOfflineMutation({ isOfflineSession, navigatorOnline: navigator.onLine })) stageScoreResult(submission);
     else recordResult.mutate(submission);
@@ -810,7 +822,7 @@ export default function Scorekeeper() {
           ? buildDeliveryUncertainMessage('result', label)
           : buildOfflineReviewMessage('result', operation.targetId, operation.lastError, {
             label,
-            attempted: `${winner}, ${String(operation.payload.score1 ?? '-')}–${String(operation.payload.score2 ?? '-')}`,
+            attempted: `${winner}, ${String((operation.payload as { scores?: { score1?: string; score2?: string } }).scores?.score1 ?? '-')}–${String((operation.payload as { scores?: { score1?: string; score2?: string } }).scores?.score2 ?? '-')}`,
             createdAt: operation.createdAt,
           });
         return (
@@ -954,7 +966,7 @@ export default function Scorekeeper() {
                 )}
                 {divisions
                   ?.filter((d) => d.bracket
-                    && (selectedRing == null || d.bracket.matches.some((match) => match.ringNumber === selectedRing))
+                    && (selectedRing == null || d.bracket.matches.some((match) => match.ring === selectedRing))
                     && (!divisionSearch || d.name.toLowerCase().includes(divisionSearch.toLowerCase())))
                   .map((division) => {
                     const readyCount = division.bracket?.matches?.filter((m) => m.status === 'ready' || m.status === 'in_progress').length || 0;
@@ -1515,8 +1527,8 @@ export default function Scorekeeper() {
                       <span className="text-green-400 font-medium">{winnerName}</span>
                       <span className="text-gray-600 mx-1">def.</span>
                       <span className="text-gray-600">{loserName}</span>
-                      {match.score1 && match.score2 && (
-                        <span className="text-gray-600 ml-2">({match.score1}-{match.score2})</span>
+                      {parseMatchScores(match.scores)?.score1 && parseMatchScores(match.scores)?.score2 && (
+                        <span className="text-gray-600 ml-2">({parseMatchScores(match.scores)?.score1}-{parseMatchScores(match.scores)?.score2})</span>
                       )}
                     </div>
                     <button
@@ -1796,3 +1808,7 @@ export default function Scorekeeper() {
     </div>
   );
 }
+
+
+
+

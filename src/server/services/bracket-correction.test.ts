@@ -24,8 +24,11 @@ const snapshot = {
   bracket: {
     id: 'bracket-1', format: 'double_elim', structure: '{"version":1}', updatedAt: '2030-01-01T10:00:00.000Z',
     matches: [
-      { id: 'm1', matchNumber: 1, roundNumber: 1, bracketType: 'winners', competitor1Id: 'r1', competitor2Id: 'r2', winnerId: 'r1', score1: '6', score2: '3', status: 'completed', notes: 'clean result' },
-      { id: 'm2', matchNumber: 2, roundNumber: 1, bracketType: 'losers', competitor1Id: null, competitor2Id: null, winnerId: null, score1: null, score2: null, status: 'pending', notes: null },
+      // SH-4: legacy `score1`/`score2`/`notes` fields are gone. The
+      // `scores` column holds a JSON payload; the structured data the
+      // tests care about lives inside it.
+      { id: 'm1', matchNumber: 1, roundNumber: 1, bracketType: 'winners', competitor1Id: 'r1', competitor2Id: 'r2', winnerId: 'r1', scores: JSON.stringify({ score1: '6', score2: '3' }), status: 'completed' },
+      { id: 'm2', matchNumber: 2, roundNumber: 1, bracketType: 'losers', competitor1Id: null, competitor2Id: null, winnerId: null, scores: null, status: 'pending' },
     ],
   },
   matchAuditCount: 2,
@@ -46,7 +49,7 @@ describe('bracket correction preview contract', () => {
   it('versions every assignment, competitor label, match result, and history count', () => {
     const version = bracketCorrectionVersion(snapshot);
     expect(bracketCorrectionVersion({ ...snapshot, assignments: [{ ...snapshot.assignments[0], firstName: 'Amira' }, snapshot.assignments[1]] })).not.toBe(version);
-    expect(bracketCorrectionVersion({ ...snapshot, bracket: { ...snapshot.bracket, matches: [{ ...snapshot.bracket.matches[0], score1: '7' }, snapshot.bracket.matches[1]] } })).not.toBe(version);
+    expect(bracketCorrectionVersion({ ...snapshot, bracket: { ...snapshot.bracket, matches: [{ ...snapshot.bracket.matches[0], scores: JSON.stringify({ score1: '7', score2: '3' }) }, snapshot.bracket.matches[1]] } })).not.toBe(version);
     expect(bracketCorrectionVersion({ ...snapshot, matchAuditCount: 3 })).not.toBe(version);
   });
 
@@ -62,7 +65,6 @@ describe('bracket correction preview contract', () => {
       completedMatchesRemoved: 1,
       inProgressMatchesBlocked: 0,
       scoredMatchesRemoved: 1,
-      notesRemoved: 1,
       matchAuditRowsRemoved: 2,
       matchupHistoryRowsRemoved: 1,
       oldByeCount: 0,
@@ -115,7 +117,7 @@ describe('bracket correction preview contract', () => {
   });
 
   it('replaces the bracket, histories, initializes byes, and writes one audit atomically', async () => {
-    const clean = { ...snapshot, bracket: { ...snapshot.bracket, matches: snapshot.bracket.matches.map((match) => ({ ...match, status: 'ready', winnerId: null, score1: null, score2: null, notes: null })) }, matchAuditCount: 0, matchupHistoryCount: 0 };
+    const clean = { ...snapshot, bracket: { ...snapshot.bracket, matches: snapshot.bracket.matches.map((match) => ({ ...match, status: 'ready', winnerId: null, scores: null,  })) }, matchAuditCount: 0, matchupHistoryCount: 0 };
     const proposal = buildProposedBracketCorrection(clean, { format: 'single_elim', seedingStrategy: 'school_spread' });
     const after = { ...clean, bracket: { id: 'new-bracket', format: 'single_elim', structure: JSON.stringify(proposal.structure), updatedAt: '2030-01-01T11:00:00.000Z', matches: proposal.matches }, matchAuditCount: 0, matchupHistoryCount: 0 };
     const initializeByes = vi.fn().mockResolvedValue(0);
@@ -139,7 +141,7 @@ describe('bracket correction preview contract', () => {
 
   it('restores the exact snapshotted bracket and histories only when no later scoring occurred', async () => {
     const before = { ...snapshot, matchAuditRows: [{ id: 'log-1', matchId: 'm1' }], matchupHistoryRows: [{ id: 'history-1', matchId: 'm1' }] };
-    const current = { ...snapshot, bracket: { ...snapshot.bracket, id: 'new-bracket', updatedAt: '2030-01-01T11:00:00.000Z', matches: snapshot.bracket.matches.map((match) => ({ ...match, id: `new-${match.id}`, status: 'ready', winnerId: null, score1: null, score2: null })) }, matchAuditCount: 0, matchupHistoryCount: 0, matchAuditRows: [], matchupHistoryRows: [] };
+    const current = { ...snapshot, bracket: { ...snapshot.bracket, id: 'new-bracket', updatedAt: '2030-01-01T11:00:00.000Z', matches: snapshot.bracket.matches.map((match) => ({ ...match, id: `new-${match.id}`, status: 'ready', winnerId: null, scores: null })) }, matchAuditCount: 0, matchupHistoryCount: 0, matchAuditRows: [], matchupHistoryRows: [] };
     const auditUpdate = vi.fn().mockResolvedValue({ count: 1 });
     const tx = {
       tournamentOperationAudit: { findUnique: vi.fn().mockResolvedValue({ id: 'audit-1', tournamentId: 'tournament-1', operationType: 'bracket_reseed', reversible: true, undoneAt: null, beforeState: JSON.stringify(before), afterState: JSON.stringify(current) }), updateMany: auditUpdate },
@@ -175,3 +177,11 @@ describe('bracket correction preview contract', () => {
     expect(() => assertDeterministicCorrectionConfig({ format: 'double_elim', seedingStrategy: 'school_spread' })).not.toThrow();
   });
 });
+
+
+
+
+
+
+
+

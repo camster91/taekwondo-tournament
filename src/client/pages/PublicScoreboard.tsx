@@ -81,13 +81,13 @@ export default function PublicScoreboard() {
   // Closes M8 from the UI audit.
   const { data: scoreboardData, isLoading: divisionsLoading, error: scoreboardError, refetch: retryScoreboard } = useQuery<{
     divisions: Division[];
-    displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
+    displaySettings: { mode?: string; ring?: number; featuredMatchId?: string };
   }>({
     queryKey: ['scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
       const data = await fetchJson<{
         divisions: Division[];
-        displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
+        displaySettings: { mode?: string; ring?: number; featuredMatchId?: string };
       }>(fetch, buildScoreboardApiUrl(tournamentId || '', publicKey));
       setLastFetchAt(new Date());
       return data;
@@ -139,15 +139,18 @@ export default function PublicScoreboard() {
 
   // Stale-data warning removed — now integrated into scoreboardState
 
-  // Group by ring. Matches without a ringNumber are NOT bucketed into a
+  // Group by ring. Matches without a ring are NOT bucketed into a
   // default ring — they go into a separate "unassigned" bucket so the LIVE
   // badge count reflects reality, not a || 1 fallback. Closes #30.
+  // SH-4: ring is a free-form string, so the bucket keys are strings.
+  // We keep the legacy `1..4` defaults as strings so existing markup
+  // that labels them "Ring 1" still reads correctly.
   const matchesByRing = useMemo(() => {
-    const out: Record<number, Match[]> = { 1: [], 2: [], 3: [], 4: [] };
+    const out: Record<string, Match[]> = { '1': [], '2': [], '3': [], '4': [] };
     for (const d of divisions || []) {
       for (const m of d.bracket?.matches || []) {
-        if (m.ringNumber == null) continue; // unassigned — render separately
-        const ring = m.ringNumber;
+        if (m.ring == null) continue; // unassigned — render separately
+        const ring = m.ring;
         if (!out[ring]) out[ring] = [];
         out[ring].push(m);
       }
@@ -620,3 +623,4 @@ export default function PublicScoreboard() {
     </div>
   );
 }
+
