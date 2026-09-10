@@ -270,7 +270,7 @@ export default function Divisions() {
     return sportProfile.eventTypes[idx]?.name ?? eventType;
   };
 
-  const { data: divisions, isLoading } = useQuery<Division[]>({
+  const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions } = useQuery<Division[]>({
     queryKey: ['divisions', id],
     queryFn: async () => {
       const res = await fetch(`/api/divisions/tournament/${id}`, { headers: getAuthHeaders() });
@@ -1296,46 +1296,61 @@ export default function Divisions() {
             <CardSkeleton key={i} />
           ))}
         </div>
+      ) : divisionsError ? (
+        <OperationStatus
+          state="rejected"
+          message="Could not load divisions. Check your connection and try again."
+          actionLabel="Retry"
+          onAction={() => void retryDivisions()}
+        />
       ) : divisions && divisions.length > 0 ? (
         <div className="space-y-6">
-          {Object.entries(groupedDivisions || {}).map(([category, divs]) => (
-            <Card key={category}>
-              <CardHeader>
-                <div className="flex items-center justify-between w-full">
-                  <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white">{category}</h3>
-                    <span className="text-sm text-gray-600 dark:text-gray-400">
-                      {divs.length} division{divs.length !== 1 ? 's' : ''}
-                    </span>
+          {Object.entries(groupedDivisions || {}).length === 0 ? (
+            <EmptyState
+              icon={<LayoutGrid className="h-12 w-12 text-gray-400" />}
+              title="No matches found"
+              description="No divisions match your current filters. Try adjusting your search criteria."
+            />
+          ) : (
+            Object.entries(groupedDivisions || {}).map(([category, divs]) => (
+              <Card key={category}>
+                <CardHeader>
+                  <div className="flex items-center justify-between w-full">
+                    <div>
+                      <h3 className="font-semibold text-gray-900 dark:text-white">{category}</h3>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        {divs.length} division{divs.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
                   </div>
+                </CardHeader>
+                <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                  <SortableContext items={divs.map((d) => d.id)} strategy={verticalListSortingStrategy}>
+                    {divs.map((div) => (
+                      <SortableDivisionRow
+                        key={div.id}
+                        div={div}
+                        tournamentId={id || ''}
+                        onManageCompetitors={() => setAssignTarget(div)}
+                        onSplit={() => setSplitTarget(div)}
+                        onDelete={() => setDeleteTarget(div)}
+                        isSelected={selectedDivisionsForMerge.has(div.id)}
+                        onToggleSelect={(divisionId) => {
+                          const newSelection = new Set(selectedDivisionsForMerge);
+                          if (newSelection.has(divisionId)) {
+                            newSelection.delete(divisionId);
+                          } else {
+                            newSelection.add(divisionId);
+                          }
+                          setSelectedDivisionsForMerge(newSelection);
+                        }}
+                      />
+                    ))}
+                  </SortableContext>
                 </div>
-              </CardHeader>
-              <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                <SortableContext items={divs.map((d) => d.id)} strategy={verticalListSortingStrategy}>
-                  {divs.map((div) => (
-                    <SortableDivisionRow
-                      key={div.id}
-                      div={div}
-                      tournamentId={id || ''}
-                      onManageCompetitors={() => setAssignTarget(div)}
-                      onSplit={() => setSplitTarget(div)}
-                      onDelete={() => setDeleteTarget(div)}
-                      isSelected={selectedDivisionsForMerge.has(div.id)}
-                      onToggleSelect={(divisionId) => {
-                        const newSelection = new Set(selectedDivisionsForMerge);
-                        if (newSelection.has(divisionId)) {
-                          newSelection.delete(divisionId);
-                        } else {
-                          newSelection.add(divisionId);
-                        }
-                        setSelectedDivisionsForMerge(newSelection);
-                      }}
-                    />
-                  ))}
-                </SortableContext>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            ))
+          )}
         </div>
       ) : (
         <Card>
