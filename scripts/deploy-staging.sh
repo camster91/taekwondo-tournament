@@ -111,7 +111,11 @@ test "$(docker inspect bowin-staging-db --format '{{.HostConfig.NetworkMode}}')"
 test "$(docker inspect bowin-staging-app --format '{{.HostConfig.NetworkMode}}')" = bowin-staging-net
 test "$(docker inspect bowin-staging-db --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}')" = bowin-staging-pgdata
 
-ALLOWED_ENV='^(DATABASE_URL|JWT_SECRET|METRICS_TOKEN|ADMIN_SETUP_KEY|MAILGUN_API_KEY|MAILGUN_DOMAIN|MAILGUN_BASE_URL|EMAIL_FROM_NAME|EMAIL_FROM_ADDRESS|OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64|RETENTION_PURGE_ENABLED|SOFT_DELETE_RETENTION_DAYS|REGISTRATION_CONSENT_VERSION|PRIVACY_NOTICE_URL|TOURNAMENT_TERMS_URL|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_STARTER_PRICE_ID|STRIPE_PRO_PRICE_ID|DEBUG)='
+# Closes SH-7: every SENTRY_* key the runtime reads must survive the
+# env-file rewrite. The Sentry SDK is a hard no-op when SENTRY_DSN is
+# empty, and the previous regex silently dropped Sentry keys between
+# every release.
+ALLOWED_ENV='^(DATABASE_URL|JWT_SECRET|METRICS_TOKEN|ADMIN_SETUP_KEY|MAILGUN_API_KEY|MAILGUN_DOMAIN|MAILGUN_BASE_URL|EMAIL_FROM_NAME|EMAIL_FROM_ADDRESS|OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64|RETENTION_PURGE_ENABLED|SOFT_DELETE_RETENTION_DAYS|REGISTRATION_CONSENT_VERSION|PRIVACY_NOTICE_URL|TOURNAMENT_TERMS_URL|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_STARTER_PRICE_ID|STRIPE_PRO_PRICE_ID|STRIPE_PER_EVENT_SMALL_PRICE_ID|STRIPE_PER_EVENT_MEDIUM_PRICE_ID|STRIPE_PER_EVENT_LARGE_PRICE_ID|DEBUG|SENTRY_DSN|SENTRY_ENVIRONMENT|VITE_SENTRY_DSN|VITE_SENTRY_ENVIRONMENT)='
 docker inspect bowin-staging-app --format '{{range .Config.Env}}{{println .}}{{end}}' \
   | grep -E "$ALLOWED_ENV" > "$ENV_FILE"
 if ! grep -q '^OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=' "$ENV_FILE"; then
@@ -132,9 +136,6 @@ LIVE_DATABASE_URL=$(docker inspect taekwondo-tournament --format '{{range .Confi
   | grep '^DATABASE_URL=' | cut -d= -f2-)
 test "$DATABASE_URL" != "$LIVE_DATABASE_URL"
 
-grep -q '^JWT_SECRET=' "$ENV_FILE"
-grep -q '^METRICS_TOKEN=' "$ENV_FILE"
-grep -q '^OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=' "$ENV_FILE"
 printf '%s\n' \
   'NODE_ENV=production' \
   'PORT=3001' \
@@ -151,6 +152,18 @@ test -n "$PUBLIC_KEY"
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
 tar xzf "$ARCHIVE" -C "$RELEASE_DIR" --strip-components=1
+# Closes SH-7: fail closed on missing or empty required env vars before
+# the candidate container is started. The previous grep -q checks
+# silently accepted a present-but-empty value (e.g. SENTRY_DSN=), which
+# degraded the Sentry SDK to a no-op for the lifetime of the release.
+# Staging uses a smaller required list than production (Stripe/Mailgun
+# are not required to validate the deploy path itself).
+# shellcheck source=scripts/lib/assert-required-env.sh
+. "$RELEASE_DIR/scripts/lib/assert-required-env.sh"
+assert_required_env_vars "$ENV_FILE" "staging" \
+  DATABASE_URL JWT_SECRET METRICS_TOKEN \
+  SENTRY_DSN SENTRY_ENVIRONMENT \
+  OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64
 docker build \
   --build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${PUBLIC_KEY}" \
   --label "org.opencontainers.image.revision=${RELEASE_SHA}" \
