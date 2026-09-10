@@ -34,8 +34,52 @@ import {
   type BracketCorrectionConfig,
 } from '../services/bracket-correction.js';
 import { broadcastMatchUpdate, broadcastBracketRegenerated } from '../services/websocket.js';
+import { createRateLimiter } from '../middleware/rate-limit.js';
+import { ipKeyGenerator } from 'express-rate-limit';
 
 const router = Router();
+
+// HIGH #5 (backend review): every bracket write path
+// (PUT /match, POST /match/:id/swap, /match/:id/undo,
+// /division/:id/correction/apply, /division/:id/reset,
+// /tournament/:id/generate-all, etc.) mutates Match rows
+// and writes to MatchAuditLog. Without a rate limit a
+// scorekeeper (or a stolen director JWT) can spam the
+// audit log, hold row locks on the same match, and
+// produce inconsistent downstream state via
+// match-advancement. The mount-level limiter keys on the
+// authenticated user (so two honest users don't share a
+// bucket); the correction/apply route gets a tighter
+// cap because it is a heavy write that re-seeds the
+// bracket.
+//
+// All routes under this router require `authenticate`,
+// so the `user.id` is always present at limiter time.
+// We still fall back to IP via express-rate-limit's
+// `ipKeyGenerator` helper to satisfy the library's
+// IPv6 validation (which would otherwise throw at
+// limiter construction).
+const bracketWriteLimiter = createRateLimiter({
+  windowMs: 60_000,
+  max: 120,
+  keyGenerator: (req) => {
+    const userId = (req as unknown as { user?: { id?: string } }).user?.id;
+    const ip = (req as unknown as { ip?: string }).ip;
+    return userId ?? ipKeyGenerator(ip ?? 'unknown');
+  },
+  message: { error: 'Too many bracket writes, please slow down' },
+});
+const bracketCorrectionApplyLimiter = createRateLimiter({
+  windowMs: 60_000,
+  max: 30,
+  keyGenerator: (req) => {
+    const userId = (req as unknown as { user?: { id?: string } }).user?.id;
+    const ip = (req as unknown as { ip?: string }).ip;
+    return userId ?? ipKeyGenerator(ip ?? 'unknown');
+  },
+  message: { error: 'Too many bracket correction applies, please slow down' },
+});
+router.use(bracketWriteLimiter);
 
 // Helper to safely get string param
 const getParam = (param: string | string[] | undefined): string => {
@@ -133,7 +177,7 @@ router.post('/division/:divisionId/correction/preview', authenticate, validateRe
   }
 });
 
-router.post('/division/:divisionId/correction/apply', authenticate, validateRequest(bracketCorrectionApplySchema), async (req: AuthenticatedRequest, res: Response) => {
+router.post('/division/:divisionId/correction/apply', authenticate, bracketCorrectionApplyLimiter, validateRequest(bracketCorrectionApplySchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.divisionId);
   const access = await resolveDirectorTournament(req, prisma, divisionId);

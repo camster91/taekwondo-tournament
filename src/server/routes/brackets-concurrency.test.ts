@@ -8,12 +8,17 @@ const state = vi.hoisted(() => ({
 
 vi.mock('express', () => {
   const router: any = {};
-  for (const method of ['get', 'post', 'put', 'delete']) {
+  for (const method of ['get', 'post', 'put', 'delete', 'patch']) {
     router[method] = (path: string, ...handlers: any[]) => {
       state.handlers.push({ method, path, handler: handlers.at(-1) });
       return router;
     };
   }
+  // `brackets.ts` registers a mount-level rate limiter via
+  // `router.use(...)` (HIGH #5 fix). The mock has to satisfy
+  // the call or the module load will throw before any test
+  // body runs.
+  router.use = () => router;
   return { Router: () => router };
 });
 
@@ -66,7 +71,8 @@ const currentMatch = {
   competitor1Id: 'registration-1',
   competitor2Id: 'registration-2',
   winnerId: null,
-  scores: null,\n  status: 'ready',
+  scores: null,
+  status: 'ready',
   updatedAt: new Date('2026-08-07T12:00:00.000Z'),
 };
 

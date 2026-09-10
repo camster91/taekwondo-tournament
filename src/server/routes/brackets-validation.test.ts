@@ -8,12 +8,17 @@ const captured = vi.hoisted(() => [] as Array<{
 
 vi.mock('express', () => {
   const router: any = {};
-  for (const method of ['get', 'post', 'put', 'delete']) {
+  for (const method of ['get', 'post', 'put', 'delete', 'patch']) {
     router[method] = (path: string, ...handlers: any[]) => {
       captured.push({ method, path, middleware: handlers.slice(0, -1) });
       return router;
     };
   }
+  // `brackets.ts` registers a mount-level rate limiter via
+  // `router.use(...)` (HIGH #5 fix). The mock has to satisfy
+  // the call or the module load will throw before any test
+  // body runs.
+  router.use = () => router;
   return { Router: () => router };
 });
 
