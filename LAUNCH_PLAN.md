@@ -10,7 +10,7 @@
 - [x] Set up hosting (Dockerized for Coolify self-hosting)
 - [ ] Configure custom domain (if applicable)
 - [ ] Setup CI/CD pipeline via GitHub Actions
-- [ ] Add analytics (Google Analytics or PostHog)
+- [x] Add analytics (Google Analytics or PostHog)
 
 ## Phase 3: Launch
 - [x] Prepare app store assets (if mobile) or social media graphics

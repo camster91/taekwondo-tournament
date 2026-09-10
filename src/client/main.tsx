@@ -5,10 +5,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import { registerOfflineShell } from './utils/offline-shell';
 import { initSentry, ErrorBoundary as SentryErrorBoundary } from './services/sentry';
+import { initPostHog } from './services/posthog';
 import './index.css';
 
 // Initialize Sentry BEFORE ReactDOM.render
 initSentry();
+// Initialize PostHog for product analytics (LAUNCH_PLAN.md).
+// Privacy-respecting defaults; no-op when VITE_POSTHOG_KEY is unset.
+initPostHog();
 
 if (import.meta.env.PROD) {
   const buildAsset = new URL(import.meta.url).pathname;
@@ -68,10 +72,6 @@ const origConsoleError = console.error;
 console.error = (...args) => {
   origConsoleError.apply(console, ['[CONSOLE.ERROR]', ...args]);
 };
-
-if (import.meta.env.VITE_POSTHOG_KEY) {
-  // posthog.init(import.meta.env.VITE_POSTHOG_KEY, { api_host: 'https://app.posthog.com' })
-}
 
 const queryClient = new QueryClient({
   defaultOptions: {
