@@ -75,6 +75,15 @@ model Tournament {
   // this tournament. Rotated from the UI to revoke the old link.
   publicSlug String? @unique
 
+  // Event portal slug for tenant-branded public URLs (/events/:orgSlug/:eventSlug)
+  // Unique within the organization scope. Used for branded discovery and sharing.
+  // NULL means the event is not published to the portal (preview-only).
+  eventSlug String? // e.g. "spring-championship-2027"
+  
+  // Portal publication state — whether this event is live on the public portal
+  portalPublished Boolean @default(false)
+  portalPublishedAt DateTime? // When first published to portal
+
   // Organizer branding — applied to public-facing pages (register,
   // scoreboard, results). Competitors see the organizer's tournament
   // brand, not "Bowin" as the product face.
@@ -104,6 +113,9 @@ model Tournament {
   // filters on status; the publicSlug is already @unique.
   @@index([deletedAt])
   @@index([status])
+  @@index([organizationId, eventSlug])
+  @@index([portalPublished])
+  @@unique([organizationId, eventSlug])
 }
 
 // Competitor-Tournament registration link
