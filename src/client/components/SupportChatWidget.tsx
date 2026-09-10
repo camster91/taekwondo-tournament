@@ -253,7 +253,7 @@ export default function SupportChatWidget() {
               ) : null}
             </div>
 
-            {canOpenQueue && (
+            {canOpenQueue && user && (user.role === 'admin' || user.role === 'director') && (
               <div className="px-4 pb-2">
                 <Button
                   type="button"
