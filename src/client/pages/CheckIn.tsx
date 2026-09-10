@@ -645,14 +645,26 @@ export default function CheckIn() {
             <CardSkeleton />
           </div>
         ) : registrationsError ? (
-          <div role="alert" className="text-center py-12 text-red-700 dark:text-red-300">
-            <p className="mb-4">Could not load registrations. Check the venue connection and try again.</p>
-            <Button onClick={() => void retryRegistrations()}>Retry</Button>
-          </div>
+          <OperationStatus
+            state="rejected"
+            message="Could not load registrations. Check the venue connection and try again."
+            actionLabel="Retry"
+            onAction={() => void retryRegistrations()}
+          />
         ) : sortedRegistrations.length === 0 ? (
-          <div className="text-center py-12 text-gray-600 dark:text-gray-400">
-            No registrations found matching your filters.
-          </div>
+          <EmptyState
+            icon={<Users className="h-12 w-12 text-gray-400" />}
+            title={
+              filterStatus !== 'all' || filterEvent !== 'all' || schoolFilter || searchTerm
+                ? 'No matches found'
+                : 'No registrations yet'
+            }
+            description={
+              filterStatus !== 'all' || filterEvent !== 'all' || schoolFilter || searchTerm
+                ? 'No registrations match your current filters. Try adjusting your search criteria.'
+                : 'Registrations will appear here once competitors are added to this tournament.'
+            }
+          />
         ) : (
           <div className="space-y-2">
             {sortedRegistrations.map((registration) => (
