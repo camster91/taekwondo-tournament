@@ -26,7 +26,7 @@ export function initializeWebSocket(server: HTTPServer): WebSocketServer {
     server,
     path: '/ws/brackets',
     // Verify origin in production (allow same-origin + configured origins)
-    verifyClient: (info, callback) => {
+    verifyClient: (info: { origin: string; secure: boolean; req: IncomingMessage }, callback: (result: boolean, code?: number, message?: string) => void) => {
       const origin = info.origin || info.req.headers.origin;
       const allowed = process.env.ALLOWED_ORIGINS?.split(',') || [];
       
@@ -119,7 +119,7 @@ export function initializeWebSocket(server: HTTPServer): WebSocketServer {
       }
     });
 
-    ws.on('error', (error) => {
+    ws.on('error', (error: Error) => {
       console.error('[websocket] connection error:', error);
     });
   });
