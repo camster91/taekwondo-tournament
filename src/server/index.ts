@@ -18,6 +18,7 @@ import bracketsRouter from './routes/brackets.js';
 import authRouter from './routes/auth.js';
 import publicRouter from './routes/public.js';
 import publicPortalRouter from './routes/public-portal.js';
+import customDomainsRouter from './routes/custom-domains.js';
 import analyticsRouter from './routes/analytics.js';
 import invitesRouter from './routes/invites.js';
 import sportsRouter from './routes/sports.js';
@@ -213,6 +214,11 @@ app.use((await import('compression')).default());
 // Make prisma available to routes
 app.locals.prisma = prisma;
 
+// Mount custom domain host resolution middleware
+// This must run BEFORE public portal routes to enable host-based routing
+import { resolveCustomDomainHost } from './middleware/custom-domain-host.js';
+app.use(resolveCustomDomainHost());
+
 app.get('/api/internal/metrics', (req: Request, res: Response) => {
   if (!metricsToken) return res.status(404).json({ error: 'Not found' });
   const supplied = req.header('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
@@ -237,6 +243,7 @@ app.use('/api/public/portal', publicPortalRouter);
 app.use('/api/competitors', competitorsRouter);
 app.use('/api/tournaments', tournamentsRouter);
 app.use('/api/tournament-templates', tournamentTemplatesRouter);
+app.use('/api/custom-domains', customDomainsRouter);
 app.use('/api/divisions', divisionsRouter);
 app.use('/api/brackets', bracketsRouter);
 app.use('/api/analytics', analyticsRouter);

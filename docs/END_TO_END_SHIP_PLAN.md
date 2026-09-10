@@ -23,7 +23,8 @@
 - ✅ PR #252: Ship plan sync post-#251 + typecheck leftovers (@types/ws, Waitlist/sentry/DirectorDashboard/ToastContext/etc.) + #189 demo data disclosure
 - ✅ PR #253: Typecheck completion + TV-optimized public scoreboard — fixed remaining typecheck errors (PublicScoreboard refetchInterval, Results videoUrl, VideoTutorials icon prop), TV-optimized public scoreboard (4K-safe fonts, improved contrast, better spacing for venue displays)
 - ✅ PR #254: Support-access test role fixes + ship-plan sync post-#253
-- 🔄 **This PR**: Org-level tournament templates — reusable tournament setup templates (settings, rules, weight classes, sport defaults) scoped to organization; create tournaments from templates; fail-closed tenant isolation
+- ✅ PR #255: Org-level tournament templates — reusable tournament setup templates (settings, rules, weight classes, sport defaults) scoped to organization; create tournaments from templates; fail-closed tenant isolation; **migration prisma/migrations/20260910_add_tournament_templates requires `prisma migrate deploy` on next VPS deploy**
+- 🔄 **This PR**: Custom domain support for organizer-branded public portals — attach/verify/activate/revoke custom hostnames for org-branded event registration and scoreboard pages; DNS TXT/CNAME verification flow; host-based routing with fail-closed cross-tenant protection; abuse prevention (reject Bowin-owned domains, prevent squatting); audit logging; operator DNS + TLS/Traefik documentation
 
 ---
 
@@ -62,14 +63,14 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Scoring & results | 90% | 🟢 Strong | Match scoring, audit trail, undo/redo UI, video review integration (labeled, with help text) complete |
 | Public display | 90% | 🟢 Strong | Public scoreboard by slug complete; auto-refresh config shipped; TV-optimized layout polish complete (4K-safe fonts, improved contrast, better spacing); QR poster service exists |
 | **Non-product** | | | |
-| Branding | 90% | 🟢 Strong | Bowin identity complete; organizer white-label shipped (logo upload, primary color); custom domains remain |
+| Branding | 95% | 🟢 Strong | Bowin identity complete; organizer white-label shipped (logo upload, primary color); custom domains in progress (this PR) |
 | Billing & subscriptions | 80% | 🟢 Strong | Stripe integrated; plan selection, usage metering, billing portal code complete; needs Cameron Stripe dashboard setup |
 | Ops & monitoring | 85% | 🟢 Strong | VPS deployment complete; uptime monitoring (Uptime Kuma) and error tracking (GlitchTip) LIVE on HH VPS; daily backups running |
 | Legal & compliance | 75% | 🟢 Strong | Privacy/terms published; COPPA compliance (parental consent flow) shipped; GDPR export/delete shipped; needs counsel final approval |
 | Support & docs | 70% | 🟢 Strong | In-app tour complete; help center v1 shipped; video tutorial structure ready (awaiting Cameron recordings); first-party support tickets working |
 | Marketing & onboarding | 70% | 🟢 Strong | Landing page drafted; onboarding checklist shipped; needs case studies, demo video (Cameron-gated) |
 
-**Overall estimated completion:** ~88%  
+**Overall estimated completion:** ~89% (custom domains add ~1% to Branding key gap)  
 **Blocker count:** 3 critical items (Cameron Stripe dashboard setup for self-service billing, legal counsel final approval, production deploy execution with demo video/case studies for marketing)
 
 ---

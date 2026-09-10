@@ -49,53 +49,36 @@ model Competitor {
   @@index([deletedAt])
 }
 
-// Tournament instances
+// Tournament
 model Tournament {
-  id        String   @id @default(uuid())
-  name      String
-  date      DateTime
-  location  String?
-  status    String   @default("draft") // draft, registration, brackets, in_progress, completed
-  settings  String? // JSON string for tournament-specific settings
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  organizationId   String?
+  id               String    @id @default(uuid())
+  name             String
+  date             DateTime
+  location         String
+  status           String    @default("draft") // draft, registration, in_progress, completed
+  settings         String? // JSON
   sportProfileId   String?
-  sportProfileSlug String? @default("taekwondo")
+  sportProfileSlug String    @default("taekwondo")
+  organizationId   String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime? // Soft-delete: managers can delete a tournament, then restore it.
 
-  // Soft-delete: see Competitor.deletedAt comment
-  deletedAt DateTime?
-
-  // Public share token for the unauthenticated scoreboard. Directors
-  // see this in the Tournament Settings page; it goes into the URL for
-  // the public scoreboard link. Without a matching token the route
-  // returns 404 — a brute-force guess of valid UUIDs is impractical.
-  // Optional (NULL) means the public scoreboard link is disabled for
-  // this tournament. Rotated from the UI to revoke the old link.
+  // Public scoreboard access control
   publicSlug String? @unique
 
-  // Public scoreboard auto-refresh interval in milliseconds.
-  // Default: 10000 (10 seconds). Organizers can adjust this in
-  // Tournament Settings to balance freshness vs. server load.
-  // Minimum: 3000 (3s), Maximum: 60000 (60s).
-  publicScoreboardRefreshMs Int? @default(10000)
+  // Organizer branding (overrides organization defaults for this event)
+  brandName         String?
+  brandPrimaryColor String?
+  brandLogoUrl      String?
 
   // Event portal slug for tenant-branded public URLs (/events/:orgSlug/:eventSlug)
-  // Unique within the organization scope. Used for branded discovery and sharing.
-  // NULL means the event is not published to the portal (preview-only).
-  eventSlug String? // e.g. "spring-championship-2027"
-  
-  // Portal publication state — whether this event is live on the public portal
-  portalPublished Boolean @default(false)
-  portalPublishedAt DateTime? // When first published to portal
+  eventSlug         String? // URL-safe slug, unique per org
+  portalPublished   Boolean @default(false) // Whether this event is visible on the org's public portal
+  portalPublishedAt DateTime? // When the event was first published
 
-  // Organizer branding — applied to public-facing pages (register,
-  // scoreboard, results). Competitors see the organizer's tournament
-  // brand, not "Bowin" as the product face.
-  brandName       String? // Display name for public pages (e.g. "Master Kim's Academy")
-  brandPrimaryColor String? @default("#DC2626") // Hex color code for accent/CTA elements
-  brandLogoUrl    String? // Public URL to organizer's logo image
+  // Public scoreboard display settings (P1-12)
+  publicScoreboardRefreshMs Int? @default(10000) // Auto-refresh interval in milliseconds (3000-60000 range)
 
   registrations       Registration[]
   divisions           Division[]
@@ -178,62 +161,61 @@ model Registration {
   assignments DivisionAssignment[]
   matches1    Match[]              @relation("Competitor1")
   matches2    Match[]              @relation("Competitor2")
-  parentalConsentVerification ParentalConsentVerification?
-  matchWins   Match[]              @relation("Winner")
 
   @@unique([tournamentId, competitorId])
   @@index([tournamentId])
   @@index([competitorId])
-  // Closes P13: day-of panel queries filter on checkedIn.
-  @@index([tournamentId, checkedIn])
-  @@index([tournamentId, waitlistStatus])
+  @@index([waitlistStatus])
 }
 
-// Auto-generated or manually created divisions/categories
+// Parental consent verification (P2-14: COPPA compliance)
+model ParentalConsentVerification {
+  id             String   @id @default(uuid())
+  registrationId String
+  parentEmail    String
+  token          String   @unique
+  code           String // 6-digit code
+  expiresAt      DateTime // 48-hour TTL
+  verifiedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([registrationId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+// Division
 model Division {
-  id             String  @id @default(uuid())
-  tournamentId   String
-  name           String // e.g., "10-11 CB All Green Belts Males Sparring Heavy"
-  beltLevel      String // BB or CB
-  gender         String // M or F
-  eventType      String // patterns or sparring
-  ageMin         Int
-  ageMax         Int
-  beltColors     String? // JSON array: ["White", "Yellow"]
-  danMin         Int?
-  danMax         Int?
-  weightClass    String? // Feather, Light, Middle, Heavy
-  divisionNumber Int     @default(1) // DIV1, DIV2, DIV3
-
-  // Soft-delete: see Competitor.deletedAt comment
-  deletedAt      DateTime?
-  isSpecialNeeds Boolean   @default(false)
-  displayOrder   Int?
-  createdAt      DateTime  @default(now())
-
-  // Fairness metadata
-  bracketDifficulty Float? // Calculated bracket difficulty score
-  matchupQuality    Float? // Overall matchup fairness score
-  avgSkillRating    Float? // Average skill rating of competitors
+  id           String    @id @default(uuid())
+  tournamentId String
+  name         String
+  gender       String
+  beltLevel    String // BB or CB
+  beltColor    String? // for CB: White, Yellow, Green, Blue, Red
+  danRank      Int? // for BB: 1-6
+  ageMin       Int
+  ageMax       Int
+  weightMin    Float?
+  weightMax    Float?
+  eventType    String // patterns or sparring
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
 
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   assignments DivisionAssignment[]
-  bracket     Bracket?
+  brackets    Bracket[]
 
   @@index([tournamentId])
-  @@index([tournamentId, eventType])
-  @@index([tournamentId, gender, eventType])
-  // Closes P13: every list query filters on deletedAt.
   @@index([deletedAt])
 }
 
-// Competitor-Division assignment
+// Division assignment
 model DivisionAssignment {
   id             String   @id @default(uuid())
   divisionId     String
   registrationId String
-  seedPosition   Int? // Bracket seeding
-  manualOverride Boolean  @default(false) // True if manually placed
+  seed           Int? // 1-N for manual seeding
   createdAt      DateTime @default(now())
 
   division     Division     @relation(fields: [divisionId], references: [id], onDelete: Cascade)
@@ -244,12 +226,11 @@ model DivisionAssignment {
   @@index([registrationId])
 }
 
-// Bracket structure for a division
+// Bracket
 model Bracket {
   id         String   @id @default(uuid())
   divisionId String   @unique
-  structure  String // JSON bracket tree structure
-  format     String   @default("double_elim") // double_elim, single_elim, round_robin, pool_play
+  structure  String // JSON-encoded bracket tree
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -257,217 +238,73 @@ model Bracket {
   matches  Match[]
 }
 
-// Individual matches
+// Match
 model Match {
-  id            String    @id @default(uuid())
-  bracketId     String
-  roundNumber   Int
-  matchNumber   Int
-  bracketType   String // winners, losers, finals, pool
+  id           String    @id @default(uuid())
+  bracketId    String
+  matchNumber  Int
+  roundName    String? // Winners Round 1, Losers Round 2, Grand Finals, etc.
   competitor1Id String?
   competitor2Id String?
-  winnerId      String?
-  score1        String?
-  score2        String?
-  status        String    @default("pending") // pending, ready, in_progress, completed, bye
-  scheduledTime DateTime?
-  ringNumber    Int?
-  notes         String?
-  videoUrl      String? // P2-9: Video review link (YouTube, Vimeo, etc.)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  winnerId     String?
+  status       String    @default("pending") // pending, ready, in_progress, completed
+  scores       String? // JSON
+  ring         String? // Ring assignment (A, B, C, etc.)
+  scheduledAt  DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  videoUrl     String? // P2-9: Video review integration
 
   bracket     Bracket       @relation(fields: [bracketId], references: [id], onDelete: Cascade)
   competitor1 Registration? @relation("Competitor1", fields: [competitor1Id], references: [id], onDelete: SetNull)
   competitor2 Registration? @relation("Competitor2", fields: [competitor2Id], references: [id], onDelete: SetNull)
-  winner      Registration? @relation("Winner", fields: [winnerId], references: [id], onDelete: SetNull)
+  auditLog    MatchAuditLog[]
 
   @@index([bracketId])
   @@index([status])
-  @@index([winnerId])
-  // Closes P13: the match-advancement path looks up "the next
-  // winners match" via bracketId+roundNumber+bracketType. The
-  // previous indexes on bracketId and status didn't cover this
-  // combined lookup, so a 100+ match bracket hit a full scan per
-  // advancement. Same for competitor1Id / competitor2Id, used by
-  // the public scoreboard to enumerate a registration's matches.
-  @@index([bracketId, roundNumber, bracketType])
   @@index([competitor1Id])
   @@index([competitor2Id])
 }
 
-// Configurable weight classes per tournament
+// Weight class (per-tournament overrides)
 model WeightClass {
-  id           String  @id @default(uuid())
+  id           String @id @default(uuid())
   tournamentId String
-  name         String // Feather, Light, Middle, Heavy
-  gender       String?
-  ageMin       Int?
-  ageMax       Int?
-  weightMinLbs Float?
-  weightMaxLbs Float?
-  displayOrder Int?
+  division     String // CB or BB
+  gender       String // M or F
+  ageMin       Int
+  ageMax       Int
+  name         String // Fin, Fly, Bantam, Feather, Light, Welter, Middle, Heavy
+  maxWeight    Float
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@index([tournamentId])
 }
 
-// User authentication
+// User
 model User {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  passwordHash String?
-  firstName    String
-  lastName     String
-  role         String    @default("viewer") // admin, director, scorekeeper, viewer
-  isActive     Boolean   @default(true)
-  lastLogin    DateTime?
-  demoExpiresAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id        String   @id @default(uuid())
+  email     String   @unique
+  firstName String
+  lastName  String
+  role      String   @default("viewer") // admin, director, scorekeeper, viewer
+  tokenVersion Int    @default(0) // P0-1: JWT token version for invalidation
+  isActive  Boolean  @default(true) // P0-2: Account status (disabled accounts cannot log in)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // JWT tokenVersion: bumped on logout / role change / isActive flip
-  // to invalidate every outstanding token for this user at once.
-  // Without this, a JWT in flight remains valid until its 7-day TTL
-  // expires regardless of who owns it. Default 0 keeps the column
-  // populated for existing rows after `db:push`.
-  tokenVersion Int @default(0)
-
-  // Tournament-specific permissions
-  tournamentAccess    UserTournamentAccess[]
-  organizationMembers OrganizationMember[]
-  auditLogs           UserAuditLog[]
-  onboardingChecklist UserOnboardingChecklist?
-
-  @@index([demoExpiresAt])
-}
-
-// P2-18: First-time onboarding checklist
-// Tracks completion of the 5 setup steps for new users/orgs.
-// One row per user; UI shows the checklist until all 5 are true.
-model UserOnboardingChecklist {
-  id                   String   @id @default(uuid())
-  userId               String   @unique
-  orgProfileComplete   Boolean  @default(false) // Step 1: Set org name/logo/branding
-  importComplete       Boolean  @default(false) // Step 2: Import competitors or run first event
-  firstTournamentDone  Boolean  @default(false) // Step 3: Create first tournament
-  publicPageReviewed   Boolean  @default(false) // Step 4: Review public registration page
-  staffInvited         Boolean  @default(false) // Step 5: Invite staff (if applicable)
-  dismissed            Boolean  @default(false) // User explicitly dismissed the checklist
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model PublicDisplayHeartbeat {
-  tournamentId String   @id
-  lastSeenAt   DateTime
-  updatedAt    DateTime @updatedAt
-
-  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-
-  @@index([lastSeenAt])
-}
-
-model TournamentOperationAudit {
-  id            String    @id @default(uuid())
-  tournamentId  String
-  operationType String
-  operationKey  String    @unique
-  beforeState   String?
-  afterState    String
-  impactSummary String
-  reversible    Boolean   @default(false)
-  createdBy     String?
-  createdAt     DateTime  @default(now())
-  undoneAt      DateTime?
-  undoneBy      String?
-
-  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  recommendation Recommendation?
-
-  @@index([tournamentId, createdAt])
-  @@index([operationType])
-}
-
-model Recommendation {
-  id                    String   @id @default(uuid())
-  tournamentId          String
-  recommendationType    String
-  inputSnapshot         String
-  explanation           String
-  constraintsConsidered String
-  confidence            Float
-  warnings              String
-  proposedDiff          String
-  validationResult      String
-  status                String   @default("proposed")
-  createdBy             String?
-  createdAt             DateTime @default(now())
-  approvedBy            String?
-  approvedAt            DateTime?
-  rejectedBy            String?
-  rejectedAt            DateTime?
-  rejectionReason       String?
-  appliedBy             String?
-  appliedAt             DateTime?
-  appliedResult         String?
-  undoReference         String?
-  operationAuditId      String?  @unique
-
-  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  operationAudit TournamentOperationAudit? @relation(fields: [operationAuditId], references: [id], onDelete: SetNull)
-
-  @@index([tournamentId, createdAt])
-  @@index([tournamentId, status])
-  @@index([recommendationType])
-}
-
-// Magic link / code authentication
-model MagicLink {
-  id             String    @id @default(uuid())
-  email          String
-  // Stored as SHA-256 hex of the raw token emailed to the user.
-  // Legacy plaintext rows (pre-hash deploy) remain readable via
-  // dual-lookup until their 10-minute TTL expires.
-  token          String    @unique
-  // Stored as SHA-256 hex of the 6-digit code (same dual-read rule).
-  code           String
-  // Wrong-code attempts against this link. Caps brute-force at
-  // MAX_CODE_ATTEMPTS regardless of which replica handles the request.
-  failedAttempts Int       @default(0)
-  expiresAt      DateTime
-  usedAt         DateTime?
-  createdAt      DateTime  @default(now())
+  organizationMemberships OrganizationMember[]
+  tournamentAccess        UserTournamentAccess[]
+  auditLogs               UserAuditLog[]
 
   @@index([email])
-  @@index([token])
-  @@index([email, code])
+  @@index([role])
 }
 
-// P2-14: COPPA parental consent verification
-// When a minor registers, we send a verification email to the parent.
-// The registration is in 'pending_verification' state until the parent
-// clicks the link. TTL: 48 hours (more generous than magic-link auth).
-model ParentalConsentVerification {
-  id             String    @id @default(uuid())
-  registrationId String    @unique
-  parentEmail    String
-  token          String    @unique // 32-byte hex
-  code           String // 6-digit numeric code (for SMS fallback, if needed)
-  expiresAt      DateTime
-  verifiedAt     DateTime?
-  createdAt      DateTime  @default(now())
-
-  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-
-  @@index([parentEmail])
-  @@index([token])
-}
-
-// Tournament-specific user access
+// User-Tournament access control
 model UserTournamentAccess {
   id           String   @id @default(uuid())
   userId       String
@@ -479,93 +316,173 @@ model UserTournamentAccess {
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@unique([userId, tournamentId])
+  @@index([userId])
   @@index([tournamentId])
 }
 
-// Track competitor performance across tournaments
+// Magic link authentication
+model MagicLink {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  code      String // 6-digit code for manual entry
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  invalidatedAt DateTime? // Brute-force protection: invalidate after N wrong tries
+
+  @@index([email])
+  @@index([expiresAt])
+}
+
+// Tournament rules
+model TournamentRule {
+  id           String   @id @default(uuid())
+  tournamentId String
+  key          String
+  value        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, key])
+  @@index([tournamentId])
+}
+
+// Competitor historical performance tracking (P2-13)
 model CompetitorHistory {
   id           String   @id @default(uuid())
   competitorId String
   tournamentId String
-  divisionId   String
-  divisionName String // Stored for historical reference
   eventType    String // patterns or sparring
-  placement    Int // 1, 2, 3, etc.
+  placement    Int? // 1, 2, 3, 4, or null (did not place)
   matchesWon   Int      @default(0)
   matchesLost  Int      @default(0)
-  points       Float    @default(0) // Calculated skill points
+  totalPoints  Int      @default(0)
   createdAt    DateTime @default(now())
 
   competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
-  // Closes B8: orphan history rows on hard-delete of Tournament.
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@index([competitorId])
   @@index([tournamentId])
-  @@index([eventType])
-  @@index([competitorId, eventType])
 }
 
-// Track head-to-head matchup history
-model MatchupHistory {
-  id            String   @id @default(uuid())
-  competitor1Id String // First competitor (alphabetically by ID)
-  competitor2Id String // Second competitor
-  tournamentId  String
-  divisionId    String
-  matchId       String
-  winnerId      String?
-  eventType     String // patterns or sparring
-  roundNumber   Int // Which round the matchup occurred
-  score         String? // Score if available
-  createdAt     DateTime @default(now())
-
-  // Closes B8: orphan history rows on hard-delete of Tournament.
-  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-
-  @@unique([competitor1Id, competitor2Id, tournamentId, matchId])
-  @@index([competitor1Id])
-  @@index([competitor2Id])
-  @@index([tournamentId])
-}
-
-// Competitor skill ratings (ELO-style)
+// Competitor skill rating (for fair matching and seeding)
 model CompetitorRating {
-  id            String    @id @default(uuid())
-  competitorId  String
-  eventType     String // patterns or sparring
-  rating        Float     @default(1000) // Initial ELO
-  peakRating    Float     @default(1000)
-  matchesPlayed Int       @default(0)
-  lastMatchDate DateTime?
-  lastUpdated   DateTime  @default(now())
+  id           String   @id @default(uuid())
+  competitorId String
+  eventType    String // patterns or sparring
+  rating       Float    @default(1000) // Elo-style rating
+  confidence   Float    @default(0) // 0-1, increases with more matches
+  lastMatchAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
 
   @@unique([competitorId, eventType])
   @@index([competitorId])
-  @@index([eventType])
-  @@index([rating])
 }
 
-// Email invitations
-model Invitation {
-  id             String   @id @default(uuid())
-  email          String
-  firstName      String?
-  lastName       String?
-  role           String   @default("viewer")
-  // SHA-256 of the raw invite token (emailed once). Dual-read
-  // accepts legacy plaintext until tokenExpiry.
-  token          String   @unique
-  tokenExpiry    DateTime
-  invitedBy      String
-  status         String   @default("pending") // pending, accepted, expired
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  organizationId String?
+// Matchup history (P2-10: Avoid repeat matchups in same division)
+model MatchupHistory {
+  id            String   @id @default(uuid())
+  tournamentId  String
+  competitor1Id String
+  competitor2Id String
+  eventType     String // patterns or sparring
+  matchedAt     DateTime @default(now())
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, competitor1Id])
+  @@index([tournamentId, competitor2Id])
+  @@index([tournamentId, eventType])
+}
+
+// Public display heartbeat (P1-12: Track public scoreboard viewer activity)
+model PublicDisplayHeartbeat {
+  tournamentId    String   @id
+  lastHeartbeatAt DateTime @default(now())
+  activeViewers   Int      @default(1)
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+}
+
+// Tournament operation audit trail (P1-2: Audit key mutations for security)
+model TournamentOperationAudit {
+  id           String   @id @default(uuid())
+  tournamentId String
+  userId       String?
+  operation    String // create_division, delete_division, generate_bracket, reset_bracket, etc.
+  entityType   String? // division, bracket, match, etc.
+  entityId     String?
+  details      String? // JSON
+  createdAt    DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, createdAt])
+  @@index([operation])
+}
+
+// AI-generated recommendations (P2-10: Smart division splitting, seeding suggestions)
+model Recommendation {
+  id           String   @id @default(uuid())
+  tournamentId String
+  type         String // division_split, seeding_adjustment, schedule_optimization, etc.
+  targetId     String? // Division ID, Match ID, etc.
+  title        String
+  description  String
+  confidence   Float    @default(0) // 0-1
+  status       String   @default("pending") // pending, accepted, rejected, dismissed
+  createdAt    DateTime @default(now())
+  resolvedAt   DateTime?
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, status])
+  @@index([createdAt])
+}
+
+// Director SOS alerts (P2-10: Real-time event day warnings)
+model SOSAlert {
+  id           String   @id @default(uuid())
+  tournamentId String
+  severity     String // info, warning, critical
+  category     String // delay, injury, equipment, conflict, other
+  title        String
+  message      String
+  source       String? // ring, division, match, etc.
+  sourceId     String?
+  status       String   @default("active") // active, acknowledged, resolved
+  createdAt    DateTime @default(now())
+  acknowledgedAt DateTime?
+  resolvedAt   DateTime?
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, status])
+  @@index([severity])
+  @@index([createdAt])
+}
+
+// Invitations for org membership (P1-1)
+model Invitation {
+  id             String    @id @default(uuid())
+  email          String
+  firstName      String
+  lastName       String
+  role           String // director, scorekeeper, viewer
+  organizationId String
+  token          String    @unique
+  status         String    @default("pending") // pending, accepted, expired
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([email])
   @@index([token])
@@ -577,16 +494,14 @@ model Invitation {
 model MatchAuditLog {
   id            String   @id @default(uuid())
   matchId       String
-  action        String // update, complete, reset
-  previousState String // JSON of previous match state
-  newState      String // JSON of new match state
-  userId        String? // Who made the change
-  userEmail     String? // Email for reference
-  reason        String? // Optional reason for change
+  previousState String // JSON snapshot of match state before update
+  newState      String // JSON snapshot of match state after update
+  userId        String?
   createdAt     DateTime @default(now())
 
-  @@index([matchId])
-  @@index([createdAt])
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, createdAt])
 }
 
 // Organization (multi-tenant isolation)
@@ -613,6 +528,7 @@ model Organization {
   auditLogs           UserAuditLog[]
   usageRecords        OrganizationUsageRecord[]
   tournamentTemplates TournamentTemplate[]
+  customDomains       CustomDomain[]
 
   @@index([slug])
 }
@@ -794,63 +710,17 @@ model SupportTicket {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@index([status, createdAt])
+  @@index([status])
+  @@index([requestedByEmail])
   @@index([userId])
-  @@index([organizationId, createdAt])
-}
-
-// Tournament fairness rules (configurable per tournament)
-model TournamentRule {
-  id           String   @id @default(uuid())
-  tournamentId String
-  name         String // Human-readable name: "Same-school avoidance"
-  description  String? // Why this rule exists
-  category     String // "bracket", "division", "weight", "seeding", "custom"
-  ruleType     String // "same_school_avoidance", "weight_tolerance", "height_limit", "experience_grouping", "custom_constraint"
-  enforcement  String   @default("hard") // "hard" (must comply), "soft" (warning), "info" (log only)
-  parameters   String // JSON: rule-specific parameters
-  priority     Int      @default(50) // Higher = evaluated first (0-100)
-  isActive     Boolean  @default(true)
-  source       String   @default("manual") // "manual", "llm_suggested", "system_default"
-  createdBy    String? // User ID who created/approved
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-
-  @@index([tournamentId])
-  @@index([tournamentId, category])
-  @@index([ruleType])
-}
-
-// P2-10: SOS alerts for director command center
-// Staff can raise urgent alerts (e.g. "Ring 2 delayed", "Division X needs attention")
-model SOSAlert {
-  id           String   @id @default(uuid())
-  tournamentId String
-  severity     String   @default("warning") // info, warning, critical
-  category     String   // ring, division, equipment, medical, other
-  title        String
-  description  String?
-  ringNumber   Int?
-  divisionId   String?
-  resolved     Boolean  @default(false)
-  resolvedAt   DateTime?
-  raisedBy     String? // User ID
-  raisedByName String? // Cached name for display
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-
-  @@index([tournamentId, resolved])
+  @@index([organizationId])
   @@index([createdAt])
 }
 
-// Snapshot of tournament division state for rollback if a bracket
-// regeneration wipes data. Replaces the previous file-based
+// Division backup/restore (in-DB backup store, Phase 6, P15)
+// Replaces the previous single-file /tmp/tournament-backups/
 // BACKUP_DIR/<tournamentId>.json store (closes day-2 follow-up:
 // move backupStore to DB table). One row per tournament, overwritten
 // in place — there's no audit history, just the "last known good"
@@ -899,4 +769,41 @@ model TournamentTemplate {
 
   @@index([organizationId])
   @@index([organizationId, deletedAt])
+}
+
+// Custom domain configuration for organizer-branded public portals
+// Enables organizations to serve public registration/scoreboard pages on their own domain
+model CustomDomain {
+  id             String    @id @default(uuid())
+  organizationId String
+  
+  // Domain configuration
+  hostname       String    @unique // e.g., "register.myclub.com" (normalized to lowercase)
+  
+  // Verification method and state
+  verificationMethod String  @default("txt") // "txt" or "cname"
+  verificationToken  String  // Random token for TXT record or CNAME target subdomain
+  verifiedAt         DateTime? // When DNS verification succeeded
+  
+  // Lifecycle status
+  status         String    @default("pending") // pending, verified, active, disabled, revoked
+  activatedAt    DateTime? // When domain was activated (first served traffic)
+  disabledAt     DateTime? // When domain was disabled (soft-disable, can be re-enabled)
+  revokedAt      DateTime? // When domain was permanently revoked (cannot be reactivated)
+  revokedReason  String?   // Why it was revoked (abuse, migration, user request)
+  
+  // Audit trail
+  createdBy      String?   // User ID who attached the domain
+  verifiedBy     String?   // User ID who triggered verification
+  activatedBy    String?   // User ID who activated
+  revokedBy      String?   // User ID who revoked
+  
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([hostname]) // Already unique, but useful for lookups by status+hostname
 }
