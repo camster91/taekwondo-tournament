@@ -31,7 +31,7 @@ import { StatTile } from '../components/ui';
 import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
 import OperationStatus from '../components/ui/OperationStatus';
-import type { ApiDivision, ApiMatch, ApiTournamentSummary } from '../utils/api-types';
+import type { ApiDivision, ApiMatch, ApiTournamentSummary } from '../../shared/contracts';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
 import {
   parseDirectorDashboardFilters,

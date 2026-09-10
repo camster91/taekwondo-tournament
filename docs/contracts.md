@@ -1,7 +1,7 @@
 # API Response Contracts
 
-**Status**: Partial rollout (Phase 1 complete)  
-**PR**: #XXX  
+**Status**: Phase 2 in progress  
+**Phase 1 PR**: #277  
 **Issue**: #130
 
 This document describes the shared API response contract system that establishes a single source of truth for high-risk API endpoint shapes.
@@ -88,7 +88,7 @@ These tests **fail early** when:
 
 ## Rollout stages
 
-### ✅ Phase 1: Foundation (PR #XXX — this PR)
+### ✅ Phase 1: Foundation (PR #277)
 
 **Status**: Complete
 
@@ -100,20 +100,24 @@ These tests **fail early** when:
 
 **Scope**: No runtime validation yet; no server-side changes. Contracts are types-only with test coverage.
 
-### 🚧 Phase 2: Client migration (next PR)
+### ✅ Phase 2: Client migration (PR #XXX — current)
 
-**Planned scope**:
+**Status**: Complete
 
-- [ ] Migrate remaining pages from `api-types.ts` to `@/shared/contracts`:
-  - `DirectorDashboard.tsx` (day-of operations)
-  - `Scorekeeper.tsx` (divisions-with-matches)
-  - `Results.tsx` (results contract)
-  - `Divisions.tsx` (division management)
-  - `BracketEditor.tsx` (match updates)
-- [ ] Deprecate `src/client/utils/api-types.ts` (add deprecation comment)
-- [ ] Add contract test for scorekeeper endpoint shape
+- [x] Migrate remaining pages from `api-types.ts` to `@/shared/contracts`:
+  - `DirectorDashboard.tsx` (day-of operations) → uses `ApiDivision`, `ApiMatch`, `ApiTournamentSummary`
+  - `Scorekeeper.tsx` (divisions-with-matches) → uses `ApiMatch`, `ApiDivision` with extended competitor slot fields
+  - `Divisions.tsx` (division management) → uses `ApiDivisionWithCount`
+  - `BracketEditor.tsx` (match updates) → uses `ApiMatch` base with page-specific extensions
+  - `Results.tsx` → uses local `DivisionLike` (specialized CSV export shape, intentionally not migrated)
+- [x] Extend `matchCompetitorSlotSchema` with `specialNeeds` + `competeWithOlder` fields for scorekeeper
+- [x] Deprecate `src/client/utils/api-types.ts` with migration status notice
+- [x] Contract test coverage: `divisions-with-matches.contract.test.ts` validates scorekeeper endpoint shape (PR #277)
 
-**Success criteria**: Client imports contracts; `api-types.ts` is unused (but not deleted yet for rollback safety).
+**Extensions to shared contracts**:
+- `matchCompetitorSlotSchema`: Added `specialNeeds` (string, nullable) and `competeWithOlder` (boolean) fields at both registration and competitor levels to support scorekeeper notes display
+
+**Success criteria met**: High-risk pages import from `@/shared/contracts`; `api-types.ts` marked deprecated but retained for rollback safety.
 
 ### 🔮 Phase 3: Server-side validation (staged rollout)
 

@@ -1,23 +1,21 @@
 /**
- * @deprecated This file is being migrated to `src/shared/contracts/`.
+ * @deprecated DEPRECATED — This file is superseded by `src/shared/contracts/`.
  * 
- * Shared response shapes for the dashboard / detail page API calls.
- *
- * These mirror the server-side include shape used in `routes/divisions.ts`
- * and `routes/brackets.ts`. Keeping them in one place stops each page from
- * declaring its own ad-hoc `any[]` shape and lets the same types flow
- * through hooks, derived selectors, and components.
- *
- * **Migration plan**:
- * - Phase 1 (current): Shared contracts in `src/shared/contracts/` with test coverage
- * - Phase 2 (next): Migrate remaining pages to use `@/shared/contracts`
- * - Phase 3: Delete this file after all consumers migrated
+ * **DO NOT USE** for new code. Import from `@/shared/contracts` instead.
  * 
- * **New consumers**: Import from `../../shared/contracts` instead of this file.
+ * **Migration status (Phase 2 complete)**:
+ * - ✅ DirectorDashboard.tsx → migrated to `@/shared/contracts`
+ * - ✅ Scorekeeper.tsx → migrated to `@/shared/contracts`
+ * - ✅ Divisions.tsx → migrated to `@/shared/contracts`
+ * - ✅ BracketEditor.tsx → migrated to `@/shared/contracts`
+ * - ✅ Results.tsx → uses local DivisionLike (specialized shape for CSV export)
  * 
- * Only the fields the dashboards actually consume are typed; the server
- * returns more (registration, audit log, etc.) but pages that don't
- * need them should not pretend they do.
+ * This file is retained for **rollback safety only**. It will be deleted in Phase 3
+ * after runtime validation proves the migration is stable.
+ * 
+ * **Phase 3 blockers**: Performance benchmarking of Zod `.parse()` on hot paths
+ * (scorekeeper, public scoreboard) — if p99 latency increases >5ms, contracts
+ * remain types-only and skip runtime validation.
  */
 
 export type MatchStatus = 'pending' | 'ready' | 'in_progress' | 'completed' | 'bye';

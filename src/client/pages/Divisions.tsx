@@ -70,21 +70,10 @@ import {
   updateSearchParams,
 } from '../utils/url-state';
 
-interface Division {
-  id: string;
-  name: string;
-  beltLevel: string;
-  gender: string;
-  eventType: string;
-  ageMin: number;
-  ageMax: number;
-  weightClass: string | null;
-  divisionNumber: number;
-  _count: {
-    assignments: number;
-  };
-  bracket: { id: string } | null;
-}
+import type { ApiDivisionWithCount } from '../../shared/contracts';
+
+// Division management needs assignment counts
+type Division = ApiDivisionWithCount;
 
 interface Tournament {
   id: string;
@@ -569,7 +558,7 @@ export default function Divisions() {
       sourceDivisions: sourceDivs.map((d) => ({
         id: d.id,
         name: d.name,
-        competitorCount: d._count.assignments,
+        competitorCount: d._count?.assignments ?? 0,
         hasActiveBracket: Boolean(d.bracket),
       })),
       availableTargets: availableTargets.map((d) => ({
@@ -746,9 +735,9 @@ export default function Divisions() {
   const stats = {
     total: divisions?.length || 0,
     withBrackets: divisions?.filter((d) => d.bracket).length || 0,
-    smallDivisions: divisions?.filter((d) => d._count.assignments < 3 && d._count.assignments > 0).length || 0,
-    largeDivisions: divisions?.filter((d) => d._count.assignments > 8).length || 0,
-    emptyDivisions: divisions?.filter((d) => d._count.assignments === 0).length || 0,
+    smallDivisions: divisions?.filter((d) => (d._count?.assignments ?? 0) < 3 && (d._count?.assignments ?? 0) > 0).length || 0,
+    largeDivisions: divisions?.filter((d) => (d._count?.assignments ?? 0) > 8).length || 0,
+    emptyDivisions: divisions?.filter((d) => (d._count?.assignments ?? 0) === 0).length || 0,
   };
 
   const groupedDivisions = filteredDivisions?.reduce(
@@ -1920,21 +1909,21 @@ function SortableDivisionRow({
       </div>
       <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
         <div className={`flex items-center text-sm ${
-          div._count.assignments === 0 ? 'text-danger500 dark:text-danger400' :
-          div._count.assignments < 3 ? 'text-warning600 dark:text-warning400' :
-          div._count.assignments > 8 ? 'text-orange-600 dark:text-orange-400' :
+          (div._count?.assignments ?? 0) === 0 ? 'text-danger500 dark:text-danger400' :
+          (div._count?.assignments ?? 0) < 3 ? 'text-warning600 dark:text-warning400' :
+          (div._count?.assignments ?? 0) > 8 ? 'text-orange-600 dark:text-orange-400' :
           'text-surface-500 dark:text-surface-400'
         }`}>
           <Users className="h-4 w-4 mr-1" />
-          {div._count.assignments}
+          {div._count?.assignments ?? 0}
         </div>
-        {div._count.assignments === 0 && (
+        {(div._count?.assignments ?? 0) === 0 && (
           <span className="badge bg-danger/100 dark:bg-danger/900/30 text-danger800 dark:text-danger300">Empty</span>
         )}
-        {div._count.assignments > 0 && div._count.assignments < 3 && (
+        {(div._count?.assignments ?? 0) > 0 && (div._count?.assignments ?? 0) < 3 && (
           <span className="badge bg-warning/100 dark:bg-warning/900/30 text-warning800 dark:text-warning300">Small</span>
         )}
-        {div._count.assignments > 8 && (
+        {(div._count?.assignments ?? 0) > 8 && (
           <span className="badge bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">Large</span>
         )}
         <span className={`badge ${div.bracket ? 'badge-green' : 'badge-gray'}`}>
@@ -1948,7 +1937,7 @@ function SortableDivisionRow({
         >
           <UserPlus className="h-4 w-4" />
         </button>
-        {div._count.assignments > 8 && (
+        {(div._count?.assignments ?? 0) > 8 && (
           <button
             onClick={onSplit}
             className="text-surface-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
