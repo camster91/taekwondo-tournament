@@ -572,7 +572,7 @@ export default function Schedule() {
       { light: 'bg-info/100 border-info300', dark: 'dark:bg-info/900/30 dark:border-info700', text: 'text-info900 dark:text-info200' },
       { light: 'bg-success/100 border-success300', dark: 'dark:bg-success/900/30 dark:border-success700', text: 'text-success900 dark:text-success200' },
       { light: 'bg-warning/100 border-warning300', dark: 'dark:bg-warning/900/30 dark:border-warning700', text: 'text-warning900 dark:text-warning200' },
-      { light: 'bg-purple-100 border-purple-300', dark: 'dark:bg-purple-900/30 dark:border-purple-700', text: 'text-purple-900 dark:text-purple-200' },
+      { light: 'bg-primary-100 border-primary-300', dark: 'dark:bg-primary-900/30 dark:border-primary-700', text: 'text-primary-900 dark:text-primary-200' },
       { light: 'bg-pink-100 border-pink-300', dark: 'dark:bg-pink-900/30 dark:border-pink-700', text: 'text-pink-900 dark:text-pink-200' },
       { light: 'bg-orange-100 border-orange-300', dark: 'dark:bg-orange-900/30 dark:border-orange-700', text: 'text-orange-900 dark:text-orange-200' },
     ];
@@ -645,7 +645,7 @@ export default function Schedule() {
       >
         <Link
           to={`/tournaments/${id}`}
-          className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 flex items-center mb-2"
           aria-label="Back to Tournament"
         >
           <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" />
@@ -877,9 +877,9 @@ export default function Schedule() {
                       {scheduleByRing[Number(ring)].length} divisions
                     </p>
                   </div>
-                  <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                  <div className="divide-y divide-surface-100 dark:divide-surface-700">
                     {scheduleByRing[Number(ring)].map((div) => (
-                      <div key={div.divisionId} className="p-3 hover:bg-surface-50 dark:hover:bg-gray-700/50">
+                      <div key={div.divisionId} className="p-3 hover:bg-surface-50 dark:hover:bg-surface-700/50">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm font-medium text-surface-600 dark:text-surface-400">
                             {div.startTime} - {div.endTime}
@@ -953,7 +953,7 @@ export default function Schedule() {
               </TableHead>
               <TableBody>
                 {schedule.schedule.map((div) => (
-                  <tr key={div.divisionId} className="hover:bg-surface-50 dark:hover:bg-gray-700/50">
+                  <tr key={div.divisionId} className="hover:bg-surface-50 dark:hover:bg-surface-700/50">
                     <td className="font-medium text-surface-900 dark:text-white">
                       {div.startTime} - {div.endTime}
                     </td>

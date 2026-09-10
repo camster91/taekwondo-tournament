@@ -187,7 +187,7 @@ export default function Dashboard() {
         onRetry={retryDemoGuide}
       />
       {/* ── Hero greeting ── */}
-      <div data-tour="dashboard-hero" className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-900 via-slate-900 to-primary-950 p-6 lg:p-8 shadow-xl">
+      <div data-tour="dashboard-hero" className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-900 via-primary-900 to-primary-950 p-6 lg:p-8 shadow-xl">
         <div className="absolute top-0 right-0 w-72 h-72 bg-primary-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
         <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-accent-500/15 rounded-full blur-3xl translate-y-1/2" />
         <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
@@ -430,7 +430,7 @@ export default function Dashboard() {
                         <div className={`flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center ${step.done ? 'bg-success/100 dark:bg-success/900/30 text-success/600 dark:text-success/400' : 'bg-surface-100 dark:bg-primary-800 text-primary-400'}`}>
                           {step.done ? <Check className="h-3 w-3" strokeWidth={3} /> : <span className="text-[10px] font-semibold">{i + 1}</span>}
                         </div>
-                        <span className={`text-sm leading-relaxed ${step.done ? 'text-primary-500 line-through decoration-slate-300 dark:decoration-slate-700' : 'text-primary-700 dark:text-primary-300'}`}>{step.text}</span>
+                        <span className={`text-sm leading-relaxed ${step.done ? 'text-primary-500 line-through decoration-surface-300 dark:decoration-surface-700' : 'text-primary-700 dark:text-primary-300'}`}>{step.text}</span>
                       </li>
                     ))}
                   </ol>

@@ -885,7 +885,7 @@ export default function Divisions() {
       >
         <Link
           to={`/tournaments/${id}`}
-          className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Tournament
@@ -1208,7 +1208,7 @@ export default function Divisions() {
                   <Button
                     variant="secondary"
                     onClick={handleMergeSelected}
-                    className="text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                    className="text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20"
                   >
                     <Merge className="h-4 w-4 mr-2" />
                     Merge {selectedDivisionsForMerge.size} Selected
@@ -1307,7 +1307,7 @@ export default function Divisions() {
         <div className="space-y-6">
           {Object.entries(groupedDivisions || {}).length === 0 ? (
             <EmptyState
-              icon={<LayoutGrid className="h-12 w-12 text-gray-400" />}
+              icon={<LayoutGrid className="h-12 w-12 text-surface-400" />}
               title="No matches found"
               description="No divisions match your current filters. Try adjusting your search criteria."
             />
@@ -1324,7 +1324,7 @@ export default function Divisions() {
                     </div>
                   </div>
                 </CardHeader>
-                <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                <div className="divide-y divide-surface-200 dark:divide-surface-700">
                   <SortableContext items={divs.map((d) => d.id)} strategy={verticalListSortingStrategy}>
                     {divs.map((div) => (
                       <SortableDivisionRow
@@ -1621,7 +1621,7 @@ export default function Divisions() {
                 Available ({availableRegistrations.length})
               </h3>
               <div className="relative mb-2">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-600" />
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-surface-600" />
                 <Input
                   type="text"
                   value={assignmentSearch}
@@ -1642,7 +1642,7 @@ export default function Divisions() {
                     return (
                       <label
                         key={r.id}
-                        className="flex items-center gap-2 py-1.5 px-2 hover:bg-surface-50 dark:hover:bg-gray-800/40 rounded cursor-pointer"
+                        className="flex items-center gap-2 py-1.5 px-2 hover:bg-surface-50 dark:hover:bg-surface-800/40 rounded cursor-pointer"
                       >
                         <input
                           type="checkbox"
@@ -1728,7 +1728,7 @@ function AssignedList({
         const c = a.registration?.competitor;
         if (!c) return null;
         return (
-          <div key={a.id} className="flex items-center justify-between gap-2 py-1.5 px-2 hover:bg-surface-50 dark:hover:bg-gray-800/40 rounded">
+          <div key={a.id} className="flex items-center justify-between gap-2 py-1.5 px-2 hover:bg-surface-50 dark:hover:bg-surface-800/40 rounded">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-surface-900 dark:text-white truncate">
                 {c.firstName} {c.lastName}
@@ -1887,7 +1887,7 @@ function SortableDivisionRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-surface-50 dark:hover:bg-gray-700/50 ${isDragging ? 'bg-primary-50 dark:bg-primary-900/20 shadow-lg z-10' : ''} ${isSelected ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500' : ''}`}
+      className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-surface-50 dark:hover:bg-surface-700/50 ${isDragging ? 'bg-primary-50 dark:bg-primary-900/20 shadow-lg z-10' : ''} ${isSelected ? 'bg-primary-50 dark:bg-primary-900/20 border-l-4 border-primary-500' : ''}`}
     >
       <div className="flex items-center min-w-0 flex-1">
         {onToggleSelect && (
@@ -1895,7 +1895,7 @@ function SortableDivisionRow({
             type="checkbox"
             checked={isSelected || false}
             onChange={() => onToggleSelect(div.id)}
-            className="mr-3 h-4 w-4 text-purple-600 border-surface-300 rounded focus:ring-purple-500"
+            className="mr-3 h-4 w-4 text-primary-600 border-surface-300 rounded focus:ring-primary-500"
             aria-label={`Select ${div.name} for merge`}
           />
         )}

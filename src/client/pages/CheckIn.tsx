@@ -654,7 +654,7 @@ export default function CheckIn() {
           />
         ) : sortedRegistrations.length === 0 ? (
           <EmptyState
-            icon={<Users className="h-12 w-12 text-gray-400" />}
+            icon={<Users className="h-12 w-12 text-surface-400" />}
             title={
               filterStatus !== 'all' || filterEvent !== 'all' || schoolFilter || searchTerm
                 ? 'No matches found'

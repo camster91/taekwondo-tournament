@@ -146,7 +146,7 @@ export default function Results() {
 
   const getMedalIcon = (place: number) => {
     if (place === 1) return <Medal className="h-5 w-5 text-warning500" />;
-    if (place === 2) return <Medal className="h-5 w-5 text-gray-600" />;
+    if (place === 2) return <Medal className="h-5 w-5 text-surface-600" />;
     if (place === 3) return <Medal className="h-5 w-5 text-warning600" />;
     return <span className="text-surface-600 text-sm">{place}th</span>;
   };
@@ -232,7 +232,7 @@ export default function Results() {
             <div className="flex items-center">
               <Link
                 to={`/tournaments/${tournamentId}`}
-                className="mr-3 text-surface-600 dark:text-surface-500 hover:text-surface-600 dark:hover:text-gray-300"
+                className="mr-3 text-surface-600 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-300"
               >
                 <ChevronLeft className="h-6 w-6" />
               </Link>
@@ -262,7 +262,7 @@ export default function Results() {
                       <button
                         type="button"
                         disabled={exporting}
-                        className="flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-gray-700"
+                        className="flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700"
                         onClick={() => void exportPDF('results')}
                       >
                         <Download className="h-4 w-4 mr-3 text-danger500 dark:text-danger400" />
@@ -275,21 +275,21 @@ export default function Results() {
                       </div>
                       <button
                         onClick={exportSchoolsCSV}
-                        className="w-full flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-gray-700"
+                        className="w-full flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700"
                       >
                         <FileSpreadsheet className="h-4 w-4 mr-3 text-success500 dark:text-success400" />
                         School Standings
                       </button>
                       <button
                         onClick={exportResultsCSV}
-                        className="w-full flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-gray-700"
+                        className="w-full flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700"
                       >
                         <FileSpreadsheet className="h-4 w-4 mr-3 text-success500 dark:text-success400" />
                         All Results by Division
                       </button>
                       <button
                         onClick={exportCompetitorsCSV}
-                        className="w-full flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-gray-700"
+                        className="w-full flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700"
                       >
                         <FileSpreadsheet className="h-4 w-4 mr-3 text-success500 dark:text-success400" />
                         All Results by Competitor
@@ -302,7 +302,7 @@ export default function Results() {
                       <button
                         onClick={exportExcel}
                         disabled={exporting}
-                        className="w-full flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-gray-700"
+                        className="w-full flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700"
                       >
                         <FileDown className="h-4 w-4 mr-3 text-info500 dark:text-info400" />
                         Complete Excel Report
@@ -315,7 +315,7 @@ export default function Results() {
                       <button
                         type="button"
                         disabled={exporting}
-                        className="flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-gray-700"
+                        className="flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700"
                         onClick={() => void exportPDF('certificates')}
                       >
                         <Award className="h-4 w-4 mr-3 text-warning500 dark:text-warning400" />
@@ -324,7 +324,7 @@ export default function Results() {
                       <button
                         type="button"
                         disabled={exporting}
-                        className="flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-gray-700"
+                        className="flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700"
                         onClick={() => void exportPDF('certificates', 1)}
                       >
                         <Medal className="h-4 w-4 mr-3 text-warning500 dark:text-warning400" />
@@ -433,7 +433,7 @@ export default function Results() {
                     <th>Rank</th>
                     <th>School</th>
                     <th className="text-center"><Medal className="h-4 w-4 inline text-warning500" /> Gold</th>
-                    <th className="text-center"><Medal className="h-4 w-4 inline text-gray-600" /> Silver</th>
+                    <th className="text-center"><Medal className="h-4 w-4 inline text-surface-600" /> Silver</th>
                     <th className="text-center"><Medal className="h-4 w-4 inline text-warning600" /> Bronze</th>
                     <th className="text-center">Total</th>
                   </TableHead>
@@ -441,7 +441,7 @@ export default function Results() {
                     {schoolStats.map((school, index) => (
                       <tr
                         key={school.name}
-                        className={`hover:bg-surface-50 dark:hover:bg-gray-700 cursor-pointer ${
+                        className={`hover:bg-surface-50 dark:hover:bg-surface-700 cursor-pointer ${
                           selectedSchool === school.name ? 'bg-info/50 dark:bg-info/900/30' : ''
                         }`}
                         onClick={() =>
@@ -454,7 +454,7 @@ export default function Results() {
                               index === 0
                                 ? 'bg-warning/100 dark:bg-warning/900/50 text-warning800 dark:text-warning300'
                                 : index === 1
-                                ? 'bg-surface-100 dark:bg-gray-600 text-surface-800 dark:text-surface-200'
+                                ? 'bg-surface-100 dark:bg-surface-600 text-surface-800 dark:text-surface-200'
                                 : index === 2
                                 ? 'bg-warning/100 dark:bg-warning/900/50 text-warning800 dark:text-warning300'
                                 : 'bg-surface-50 dark:bg-surface-700 text-surface-600 dark:text-surface-400'
@@ -465,7 +465,7 @@ export default function Results() {
                         </td>
                         <td className="font-medium text-surface-900 dark:text-white">{school.name}</td>
                         <td className="text-center text-lg font-bold text-warning600 dark:text-warning400">{school.gold}</td>
-                        <td className="text-center text-lg font-bold text-gray-600">{school.silver}</td>
+                        <td className="text-center text-lg font-bold text-surface-600">{school.silver}</td>
                         <td className="text-center text-lg font-bold text-warning600 dark:text-warning400">{school.bronze}</td>
                         <td className="text-center text-lg font-semibold text-surface-700 dark:text-surface-300">
                           {school.gold + school.silver + school.bronze}
@@ -656,7 +656,7 @@ export default function Results() {
                           key={belt.name}
                           className={`p-4 rounded-lg border-2 ${
                             belt.name === 'Black Belt'
-                              ? 'border-gray-800 dark:border-gray-500 bg-surface-50 dark:bg-surface-700'
+                              ? 'border-surface-800 dark:border-surface-500 bg-surface-50 dark:bg-surface-700'
                               : 'border-info300 dark:border-info700 bg-info/50 dark:bg-info/900/30'
                           }`}
                         >
@@ -670,7 +670,7 @@ export default function Results() {
                               <div className="text-xs text-surface-600 dark:text-surface-400">Gold</div>
                             </div>
                             <div>
-                              <div className="text-2xl font-bold text-gray-600">{belt.silver}</div>
+                              <div className="text-2xl font-bold text-surface-600">{belt.silver}</div>
                               <div className="text-xs text-surface-600 dark:text-surface-400">Silver</div>
                             </div>
                             <div>
@@ -709,11 +709,11 @@ export default function Results() {
                     </TableHead>
                     <TableBody>
                       {ageBreakdown.map((age) => (
-                        <tr key={age.name} className="hover:bg-surface-50 dark:hover:bg-gray-700">
+                        <tr key={age.name} className="hover:bg-surface-50 dark:hover:bg-surface-700">
                           <td className="font-medium text-surface-900 dark:text-white">{age.name} years</td>
                           <td className="text-center text-surface-600 dark:text-surface-400">{age.divisions}</td>
                           <td className="text-center font-bold text-warning600 dark:text-warning400">{age.gold}</td>
-                          <td className="text-center font-bold text-gray-600">{age.silver}</td>
+                          <td className="text-center font-bold text-surface-600">{age.silver}</td>
                           <td className="text-center font-bold text-warning600 dark:text-warning400">{age.bronze}</td>
                           <td className="text-center font-semibold text-surface-900 dark:text-white">{age.gold + age.silver + age.bronze}</td>
                         </tr>
@@ -722,7 +722,7 @@ export default function Results() {
                         <td className="text-surface-900 dark:text-white">Total</td>
                         <td className="text-center text-surface-700 dark:text-surface-300">{ageBreakdown.reduce((s, a) => s + a.divisions, 0)}</td>
                         <td className="text-center text-warning600 dark:text-warning400">{ageBreakdown.reduce((s, a) => s + a.gold, 0)}</td>
-                        <td className="text-center text-gray-600">{ageBreakdown.reduce((s, a) => s + a.silver, 0)}</td>
+                        <td className="text-center text-surface-600">{ageBreakdown.reduce((s, a) => s + a.silver, 0)}</td>
                         <td className="text-center text-warning600 dark:text-warning400">{ageBreakdown.reduce((s, a) => s + a.bronze, 0)}</td>
                         <td className="text-center text-surface-900 dark:text-white">{ageBreakdown.reduce((s, a) => s + a.gold + a.silver + a.bronze, 0)}</td>
                       </tr>

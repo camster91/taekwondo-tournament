@@ -687,7 +687,7 @@ export default function BracketEditor() {
       {/* Back link */}
       <Link
         to={`/tournaments/${tournamentId}/divisions`}
-        className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-gray-300 flex items-center"
+        className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 flex items-center"
         aria-label="Back to Divisions"
       >
         <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" /> Back to Divisions
@@ -913,12 +913,12 @@ export default function BracketEditor() {
             {correctionError && <OperationStatus state="rejected" message={correctionError} />}
             <p>This correction replaces <strong>{correctionPreview.impact.oldMatchCount}</strong> matches with <strong>{correctionPreview.impact.newMatchCount}</strong> for {correctionPreview.impact.competitorCount} competitors.</p>
             <dl className="grid grid-cols-2 gap-3 rounded-xl bg-surface-50 p-4 dark:bg-surface-900">
-              <div><dt className="text-gray-500">Completed results</dt><dd className="font-semibold">{correctionPreview.impact.completedMatchesRemoved}</dd></div>
-              <div><dt className="text-gray-500">Scored matches</dt><dd className="font-semibold">{correctionPreview.impact.scoredMatchesRemoved}</dd></div>
-              <div><dt className="text-gray-500">Audit entries</dt><dd className="font-semibold">{correctionPreview.impact.matchAuditRowsRemoved}</dd></div>
-              <div><dt className="text-gray-500">Match histories</dt><dd className="font-semibold">{correctionPreview.impact.matchupHistoryRowsRemoved}</dd></div>
-              <div><dt className="text-gray-500">BYEs before</dt><dd className="font-semibold">{correctionPreview.impact.oldByeCount}</dd></div>
-              <div><dt className="text-gray-500">BYEs after</dt><dd className="font-semibold">{correctionPreview.impact.newByeCount}</dd></div>
+              <div><dt className="text-surface-500">Completed results</dt><dd className="font-semibold">{correctionPreview.impact.completedMatchesRemoved}</dd></div>
+              <div><dt className="text-surface-500">Scored matches</dt><dd className="font-semibold">{correctionPreview.impact.scoredMatchesRemoved}</dd></div>
+              <div><dt className="text-surface-500">Audit entries</dt><dd className="font-semibold">{correctionPreview.impact.matchAuditRowsRemoved}</dd></div>
+              <div><dt className="text-surface-500">Match histories</dt><dd className="font-semibold">{correctionPreview.impact.matchupHistoryRowsRemoved}</dd></div>
+              <div><dt className="text-surface-500">BYEs before</dt><dd className="font-semibold">{correctionPreview.impact.oldByeCount}</dd></div>
+              <div><dt className="text-surface-500">BYEs after</dt><dd className="font-semibold">{correctionPreview.impact.newByeCount}</dd></div>
             </dl>
             {correctionPreview.impact.changedFirstRoundPairings.length > 0 && (
               <div>
@@ -1102,7 +1102,7 @@ function MatchCard({
         <span>Match {label}</span>
         <span className="capitalize" aria-label={`Status: ${cardStatus}`}>{cardStatus}</span>
       </div>
-      <div className="divide-y divide-gray-200 dark:divide-gray-700">
+      <div className="divide-y divide-surface-200 dark:divide-surface-700">
         <button
           onClick={() =>
             isReady && match.competitor1Id && onSelectWinner(match.competitor1Id)
@@ -1121,7 +1121,7 @@ function MatchCard({
             match.winnerId === match.competitor1Id
               ? 'bg-success/100 dark:bg-success/800/50 font-semibold'
               : isReady
-              ? 'hover:bg-surface-50 dark:hover:bg-gray-700'
+              ? 'hover:bg-surface-50 dark:hover:bg-surface-700'
               : ''
           }`}
         >
@@ -1150,7 +1150,7 @@ function MatchCard({
             match.winnerId === match.competitor2Id
               ? 'bg-success/100 dark:bg-success/800/50 font-semibold'
               : isReady
-              ? 'hover:bg-surface-50 dark:hover:bg-gray-700'
+              ? 'hover:bg-surface-50 dark:hover:bg-surface-700'
               : ''
           }`}
         >
