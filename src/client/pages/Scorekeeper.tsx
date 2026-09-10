@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Trophy,
@@ -36,6 +36,11 @@ import { browserVenueDataSnapshotStore, loadVenueData } from '../utils/venue-dat
 import { isScorekeeperDivisionData } from '../utils/venue-data-contracts';
 import { shouldQueueOfflineMutation } from '../utils/offline-delivery';
 import { useBracketWebSocket } from '../hooks/useBracketWebSocket';
+import {
+  parseScorekeeperFilters,
+  serializeScorekeeperFilters,
+  updateSearchParams,
+} from '../utils/url-state';
 
 interface Match {
   id: string;
@@ -162,6 +167,7 @@ function validateResult(
 
 export default function Scorekeeper() {
   const { tournamentId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const { user, isOfflineSession } = useAuth();
@@ -172,8 +178,12 @@ export default function Scorekeeper() {
   const [discardOfflineError, setDiscardOfflineError] = useState('');
   const [unpersistedDeliveryWarning, setUnpersistedDeliveryWarning] = useState('');
 
-  const [selectedRing, setSelectedRing] = useState<number | null>(null);
-  const [selectedDivision, setSelectedDivision] = useState<string | null>(null);
+  // Read filters from URL
+  const urlFilters = parseScorekeeperFilters(searchParams);
+  const [selectedRing, setSelectedRing] = useState<number | null>(
+    urlFilters.ring ? parseInt(urlFilters.ring) : null
+  );
+  const [selectedDivision, setSelectedDivision] = useState<string | null>(urlFilters.division || null);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [score1, setScore1] = useState('');
   const [score2, setScore2] = useState('');
@@ -206,6 +216,18 @@ export default function Scorekeeper() {
   const incidentDialogRef = useRef<HTMLDivElement>(null);
   const incidentOpenerRef = useRef<HTMLButtonElement>(null);
   const incidentWasOpenRef = useRef(false);
+
+  // Sync filters to URL when they change
+  useEffect(() => {
+    const filters = serializeScorekeeperFilters({
+      ring: selectedRing?.toString() || undefined,
+      division: selectedDivision || undefined,
+    });
+    const newParams = updateSearchParams(searchParams, filters);
+    if (newParams.toString() !== searchParams.toString()) {
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [selectedRing, selectedDivision, searchParams, setSearchParams]);
 
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['tournament', tournamentId],

@@ -41,7 +41,12 @@ import { Card, CardHeader, CardBody } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
-import { getTournamentDestination } from '../utils/tournament-navigation';
+import {
+  getRoleAwareTournamentDestination,
+  getRoleAwareTournamentLabel,
+  getRoleAwareTournamentAriaLabel,
+  type UserRole,
+} from '../utils/tournament-navigation';
 
 interface Tournament {
   id: string;
@@ -251,10 +256,15 @@ export default function Dashboard() {
                 </div>
               ) : tournaments && tournaments.length > 0 ? (
                 <div className="divide-y divide-slate-100 dark:divide-slate-800 border-t border-slate-100 dark:border-slate-800">
-                  {tournaments.slice(0, 5).map((t, i) => (
+                  {tournaments.slice(0, 5).map((t, i) => {
+                    const userRole = (user?.role || 'viewer') as UserRole;
+                    const destination = getRoleAwareTournamentDestination(t, userRole);
+                    const ariaLabel = getRoleAwareTournamentAriaLabel(t, userRole);
+                    return (
                     <Link
                       key={t.id}
-                      to={getTournamentDestination(t)}
+                      to={destination}
+                      aria-label={ariaLabel}
                       className="group flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors animate-slide-up"
                       style={{ animationDelay: `${i * 40}ms` }}
                     >
@@ -281,7 +291,8 @@ export default function Dashboard() {
                       <StatusBadge status={t.status} />
                       <ArrowUpRight className="h-4 w-4 text-slate-300 dark:text-slate-600 group-hover:text-primary-500 transition-colors" />
                     </Link>
-                  ))}
+                  );
+                  })}
                 </div>
               ) : (
                 <div className="p-5 pt-0">

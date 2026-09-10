@@ -1,22 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText } from 'lucide-react';
+import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText, AlertTriangle, RefreshCw } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import { StatusBadge } from '../components/ui/Badge';
 import Badge from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { SPORT_PROFILES } from '../../shared/constants/sport-profiles';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { isTestData } from '../utils/test-data';
 import {
-  getTournamentDestination,
-  getTournamentPrimaryActionLabel,
-  getTournamentPrimaryActionAriaLabel,
+  getRoleAwareTournamentDestination,
+  getRoleAwareTournamentLabel,
+  getRoleAwareTournamentAriaLabel,
+  type UserRole,
 } from '../utils/tournament-navigation';
+import {
+  parseTournamentListFilters,
+  serializeTournamentListFilters,
+  updateSearchParams,
+} from '../utils/url-state';
+import {
+  getAsyncStateMessage,
+  isOperationInProgress,
+  canRetry,
+  type AsyncOperationState,
+} from '../utils/async-state';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
@@ -38,6 +50,7 @@ interface Tournament {
 
 export default function Tournaments() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   // Auto-open the create modal when ?create=1 is in the URL. Lets the
   // dashboard "New Tournament" button land here with the modal already
@@ -56,7 +69,11 @@ export default function Tournaments() {
     }
   };
   const [deleteTarget, setDeleteTarget] = useState<Tournament | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Read filters from URL
+  const urlFilters = parseTournamentListFilters(searchParams);
+  const [searchQuery, setSearchQuery] = useState(urlFilters.search || '');
+  const [statusFilter, setStatusFilter] = useState<typeof urlFilters.status>(urlFilters.status || 'all');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [formData, setFormData] = useState({
     name: '',
@@ -64,6 +81,19 @@ export default function Tournaments() {
     location: '',
     sportProfileSlug: 'taekwondo',
   });
+
+  // Sync filters to URL when they change
+  useEffect(() => {
+    const filters = serializeTournamentListFilters({
+      search: searchQuery || undefined,
+      status: statusFilter === 'all' ? undefined : statusFilter,
+      trash: urlFilters.trash,
+    });
+    const newParams = updateSearchParams(searchParams, filters);
+    if (newParams.toString() !== searchParams.toString()) {
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchQuery, statusFilter, urlFilters.trash, searchParams, setSearchParams]);
 
   const { data: templates } = useQuery<Array<{id: string; name: string; description: string | null}>>({
     queryKey: ['tournament-templates'],
@@ -74,7 +104,7 @@ export default function Tournaments() {
     },
   });
 
-  const { data: tournaments, isLoading } = useQuery<Tournament[]>({
+  const { data: tournaments, isLoading, isError, error, refetch } = useQuery<Tournament[]>({
     queryKey: ['tournaments'],
     queryFn: async () => {
       const res = await fetch('/api/tournaments', { headers: getAuthHeaders() });
@@ -121,10 +151,17 @@ export default function Tournaments() {
     },
   });
 
-  const filteredTournaments = tournaments?.filter((t) =>
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.location?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTournaments = tournaments?.filter((t) => {
+    // Search filter
+    const matchesSearch = !searchQuery || 
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.location?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Status filter
+    const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
 
   const upcomingTournaments = filteredTournaments?.filter(
     (t) => t.status !== 'completed'
@@ -145,6 +182,35 @@ export default function Tournaments() {
           </Button>
         }
       />
+
+      {/* Error Banner */}
+      {isError && (
+        <Card className="border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-900/20">
+          <CardBody>
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-red-900 dark:text-red-100">
+                  Failed to load tournaments
+                </h3>
+                <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+                  {error instanceof Error ? error.message : 'An error occurred'}
+                </p>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => refetch()}
+                  className="mt-3"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" /> Try Again
+                </Button>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Search Bar */}
       {tournaments && tournaments.length > 0 && (
@@ -178,6 +244,7 @@ export default function Tournaments() {
                   <TournamentCard
                     key={tournament.id}
                     tournament={tournament}
+                    userRole={(user?.role || 'viewer') as UserRole}
                     onDelete={() => setDeleteTarget(tournament)}
                   />
                 ))}
@@ -196,6 +263,7 @@ export default function Tournaments() {
                   <TournamentCard
                     key={tournament.id}
                     tournament={tournament}
+                    userRole={(user?.role || 'viewer') as UserRole}
                     onDelete={() => setDeleteTarget(tournament)}
                   />
                 ))}
@@ -264,6 +332,16 @@ export default function Tournaments() {
             }}
             className="space-y-4"
           >
+            {createMutation.isError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700 dark:text-red-300">
+                    {createMutation.error instanceof Error ? createMutation.error.message : 'Failed to create tournament'}
+                  </p>
+                </div>
+              </div>
+            )}
             {templates && templates.length > 0 && (
               <div>
                 <Label>Use Template (Optional)</Label>
@@ -369,15 +447,17 @@ export default function Tournaments() {
 
 function TournamentCard({
   tournament,
+  userRole,
   onDelete,
 }: {
   tournament: Tournament;
+  userRole: UserRole;
   onDelete: () => void;
 }) {
   const isCompleted = tournament.status === 'completed';
-  const destination = getTournamentDestination(tournament);
-  const actionLabel = getTournamentPrimaryActionLabel(tournament);
-  const actionAriaLabel = getTournamentPrimaryActionAriaLabel(tournament);
+  const destination = getRoleAwareTournamentDestination(tournament, userRole);
+  const actionLabel = getRoleAwareTournamentLabel(tournament, userRole);
+  const actionAriaLabel = getRoleAwareTournamentAriaLabel(tournament, userRole);
 
   return (
     <Card interactive={!isCompleted} className={isCompleted ? 'opacity-75' : 'border-l-4 border-l-primary-500'}>

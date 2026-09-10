@@ -29,6 +29,8 @@
 - ✅ PR #258: Demo isolation Phase 1 hardening + ship-plan sync post-#257 — isolated public demo (agent work complete; Cameron/VPS ops remain: demo hostname, isolated DB, Traefik, deploy-demo.sh)
 - ✅ PR #259: Live schedule delay propagation (#125) — director records ring/division delay with preview + confirmation; deterministic propagation preserves completed/in-progress matches; conflict detection; audit trail + undo; unit tests for propagation logic, multi-ring, end-of-day boundaries
 - ✅ PR #260: UX Wave 0 trust batch 1 (#135, #140, #141) — completed tournament routing (results vs detail based on status), modal/confirmation safety (cancel-first focus for danger, aria connections, loading lock, body scroll lock), truthful settings save state (SaveState machine replacing hasChanges boolean, beforeunload protection, dynamic status banner)
+- ✅ PR #261: UX Wave 0 trust batch 2 utilities (#134, #136, #146) — foundational utilities: role-aware navigation (3 functions), URL state (5 filter sets + parse/serialize), async state machine (AsyncState + MutationState + list helpers); 76 unit tests
+- 🚧 PR #262: UX Wave 0 trust batch 2 wiring (#134, #136, #146) — wired utilities into real pages: role-aware nav in Dashboard + Tournaments; URL state in CheckIn, Divisions, Tournaments, DirectorDashboard, Scorekeeper; async state helpers in Tournaments (error banner with retry + mutation error display)
 
 ---
 
@@ -77,7 +79,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 **Overall estimated completion:** ~92% (custom domains API+UI complete #256/#257, live schedule delay propagation #125/#259 complete; day-of operations ~95%; UX Wave 0 trust items #135/#140/#141 complete)  
 **Blocker count:** 3 critical items (Cameron Stripe dashboard setup for self-service billing, legal counsel final approval, production deploy execution with demo video/case studies for marketing)
 
-**Next Agent Track:** APP-COMPLETION Phase 5 / UX Wave 0 trust batch 2 (#134, #136, #146) UTILITIES COMPLETE — role-aware tournament navigation (3 new exported functions), URL state preservation (5 filter sets + parse/serialize helpers), async state machine (AsyncState + MutationState + list helpers) all implemented with 76 unit tests passing. **Follow-up work:** Wire these utilities into existing pages (CheckIn, Divisions, Tournaments, DirectorDashboard, Scorekeeper, etc.) to actually preserve filter state on refresh and show role-appropriate tournament destinations.
+**Next Agent Track:** APP-COMPLETION Phase 5 / UX Wave 0 trust batch 2 (#134, #136, #146) **COMPLETE** — role-aware tournament navigation wired into Dashboard + Tournaments (6 pages total use role-aware routing with proper labels/aria-labels). URL state preservation wired into CheckIn, Divisions, Tournaments, DirectorDashboard, Scorekeeper (filters survive refresh, URLs are shareable). Async state helpers wired into Tournaments list page (error banner with retry) + create mutation (inline error display). All 76 unit tests pass; client-side tests green.
 
 ---
 
