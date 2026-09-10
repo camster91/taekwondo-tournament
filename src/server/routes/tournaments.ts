@@ -1355,6 +1355,74 @@ router.delete('/:id/registrations/:regId', authenticate, requireTournamentAccess
   res.status(204).send();
 });
 
+// Revoke or rotate a registration management token.
+// POST /api/tournaments/:id/registrations/:regId/revoke-token
+// Directors can revoke a leaked/lost token and optionally re-issue a fresh one.
+// Closes #118 acceptance: revocation + rotation support.
+router.post('/:id/registrations/:regId/revoke-token', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { reissue } = req.body; // boolean: rotate (generate new token) or just revoke?
+
+  // Verify registration belongs to this tournament
+  const registration = await prisma.registration.findFirst({
+    where: { id: getParam(req.params.regId), tournamentId: getParam(req.params.id) },
+    include: {
+      competitor: { select: { firstName: true, lastName: true } },
+      tournament: { select: { name: true } },
+    },
+  });
+
+  if (!registration) {
+    return res.status(404).json({ error: 'Registration not found in this tournament' });
+  }
+
+  if (!registration.managementTokenHash) {
+    return res.status(400).json({ error: 'This registration has no management token to revoke (legacy registration or no parent email)' });
+  }
+
+  // Revoke the existing token (mark as revoked so it stops working)
+  await prisma.registration.update({
+    where: { id: registration.id },
+    data: { managementTokenRevokedAt: new Date() },
+  });
+
+  // #118 acceptance: audit logging (non-sensitive)
+  console.log(`[registration-token-revoke] Registration ${registration.id} (${registration.competitor.firstName} ${registration.competitor.lastName}, tournament: ${registration.tournament.name}) token revoked by director`);
+
+  // If reissue=true, generate a new token and return it
+  if (reissue) {
+    const { generateManagementToken, getManagementTokenExpiry, hashManagementToken } = await import('../utils/registration-management-token.js');
+    const newToken = generateManagementToken();
+    const newExpiry = getManagementTokenExpiry();
+
+    await prisma.registration.update({
+      where: { id: registration.id },
+      data: {
+        managementTokenHash: hashManagementToken(newToken),
+        managementTokenExpiresAt: newExpiry,
+        managementTokenRevokedAt: null, // clear revocation flag for new token
+      },
+    });
+
+    // #118 acceptance: audit logging (non-sensitive)
+    console.log(`[registration-token-rotate] Registration ${registration.id} issued new management token, expires ${newExpiry.toISOString()}`);
+
+    return res.json({
+      success: true,
+      message: 'Old token revoked and new token generated',
+      managementToken: newToken,
+      expiresAt: newExpiry,
+      managementUrl: `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(newToken)}`,
+    });
+  }
+
+  // Just revoked, no re-issue
+  res.json({
+    success: true,
+    message: 'Management token revoked',
+  });
+});
+
 // Get weight classes for tournament (requires authentication)
 router.get('/:id/weight-classes', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;

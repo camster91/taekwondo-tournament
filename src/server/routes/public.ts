@@ -22,8 +22,10 @@ import {
 } from '../middleware/auth.js';
 import {
   generateManagementToken,
+  getManagementTokenExpiry,
   hashManagementToken,
   isValidManagementToken,
+  validateManagementTokenStatus,
 } from '../utils/registration-management-token.js';
 import { recordPublicDisplayHeartbeat } from '../services/public-display-heartbeat.js';
 
@@ -404,6 +406,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     // Create registration. The raw bearer token is returned/sent once;
     // only its digest is persisted.
     const managementToken = generateManagementToken();
+    const managementTokenExpiry = getManagementTokenExpiry(); // 30 days default
     const registration = await prisma.registration.create({
       data: {
         tournamentId,
@@ -419,6 +422,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         competeWithOlder: competeWithOlder === true,
         specialNeeds: specialNeeds?.trim() || null,
         managementTokenHash: hashManagementToken(managementToken),
+        managementTokenExpiresAt: managementTokenExpiry,
         // Waitlist support
         waitlistStatus: shouldWaitlist ? 'waitlisted' : 'active',
         waitlistPosition: position,
@@ -867,7 +871,7 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
   const token = String(req.params.token || '');
   if (!isValidManagementToken(token)) return res.status(404).json({ error: 'No matching registration found.' });
 
-  // Match by registration.id prefix (first 8 chars)
+  // Match by registration.managementTokenHash
   const registration = await prisma.registration.findFirst({
     where: {
       managementTokenHash: hashManagementToken(token),
@@ -881,6 +885,19 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
   if (!registration) {
     return res.status(404).json({ error: 'No matching registration found.' });
   }
+
+  // #118 acceptance: Expiration + revocation check. Use the same
+  // 404 error shape as "token not found" (no enumeration).
+  const statusCheck = validateManagementTokenStatus(
+    registration.managementTokenExpiresAt,
+    registration.managementTokenRevokedAt,
+  );
+  if (!statusCheck.valid) {
+    return res.status(404).json({ error: 'No matching registration found.' });
+  }
+
+  // #118 acceptance: Audit log (non-sensitive: no raw token, no full PII)
+  console.log(`[registration-manage-read] Registration ${registration.id.slice(0, 8)} accessed via management token`);
 
   res.json({
     registration: {
@@ -933,6 +950,15 @@ router.patch('/registrations/:token', manageUpdateLimiter, async (req: Request, 
     return res.status(404).json({ error: 'No matching registration found.' });
   }
 
+  // #118 acceptance: Expiration + revocation check
+  const statusCheck = validateManagementTokenStatus(
+    registration.managementTokenExpiresAt,
+    registration.managementTokenRevokedAt,
+  );
+  if (!statusCheck.valid) {
+    return res.status(404).json({ error: 'No matching registration found.' });
+  }
+
   // Hard rules: can't edit a checked-in registration, can't edit a
   // tournament that's already in_progress or later.
   if (registration.checkedIn) {
@@ -963,6 +989,9 @@ router.patch('/registrations/:token', manageUpdateLimiter, async (req: Request, 
       await tx.registration.update({ where: { id: registration.id }, data: regData });
     }
   });
+
+  // #118 acceptance: Audit log (non-sensitive)
+  console.log(`[registration-manage-update] Registration ${registration.id.slice(0, 8)} updated via management token`);
 
   // Invalidate bracket regeneration since the data changed.
   // Closes B4: the previous code did an unconditional
@@ -1003,6 +1032,15 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
     return res.status(404).json({ error: 'No matching registration found.' });
   }
 
+  // #118 acceptance: Expiration + revocation check
+  const statusCheck = validateManagementTokenStatus(
+    registration.managementTokenExpiresAt,
+    registration.managementTokenRevokedAt,
+  );
+  if (!statusCheck.valid) {
+    return res.status(404).json({ error: 'No matching registration found.' });
+  }
+
   if (registration.checkedIn) {
     return res.status(409).json({ error: 'Cannot withdraw a checked-in registration. Talk to the director at the venue.' });
   }
@@ -1016,6 +1054,9 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
     await tx.match.deleteMany({ where: { OR: [{ competitor1Id: registration.id }, { competitor2Id: registration.id }] } });
     await tx.registration.delete({ where: { id: registration.id } });
   });
+
+  // #118 acceptance: Audit log (non-sensitive)
+  console.log(`[registration-manage-withdraw] Registration ${registration.id.slice(0, 8)} withdrawn via management token`);
 
   // Only promote from waitlist if this was an active registration (not itself waitlisted)
   if (registration.tournament.status === 'registration' && registration.waitlistStatus === 'active') {
