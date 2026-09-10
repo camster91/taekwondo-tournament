@@ -95,7 +95,7 @@ function AnnouncerView() {
 
   if (tournamentLoading || scoreboardLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-surface-950 text-white flex items-center justify-center">
         <Spinner size="lg" />
       </div>
     );
@@ -103,10 +103,10 @@ function AnnouncerView() {
 
   if (!tournament || !scoreboardData) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-surface-950 text-white flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-4xl font-bold mb-4">Announcer View Unavailable</h1>
-          <p className="text-slate-300">Could not load tournament data.</p>
+          <p className="text-surface-300">Could not load tournament data.</p>
         </div>
       </div>
     );
@@ -181,18 +181,18 @@ function AnnouncerView() {
   const brandColor = tournament.brandPrimaryColor || '#DC2626';
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div className="min-h-screen bg-surface-950 text-white">
       {/* Header - enhanced for readability at distance */}
-      <div className="border-b border-slate-700" style={{ borderBottomColor: brandColor, borderBottomWidth: '6px' }}>
+      <div className="border-b border-surface-700" style={{ borderBottomColor: brandColor, borderBottomWidth: '6px' }}>
         <div className="container mx-auto px-8 py-8">
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-6xl font-bold mb-3 tracking-tight">{tournament.name}</h1>
-              <p className="text-slate-300 text-2xl font-medium">
+              <p className="text-surface-300 text-2xl font-medium">
                 {tournament.brandName || 'Tournament Announcer'}
               </p>
             </div>
-            <div className="text-right text-slate-300">
+            <div className="text-right text-surface-300">
               <div className="text-5xl font-mono font-bold tracking-wide">
                 {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </div>
@@ -214,31 +214,31 @@ function AnnouncerView() {
             </span>
           </h2>
           {nowCompeting.length === 0 ? (
-            <div className="bg-slate-800 rounded-xl p-16 text-center border-4 border-slate-700">
-              <p className="text-slate-400 text-4xl font-medium">No matches currently in progress</p>
+            <div className="bg-surface-900 rounded-xl p-16 text-center border-4 border-surface-700">
+              <p className="text-surface-400 text-4xl font-medium">No matches currently in progress</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {nowCompeting.map((match) => (
-                <div key={match.id} className="bg-slate-800 rounded-xl p-10 border-4 shadow-2xl" style={{ borderColor: brandColor }}>
+                <div key={match.id} className="bg-surface-900 rounded-xl p-10 border-4 shadow-2xl" style={{ borderColor: brandColor }}>
                   <div className="flex items-center justify-between mb-6">
                     <span className="text-2xl font-black px-4 py-2 rounded-lg" style={{ backgroundColor: brandColor, color: '#fff' }}>
                       RING {match.ringNumber || '?'}
                     </span>
-                    <span className="text-slate-400 text-lg font-semibold">Match {match.matchNumber}</span>
+                    <span className="text-surface-400 text-lg font-semibold">Match {match.matchNumber}</span>
                   </div>
                   <div className="mb-4">
                     <h3 className="text-2xl font-bold text-white truncate">{match.divisionName}</h3>
                   </div>
                   <div className="space-y-4 mt-6">
-                    <div className="bg-slate-700 rounded-lg p-6 border-2 border-slate-600">
+                    <div className="bg-surface-800 rounded-lg p-6 border-2 border-surface-600">
                       <p className="text-3xl font-bold truncate text-white">{match.competitor1Name || 'TBD'}</p>
-                      {match.competitor1School && <p className="text-slate-300 text-lg mt-2 truncate font-medium">{match.competitor1School}</p>}
+                      {match.competitor1School && <p className="text-surface-300 text-lg mt-2 truncate font-medium">{match.competitor1School}</p>}
                     </div>
-                    <div className="text-center text-slate-500 font-black text-2xl py-2">VS</div>
-                    <div className="bg-slate-700 rounded-lg p-6 border-2 border-slate-600">
+                    <div className="text-center text-surface-500 font-black text-2xl py-2">VS</div>
+                    <div className="bg-surface-800 rounded-lg p-6 border-2 border-surface-600">
                       <p className="text-3xl font-bold truncate text-white">{match.competitor2Name || 'TBD'}</p>
-                      {match.competitor2School && <p className="text-slate-300 text-lg mt-2 truncate font-medium">{match.competitor2School}</p>}
+                      {match.competitor2School && <p className="text-surface-300 text-lg mt-2 truncate font-medium">{match.competitor2School}</p>}
                     </div>
                   </div>
                 </div>
@@ -249,37 +249,37 @@ function AnnouncerView() {
 
         {/* UP NEXT - enhanced for distance readability */}
         <section>
-          <h2 className="text-5xl font-black mb-8 uppercase tracking-wider text-amber-400">
-            <span className="inline-block px-4 py-2 rounded-lg bg-amber-500">
-              <span className="text-slate-900">UP NEXT</span>
+          <h2 className="text-5xl font-black mb-8 uppercase tracking-wider text-warning">
+            <span className="inline-block px-4 py-2 rounded-lg bg-warning">
+              <span className="text-surface-900">UP NEXT</span>
             </span>
           </h2>
           {upNext.length === 0 ? (
-            <div className="bg-slate-800 rounded-xl p-16 text-center border-4 border-slate-700">
-              <p className="text-slate-400 text-4xl font-medium">No matches ready</p>
+            <div className="bg-surface-900 rounded-xl p-16 text-center border-4 border-surface-700">
+              <p className="text-surface-400 text-4xl font-medium">No matches ready</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {upNext.map((match) => (
-                <div key={match.id} className="bg-slate-800 rounded-xl p-10 border-4 border-amber-500 shadow-2xl">
+                <div key={match.id} className="bg-surface-900 rounded-xl p-10 border-4 border-warning shadow-2xl">
                   <div className="flex items-center justify-between mb-6">
-                    <span className="text-2xl font-black px-4 py-2 rounded-lg bg-amber-500 text-slate-900">
+                    <span className="text-2xl font-black px-4 py-2 rounded-lg bg-warning text-surface-900">
                       RING {match.ringNumber || '?'}
                     </span>
-                    <span className="text-slate-400 text-lg font-semibold">Match {match.matchNumber}</span>
+                    <span className="text-surface-400 text-lg font-semibold">Match {match.matchNumber}</span>
                   </div>
                   <div className="mb-4">
                     <h3 className="text-2xl font-bold text-white truncate">{match.divisionName}</h3>
                   </div>
                   <div className="space-y-4 mt-6">
-                    <div className="bg-slate-700 rounded-lg p-6 border-2 border-amber-500/50">
+                    <div className="bg-surface-800 rounded-lg p-6 border-2 border-warning/50">
                       <p className="text-3xl font-bold truncate text-white">{match.competitor1Name || 'TBD'}</p>
-                      {match.competitor1School && <p className="text-slate-300 text-lg mt-2 truncate font-medium">{match.competitor1School}</p>}
+                      {match.competitor1School && <p className="text-surface-300 text-lg mt-2 truncate font-medium">{match.competitor1School}</p>}
                     </div>
-                    <div className="text-center text-amber-400 font-black text-2xl py-2">VS</div>
-                    <div className="bg-slate-700 rounded-lg p-6 border-2 border-amber-500/50">
+                    <div className="text-center text-warning font-black text-2xl py-2">VS</div>
+                    <div className="bg-surface-800 rounded-lg p-6 border-2 border-warning/50">
                       <p className="text-3xl font-bold truncate text-white">{match.competitor2Name || 'TBD'}</p>
-                      {match.competitor2School && <p className="text-slate-300 text-lg mt-2 truncate font-medium">{match.competitor2School}</p>}
+                      {match.competitor2School && <p className="text-surface-300 text-lg mt-2 truncate font-medium">{match.competitor2School}</p>}
                     </div>
                   </div>
                 </div>
@@ -290,37 +290,37 @@ function AnnouncerView() {
 
         {/* ON DECK - enhanced for distance readability */}
         <section>
-          <h2 className="text-5xl font-black mb-8 uppercase tracking-wider text-blue-400">
-            <span className="inline-block px-4 py-2 rounded-lg bg-blue-500">
+          <h2 className="text-5xl font-black mb-8 uppercase tracking-wider text-info">
+            <span className="inline-block px-4 py-2 rounded-lg bg-info">
               <span className="text-white">ON DECK</span>
             </span>
           </h2>
           {onDeck.length === 0 ? (
-            <div className="bg-slate-800 rounded-xl p-16 text-center border-4 border-slate-700">
-              <p className="text-slate-400 text-4xl font-medium">No matches on deck</p>
+            <div className="bg-surface-900 rounded-xl p-16 text-center border-4 border-surface-700">
+              <p className="text-surface-400 text-4xl font-medium">No matches on deck</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {onDeck.map((match) => (
-                <div key={match.id} className="bg-slate-800 rounded-xl p-8 border-4 border-blue-500 shadow-lg">
+                <div key={match.id} className="bg-surface-900 rounded-xl p-8 border-4 border-info shadow-lg">
                   <div className="flex items-center justify-between mb-5">
-                    <span className="text-xl font-bold px-3 py-1 rounded-lg bg-blue-500 text-white">
+                    <span className="text-xl font-bold px-3 py-1 rounded-lg bg-info text-white">
                       RING {match.ringNumber || '?'}
                     </span>
-                    <span className="text-slate-400 text-base font-semibold">Match {match.matchNumber}</span>
+                    <span className="text-surface-400 text-base font-semibold">Match {match.matchNumber}</span>
                   </div>
                   <div className="mb-3">
                     <h3 className="text-xl font-bold text-white truncate">{match.divisionName}</h3>
                   </div>
                   <div className="space-y-3 mt-4">
-                    <div className="bg-slate-700 rounded-lg p-4 border border-blue-500/30">
+                    <div className="bg-surface-800 rounded-lg p-4 border border-info/30">
                       <p className="text-2xl font-bold truncate text-white">{match.competitor1Name || 'TBD'}</p>
-                      {match.competitor1School && <p className="text-slate-300 text-base mt-1 truncate">{match.competitor1School}</p>}
+                      {match.competitor1School && <p className="text-surface-300 text-base mt-1 truncate">{match.competitor1School}</p>}
                     </div>
-                    <div className="text-center text-blue-400 font-bold text-xl py-1">VS</div>
-                    <div className="bg-slate-700 rounded-lg p-4 border border-blue-500/30">
+                    <div className="text-center text-info font-bold text-xl py-1">VS</div>
+                    <div className="bg-surface-800 rounded-lg p-4 border border-info/30">
                       <p className="text-2xl font-bold truncate text-white">{match.competitor2Name || 'TBD'}</p>
-                      {match.competitor2School && <p className="text-slate-300 text-base mt-1 truncate">{match.competitor2School}</p>}
+                      {match.competitor2School && <p className="text-surface-300 text-base mt-1 truncate">{match.competitor2School}</p>}
                     </div>
                   </div>
                 </div>
@@ -331,7 +331,7 @@ function AnnouncerView() {
       </div>
 
       {/* Footer */}
-      <div className="text-center py-8 text-slate-500 text-lg font-medium">
+      <div className="text-center py-8 text-surface-500 text-lg font-medium">
         Auto-refreshes every 10 seconds
       </div>
     </div>

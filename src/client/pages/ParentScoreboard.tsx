@@ -169,31 +169,31 @@ export default function ParentScoreboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-surface-50 dark:bg-surface-950">
       {/* Header - tournament context */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
+      <header className="bg-white dark:bg-surface-900 border-b border-surface-200 dark:border-surface-700 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3">
           <Link
             to="/"
-            className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 inline-flex items-center mb-1"
+            className="text-xs text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200 inline-flex items-center mb-1"
           >
             <ArrowLeft className="h-3 w-3 mr-1" />
             Back
           </Link>
           {tournament ? (
             <>
-              <h1 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+              <h1 className="text-lg font-semibold text-surface-900 dark:text-white truncate">
                 {tournament.name}
               </h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs text-surface-500 dark:text-surface-400">
                 {new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                 {tournament.location && ` · ${tournament.location}`}
               </p>
             </>
           ) : tournamentError ? (
-            <p className="text-sm text-red-600">Tournament not found</p>
+            <p className="text-sm text-danger">Tournament not found</p>
           ) : (
-            <p className="text-sm text-gray-500">Loading...</p>
+            <p className="text-sm text-surface-500">Loading...</p>
           )}
         </div>
       </header>
@@ -203,56 +203,56 @@ export default function ParentScoreboard() {
           <Card>
             <CardBody className="p-6 text-center">
               <div role="alert">
-                <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" aria-hidden="true" />
-                <h1 className="font-semibold text-gray-900 dark:text-white mb-1">Tournament unavailable</h1>
-                <p className="text-sm text-gray-600 dark:text-gray-300">This link may be inactive. Ask the tournament director for the current scoreboard link.</p>
-                <button type="button" onClick={() => void retryTournament()} className="mt-4 min-h-11 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold">Try again</button>
+                <AlertCircle className="h-10 w-10 text-warning mx-auto mb-3" aria-hidden="true" />
+                <h1 className="font-semibold text-surface-900 dark:text-white mb-1">Tournament unavailable</h1>
+                <p className="text-sm text-surface-600 dark:text-surface-300">This link may be inactive. Ask the tournament director for the current scoreboard link.</p>
+                <button type="button" onClick={() => void retryTournament()} className="mt-4 min-h-11 rounded-lg border border-surface-300 px-4 py-2 text-sm font-semibold">Try again</button>
               </div>
             </CardBody>
           </Card>
         ) : pageState === 'loading-tournament' ? (
-          <p className="text-sm text-gray-600 dark:text-gray-300" role="status">Loading tournament…</p>
+          <p className="text-sm text-surface-600 dark:text-surface-300" role="status">Loading tournament…</p>
         ) : pageState === 'scoreboard-unavailable' ? (
           <Card>
             <CardBody className="p-6 text-center">
               <div role="alert">
-                <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" aria-hidden="true" />
-                <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Live scoreboard unavailable</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-300">{scoreboardUnavailableMessage}</p>
-                <button type="button" onClick={() => void retryScoreboard()} className="mt-4 min-h-11 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold">Try again</button>
+                <AlertCircle className="h-10 w-10 text-warning mx-auto mb-3" aria-hidden="true" />
+                <h2 className="font-semibold text-surface-900 dark:text-white mb-1">Live scoreboard unavailable</h2>
+                <p className="text-sm text-surface-600 dark:text-surface-300">{scoreboardUnavailableMessage}</p>
+                <button type="button" onClick={() => void retryScoreboard()} className="mt-4 min-h-11 rounded-lg border border-surface-300 px-4 py-2 text-sm font-semibold">Try again</button>
               </div>
             </CardBody>
           </Card>
         ) : pageState === 'loading-scoreboard' ? (
-          <p className="text-sm text-gray-600 dark:text-gray-300" role="status">Loading live matches…</p>
+          <p className="text-sm text-surface-600 dark:text-surface-300" role="status">Loading live matches…</p>
         ) : (
         <>
         {pageState === 'stale-scoreboard' && (
           <Card>
             <CardBody className="p-4">
               <div role="alert" className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 shrink-0 text-amber-500" aria-hidden="true" />
+                <AlertCircle className="h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
                 <div>
-                  <h2 className="font-semibold text-gray-900 dark:text-white">Showing the last confirmed scoreboard</h2>
-                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Live updates are temporarily unavailable. Match information below may be out of date.</p>
-                  {scoreboardUpdatedAt > 0 && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Last confirmed at {new Date(scoreboardUpdatedAt).toLocaleTimeString()}.</p>}
-                  <button type="button" onClick={() => { if (tournamentError) void retryTournament(); if (scoreboardError) void retryScoreboard(); }} className="mt-3 min-h-11 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold">Try again</button>
+                  <h2 className="font-semibold text-surface-900 dark:text-white">Showing the last confirmed scoreboard</h2>
+                  <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">Live updates are temporarily unavailable. Match information below may be out of date.</p>
+                  {scoreboardUpdatedAt > 0 && <p className="mt-1 text-xs text-surface-500 dark:text-surface-400">Last confirmed at {new Date(scoreboardUpdatedAt).toLocaleTimeString()}.</p>}
+                  <button type="button" onClick={() => { if (tournamentError) void retryTournament(); if (scoreboardError) void retryScoreboard(); }} className="mt-3 min-h-11 rounded-lg border border-surface-300 px-4 py-2 text-sm font-semibold">Try again</button>
                 </div>
               </div>
             </CardBody>
           </Card>
         )}
         <section aria-labelledby="live-finder-heading">
-          <h2 id="live-finder-heading" className="text-base font-semibold text-gray-900 dark:text-white">Find an athlete</h2>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Search by athlete, division, or school to see where and when they compete.</p>
+          <h2 id="live-finder-heading" className="text-base font-semibold text-surface-900 dark:text-white">Find an athlete</h2>
+          <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">Search by athlete, division, or school to see where and when they compete.</p>
           <div className="relative mt-3">
-            <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-gray-400" aria-hidden="true" />
+            <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-surface-400" aria-hidden="true" />
             <Input aria-label="Search athletes, divisions, or schools" value={finderQuery} onChange={(event) => setFinderQuery(event.target.value)} className="pl-10" />
           </div>
           {(finderQuery || favorites.size > 0) && (
             <div className="mt-3 space-y-2" aria-live="polite">
               {finderMatches.filter((match) => finderQuery || favorites.has(match.id)).length === 0 ? (
-                <p className="rounded-lg bg-gray-100 p-4 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">No matching athletes or divisions were found.</p>
+                <p className="rounded-lg bg-surface-100 p-4 text-sm text-surface-600 dark:bg-surface-900 dark:text-surface-300">No matching athletes or divisions were found.</p>
               ) : finderMatches.filter((match) => finderQuery || favorites.has(match.id)).map((match) => (
                 <FinderMatchCard key={match.id} match={match} favorite={favorites.has(match.id)} onToggleFavorite={() => toggleFavorite(match.id)} />
               ))}
@@ -262,8 +262,8 @@ export default function ParentScoreboard() {
         </section>
         {/* NOW COMPETING - most attention-grabbing block */}
         <section>
-          <h2 className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+          <h2 className="text-xs font-bold uppercase tracking-wider text-warning dark:text-warning mb-2 flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-warning animate-pulse" />
             Now Competing
           </h2>
           {featured ? (
@@ -280,7 +280,7 @@ export default function ParentScoreboard() {
         {/* UP NEXT */}
         {upNext.length > 0 && (
           <section>
-            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 mb-2">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-info dark:text-info mb-2">
               Up Next
             </h2>
             <div className="space-y-2">
@@ -292,7 +292,7 @@ export default function ParentScoreboard() {
         {/* RECENT RESULTS */}
         {recent.length > 0 && (
           <section>
-            <h2 className="text-xs font-bold uppercase tracking-wider text-green-700 dark:text-green-400 mb-2">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-success dark:text-success mb-2">
               Recent Results
             </h2>
             <div className="space-y-2">
@@ -305,8 +305,8 @@ export default function ParentScoreboard() {
         {!tournamentError && nowCompeting.length === 0 && upNext.length === 0 && recent.length === 0 && tournament && (
           <Card>
             <CardBody className="p-6 text-center">
-              <Clock className="h-10 w-10 text-gray-400 mx-auto mb-2" aria-hidden="true" />
-              <p className="text-sm text-gray-700 dark:text-gray-300">
+              <Clock className="h-10 w-10 text-surface-400 mx-auto mb-2" aria-hidden="true" />
+              <p className="text-sm text-surface-700 dark:text-surface-300">
                 The tournament hasn't started yet. Check back when divisions begin.
               </p>
             </CardBody>
@@ -315,7 +315,7 @@ export default function ParentScoreboard() {
         </>
         )}
 
-        <p className="text-[10px] text-gray-400 text-center pt-4">
+        <p className="text-[10px] text-surface-400 text-center pt-4">
           Refreshes every 5 seconds. <RefreshCw className="inline h-2.5 w-2.5" />
         </p>
       </main>
@@ -338,10 +338,10 @@ function FinderMatchCard({ match, favorite, onToggleFavorite }: {
       <CardBody className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="font-semibold text-gray-900 dark:text-white">{athletes || `Match ${match.matchNumber}`}</h3>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{match.divisionName}</p>
-            <p className="mt-2 text-sm font-medium text-gray-900 dark:text-white">{view.status} · {view.location}</p>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{view.schedule}</p>
+            <h3 className="font-semibold text-surface-900 dark:text-white">{athletes || `Match ${match.matchNumber}`}</h3>
+            <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">{match.divisionName}</p>
+            <p className="mt-2 text-sm font-medium text-surface-900 dark:text-white">{view.status} · {view.location}</p>
+            <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">{view.schedule}</p>
           </div>
           <Button type="button" variant="secondary" size="sm" onClick={onToggleFavorite} aria-pressed={favorite} aria-label={`${favorite ? 'Remove' : 'Save'} ${athletes || `match ${match.matchNumber}`} ${favorite ? 'from' : 'to'} favorites`}>
             <Star className={`h-4 w-4 ${favorite ? 'fill-current' : ''}`} aria-hidden="true" />
@@ -365,32 +365,32 @@ function MatchCard({ m, highlight }: { m: Match & { divisionName: string; eventT
   const eventLabel = m.eventType === 'patterns' ? 'Patterns' : 'Sparring';
 
   return (
-    <Card className={highlight ? 'border-2 border-amber-400 shadow-md' : ''}>
+    <Card className={highlight ? 'border-2 border-warning shadow-md' : ''}>
       <CardBody className="p-3">
         <div className="flex items-center justify-between mb-1">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400 truncate">
             {m.divisionName}
           </div>
           <span className={`text-[10px] px-1.5 py-0.5 rounded ${m.eventType === 'patterns'
-              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-              : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'}`}>
+              ? 'bg-info/10 dark:bg-info/30 text-info dark:text-info/30'
+              : 'bg-danger/10 dark:bg-danger/20 text-danger dark:text-danger'}`}>
             {eventLabel}
           </span>
         </div>
         <div className="flex items-center justify-between gap-2">
-          <div className={`flex-1 text-right text-sm font-semibold ${winner1 ? 'text-green-700 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
+          <div className={`flex-1 text-right text-sm font-semibold ${winner1 ? 'text-success dark:text-success' : 'text-surface-900 dark:text-white'}`}>
             {name1}
           </div>
           <div className="flex flex-col items-center min-w-[60px]">
             {m.status === 'completed' ? (
-              <div className="text-lg font-bold tabular-nums text-gray-900 dark:text-white">
+              <div className="text-lg font-bold tabular-nums text-surface-900 dark:text-white">
                 {m.score1 ?? 0} - {m.score2 ?? 0}
               </div>
             ) : (
-              <div className="text-xs text-gray-400">vs</div>
+              <div className="text-xs text-surface-400">vs</div>
             )}
           </div>
-          <div className={`flex-1 text-left text-sm font-semibold ${winner2 ? 'text-green-700 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
+          <div className={`flex-1 text-left text-sm font-semibold ${winner2 ? 'text-success dark:text-success' : 'text-surface-900 dark:text-white'}`}>
             {name2}
           </div>
         </div>
@@ -401,7 +401,7 @@ function MatchCard({ m, highlight }: { m: Match & { divisionName: string; eventT
 
 function EmptyBlock({ message }: { message: string }) {
   return (
-    <div className="rounded-lg bg-gray-100 dark:bg-gray-800 p-4 text-center text-sm text-gray-600 dark:text-gray-400">
+    <div className="rounded-lg bg-surface-100 dark:bg-surface-900 p-4 text-center text-sm text-surface-600 dark:text-surface-400">
       {message}
     </div>
   );

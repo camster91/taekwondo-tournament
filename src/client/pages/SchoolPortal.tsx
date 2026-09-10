@@ -171,13 +171,13 @@ export default function SchoolPortal() {
 
   const getBeltColor = (belt: string) => {
     const lower = belt.toLowerCase();
-    if (lower.includes('black')) return 'bg-gray-900 text-white';
-    if (lower.includes('red')) return 'bg-red-500 text-white';
-    if (lower.includes('blue')) return 'bg-blue-500 text-white';
-    if (lower.includes('green')) return 'bg-green-500 text-white';
-    if (lower.includes('yellow')) return 'bg-yellow-400 text-gray-900';
-    if (lower.includes('white')) return 'bg-white text-gray-900 border border-gray-300';
-    return 'bg-gray-200 text-gray-800';
+    if (lower.includes('black')) return 'bg-surface-950 text-white';
+    if (lower.includes('red')) return 'bg-danger text-white';
+    if (lower.includes('blue')) return 'bg-info text-white';
+    if (lower.includes('green')) return 'bg-success text-white';
+    if (lower.includes('yellow')) return 'bg-warning text-surface-900';
+    if (lower.includes('white')) return 'bg-white text-surface-900 border border-surface-300';
+    return 'bg-surface-200 text-surface-800';
   };
 
   const getPlacementBadge = (placement: number | null) => {
@@ -207,8 +207,8 @@ export default function SchoolPortal() {
 
   if (!shareSlug) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center px-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 max-w-md w-full">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-950 flex items-center justify-center px-6">
+        <div className="bg-white dark:bg-surface-900 rounded-xl shadow-sm p-8 max-w-md w-full">
           <EmptyState
             icon={AlertCircle}
             title="Share link required"
@@ -222,7 +222,7 @@ export default function SchoolPortal() {
   // Show school selection if no school is selected
   if (!schoolName) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-950">
         {/* Header */}
         <div className="bg-gradient-to-r from-primary-500 to-accent-500 px-6 py-8">
           <div className="max-w-4xl mx-auto">
@@ -238,7 +238,7 @@ export default function SchoolPortal() {
           {schoolsLoading ? (
             <PageLoader />
           ) : schoolsError ? (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8">
+            <div className="bg-white dark:bg-surface-900 rounded-xl shadow-sm p-8">
               <EmptyState
                 icon={AlertCircle}
                 title="Couldn't load the school list"
@@ -246,7 +246,7 @@ export default function SchoolPortal() {
               />
             </div>
           ) : !schoolList || schoolList.schools.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8">
+            <div className="bg-white dark:bg-surface-900 rounded-xl shadow-sm p-8">
               <EmptyState
                 icon={Building2}
                 title="No schools registered"
@@ -256,18 +256,18 @@ export default function SchoolPortal() {
           ) : (
             <>
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
                   Select your school or dojang
                 </label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-surface-400" />
                   <input
                     type="text"
                     placeholder="Search schools..."
                     value={schoolSearch}
                     onChange={(e) => setSchoolSearch(e.target.value)}
                     aria-label="Search schools"
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full pl-10 pr-4 py-3 border border-surface-300 dark:border-surface-600 rounded-lg bg-white dark:bg-surface-900 text-surface-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
                 </div>
               </div>
@@ -277,13 +277,13 @@ export default function SchoolPortal() {
                   <button
                     key={school}
                     onClick={() => selectSchool(school)}
-                    className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-500 hover:shadow-md transition-all text-left group"
+                    className="bg-white dark:bg-surface-900 p-4 rounded-xl shadow-sm border border-surface-200 dark:border-surface-700 hover:border-primary-300 dark:hover:border-primary-500 hover:shadow-md transition-all text-left group"
                   >
                     <div className="flex items-center gap-3">
                       <div className="bg-primary-100 dark:bg-primary-900/30 p-2 rounded-lg group-hover:bg-primary-200 dark:group-hover:bg-primary-900/50 transition-colors">
                         <Building2 className="h-5 w-5 text-primary-600 dark:text-primary-400" />
                       </div>
-                      <span className="font-medium text-gray-900 dark:text-white text-sm">
+                      <span className="font-medium text-surface-900 dark:text-white text-sm">
                         {school}
                       </span>
                     </div>
@@ -292,7 +292,7 @@ export default function SchoolPortal() {
               </div>
 
               {filteredSchools.length === 0 && schoolSearch && (
-                <p className="text-center text-gray-500 dark:text-gray-400 py-8">
+                <p className="text-center text-surface-500 dark:text-surface-400 py-8">
                   No schools matching "{schoolSearch}"
                 </p>
               )}
@@ -306,7 +306,7 @@ export default function SchoolPortal() {
   // School data view
   if (dataLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-950">
         <div className="bg-gradient-to-r from-primary-500 to-accent-500 px-6 py-8">
           <div className="max-w-6xl mx-auto">
             <h1 className="text-2xl font-bold text-white">Loading...</h1>
@@ -326,8 +326,8 @@ export default function SchoolPortal() {
     // real problem is a server outage or rate-limit.
     if (schoolDataError) {
       return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8">
+        <div className="min-h-screen bg-surface-50 dark:bg-surface-950 flex items-center justify-center">
+          <div className="bg-white dark:bg-surface-900 rounded-xl shadow-sm p-8">
             <EmptyState
               icon={AlertCircle}
               title="Couldn't load school data"
@@ -339,8 +339,8 @@ export default function SchoolPortal() {
       );
     }
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-950 flex items-center justify-center">
+        <div className="bg-white dark:bg-surface-900 rounded-xl shadow-sm p-8">
           <EmptyState
             icon={Building2}
             title="School not found"
@@ -353,7 +353,7 @@ export default function SchoolPortal() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+    <div className="min-h-screen bg-surface-50 dark:bg-surface-950">
       {/* Header */}
       <div className="bg-gradient-to-r from-primary-500 to-accent-500 px-6 py-6">
         <div className="max-w-6xl mx-auto">
@@ -403,53 +403,53 @@ export default function SchoolPortal() {
       <div className="max-w-6xl mx-auto px-6 py-6">
         {/* Stats Bar */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
+          <div className="bg-white dark:bg-surface-900 rounded-xl shadow-sm p-4">
             <div className="flex items-center gap-3">
-              <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg">
-                <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div className="bg-info/10 dark:bg-info/30 p-2 rounded-lg">
+                <Users className="h-5 w-5 text-info dark:text-info" />
               </div>
               <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Competitors</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                <p className="text-xs text-surface-500 dark:text-surface-400">Competitors</p>
+                <p className="text-xl font-bold text-surface-900 dark:text-white">
                   {schoolData.stats.totalCompetitors}
                 </p>
               </div>
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
+          <div className="bg-white dark:bg-surface-900 rounded-xl shadow-sm p-4">
             <div className="flex items-center gap-3">
-              <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-lg">
-                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <div className="bg-success/10 dark:bg-success/20 p-2 rounded-lg">
+                <CheckCircle className="h-5 w-5 text-success dark:text-success" />
               </div>
               <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Checked In</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                <p className="text-xs text-surface-500 dark:text-surface-400">Checked In</p>
+                <p className="text-xl font-bold text-surface-900 dark:text-white">
                   {schoolData.stats.checkedIn}
                 </p>
               </div>
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
+          <div className="bg-white dark:bg-surface-900 rounded-xl shadow-sm p-4">
             <div className="flex items-center gap-3">
-              <div className="bg-yellow-100 dark:bg-yellow-900/30 p-2 rounded-lg">
-                <Swords className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+              <div className="bg-warning/10 dark:bg-warning/30 p-2 rounded-lg">
+                <Swords className="h-5 w-5 text-warning dark:text-warning" />
               </div>
               <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Competing Now</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                <p className="text-xs text-surface-500 dark:text-surface-400">Competing Now</p>
+                <p className="text-xl font-bold text-surface-900 dark:text-white">
                   {schoolData.stats.competingNow}
                 </p>
               </div>
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4">
+          <div className="bg-white dark:bg-surface-900 rounded-xl shadow-sm p-4">
             <div className="flex items-center gap-3">
-              <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-lg">
-                <Medal className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              <div className="bg-accent-100 dark:bg-accent-900/30 p-2 rounded-lg">
+                <Medal className="h-5 w-5 text-accent-600 dark:text-accent-400" />
               </div>
               <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Medals Won</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                <p className="text-xs text-surface-500 dark:text-surface-400">Medals Won</p>
+                <p className="text-xl font-bold text-surface-900 dark:text-white">
                   {schoolData.stats.medalsWon}
                 </p>
               </div>
@@ -459,11 +459,11 @@ export default function SchoolPortal() {
 
         {/* Upcoming Matches */}
         {schoolData.upcomingMatches.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-surface-900 rounded-xl shadow-sm mb-6">
+            <div className="px-6 py-4 border-b border-surface-200 dark:border-surface-700">
               <div className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-yellow-500" />
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <Zap className="h-5 w-5 text-warning" />
+                <h2 className="text-lg font-semibold text-surface-900 dark:text-white">
                   Upcoming Matches
                 </h2>
                 <Badge variant="warning" size="sm">
@@ -471,24 +471,24 @@ export default function SchoolPortal() {
                 </Badge>
               </div>
             </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+            <div className="divide-y divide-surface-100 dark:divide-surface-700">
               {schoolData.upcomingMatches.map((match) => (
                 <div key={match.id} className="px-6 py-4">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-600 dark:text-gray-300">
+                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-surface-100 dark:bg-surface-800 flex items-center justify-center text-sm font-bold text-surface-600 dark:text-surface-300">
                         #{match.matchNumber}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-medium text-gray-900 dark:text-white truncate">
+                        <div className="font-medium text-surface-900 dark:text-white truncate">
                           {match.competitorName}
-                          <span className="text-gray-400 mx-2">vs</span>
+                          <span className="text-surface-400 mx-2">vs</span>
                           {match.opponentName || 'TBD'}
                         </div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                        <div className="text-sm text-surface-500 dark:text-surface-400 truncate">
                           {match.divisionName}
                           {match.opponentSchool && (
-                            <span className="ml-2 text-gray-400">({match.opponentSchool})</span>
+                            <span className="ml-2 text-surface-400">({match.opponentSchool})</span>
                           )}
                         </div>
                       </div>
@@ -509,22 +509,22 @@ export default function SchoolPortal() {
         )}
 
         {/* Competitor Schedule */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-surface-900 rounded-xl shadow-sm">
+          <div className="px-6 py-4 border-b border-surface-200 dark:border-surface-700">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <h2 className="text-lg font-semibold text-surface-900 dark:text-white">
                 Competitor Schedule
               </h2>
               {schoolData.competitors.length > 3 && (
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400" />
                   <input
                     type="text"
                     placeholder="Search competitors..."
                     value={competitorSearch}
                     onChange={(e) => setCompetitorSearch(e.target.value)}
                     aria-label="Search competitors"
-                    className="pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-56"
+                    className="pl-9 pr-4 py-2 border border-surface-300 dark:border-surface-600 rounded-lg bg-white dark:bg-surface-800 text-surface-900 dark:text-white text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full sm:w-56"
                   />
                 </div>
               )}
@@ -549,35 +549,35 @@ export default function SchoolPortal() {
               <div className="hidden md:block overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-gray-50 dark:bg-gray-700/50">
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <tr className="bg-surface-50 dark:bg-surface-800/50">
+                      <th className="text-left px-6 py-3 text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
                         Competitor
                       </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="text-left px-6 py-3 text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
                         Events
                       </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="text-left px-6 py-3 text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
                         Check-in
                       </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="text-left px-6 py-3 text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
                         Divisions
                       </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="text-left px-6 py-3 text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
                         Next Match
                       </th>
-                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="text-left px-6 py-3 text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
                         Placement
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
                     {filteredCompetitors.map((comp) => (
                       <tr
                         key={comp.id}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700/30"
+                        className="hover:bg-surface-50 dark:hover:bg-surface-800/30"
                       >
                         <td className="px-6 py-4">
-                          <div className="font-medium text-gray-900 dark:text-white">
+                          <div className="font-medium text-surface-900 dark:text-white">
                             {comp.firstName} {comp.lastName}
                           </div>
                           <div className="flex items-center gap-2 mt-1">
@@ -590,11 +590,11 @@ export default function SchoolPortal() {
                               {comp.danRank ? ` ${comp.danRank}D` : ''}
                             </span>
                             {comp.age && (
-                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                              <span className="text-xs text-surface-500 dark:text-surface-400">
                                 Age {comp.age}
                               </span>
                             )}
-                            <span className="text-xs text-gray-400">
+                            <span className="text-xs text-surface-400">
                               {comp.gender === 'M' ? 'Male' : 'Female'}
                             </span>
                           </div>
@@ -615,12 +615,12 @@ export default function SchoolPortal() {
                         </td>
                         <td className="px-6 py-4">
                           {comp.checkedIn ? (
-                            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                            <span className="inline-flex items-center gap-1 text-success dark:text-success">
                               <CheckCircle className="h-4 w-4" />
                               <span className="text-sm">Yes</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-red-500 dark:text-red-400">
+                            <span className="inline-flex items-center gap-1 text-danger dark:text-danger">
                               <XCircle className="h-4 w-4" />
                               <span className="text-sm">No</span>
                             </span>
@@ -632,14 +632,14 @@ export default function SchoolPortal() {
                               {comp.divisions.map((div) => (
                                 <div
                                   key={div.id}
-                                  className="text-sm text-gray-700 dark:text-gray-300"
+                                  className="text-sm text-surface-700 dark:text-surface-300"
                                 >
                                   {div.name}
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-sm text-gray-400">Not assigned</span>
+                            <span className="text-sm text-surface-400">Not assigned</span>
                           )}
                         </td>
                         <td className="px-6 py-4">
@@ -647,18 +647,18 @@ export default function SchoolPortal() {
                             <div>
                               <div className="flex items-center gap-1.5">
                                 <StatusBadge status={comp.nextMatch.status} />
-                                <span className="text-sm text-gray-600 dark:text-gray-300">
+                                <span className="text-sm text-surface-600 dark:text-surface-300">
                                   #{comp.nextMatch.matchNumber}
                                 </span>
                               </div>
                               {comp.nextMatch.ringNumber && (
-                                <span className="text-xs text-gray-500 mt-1 block">
+                                <span className="text-xs text-surface-500 mt-1 block">
                                   Ring {comp.nextMatch.ringNumber}
                                 </span>
                               )}
                             </div>
                           ) : (
-                            <span className="text-sm text-gray-400">
+                            <span className="text-sm text-surface-400">
                               {comp.divisions.length > 0 ? 'No active match' : '--'}
                             </span>
                           )}
@@ -670,13 +670,13 @@ export default function SchoolPortal() {
                               .map((p) => (
                                 <div key={p.divisionId} className="flex items-center gap-1.5">
                                   {getPlacementBadge(p.placement)}
-                                  <span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[120px]">
+                                  <span className="text-xs text-surface-500 dark:text-surface-400 truncate max-w-[120px]">
                                     {p.divisionName}
                                   </span>
                                 </div>
                               ))}
                             {comp.placements.every((p) => p.placement === null) && (
-                              <span className="text-sm text-gray-400">--</span>
+                              <span className="text-sm text-surface-400">--</span>
                             )}
                           </div>
                         </td>
@@ -687,12 +687,12 @@ export default function SchoolPortal() {
               </div>
 
               {/* Mobile Cards */}
-              <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-700">
+              <div className="md:hidden divide-y divide-surface-100 dark:divide-surface-700">
                 {filteredCompetitors.map((comp) => (
                   <div key={comp.id} className="px-4 py-4 space-y-3">
                     <div className="flex items-start justify-between">
                       <div>
-                        <div className="font-medium text-gray-900 dark:text-white">
+                        <div className="font-medium text-surface-900 dark:text-white">
                           {comp.firstName} {comp.lastName}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
@@ -705,15 +705,15 @@ export default function SchoolPortal() {
                             {comp.danRank ? ` ${comp.danRank}D` : ''}
                           </span>
                           {comp.age && (
-                            <span className="text-xs text-gray-500">Age {comp.age}</span>
+                            <span className="text-xs text-surface-500">Age {comp.age}</span>
                           )}
                         </div>
                       </div>
                       <div>
                         {comp.checkedIn ? (
-                          <CheckCircle className="h-5 w-5 text-green-500" />
+                          <CheckCircle className="h-5 w-5 text-success" />
                         ) : (
-                          <XCircle className="h-5 w-5 text-red-400" />
+                          <XCircle className="h-5 w-5 text-danger" />
                         )}
                       </div>
                     </div>
@@ -736,7 +736,7 @@ export default function SchoolPortal() {
                         {comp.divisions.map((div) => (
                           <div
                             key={div.id}
-                            className="text-sm text-gray-600 dark:text-gray-400"
+                            className="text-sm text-surface-600 dark:text-surface-400"
                           >
                             {div.name}
                           </div>
@@ -747,8 +747,8 @@ export default function SchoolPortal() {
                     <div className="flex items-center justify-between">
                       {comp.nextMatch ? (
                         <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-gray-400" />
-                          <span className="text-sm text-gray-600 dark:text-gray-300">
+                          <Clock className="h-4 w-4 text-surface-400" />
+                          <span className="text-sm text-surface-600 dark:text-surface-300">
                             Match #{comp.nextMatch.matchNumber}
                           </span>
                           <StatusBadge status={comp.nextMatch.status} />

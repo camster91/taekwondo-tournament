@@ -84,10 +84,10 @@ export default function Trash() {
         count={data?.total ?? 0}
         actions={
           <div className="text-right">
-            <div className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">
+            <div className="text-3xl font-bold text-surface-900 dark:text-white tabular-nums">
               {data?.total ?? 0}
             </div>
-            <div className="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+            <div className="text-xs text-surface-600 dark:text-surface-400 uppercase tracking-wider">
               in trash
             </div>
           </div>
@@ -96,9 +96,9 @@ export default function Trash() {
 
       {/* Warning banner when items are old */}
       {data?.competitors?.some((c: TrashItem) => c.deletedAt && daysAgo(c.deletedAt) >= 6) && (
-        <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-          <p className="text-sm text-amber-800 dark:text-amber-200">
+        <div className="flex items-start gap-3 p-3 rounded-lg bg-warning/10 dark:bg-warning/20 border border-warning/30 dark:border-warning">
+          <AlertTriangle className="h-5 w-5 text-warning dark:text-warning mt-0.5 flex-shrink-0" />
+          <p className="text-sm text-warning dark:text-warning/20">
             Some items will be auto-purged within 24 hours. Restore them now if you still need them.
           </p>
         </div>
@@ -119,7 +119,7 @@ export default function Trash() {
           <Spinner />
         </div>
       ) : error ? (
-        <div className="text-center py-12 text-red-600 dark:text-red-400">Failed to load trash.</div>
+        <div className="text-center py-12 text-danger dark:text-danger">Failed to load trash.</div>
       ) : filtered.length === 0 ? (
         <Card>
           <CardBody className="text-center py-16">
@@ -131,30 +131,30 @@ export default function Trash() {
           </CardBody>
         </Card>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+        <div className="bg-white dark:bg-surface-900 rounded-xl border border-surface-200 dark:border-surface-700 divide-y divide-surface-100 dark:divide-surface-700 overflow-hidden">
           {filtered.map((c: TrashItem) => {
             const days = c.deletedAt ? daysAgo(c.deletedAt) : 0;
             const isOld = days >= 6;
             return (
-              <div key={c.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+              <div key={c.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-surface-50 dark:hover:bg-surface-800/30 transition-colors">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-surface-300 to-surface-400 dark:from-surface-600 dark:to-surface-700 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
                   {c.firstName[0]}{c.lastName[0]}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="font-semibold text-gray-900 dark:text-white truncate">
+                    <div className="font-semibold text-surface-900 dark:text-white truncate">
                       {c.firstName} {c.lastName}
                     </div>
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300">
                       {c.belt}
                     </span>
                     {c.gender && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300">
                         {c.gender}
                       </span>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-surface-600 dark:text-surface-400 mt-0.5">
                     {c.schoolDojang && <span>{c.schoolDojang}</span>}
                     {c._count?.registrations !== undefined && (
                       <span>{c._count.registrations} registration{c._count.registrations === 1 ? '' : 's'}</span>
@@ -164,7 +164,7 @@ export default function Trash() {
                       {days === 0 ? 'today' : `${days}d ago`}
                     </span>
                     {isOld && (
-                      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
+                      <span className="flex items-center gap-1 text-warning dark:text-warning font-semibold">
                         <AlertTriangle className="h-3 w-3" />
                         auto-purge soon
                       </span>

@@ -142,9 +142,9 @@ export default function CompetitorDuplicates() {
   };
 
   const getMatchScoreColor = (score: number) => {
-    if (score >= 0.9) return 'text-red-600 dark:text-red-400';
+    if (score >= 0.9) return 'text-danger dark:text-danger';
     if (score >= 0.8) return 'text-orange-600 dark:text-orange-400';
-    return 'text-yellow-600 dark:text-yellow-400';
+    return 'text-warning dark:text-warning';
   };
 
   return (
@@ -179,7 +179,7 @@ export default function CompetitorDuplicates() {
                     onChange={(e) => setThreshold(parseFloat(e.target.value) || 0.75)}
                     className="w-32"
                   />
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="text-sm text-surface-600 dark:text-surface-400">
                     (0.75 = 75% match or higher)
                   </span>
                 </div>
@@ -209,7 +209,7 @@ export default function CompetitorDuplicates() {
 
       {!isLoading && data && data.count > 0 && (
         <div className="space-y-4">
-          <div className="text-sm text-gray-600 dark:text-gray-400">
+          <div className="text-sm text-surface-600 dark:text-surface-400">
             Found {data.count} potential duplicate{data.count !== 1 ? 's' : ''}
           </div>
 
@@ -226,20 +226,20 @@ export default function CompetitorDuplicates() {
                             {competitor1.firstName} {competitor1.lastName}
                           </h3>
                           {competitor1._count && competitor1._count.registrations > 0 && (
-                            <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded">
+                            <span className="text-xs px-2 py-0.5 bg-info/10 dark:bg-info text-info dark:text-info/20 rounded">
                               {competitor1._count.registrations} registrations
                             </span>
                           )}
                         </div>
                         <div className="text-sm space-y-1">
-                          <div><span className="text-gray-600 dark:text-gray-400">DOB:</span> {formatDate(competitor1.dateOfBirth)}</div>
-                          <div><span className="text-gray-600 dark:text-gray-400">Gender:</span> {competitor1.gender}</div>
-                          <div><span className="text-gray-600 dark:text-gray-400">Belt:</span> {competitor1.belt}{competitor1.danRank ? ` (${competitor1.danRank} Dan)` : ''}</div>
+                          <div><span className="text-surface-600 dark:text-surface-400">DOB:</span> {formatDate(competitor1.dateOfBirth)}</div>
+                          <div><span className="text-surface-600 dark:text-surface-400">Gender:</span> {competitor1.gender}</div>
+                          <div><span className="text-surface-600 dark:text-surface-400">Belt:</span> {competitor1.belt}{competitor1.danRank ? ` (${competitor1.danRank} Dan)` : ''}</div>
                           {competitor1.schoolDojang && (
-                            <div><span className="text-gray-600 dark:text-gray-400">School:</span> {competitor1.schoolDojang}</div>
+                            <div><span className="text-surface-600 dark:text-surface-400">School:</span> {competitor1.schoolDojang}</div>
                           )}
                           {competitor1.weightLbs && (
-                            <div><span className="text-gray-600 dark:text-gray-400">Weight:</span> {competitor1.weightLbs} lbs</div>
+                            <div><span className="text-surface-600 dark:text-surface-400">Weight:</span> {competitor1.weightLbs} lbs</div>
                           )}
                         </div>
                       </div>
@@ -250,20 +250,20 @@ export default function CompetitorDuplicates() {
                             {competitor2.firstName} {competitor2.lastName}
                           </h3>
                           {competitor2._count && competitor2._count.registrations > 0 && (
-                            <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded">
+                            <span className="text-xs px-2 py-0.5 bg-info/10 dark:bg-info text-info dark:text-info/20 rounded">
                               {competitor2._count.registrations} registrations
                             </span>
                           )}
                         </div>
                         <div className="text-sm space-y-1">
-                          <div><span className="text-gray-600 dark:text-gray-400">DOB:</span> {formatDate(competitor2.dateOfBirth)}</div>
-                          <div><span className="text-gray-600 dark:text-gray-400">Gender:</span> {competitor2.gender}</div>
-                          <div><span className="text-gray-600 dark:text-gray-400">Belt:</span> {competitor2.belt}{competitor2.danRank ? ` (${competitor2.danRank} Dan)` : ''}</div>
+                          <div><span className="text-surface-600 dark:text-surface-400">DOB:</span> {formatDate(competitor2.dateOfBirth)}</div>
+                          <div><span className="text-surface-600 dark:text-surface-400">Gender:</span> {competitor2.gender}</div>
+                          <div><span className="text-surface-600 dark:text-surface-400">Belt:</span> {competitor2.belt}{competitor2.danRank ? ` (${competitor2.danRank} Dan)` : ''}</div>
                           {competitor2.schoolDojang && (
-                            <div><span className="text-gray-600 dark:text-gray-400">School:</span> {competitor2.schoolDojang}</div>
+                            <div><span className="text-surface-600 dark:text-surface-400">School:</span> {competitor2.schoolDojang}</div>
                           )}
                           {competitor2.weightLbs && (
-                            <div><span className="text-gray-600 dark:text-gray-400">Weight:</span> {competitor2.weightLbs} lbs</div>
+                            <div><span className="text-surface-600 dark:text-surface-400">Weight:</span> {competitor2.weightLbs} lbs</div>
                           )}
                         </div>
                       </div>
@@ -273,7 +273,7 @@ export default function CompetitorDuplicates() {
                       <div className={`text-2xl font-bold ${getMatchScoreColor(matchScore.overallScore)}`}>
                         {(matchScore.overallScore * 100).toFixed(0)}%
                       </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1 mt-2">
+                      <div className="text-xs text-surface-600 dark:text-surface-400 space-y-1 mt-2">
                         <div>Name: {(matchScore.nameScore * 100).toFixed(0)}%</div>
                         <div>DOB: {matchScore.dobMatch ? '✓ Match' : `${matchScore.details.dobDaysDiff.toFixed(0)} days`}</div>
                       </div>
@@ -303,10 +303,10 @@ export default function CompetitorDuplicates() {
       >
         {selectedDuplicate && (
           <div className="space-y-4">
-            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded">
+            <div className="p-4 bg-warning/10 dark:bg-warning/20 border border-warning/30 dark:border-warning rounded">
               <div className="flex items-start gap-2">
-                <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-yellow-800 dark:text-yellow-200">
+                <AlertTriangle className="w-5 h-5 text-warning dark:text-warning flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-warning dark:text-warning/20">
                   <p className="font-semibold mb-1">This action cannot be undone</p>
                   <p>The secondary competitor will be soft-deleted and all their registrations, history, and ratings will be transferred to the primary competitor.</p>
                 </div>
@@ -316,7 +316,7 @@ export default function CompetitorDuplicates() {
             <div>
               <Label>Select Primary Competitor (to keep)</Label>
               <div className="space-y-2 mt-2">
-                <label className="flex items-start gap-3 p-3 border rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+                <label className="flex items-start gap-3 p-3 border rounded cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-900">
                   <input
                     type="radio"
                     name="primary"
@@ -329,14 +329,14 @@ export default function CompetitorDuplicates() {
                     <div className="font-semibold">
                       {selectedDuplicate.competitor1.firstName} {selectedDuplicate.competitor1.lastName}
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className="text-sm text-surface-600 dark:text-surface-400">
                       {formatDate(selectedDuplicate.competitor1.dateOfBirth)} • {selectedDuplicate.competitor1.belt}
                       {selectedDuplicate.competitor1._count && ` • ${selectedDuplicate.competitor1._count.registrations} registrations`}
                     </div>
                   </div>
                 </label>
 
-                <label className="flex items-start gap-3 p-3 border rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+                <label className="flex items-start gap-3 p-3 border rounded cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-900">
                   <input
                     type="radio"
                     name="primary"
@@ -349,7 +349,7 @@ export default function CompetitorDuplicates() {
                     <div className="font-semibold">
                       {selectedDuplicate.competitor2.firstName} {selectedDuplicate.competitor2.lastName}
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className="text-sm text-surface-600 dark:text-surface-400">
                       {formatDate(selectedDuplicate.competitor2.dateOfBirth)} • {selectedDuplicate.competitor2.belt}
                       {selectedDuplicate.competitor2._count && ` • ${selectedDuplicate.competitor2._count.registrations} registrations`}
                     </div>

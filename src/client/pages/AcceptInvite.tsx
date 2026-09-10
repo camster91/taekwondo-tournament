@@ -88,10 +88,10 @@ export default function AcceptInvite() {
 
   if (isVerifying) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-surface-100 to-surface-200 dark:from-surface-900 dark:to-surface-800 flex items-center justify-center">
         <div className="text-center">
           <Spinner size="lg" />
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Verifying invitation...</p>
+          <p className="mt-4 text-surface-600 dark:text-surface-400">Verifying invitation...</p>
         </div>
       </div>
     );
@@ -99,17 +99,17 @@ export default function AcceptInvite() {
 
   if (error && !inviteData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-900 dark:to-gray-800 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-gradient-to-br from-surface-100 to-surface-200 dark:from-surface-900 dark:to-surface-800 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <div className="flex justify-center">
-            <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-2xl">
-              <AlertCircle className="h-12 w-12 text-red-600 dark:text-red-400" />
+            <div className="p-3 bg-danger/10 dark:bg-danger/20 rounded-2xl">
+              <AlertCircle className="h-12 w-12 text-danger dark:text-danger" />
             </div>
           </div>
-          <h2 className="mt-6 text-center text-2xl font-bold text-gray-900 dark:text-white">
+          <h2 className="mt-6 text-center text-2xl font-bold text-surface-900 dark:text-white">
             Invalid Invitation
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">{error}</p>
+          <p className="mt-2 text-center text-sm text-surface-600 dark:text-surface-400">{error}</p>
           <div className="mt-6 text-center">
             <Button as={Link} to="/login" variant="primary" className="inline-block">
               Go to Login
@@ -125,46 +125,46 @@ export default function AcceptInvite() {
     : '';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-900 dark:to-gray-800 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-surface-100 to-surface-200 dark:from-surface-900 dark:to-surface-800 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <div className="p-3 bg-primary-100 dark:bg-primary-900/30 rounded-2xl">
             <Trophy className="h-12 w-12 text-primary-600 dark:text-primary-400" />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-bold text-gray-900 dark:text-white">
+        <h2 className="mt-6 text-center text-3xl font-bold text-surface-900 dark:text-white">
           Accept Invitation
         </h2>
-        <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
+        <p className="mt-2 text-center text-sm text-surface-600 dark:text-surface-400">
           Set up your account as <span className="font-medium text-primary-600 dark:text-primary-400">{roleLabel}</span>
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white dark:bg-gray-800 py-8 px-4 shadow-xl rounded-xl sm:px-10 border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-surface-900 py-8 px-4 shadow-xl rounded-xl sm:px-10 border border-surface-200 dark:border-surface-700">
           {error && (
-            <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start">
-              <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400 mr-3 flex-shrink-0 mt-0.5" />
-              <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+            <div className="mb-6 bg-danger/10 dark:bg-danger/20 border border-danger/30 dark:border-danger/50 rounded-lg p-4 flex items-start">
+              <AlertCircle className="h-5 w-5 text-danger dark:text-danger mr-3 flex-shrink-0 mt-0.5" />
+              <span className="text-sm text-danger dark:text-danger">{error}</span>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
                 Email address
               </label>
               <Input
                 type="email"
                 value={inviteData?.email || ''}
                 readOnly
-                className="bg-gray-50 dark:bg-gray-700"
+                className="bg-surface-50 dark:bg-surface-800"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="firstName" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
                   First Name
                 </label>
                 <Input
@@ -176,7 +176,7 @@ export default function AcceptInvite() {
                 />
               </div>
               <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="lastName" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
                   Last Name
                 </label>
                 <Input
@@ -210,7 +210,7 @@ export default function AcceptInvite() {
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-6 text-center text-sm text-surface-600 dark:text-surface-400">
             Already have an account?{' '}
             <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400">
               Sign in

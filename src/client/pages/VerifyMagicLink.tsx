@@ -53,27 +53,27 @@ export default function VerifyMagicLink() {
 
   if (isVerifying) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-surface-100 to-surface-200 dark:from-surface-900 dark:to-surface-800 flex items-center justify-center">
         <div className="text-center">
           <Spinner size="lg" />
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Verifying your sign-in link...</p>
+          <p className="mt-4 text-surface-600 dark:text-surface-400">Verifying your sign-in link...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-900 dark:to-gray-800 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-surface-100 to-surface-200 dark:from-surface-900 dark:to-surface-800 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-2xl">
-            <AlertCircle className="h-12 w-12 text-red-600 dark:text-red-400" />
+          <div className="p-3 bg-danger/10 dark:bg-danger/20 rounded-2xl">
+            <AlertCircle className="h-12 w-12 text-danger dark:text-danger" />
           </div>
         </div>
-        <h1 className="mt-6 text-center text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="mt-6 text-center text-2xl font-bold text-surface-900 dark:text-white">
           Sign-in could not be completed
         </h1>
-        <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">{error}</p>
+        <p className="mt-2 text-center text-sm text-surface-600 dark:text-surface-400">{error}</p>
         <div className="mt-6 text-center">
           {sessionVerified && (
             <Button type="button" variant="primary" onClick={retryHydration} className="mr-3">

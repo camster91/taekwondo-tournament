@@ -246,13 +246,13 @@ export default function ManageRegistration() {
   // ── Render: withdrawn confirmation
   if (withdrawn) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-950 py-12 px-4">
         <div className="max-w-md mx-auto">
           <Card>
             <CardBody className="p-8 text-center">
-              <ShieldOff className="h-16 w-16 text-amber-500 mx-auto mb-4" aria-hidden="true" />
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Registration withdrawn</h1>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
+              <ShieldOff className="h-16 w-16 text-warning mx-auto mb-4" aria-hidden="true" />
+              <h1 className="text-2xl font-bold text-surface-900 dark:text-white mb-2">Registration withdrawn</h1>
+              <p className="text-surface-600 dark:text-surface-400 mb-6">
                 {registration?.firstName} has been removed from {registration?.tournamentName}. A confirmation email will follow.
               </p>
               <Button variant="primary" onClick={reset}>Look up another</Button>
@@ -267,13 +267,13 @@ export default function ManageRegistration() {
   if (registration) {
     const isLocked = registration.checkedIn || ['in_progress', 'completed'].includes(registration.tournamentStatus);
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-950 py-12 px-4">
         <div className="max-w-2xl mx-auto">
           <button
             type="button"
             onClick={reset}
             disabled={saveConfirmationPending}
-            className="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 disabled:opacity-50"
+            className="inline-flex items-center text-sm text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white mb-4 disabled:opacity-50"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
             Look up another registration
@@ -292,7 +292,7 @@ export default function ManageRegistration() {
             <div className="text-xs text-primary-700 dark:text-primary-300 mt-1">
               Confirmation code: <span className="font-mono font-bold">{registration.confirmationCode}</span>
               {registration.checkedIn && (
-                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/10 text-success dark:bg-success/40 dark:text-success/30">
                   CHECKED IN
                 </span>
               )}
@@ -302,7 +302,7 @@ export default function ManageRegistration() {
           {isLocked && (
             <div
               role="alert"
-              className="mb-4 p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2"
+              className="mb-4 p-3 rounded-md bg-warning/10 dark:bg-warning/20 border border-warning/30 dark:border-warning text-sm text-warning dark:text-warning/30 flex items-start gap-2"
             >
               <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
               <span>
@@ -317,7 +317,7 @@ export default function ManageRegistration() {
             <div
               role="status"
               aria-live="polite"
-              className="mb-4 p-3 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm text-green-800 dark:text-green-300 flex items-start gap-2"
+              className="mb-4 p-3 rounded-md bg-success/10 dark:bg-success/20 border border-success/30 dark:border-success text-sm text-success dark:text-success/30 flex items-start gap-2"
             >
               <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
               <span>
@@ -329,7 +329,7 @@ export default function ManageRegistration() {
           {globalError && (
             <div
               role="alert"
-              className="mb-4 p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-start gap-2"
+              className="mb-4 p-3 rounded-md bg-danger/10 dark:bg-danger/20 border border-danger/30 dark:border-danger/50 text-sm text-danger dark:text-danger flex items-start gap-2"
             >
               <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
               <div>
@@ -348,7 +348,7 @@ export default function ManageRegistration() {
               <fieldset disabled={saveConfirmationPending} className="contents">
                 <legend className="sr-only">Registration details</legend>
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h2 className="text-lg font-semibold text-surface-900 dark:text-white">
                   {registration.firstName} {registration.lastName}
                 </h2>
                 {!isLocked && (
@@ -383,12 +383,12 @@ export default function ManageRegistration() {
                 <div>
                   <Label htmlFor="m-lastName">Last name</Label>
                   <ReadonlyField value={registration.lastName} />
-                  <p className="text-xs text-gray-500 mt-1">Last name is locked for verification — can't be changed.</p>
+                  <p className="text-xs text-surface-500 mt-1">Last name is locked for verification — can't be changed.</p>
                 </div>
                 <div>
                   <Label htmlFor="m-dob">Date of birth</Label>
                   <ReadonlyField value={new Date(registration.dateOfBirth).toLocaleDateString()} />
-                  <p className="text-xs text-gray-500 mt-1">Locked for verification — can't be changed.</p>
+                  <p className="text-xs text-surface-500 mt-1">Locked for verification — can't be changed.</p>
                 </div>
                 <div>
                   <Label htmlFor="m-gender">Gender</Label>
@@ -441,13 +441,13 @@ export default function ManageRegistration() {
                   <Label className="mb-2">Events</Label>
                   <div className="flex gap-4">
                     {['patterns', 'sparring'].map((evt) => (
-                      <label key={evt} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <label key={evt} className="flex items-center gap-2 text-sm text-surface-700 dark:text-surface-300">
                         <input
                           type="checkbox"
                           checked={!!form[evt as keyof ManageRegistration]}
                           disabled={!editMode}
                           onChange={(e) => setForm({ ...form, [evt]: e.target.checked })}
-                          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          className="h-4 w-4 rounded border-surface-300 text-primary-600 focus:ring-primary-500"
                         />
                         <span className="capitalize">{evt}</span>
                       </label>
@@ -455,17 +455,17 @@ export default function ManageRegistration() {
                   </div>
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 mt-2">
+                  <label className="flex items-start gap-2 text-sm text-surface-700 dark:text-surface-300 mt-2">
                     <input
                       type="checkbox"
                       checked={!!form.competeWithOlder}
                       disabled={!editMode}
                       onChange={(e) => setForm({ ...form, competeWithOlder: e.target.checked })}
-                      className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      className="mt-1 h-4 w-4 rounded border-surface-300 text-primary-600 focus:ring-primary-500"
                     />
                     <span>
                       <span className="font-medium">Compete in older age band</span>
-                      <span className="block text-xs text-gray-500">
+                      <span className="block text-xs text-surface-500">
                         Subject to the tournament's age-flex rules.
                       </span>
                     </span>
@@ -480,7 +480,7 @@ export default function ManageRegistration() {
                       onChange={(e) => setForm({ ...form, specialNeeds: e.target.value })}
                       rows={3}
                       placeholder="Any accommodations or medical info the director should know."
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+                      className="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-950 text-sm text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
                     />
                   ) : (
                     <ReadonlyField value={registration.specialNeeds || 'None'} />
@@ -492,11 +492,11 @@ export default function ManageRegistration() {
           </Card>
 
           {!isLocked && !editMode && (
-            <div className="mt-4 p-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
+            <div className="mt-4 p-4 rounded-lg border border-danger/30 dark:border-danger/50 bg-danger/10 dark:bg-danger/20">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-red-900 dark:text-red-200">Withdraw registration</p>
-                  <p className="text-sm text-red-700 dark:text-red-300 mt-0.5">
+                  <p className="font-medium text-danger dark:text-danger/20">Withdraw registration</p>
+                  <p className="text-sm text-danger dark:text-danger mt-0.5">
                     Use this if your kid is sick, has a schedule conflict, or you no longer want to compete. The director will be notified.
                   </p>
                 </div>
@@ -505,7 +505,7 @@ export default function ManageRegistration() {
                   size="sm"
                   onClick={handleWithdraw}
                   loading={withdrawing}
-                  className="text-red-700 hover:bg-red-100 dark:text-red-300 dark:hover:bg-red-900/40 border-red-300 dark:border-red-700 flex-shrink-0"
+                  className="text-danger hover:bg-danger/10 dark:text-danger dark:hover:bg-danger/40 border-danger/30 dark:border-danger flex-shrink-0"
                 >
                   <UserX className="h-4 w-4 mr-1" /> Withdraw
                 </Button>
@@ -519,11 +519,11 @@ export default function ManageRegistration() {
 
   // ── Render: lookup form (initial)
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+    <div className="min-h-screen bg-surface-50 dark:bg-surface-950 py-12 px-4">
       <div className="max-w-md mx-auto">
         <Link
           to="/register"
-          className="inline-flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4"
+          className="inline-flex items-center text-sm text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to register
@@ -532,8 +532,8 @@ export default function ManageRegistration() {
           <CardBody className="p-8">
             <div className="text-center mb-6">
               <Edit3 className="h-12 w-12 text-primary-500 mx-auto mb-3" aria-hidden="true" />
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Manage registration</h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <h1 className="text-2xl font-bold text-surface-900 dark:text-white mb-2">Manage registration</h1>
+              <p className="text-sm text-surface-600 dark:text-surface-400">
                 Update competitor details or withdraw using the private link from your confirmation screen or email.
               </p>
             </div>
@@ -542,7 +542,7 @@ export default function ManageRegistration() {
               {lookupError && (
                 <div
                   role="alert"
-                  className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-start gap-2"
+                  className="p-3 rounded-md bg-danger/10 dark:bg-danger/20 border border-danger/30 dark:border-danger/50 text-sm text-danger dark:text-danger flex items-start gap-2"
                 >
                   <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
                   <span>{lookupError}</span>
@@ -554,7 +554,7 @@ export default function ManageRegistration() {
               </Button>
             </form>
 
-            <p className="text-xs text-gray-500 mt-6 text-center">
+            <p className="text-xs text-surface-500 mt-6 text-center">
               For security, confirmation codes cannot reveal or change personal information. Contact the tournament director if you lost the private link.
             </p>
           </CardBody>
@@ -566,7 +566,7 @@ export default function ManageRegistration() {
 
 function ReadonlyField({ value }: { value: string | number | null | undefined }) {
   return (
-    <div className="h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-sm text-slate-900 dark:text-slate-100 flex items-center">
+    <div className="h-10 px-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900/50 text-sm text-surface-900 dark:text-surface-100 flex items-center">
       {value ?? '—'}
     </div>
   );

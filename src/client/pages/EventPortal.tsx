@@ -74,7 +74,7 @@ export default function EventPortal() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-surface-50 to-surface-100 dark:from-surface-900 dark:to-surface-800">
         <Spinner size="lg" />
       </div>
     );
@@ -82,10 +82,10 @@ export default function EventPortal() {
 
   if (error || !event || !organization) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-surface-50 to-surface-100 dark:from-surface-900 dark:to-surface-800 px-4">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Event Not Found</h1>
-          <p className="mt-2 text-slate-600 dark:text-slate-400">
+          <h1 className="text-2xl font-bold text-surface-900 dark:text-white">Event Not Found</h1>
+          <p className="mt-2 text-surface-600 dark:text-surface-400">
             This event is not currently available or has been unpublished.
           </p>
           <Link
@@ -103,9 +103,9 @@ export default function EventPortal() {
   const isRegistrationOpen = event.status === 'registration';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+    <div className="min-h-screen bg-gradient-to-br from-surface-50 to-surface-100 dark:from-surface-900 dark:to-surface-800">
       {/* Header */}
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-700 dark:bg-slate-800/80">
+      <header className="border-b border-surface-200 bg-white/80 backdrop-blur dark:border-surface-700 dark:bg-surface-900/80">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -117,12 +117,12 @@ export default function EventPortal() {
                 />
               )}
               <div>
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+                <h1 className="text-2xl font-bold text-surface-900 dark:text-white">
                   {event.name}
                 </h1>
                 <Link
                   to={`/events/${orgSlug}`}
-                  className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+                  className="text-sm text-surface-600 hover:text-surface-900 dark:text-surface-400 dark:hover:text-surface-200"
                 >
                   {organization.name}
                 </Link>
@@ -148,18 +148,18 @@ export default function EventPortal() {
         <div className="grid gap-8 lg:grid-cols-3">
           {/* Event Details Card */}
           <div className="lg:col-span-2">
-            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            <div className="rounded-lg border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
+              <h2 className="text-lg font-semibold text-surface-900 dark:text-white">
                 Event Details
               </h2>
 
               <div className="mt-6 space-y-4">
                 {/* Date */}
                 <div className="flex items-start gap-3">
-                  <Calendar className="h-5 w-5 text-slate-400" />
+                  <Calendar className="h-5 w-5 text-surface-400" />
                   <div>
-                    <p className="text-sm font-medium text-slate-900 dark:text-white">Date</p>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                    <p className="text-sm font-medium text-surface-900 dark:text-white">Date</p>
+                    <p className="text-sm text-surface-600 dark:text-surface-400">
                       {new Date(event.date).toLocaleDateString('en-US', {
                         weekday: 'long',
                         year: 'numeric',
@@ -173,20 +173,20 @@ export default function EventPortal() {
                 {/* Location */}
                 {event.location && (
                   <div className="flex items-start gap-3">
-                    <MapPin className="h-5 w-5 text-slate-400" />
+                    <MapPin className="h-5 w-5 text-surface-400" />
                     <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">Location</p>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">{event.location}</p>
+                      <p className="text-sm font-medium text-surface-900 dark:text-white">Location</p>
+                      <p className="text-sm text-surface-600 dark:text-surface-400">{event.location}</p>
                     </div>
                   </div>
                 )}
 
                 {/* Registration Count */}
                 <div className="flex items-start gap-3">
-                  <Users className="h-5 w-5 text-slate-400" />
+                  <Users className="h-5 w-5 text-surface-400" />
                   <div>
-                    <p className="text-sm font-medium text-slate-900 dark:text-white">Competitors</p>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                    <p className="text-sm font-medium text-surface-900 dark:text-white">Competitors</p>
+                    <p className="text-sm text-surface-600 dark:text-surface-400">
                       {event.registrationCount} registered
                     </p>
                   </div>
@@ -195,10 +195,10 @@ export default function EventPortal() {
                 {/* Registration Fee */}
                 {event.registrationFee && (
                   <div className="flex items-start gap-3">
-                    <DollarSign className="h-5 w-5 text-slate-400" />
+                    <DollarSign className="h-5 w-5 text-surface-400" />
                     <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">Entry Fee</p>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                      <p className="text-sm font-medium text-surface-900 dark:text-white">Entry Fee</p>
+                      <p className="text-sm text-surface-600 dark:text-surface-400">
                         {event.registrationFee}
                       </p>
                     </div>
@@ -208,8 +208,8 @@ export default function EventPortal() {
 
               {/* Status Banner */}
               {!isRegistrationOpen && (
-                <div className="mt-6 rounded-lg bg-amber-50 p-4 dark:bg-amber-900/20">
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                <div className="mt-6 rounded-lg bg-warning/10 p-4 dark:bg-warning/20">
+                  <p className="text-sm text-warning dark:text-warning/20">
                     {event.status === 'draft' && 'Registration has not opened yet.'}
                     {event.status === 'brackets' && 'Registration is closed. Brackets are being prepared.'}
                     {event.status === 'in_progress' && 'Tournament is currently in progress!'}
@@ -224,11 +224,11 @@ export default function EventPortal() {
           <div className="space-y-6">
             {/* Register Card */}
             {isRegistrationOpen && (
-              <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+              <div className="rounded-lg border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
+                <h3 className="text-sm font-semibold text-surface-900 dark:text-white">
                   Registration
                 </h3>
-                <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                <p className="mt-2 text-sm text-surface-600 dark:text-surface-400">
                   Register to compete in this event
                 </p>
                 <Link
@@ -244,14 +244,14 @@ export default function EventPortal() {
 
             {/* Scoreboard Card */}
             {event.scoreboardUrl && (
-              <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <div className="rounded-lg border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
                 <div className="flex items-center gap-2">
                   <Trophy className="h-5 w-5" style={{ color: brandColor }} />
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">
                     Live Scoreboard
                   </h3>
                 </div>
-                <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                <p className="mt-2 text-sm text-surface-600 dark:text-surface-400">
                   View live brackets and results
                 </p>
                 <Link
@@ -269,14 +269,14 @@ export default function EventPortal() {
             )}
 
             {/* Check Registration Card */}
-            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <div className="rounded-lg border border-surface-200 bg-white p-6 shadow-sm dark:border-surface-700 dark:bg-surface-900">
               <div className="flex items-center gap-2">
                 <FileText className="h-5 w-5" style={{ color: brandColor }} />
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                <h3 className="text-sm font-semibold text-surface-900 dark:text-white">
                   Check Registration
                 </h3>
               </div>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              <p className="mt-2 text-sm text-surface-600 dark:text-surface-400">
                 Look up your registration status
               </p>
               <Link

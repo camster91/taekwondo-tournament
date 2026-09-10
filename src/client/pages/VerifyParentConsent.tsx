@@ -43,8 +43,8 @@ export default function VerifyParentConsent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="flex items-center text-gray-600 dark:text-gray-400">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-950 flex items-center justify-center">
+        <div className="flex items-center text-surface-600 dark:text-surface-400">
           <Spinner className="mr-2" />
           Verifying parental consent...
         </div>
@@ -54,13 +54,13 @@ export default function VerifyParentConsent() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-950 py-12 px-4">
         <div className="max-w-md mx-auto text-center">
           <Card>
             <CardBody className="p-8">
-              <AlertCircle className="h-16 w-16 text-red-500 dark:text-red-400 mx-auto mb-4" />
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Verification Failed</h1>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
+              <AlertCircle className="h-16 w-16 text-danger dark:text-danger mx-auto mb-4" />
+              <h1 className="text-2xl font-bold text-surface-900 dark:text-white mb-2">Verification Failed</h1>
+              <p className="text-surface-600 dark:text-surface-400 mb-6">{error}</p>
               <Button as={Link} to="/" variant="secondary">
                 Return to home
               </Button>
@@ -73,31 +73,31 @@ export default function VerifyParentConsent() {
 
   if (result?.success) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-950 py-12 px-4">
         <div className="max-w-md mx-auto">
           <Card>
             <CardBody className="p-8 text-center">
-              <CheckCircle className="h-16 w-16 text-green-500 dark:text-green-400 mx-auto mb-4" />
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Consent Verified!</h1>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">{result.message}</p>
+              <CheckCircle className="h-16 w-16 text-success dark:text-success mx-auto mb-4" />
+              <h1 className="text-2xl font-bold text-surface-900 dark:text-white mb-2">Consent Verified!</h1>
+              <p className="text-surface-600 dark:text-surface-400 mb-6">{result.message}</p>
 
               {result.registration && (
-                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 text-left mb-6">
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Registration Confirmed</h3>
+                <div className="bg-surface-100 dark:bg-surface-800 rounded-lg p-4 text-left mb-6">
+                  <h3 className="font-semibold text-surface-900 dark:text-white mb-2">Registration Confirmed</h3>
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Competitor:</span>
-                      <span className="font-medium text-gray-900 dark:text-white">{result.registration.competitorName}</span>
+                      <span className="text-surface-600 dark:text-surface-400">Competitor:</span>
+                      <span className="font-medium text-surface-900 dark:text-white">{result.registration.competitorName}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">Tournament:</span>
-                      <span className="font-medium text-gray-900 dark:text-white">{result.registration.tournamentName}</span>
+                      <span className="text-surface-600 dark:text-surface-400">Tournament:</span>
+                      <span className="font-medium text-surface-900 dark:text-white">{result.registration.tournamentName}</span>
                     </div>
                   </div>
                 </div>
               )}
 
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
                 Your child's registration is now complete and confirmed. You should have received a confirmation email with all the details.
               </p>
 

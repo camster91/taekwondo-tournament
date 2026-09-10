@@ -130,11 +130,11 @@ export default function TournamentTemplates() {
       ) : displayTemplates.length === 0 ? (
         <Card>
           <div className="py-12 text-center">
-            <FileText className="mx-auto h-12 w-12 text-slate-400 dark:text-slate-600" />
-            <h3 className="mt-4 text-lg font-semibold text-slate-700 dark:text-slate-200">
+            <FileText className="mx-auto h-12 w-12 text-surface-400 dark:text-surface-600" />
+            <h3 className="mt-4 text-lg font-semibold text-surface-700 dark:text-surface-200">
               {showDeleted ? 'No deleted templates' : 'No templates yet'}
             </h3>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            <p className="mt-2 text-sm text-surface-500 dark:text-surface-400">
               {showDeleted
                 ? 'Templates you delete will appear here for 7 days before being permanently removed.'
                 : 'Create your first tournament template to speed up future event setup.'}
@@ -160,15 +160,15 @@ export default function TournamentTemplates() {
                   <div className="flex items-center gap-3">
                     <Trophy className="h-5 w-5 text-primary-500" />
                     <div>
-                      <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                      <h3 className="text-lg font-semibold text-surface-800 dark:text-surface-100">
                         {template.name}
                       </h3>
                       {template.description && (
-                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                        <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">
                           {template.description}
                         </p>
                       )}
-                      <div className="mt-2 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+                      <div className="mt-2 flex items-center gap-4 text-xs text-surface-500 dark:text-surface-400">
                         <span>Sport: {template.sportProfileSlug}</span>
                         <span>
                           Created {new Date(template.createdAt).toLocaleDateString()}
