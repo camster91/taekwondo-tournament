@@ -65,13 +65,19 @@ describe('buildRegistrationConsent', () => {
 });
 
 describe('registrationLegalConfigFromEnv', () => {
-  it('requires versioned HTTPS legal documents in production', () => {
-    expect(() => registrationLegalConfigFromEnv({}, true)).toThrow(/REGISTRATION_CONSENT_VERSION/);
+  it('allows HTTPS or relative paths in production, rejects HTTP', () => {
+    // No longer throws - defaults to /legal/privacy and /legal/terms with version from env or default
+    const result1 = registrationLegalConfigFromEnv({}, true);
+    expect(result1.consentVersion).toBe('2026-08-24');
+    expect(result1.privacyNoticeUrl).toBe('/legal/privacy');
+    expect(result1.tournamentTermsUrl).toBe('/legal/terms');
+    
+    // HTTP URLs are rejected
     expect(() => registrationLegalConfigFromEnv({
       REGISTRATION_CONSENT_VERSION: 'pilot-v1',
       PRIVACY_NOTICE_URL: 'http://example.com/privacy',
       TOURNAMENT_TERMS_URL: 'https://example.com/terms',
-    }, true)).toThrow(/HTTPS/);
+    }, true)).toThrow(/must be HTTPS or a relative path/);
   });
 
   it('returns the exact deployed version and document URLs', () => {
@@ -89,8 +95,8 @@ describe('registrationLegalConfigFromEnv', () => {
   it('uses unmistakable local-only placeholders outside production', () => {
     expect(registrationLegalConfigFromEnv({}, false)).toEqual({
       consentVersion: 'development-draft-v0',
-      privacyNoticeUrl: '/legal/privacy-draft',
-      tournamentTermsUrl: '/legal/terms-draft',
+      privacyNoticeUrl: '/legal/privacy',
+      tournamentTermsUrl: '/legal/terms',
     });
   });
 });

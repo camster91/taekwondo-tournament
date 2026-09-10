@@ -108,8 +108,8 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P1-13 | #223 | **✅ QR code poster generator** | Generate PDF poster with QR to public registration + scoreboard — **SHIPPED** in PR #223 | S |
 | **Support** | | | | |
 | P1-14 | #225 | **✅ Help center (v1)** | 10 articles: setup, import, divisions, brackets, day-of, troubleshooting — **SHIPPED** in PR #225 | M |
-| P1-15 | #TBD | **✅ Video tutorial slots (structure only)** | 3 tutorial pages (quickstart, import Excel, run a tournament) with embed support via env vars; placeholders when videos missing — **SHIPPED** (agent work, awaiting Cameron recordings) | M |
-| P1-16 | #TBD | **✅ In-app live chat** | Crisp widget integrated; gated on VITE_CRISP_WEBSITE_ID env var + paid plans (starter/pro/pilot) — **SHIPPED** (agent work, awaiting Cameron Crisp account signup) | S |
+| P1-15 | #236 | **✅ Video tutorial slots (structure only)** | 3 tutorial pages (quickstart, import Excel, run a tournament) with embed support via env vars; placeholders when videos missing — **SHIPPED** (agent work, awaiting Cameron recordings) | M |
+| P1-16 | #236 | **✅ In-app live chat** | Crisp widget integrated; gated on VITE_CRISP_WEBSITE_ID env var + paid plans (starter/pro/pilot) — **SHIPPED** (agent work, awaiting Cameron Crisp account signup) | S |
 
 **Exit criteria:**  
 - 5 pilot tournaments run successfully with zero payment failures.
@@ -250,7 +250,11 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 | Usage metering | ✅ Implemented | Record competitor count to DB on tournament completion; Stripe report path is stubbed with tests |
 | Failed payment handling | ✅ Implemented | Email notification + 7-day grace period before downgrade via `invoice.payment_failed` webhook |
 
-**Status:** Billing routes (checkout, portal, webhook handler) are fully implemented in `src/server/routes/billing.ts`. OrganizationSettings.tsx UI is complete. **Blocker:** Cameron must create Stripe account, configure products/prices in Stripe dashboard, set env vars (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_STARTER_PRICE_ID, STRIPE_PRO_PRICE_ID), and validate flows end-to-end.
+**Status:** Billing routes (checkout, portal, webhook handler) are fully implemented in `src/server/routes/billing.ts`. OrganizationSettings.tsx UI is complete. Grace period service (`src/server/services/grace-period.ts`) is implemented and tested. **Blocker:** Cameron must:
+1. Create Stripe account, configure products/prices in Stripe dashboard
+2. Set env vars (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_STARTER_PRICE_ID, STRIPE_PRO_PRICE_ID)
+3. Validate flows end-to-end
+4. **Wire grace-period job:** Add cron entry to run `node dist-server/server/services/grace-period-job.js` daily (see grace-period-job.ts for options)
 
 ---
 
