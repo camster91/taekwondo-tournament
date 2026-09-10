@@ -32,6 +32,12 @@ export interface JWTPayload {
   userId: string;
   email: string;
   role: string;
+  // Synthetic tenant for demo users. Multi-tenant access checks
+  // (checkTournamentAccess, buildTournamentAccessFilter) still
+  // resolve authorization through OrganizationMember rows — the
+  // tenantId is surfaced on req.user so handlers and tests can pin
+  // the isolation contract without re-querying the DB.
+  tenantId?: string;
   // Mirrors User.tokenVersion at issue time. The auth middleware
   // re-reads User.tokenVersion from the DB and rejects the request
   // if the two don't match — that's how logout (bump) / role change
@@ -47,9 +53,29 @@ export interface AuthenticatedRequest extends Request {
     firstName: string;
     lastName: string;
     isDemo: boolean;
+    /** Synthetic tenant for demo users (always DEMO_ORG_ID). */
+    tenantId?: string;
   };
   /** True when the JWT came from the session cookie (not Bearer). */
   authViaCookie?: boolean;
+}
+
+// SH-3: scoped role for the public demo. Demo users hold this role
+// instead of the global 'admin' role so checkTournamentAccess and
+// buildTournamentAccessFilter run normally against the synthetic
+// demo org rather than short-circuiting.
+export const DEMO_ROLE = 'demo';
+// Synthetic tenant id for the public demo. Must match the organization
+// id produced by prisma/demo-seed.ts (id(1)). The demo user is added
+// as an OrganizationMember of this org, so all tournament/org lookups
+// scope automatically to the fabricated demo dataset.
+export const DEMO_ORG_ID = '00000000-0000-4000-8000-000000000001';
+
+export function isDemoUser(
+  user: { role?: string; isDemo?: boolean } | null | undefined
+): boolean {
+  if (!user) return false;
+  return user.isDemo === true || user.role === DEMO_ROLE;
 }
 
 // Name of the HttpOnly session cookie. Browser auto-sends on
@@ -174,7 +200,22 @@ type CachedUser = {
   demoExpiresAt: Date | null;
 };
 
+// Read paths the public demo session is never allowed to reach.
+// Reads to every other path are scoped to the synthetic demo tenant
+// by checkTournamentAccess / buildTournamentAccessFilter — those
+// checks do the cross-tenant isolation work so the demo only sees
+// fabricated org-scoped data.
 const demoDeniedReadPrefixes = ['/api/auth/users', '/api/invites', '/api/billing', '/api/organizations', '/api/support'];
+
+// SH-3: the demo session is read-only against its own synthetic tenant
+// plus the explicit logout flow. Every other write (bracket mutations,
+// registration mutations, incidents, billing, invites, …) is denied by
+// default. Listing these here (instead of an allowlist of safe paths)
+// keeps the policy obvious: the demo can observe, log out, and nothing
+// else.
+const demoAllowedWriteCapabilities: ReadonlyArray<{ method: string; path: RegExp }> = [
+  { method: 'POST', path: /^\/api\/auth\/logout$/ },
+];
 
 export function isDemoRequestAllowed(method: string, originalUrl: string): boolean {
   let path: string;
@@ -187,16 +228,13 @@ export function isDemoRequestAllowed(method: string, originalUrl: string): boole
   if (normalizedMethod === 'GET' || normalizedMethod === 'HEAD') {
     return !demoDeniedReadPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
   }
-  if (normalizedMethod === 'POST' && path === '/api/auth/logout') return true;
-  if (normalizedMethod === 'PUT' && /^\/api\/brackets\/match\/[^/]+$/.test(path)) return true;
-  if (normalizedMethod === 'POST' && /^\/api\/brackets\/match\/[^/]+\/undo$/.test(path)) return true;
-  if (normalizedMethod === 'PUT' && /^\/api\/tournaments\/[^/]+\/registrations\/[^/]+$/.test(path)) return true;
-  if (normalizedMethod === 'POST' && path === '/api/incidents') return true;
-  return false;
+  return demoAllowedWriteCapabilities.some(
+    (cap) => cap.method === normalizedMethod && cap.path.test(path),
+  );
 }
 
 function enforceDemoCapability(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
-  if (req.user?.isDemo && !isDemoRequestAllowed(req.method, req.originalUrl)) {
+  if (isDemoUser(req.user) && !isDemoRequestAllowed(req.method, req.originalUrl)) {
     res.status(403).json({
       error: 'This action is unavailable in the public demo.',
       code: 'DEMO_CAPABILITY_DENIED',
@@ -303,10 +341,17 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
     req.user = {
       id: cached.id,
       email: cached.email,
-      role: cached.role as 'admin' | 'director' | 'scorekeeper' | 'viewer',
+      role: cached.role as 'admin' | 'director' | 'scorekeeper' | 'viewer' | 'demo',
       firstName: cached.firstName,
       lastName: cached.lastName,
       isDemo: cached.demoExpiresAt !== null,
+      // SH-3: pin the synthetic tenant for the demo session so
+      // downstream handlers and tests can rely on req.user.tenantId
+      // without re-deriving it from org membership. Non-demo
+      // cached users have no embedded tenantId (they're not
+      // explicitly tenant-scoped in the JWT); the access filter
+      // still uses their organizationMembers to scope reads.
+      tenantId: payload.tenantId,
     };
     return enforceDemoCapability(req, res, next);
   }
@@ -344,6 +389,7 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
         firstName: user.firstName,
         lastName: user.lastName,
         isDemo: user.demoExpiresAt !== null,
+        tenantId: payload.tenantId,
       };
 
       enforceDemoCapability(req, res, next);
@@ -395,6 +441,7 @@ export function optionalAuthenticate(req: AuthenticatedRequest, res: Response, n
           firstName: user.firstName,
           lastName: user.lastName,
           isDemo: user.demoExpiresAt !== null,
+          tenantId: payload.tenantId,
         };
       }
       next();
@@ -421,7 +468,16 @@ export function requireRole(...allowedRoles: string[]) {
   };
 }
 
-const ROLE_HIERARCHY = { director: 3, scorekeeper: 2, viewer: 1 } as const;
+// SH-3: the demo role is treated as a viewer-level role for the
+// purpose of the role-hierarchy gate that sits in front of the
+// org-membership check. That gate exists to short-circuit
+// "this user has no business asking for this tournament" requests
+// before hitting the DB; the demo user's actual authorization is
+// resolved by the org-membership check that follows (and which
+// scopes them to the synthetic demo tenant). Without the demo
+// entry, every read would 403 with "Insufficient role" before the
+// tenant-scoping check ever ran.
+const ROLE_HIERARCHY = { director: 3, scorekeeper: 2, viewer: 1, demo: 1 } as const;
 
 export type TournamentRole = keyof typeof ROLE_HIERARCHY;
 

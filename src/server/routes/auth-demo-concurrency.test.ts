@@ -42,7 +42,7 @@ describe('concurrent demo sessions with real auth middleware', () => {
           if (where.id) return Promise.resolve(users.get(where.id) ?? null);
           return Promise.resolve([...users.values()].find((user) => user.email === where.email) ?? null);
         }),
-        create: vi.fn().mockImplementation(({ data }: { data: any }) => {
+        create: vi.fn().mockImplementation(({ data, include }: { data: any; include?: any }) => {
           const user = {
             ...data,
             id: `demo-user-${users.size}`,
@@ -52,6 +52,15 @@ describe('concurrent demo sessions with real auth middleware', () => {
             lastLogin: null,
             tournamentAccess: [],
           };
+          // SH-3: the demo session is created with the scoped 'demo'
+          // role, not 'admin'. Surface the OrganizationMember nested
+          // write so anything that reads back user.organizationMembers
+          // (e.g. future cache refresh) sees the membership.
+          if (include?.organizationMembers) {
+            user.organizationMembers = [
+              { organizationId: data.organizationMembers?.create?.organizationId },
+            ];
+          }
           users.set(user.id, user);
           return Promise.resolve(user);
         }),
@@ -60,6 +69,12 @@ describe('concurrent demo sessions with real auth middleware', () => {
           user.tokenVersion += 1;
           return Promise.resolve(user);
         }),
+      },
+      // SH-3: the demo login refuses to mint a token unless the
+      // synthetic tenant is present. Default to "present" so the
+      // concurrency test continues to exercise the success path.
+      organization: {
+        findUnique: vi.fn().mockResolvedValue({ id: '00000000-0000-4000-8000-000000000001' }),
       },
     };
     app.use('/api/auth', authRouter);
@@ -99,10 +114,15 @@ describe('concurrent demo sessions with real auth middleware', () => {
       headers: { authorization: `Bearer ${sessionB.token}` },
     });
     expect(meB.status).toBe(200);
+    // SH-3: the demo session now carries the scoped 'demo' role
+    // (not 'admin') and the synthetic tenant id. The token is
+    // therefore scoped to fabricated data via the org-membership
+    // branch in checkTournamentAccess.
     expect(await meB.json()).toMatchObject({
       id: sessionB.user.id,
-      role: 'admin',
+      role: 'demo',
       isDemo: true,
+      tenantId: '00000000-0000-4000-8000-000000000001',
       demoExpiresAt: expect.any(String),
     });
 

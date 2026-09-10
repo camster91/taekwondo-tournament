@@ -10,6 +10,12 @@ vi.mock('../middleware/auth.js', () => ({
   SESSION_COOKIE_OPTIONS: {},
   setCsrfCookie: vi.fn(),
   invalidateAuthCache: vi.fn(),
+  // SH-3: src/server/routes/auth.ts now imports the synthetic
+  // tenant id and scoped role from the middleware; the mock
+  // must surface the same names so the demo route does not
+  // crash on import.
+  DEMO_ORG_ID: '00000000-0000-4000-8000-000000000001',
+  DEMO_ROLE: 'demo',
 }));
 
 vi.mock('../services/email.js', () => ({
@@ -60,6 +66,13 @@ async function startAuthServer(demoMax?: string) {
     magicLink: {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       create: vi.fn().mockResolvedValue({}),
+    },
+    // SH-3: the demo login now looks up the synthetic tenant
+    // (Organization with id DEMO_ORG_ID) before minting a token.
+    // Mock the lookup as "present" so the existing rate-limit
+    // tests keep exercising the happy path.
+    organization: {
+      findUnique: vi.fn().mockResolvedValue({ id: '00000000-0000-4000-8000-000000000001' }),
     },
   };
   app.use('/api/auth', authRouter);

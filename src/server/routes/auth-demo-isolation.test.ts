@@ -15,6 +15,12 @@ vi.mock('../middleware/auth.js', () => ({
   SESSION_COOKIE_OPTIONS: {},
   setCsrfCookie: vi.fn(),
   invalidateAuthCache,
+  // SH-3: the demo user creation in src/server/routes/auth.ts now
+  // imports DEMO_ORG_ID and DEMO_ROLE to construct the scoped demo
+  // principal. Mirror the same values the real middleware exports
+  // so the mock doesn't fall over.
+  DEMO_ORG_ID: '00000000-0000-4000-8000-000000000001',
+  DEMO_ROLE: 'demo',
 }));
 
 vi.mock('../services/email.js', () => ({
@@ -49,11 +55,20 @@ async function startAuthServer(options: {
   const update = options.update ?? vi.fn().mockResolvedValue({});
   const findMany = options.findMany ?? vi.fn().mockResolvedValue([]);
   const deleteMany = options.deleteMany ?? vi.fn().mockResolvedValue({ count: 0 });
-  const create = vi.fn().mockImplementation(({ data }: { data: any }) => Promise.resolve({
-    ...data,
-    id: 'unique-demo-user',
-    tokenVersion: 0,
-  }));
+  const create = vi.fn().mockImplementation(({ data, include }: { data: any; include?: any }) => {
+    const user = {
+      ...data,
+      id: 'unique-demo-user',
+      tokenVersion: 0,
+    };
+    // Mirror the nested-write the route now uses to create the
+    // OrganizationMember so anything that consumes `user.organizationMembers`
+    // after `prisma.user.create` resolves still sees the membership.
+    if (include?.organizationMembers) {
+      user.organizationMembers = [{ organizationId: data.organizationMembers?.create?.organizationId }];
+    }
+    return Promise.resolve(user);
+  });
   const { default: authRouter } = await import('./auth.js');
   const app = express();
   app.use(express.json());
@@ -72,6 +87,14 @@ async function startAuthServer(options: {
       create,
       findMany,
       deleteMany,
+    },
+    // SH-3: the demo login now fails closed when the synthetic
+    // tenant (Organization with id DEMO_ORG_ID) is missing. Default
+    // the mock to "present" so the existing tests keep exercising
+    // the success path; tests that need the missing-org branch
+    // override this directly.
+    organization: {
+      findUnique: vi.fn().mockResolvedValue({ id: '00000000-0000-4000-8000-000000000001' }),
     },
   };
   app.use('/api/auth', authRouter);
@@ -189,11 +212,15 @@ describe('demo session isolation', () => {
 
     expect(findMany).toHaveBeenCalledOnce();
     const query = findMany.mock.calls[0][0];
+    // SH-3: the safety predicate moved from "no org members at all"
+    // to "every org member is the synthetic demo tenant". Real
+    // tenants' principals never match this predicate, so a leaked
+    // demo account can never sweep up a customer's user record.
     expect(query).toMatchObject({
       where: {
         demoExpiresAt: { lt: expect.any(Date) },
         tournamentAccess: { none: {} },
-        organizationMembers: { none: {} },
+        organizationMembers: { every: { organizationId: '00000000-0000-4000-8000-000000000001' } },
       },
       orderBy: { demoExpiresAt: 'asc' },
       take: 100,
@@ -207,7 +234,7 @@ describe('demo session isolation', () => {
         id: { in: ['expired-1', 'expired-2'] },
         demoExpiresAt: { lt: query.where.demoExpiresAt.lt },
         tournamentAccess: { none: {} },
-        organizationMembers: { none: {} },
+        organizationMembers: { every: { organizationId: '00000000-0000-4000-8000-000000000001' } },
       },
     });
   });

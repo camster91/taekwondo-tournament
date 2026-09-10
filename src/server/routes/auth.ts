@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { type RateLimitExceededEventHandler } from 'express-rate-limit';
-import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, setCsrfCookie, type AuthenticatedRequest, invalidateAuthCache } from '../middleware/auth.js';
+import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, setCsrfCookie, type AuthenticatedRequest, invalidateAuthCache, DEMO_ORG_ID, DEMO_ROLE } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
@@ -591,6 +591,11 @@ router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response)
     const responseUser = {
       ...user,
       isDemo: user.demoExpiresAt !== null,
+      // SH-3: surface the synthetic tenant for demo sessions so the
+      // client can show "this is the bowin-showcase-demo dataset"
+      // messaging and so the auth flow has a single source of
+      // truth for the resolved tenant. Non-demo sessions omit it.
+      tenantId: req.user!.tenantId,
     };
     const offlineCapability = maybeIssueOfflineCapability({
       id: user.id,
@@ -1113,11 +1118,18 @@ const DEMO_CLEANUP_BATCH_SIZE = 100;
 async function cleanupExpiredDemoPrincipals(prisma: PrismaClient): Promise<void> {
   try {
     const cleanupNow = new Date();
+    // SH-3: demo principals now hold a single OrganizationMember row in
+    // the synthetic demo tenant (the membership is what scopes the demo
+    // session's reads to fabricated data). The safety predicate moved
+    // from "no org members at all" to "every org member is the demo
+    // org" — i.e. a real tenant's principal is never eligible. The
+    // OrganizationMember relation has onDelete: Cascade on user, so
+    // the membership rows go away with the user.
     const expiredUsers = await prisma.user.findMany({
       where: {
         demoExpiresAt: { lt: cleanupNow },
+        organizationMembers: { every: { organizationId: DEMO_ORG_ID } },
         tournamentAccess: { none: {} },
-        organizationMembers: { none: {} },
       },
       orderBy: { demoExpiresAt: 'asc' },
       take: DEMO_CLEANUP_BATCH_SIZE,
@@ -1130,8 +1142,8 @@ async function cleanupExpiredDemoPrincipals(prisma: PrismaClient): Promise<void>
       where: {
         id: { in: expiredUsers.map(({ id }) => id) },
         demoExpiresAt: { lt: cleanupNow },
+        organizationMembers: { every: { organizationId: DEMO_ORG_ID } },
         tournamentAccess: { none: {} },
-        organizationMembers: { none: {} },
       },
     });
   } catch {
@@ -1142,9 +1154,16 @@ async function cleanupExpiredDemoPrincipals(prisma: PrismaClient): Promise<void>
 }
 // Closes S2 — old gate "on unless NODE_ENV=production" let the
 // demo account activate on any deploy where NODE_ENV was unset
-// or set to "staging". The demo user is admin. Now requires an
-// explicit ENABLE_DEMO_LOGIN=1, no NODE_ENV fallback. Production fails closed
-// unless the separate isolated-data attestation is also present.
+// or set to "staging". Now requires an explicit ENABLE_DEMO_LOGIN=1,
+// no NODE_ENV fallback. Production fails closed unless the separate
+// isolated-data attestation is also present.
+//
+// SH-3 — the demo user is NOT a global admin anymore. It is created
+// with the scoped `demo` role and added as a single
+// OrganizationMember of the synthetic demo tenant. The
+// `checkTournamentAccess` admin short-circuit is bypassed, so reads
+// scope to the demo org via the org-membership branch. `enforceDemoCapability`
+// blocks every write except `POST /api/auth/logout`.
 const demoLoginEnabled = isDemoLoginEnabled();
 
 if (demoLoginEnabled) {
@@ -1158,13 +1177,45 @@ if (demoLoginEnabled) {
       // revoke only that visitor's JWT without affecting concurrent sessions.
       const demoSessionId = crypto.randomBytes(16).toString('hex');
       const demoExpiresAt = new Date(Date.now() + DEMO_TTL_SECONDS * 1000);
+
+      // SH-3: the demo user is no longer a global admin. It is added as
+      // an OrganizationMember of the synthetic demo tenant instead, so
+      // every read goes through checkTournamentAccess /
+      // buildTournamentAccessFilter and is scoped to fabricated data
+      // only. Refuse the login when the demo org has not been seeded
+      // — a missing demo tenant means ENABLE_DEMO_LOGIN was turned on
+      // against a real-customer database, which is the failure mode
+      // this whole change is designed to make impossible.
+      const demoOrg = await prisma.organization.findUnique({
+        where: { id: DEMO_ORG_ID },
+        select: { id: true },
+      });
+      if (!demoOrg) {
+        return res.status(503).json({
+          error: 'Demo environment is not initialized. Run prisma/demo-seed against an isolated database before enabling ENABLE_DEMO_LOGIN.',
+        });
+      }
+
       const user = await prisma.user.create({
         data: {
           email: `demo-${demoSessionId}@bowin.app`,
           firstName: 'Demo',
           lastName: 'Visitor',
-          role: 'admin', // safe only behind the isolated synthetic-data gate
+          role: DEMO_ROLE,
           demoExpiresAt,
+          // Nested write creates the OrganizationMember in the same
+          // transaction. The unique (organizationId, userId) index
+          // guarantees each demo principal gets exactly one
+          // membership row in the synthetic tenant.
+          organizationMembers: {
+            create: {
+              organizationId: DEMO_ORG_ID,
+              role: 'director',
+            },
+          },
+        },
+        include: {
+          organizationMembers: { select: { organizationId: true } },
         },
       });
 
@@ -1174,6 +1225,7 @@ if (demoLoginEnabled) {
           userId: user.id,
           email: user.email,
           role: user.role,
+          tenantId: DEMO_ORG_ID,
           tokenVersion: user.tokenVersion,
         },
         DEMO_TTL_SECONDS, // 4h, not the 7d default
@@ -1184,7 +1236,14 @@ if (demoLoginEnabled) {
 
       res.json({
         ...maybeTokenField(token),
-        user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          tenantId: DEMO_ORG_ID,
+        },
         expiresIn: DEMO_TTL_SECONDS,
         message: 'Synthetic demo session active. All data in this environment is fabricated.',
       });
