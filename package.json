@@ -90,6 +90,7 @@
     "@types/cors": "^2.8.19",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/supertest": "^7.2.1",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^9.2.4",
     "eslint": "^10.8.0",

@@ -62,7 +62,13 @@ for (const [name, browserType] of Object.entries({ chromium, firefox, webkit }))
     if (pageErrors.length) throw new Error(`${name}: page errors: ${pageErrors.join(' | ')}`);
     console.log(`${name}: PASS tournament=${seeded.id}`);
     await context.close();
+  } catch (error) {
+    console.error(`${name}: FAIL - ${error.message}`);
+    throw error;
   } finally {
     await browser.close();
   }
 }
+
+console.log('\n✅ All staging smoke tests passed');
+

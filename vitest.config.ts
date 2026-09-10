@@ -9,6 +9,7 @@ export default defineConfig({
     // throwaway value for the test process so the module loads.
     env: {
       JWT_SECRET: 'test-secret-32-characters-min-for-tests',
+      DATABASE_URL: process.env.DATABASE_URL || 'postgresql://test:test@localhost:5432/test_db',
       ...process.env,
     },
     include: ['src/**/*.test.ts'],

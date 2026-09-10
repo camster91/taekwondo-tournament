@@ -13,7 +13,10 @@
  */
 
 import * as Sentry from '@sentry/node';
-import type { Express, Request, Response, NextFunction } from 'express';
+import type express from 'express';
+import type { Request, Response, NextFunction } from 'express-serve-static-core';
+
+type ExpressApp = ReturnType<typeof express>;
 
 const SENTRY_DSN = process.env.SENTRY_DSN;
 const SENTRY_ENVIRONMENT = process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development';
@@ -22,7 +25,7 @@ const SENTRY_ENVIRONMENT = process.env.SENTRY_ENVIRONMENT || process.env.NODE_EN
  * Initialize Sentry for the Express app. Call this BEFORE any routes are mounted.
  * No-op when SENTRY_DSN is unset.
  */
-export function initSentry(app: Express): void {
+export function initSentry(app: ExpressApp): void {
   if (!SENTRY_DSN) {
     console.info('[sentry] SENTRY_DSN not set — error tracking disabled');
     return;
@@ -112,7 +115,7 @@ export function initSentry(app: Express): void {
  * In Sentry v10, requestHandler/tracingHandler are deprecated. Context and tracing
  * are handled automatically by the expressIntegration in Sentry.init().
  */
-export function mountSentryRequestHandler(app: Express): void {
+export function mountSentryRequestHandler(app: ExpressApp): void {
   if (!SENTRY_DSN) return;
 
   // Attach user context from req.user (set by authenticate middleware)
@@ -135,7 +138,7 @@ export function mountSentryRequestHandler(app: Express): void {
  * 
  * In Sentry v10, use setupExpressErrorHandler instead of errorHandler().
  */
-export function mountSentryErrorHandler(app: Express): void {
+export function mountSentryErrorHandler(app: ExpressApp): void {
   if (!SENTRY_DSN) return;
 
   // Sentry v10: setupExpressErrorHandler replaces errorHandler()

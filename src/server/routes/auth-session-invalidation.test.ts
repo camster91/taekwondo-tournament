@@ -18,6 +18,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { createToken } from '../middleware/auth.js';
@@ -33,7 +34,9 @@ let testUserId: string;
 let adminUserId: string;
 
 beforeAll(async () => {
-  prisma = new PrismaClient();
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error('DATABASE_URL required for tests');
+  prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 
   // Create test users
   const testUser = await prisma.user.create({
