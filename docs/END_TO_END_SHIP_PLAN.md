@@ -8,6 +8,8 @@
 
 **Latest Update:** 2026-09-10  
 **Recent Progress:**  
+- ✅ PR #282: Ship-plan sync + measured bundle budgets (#65)
+- ✅ PR #283: Artifact publishing and deployment fail-closed hardening (#119 agent slice)
 - ✅ PR #238: Support diagnostics auth (#195) + public registrations visible in check-in (#187)
 - ✅ PR #239: Tenant-branded event portals (#212) — canonical organizer portal URLs, event slug management, publish/unpublish controls, fail-closed security
 - ✅ PR #240: Portal registration tenant-scoped operations (#213) — connect public portal registrations to org operations, fail-closed cross-tenant protection, portal-aware registration flow
@@ -102,7 +104,19 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 **Overall estimated completion:** ~95% (custom domains API+UI complete #256/#257, live schedule delay propagation #125/#259 complete; day-of operations ~97%; UX Wave 0 trust items #135/#140/#141/#134/#136/#146 complete; day-of trust batch #138 complete, #139 partially complete — check-in weight override shipped, full division move/merge workflow deferred; design token migration #150 COMPLETE across all pages #271/#272/#273; API contracts Phase 1 + Phase 2 #130/#277/#279 complete; a11y Slice 1 #278 + Slice 2 #281 complete)  
 **Blocker count:** 3 critical items (Cameron Stripe dashboard setup for self-service billing, legal counsel final approval, production deploy execution with demo video/case studies for marketing)
 
-**Next Agent Track:** After this PR, prefer completing thin agent-safe a11y/#128 leftovers ONLY if a Slice 3 is needed beyond docs/matrix clarity (Slice 1+2 already cover keyboard journeys, 320px/200% zoom, axe automation, and 4 baseline E2E suites). Otherwise, point at the next open agent-shippable P1 that is NOT Cameron-gated. **Explicitly out of scope**: API contracts Phase 3 runtime validation (deferred pending performance benchmarking); #128 Slice 3+ physical venue/screen-reader sign-off + every browser×AT combo (Cameron/waiver path via docs/DEVICE-ACCESSIBILITY-ACCEPTANCE.md); #192 ring staffing; SSO; #148 notifications decision; agency BD.
+**Next Agent Track:** After PR #283 (#119 agent slice complete), prefer P1 agent-shippable work NOT Cameron-gated. Candidates: #46 automated invitation lifecycle coverage (no live Mailgun required); #15 release-records docs (supersede stale PR #178); #63 compose host-port hardening (supersede stale PR #181). **Explicitly out of scope**: #128 Slice 3+ physical venue/SR sign-off + every browser×AT combo (Cameron/waiver path via docs/DEVICE-ACCESSIBILITY-ACCEPTANCE.md); API contracts Phase 3 runtime validation (deferred pending perf benchmarking); #192 ring staffing; SSO; #148 notifications; agency BD; Cameron Stripe/counsel/videos/demo VPS/production deploy execution.
+
+**#119 Status (Make artifact publishing and production deployment fail closed):**
+- ✅ **Agent-shippable slice COMPLETE** (PR #283):
+  - Retired Coolify workflow (deploy-coolify.yml deleted)
+  - Hardened artifact publishing: immutable SHA-primary tags, digest output, PR triggers already absent
+  - Documented immutable artifact path in DEPLOY.md
+  - Tightened fail-closed deploy evidence: explicit health check messaging, deployment JSON records (SHA/timestamp/backup/rollback without secrets), automatic rollback on 5 failure modes
+  - Enhanced DEPLOY.md rollback documentation with manual procedure, time targets, evidence audit trail
+- ⏸️ **Cameron-gated remaining items** (operator actions, NOT code):
+  - Live rollback drill on VPS (validate < 5min RTO target)
+  - Real production deploy execution with full cutover validation
+  - Deployment evidence JSON audit (verify no secrets leak)
 
 ---
 
