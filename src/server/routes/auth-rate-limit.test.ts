@@ -30,6 +30,7 @@ async function startAuthServer(demoMax?: string) {
   process.env.ENABLE_DEMO_LOGIN = '1';
   process.env.NODE_ENV = 'test';
   delete process.env.RATE_LIMIT_DISABLED;
+  delete process.env.VITEST; // Allow rate limiters to run in this test
   if (demoMax === undefined) delete process.env.DEMO_RATE_LIMIT_MAX;
   else process.env.DEMO_RATE_LIMIT_MAX = demoMax;
 
