@@ -38,6 +38,7 @@ export interface ApiMatch {
   score2?: string | null;
   startedAt?: string | null;
   updatedAt?: string | null;
+  videoUrl?: string | null;
   /** Internal helper used by DirectorDashboard after flatMap. Not server-side. */
   _divisionId?: string;
   _divisionName?: string;

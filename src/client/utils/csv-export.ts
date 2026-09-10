@@ -34,6 +34,7 @@ export interface DivisionLike {
       winnerId?: string | null;
       competitor1Id?: string | null;
       competitor2Id?: string | null;
+      videoUrl?: string | null;
       competitor1?: {
         competitor: {
           id: string;

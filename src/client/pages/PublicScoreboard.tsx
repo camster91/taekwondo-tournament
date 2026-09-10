@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trophy, Clock, Users, ChevronRight, Award, Zap, Radio, MapPin, Loader2, AlertCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Card, CardBody } from '../components/ui';
@@ -71,6 +71,8 @@ export default function PublicScoreboard() {
     return () => clearInterval(timer);
   }, []);
 
+  const queryClient = useQueryClient();
+
   // Fetch tournament via public endpoint (no auth required).
   // Treats 400 (not open) and 404 (not found) the same as a real fetch error so
   // the error UI can render instead of silently showing a blank board.
@@ -87,7 +89,10 @@ export default function PublicScoreboard() {
     queryFn: async () => {
       return fetchJson<Tournament>(fetch, `/api/public/tournaments/${tournamentId}`);
     },
-    refetchInterval: tournament?.publicScoreboardRefreshMs ?? 10_000,
+    refetchInterval: (query) => {
+      const data = query.state.data as Tournament | undefined;
+      return data?.publicScoreboardRefreshMs ?? 10_000;
+    },
     refetchIntervalInBackground: false,
     retry: false,
   });
@@ -109,7 +114,10 @@ export default function PublicScoreboard() {
       setLastFetchAt(new Date());
       return data;
     },
-    refetchInterval: tournament?.publicScoreboardRefreshMs ?? 5000, // Use tournament setting or default 5s
+    refetchInterval: () => {
+      const tournamentData = queryClient.getQueryData<Tournament>(['scoreboard-tournament', tournamentId]);
+      return tournamentData?.publicScoreboardRefreshMs ?? 5000;
+    },
     refetchIntervalInBackground: false,
     enabled: !tournamentError, // Don't keep retrying the scoreboard if the tournament is bad
     retry: false,
@@ -273,35 +281,35 @@ export default function PublicScoreboard() {
       )}
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-900 via-primary-950 to-slate-900 border-b border-white/5">
-        <div className="px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="px-4 md:px-8 lg:px-12 py-4 md:py-5 lg:py-6 flex items-center justify-between">
+          <div className="flex items-center gap-4 md:gap-6">
             {tournament?.brandLogoUrl ? (
-              <img src={tournament.brandLogoUrl} alt={`${tournament.brandName || tournament.name} logo`} className="h-10 w-auto" />
+              <img src={tournament.brandLogoUrl} alt={`${tournament.brandName || tournament.name} logo`} className="h-12 w-auto md:h-14 lg:h-16" />
             ) : (
-              <Trophy className="h-10 w-10" style={{ color: tournament?.brandPrimaryColor || '#DC2626' }} />
+              <Trophy className="h-12 w-12 md:h-14 md:w-14 lg:h-16 lg:w-16" style={{ color: tournament?.brandPrimaryColor || '#DC2626' }} />
             )}
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight">{tournament?.brandName || tournament?.name || 'Tournament'}</h1>
+              <div className="flex items-center gap-2 md:gap-3">
+                <h1 className="text-2xl md:text-4xl lg:text-5xl xl:text-6xl font-bold tracking-tight">{tournament?.brandName || tournament?.name || 'Tournament'}</h1>
                 <span
                   data-testid="live-badge"
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 border border-red-500/40 text-red-200 text-xs md:text-sm font-bold uppercase tracking-wider"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/20 border border-red-500/40 text-red-200 text-sm md:text-base lg:text-lg font-bold uppercase tracking-wider"
                 >
-                  <span className="h-2 w-2 rounded-full bg-red-400 animate-pulse" /> Live
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-400 animate-pulse" /> Live
                 </span>
               </div>
-              <p className="text-slate-300 text-sm md:text-base lg:text-lg flex items-center gap-1.5">
-                {tournament?.location && <><MapPin className="h-3 w-3 md:h-4 md:w-4" /> {tournament.location} ·</>}
+              <p className="text-slate-300 text-base md:text-lg lg:text-xl xl:text-2xl flex items-center gap-2 mt-1">
+                {tournament?.location && <><MapPin className="h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6" /> {tournament.location} ·</>}
                 {tournament?.date && new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6 md:gap-8">
             <div className="text-right">
-              <div className="text-3xl md:text-4xl lg:text-5xl font-mono font-bold text-white tabular-nums">
+              <div className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-mono font-bold text-white tabular-nums">
                 {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
-              <div className="text-slate-300 text-xs md:text-sm lg:text-base">
+              <div className="text-slate-300 text-sm md:text-base lg:text-lg xl:text-xl font-medium">
                 {stats.completed} / {stats.totalMatches} matches complete
               </div>
             </div>
@@ -393,53 +401,53 @@ export default function PublicScoreboard() {
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row md:h-[calc(100vh-180px)]">
+      <div className="flex flex-col md:flex-row md:h-[calc(100vh-200px)]">
         {/* Left Column - Current Matches (TV hero) */}
-        <div className="w-full md:w-1/2 p-4 md:p-6 border-r border-white/5 overflow-hidden">
-          <div className="flex items-center mb-6">
-            <Zap className="h-6 w-6 text-amber-400 mr-2" />
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-amber-400 uppercase tracking-wider">Now competing</h2>
+        <div className="w-full md:w-1/2 p-4 md:p-6 lg:p-8 border-r border-white/5 overflow-hidden">
+          <div className="flex items-center mb-6 md:mb-8">
+            <Zap className="h-7 w-7 md:h-8 md:w-8 lg:h-10 lg:w-10 text-amber-400 mr-3" />
+            <h2 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-amber-400 uppercase tracking-wider">Now competing</h2>
           </div>
 
           {inProgressMatches.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-300">
-              <Clock className="h-20 w-20 mb-4 opacity-50" />
-              <p className="text-2xl md:text-3xl lg:text-4xl">No matches in progress</p>
-              <p className="text-sm md:text-base lg:text-lg text-slate-300 mt-2">Stand by for the next match</p>
+              <Clock className="h-24 w-24 md:h-28 md:w-28 lg:h-32 lg:w-32 mb-6 opacity-50" />
+              <p className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-semibold">No matches in progress</p>
+              <p className="text-lg md:text-xl lg:text-2xl text-slate-400 mt-3">Stand by for the next match</p>
             </div>
           ) : (
-            <div className="space-y-3 overflow-y-auto max-h-[calc(100vh-280px)] pr-2">
+            <div className="space-y-4 md:space-y-5 overflow-y-auto max-h-[calc(100vh-320px)] pr-2">
               {inProgressMatches.map((match) => {
                 const division = getDivisionForMatch(match);
                 return (
-                  <Card key={match.id} className="overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-900 border-2 border-amber-500/40">
-                    <CardBody className="p-6">
+                  <Card key={match.id} className="overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-900 border-2 border-amber-500/40 shadow-2xl">
+                    <CardBody className="p-6 md:p-7 lg:p-8">
                       <div className="relative">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
                         <div className="relative">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="text-sm md:text-base lg:text-lg text-amber-300 font-semibold uppercase tracking-wider">
+                          <div className="flex items-center justify-between mb-5 md:mb-6">
+                            <div className="text-base md:text-lg lg:text-xl xl:text-2xl text-amber-300 font-semibold uppercase tracking-wider">
                               {division?.name} · Match #{match.matchNumber}
                             </div>
-                            <div className="flex items-center gap-1.5 text-xs md:text-sm lg:text-base text-amber-300">
-                              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" /> LIVE
+                            <div className="flex items-center gap-2 text-sm md:text-base lg:text-lg xl:text-xl text-amber-300 font-bold">
+                              <span className="h-2 w-2 md:h-2.5 md:w-2.5 rounded-full bg-amber-400 animate-pulse" /> LIVE
                             </div>
                           </div>
-                          <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
+                          <div className="grid grid-cols-[1fr_auto_1fr] gap-4 md:gap-5 lg:gap-6 items-center">
                             <div className="min-w-0">
-                              <div className="text-xl md:text-3xl lg:text-4xl font-bold tracking-tight">
+                              <div className="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold tracking-tight leading-tight">
                                 {getCompetitorName(match.competitor1)}
                               </div>
-                              <div className="text-slate-300 text-sm md:text-base lg:text-lg mt-0.5">
+                              <div className="text-slate-300 text-base md:text-lg lg:text-xl xl:text-2xl mt-1.5 md:mt-2">
                                 {getCompetitorSchool(match.competitor1) || '—'}
                               </div>
                             </div>
-                            <div className="px-2 md:px-4 text-xl md:text-2xl lg:text-3xl font-black text-slate-300 tracking-widest">VS</div>
+                            <div className="px-3 md:px-5 text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black text-slate-300 tracking-widest">VS</div>
                             <div className="min-w-0 text-right">
-                              <div className="text-xl md:text-3xl lg:text-4xl font-bold tracking-tight">
+                              <div className="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold tracking-tight leading-tight">
                                 {getCompetitorName(match.competitor2)}
                               </div>
-                              <div className="text-slate-300 text-sm md:text-base lg:text-lg mt-0.5">
+                              <div className="text-slate-300 text-base md:text-lg lg:text-xl xl:text-2xl mt-1.5 md:mt-2">
                                 {getCompetitorSchool(match.competitor2) || '—'}
                               </div>
                             </div>
@@ -454,36 +462,36 @@ export default function PublicScoreboard() {
           )}
 
           {/* Up Next Queue */}
-          <div className="mt-6">
-            <div className="flex items-center mb-3">
-              <Clock className="h-4 w-4 text-sky-400 mr-2" />
-              <h3 className="text-sm font-semibold text-sky-400 uppercase tracking-wider">Up next</h3>
+          <div className="mt-6 md:mt-8">
+            <div className="flex items-center mb-4">
+              <Clock className="h-5 w-5 md:h-6 md:w-6 text-sky-400 mr-2" />
+              <h3 className="text-base md:text-lg lg:text-xl font-semibold text-sky-400 uppercase tracking-wider">Up next</h3>
             </div>
             {readyMatches.length === 0 ? (
-              <p className="text-slate-300 text-sm">No upcoming matches</p>
+              <p className="text-slate-300 text-base md:text-lg">No upcoming matches</p>
             ) : (
-              <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                 {readyMatches.map((match, index) => {
                   const division = getDivisionForMatch(match);
                   return (
                     <div
                       key={match.id}
-                      className={`bg-slate-900/60 rounded-lg px-3 py-2 flex items-center justify-between transition-colors ${
-                        index === 0 ? 'ring-1 ring-sky-500/50 bg-sky-950/30' : ''
+                      className={`bg-slate-900/60 rounded-lg px-4 py-3 flex items-center justify-between transition-colors ${
+                        index === 0 ? 'ring-2 ring-sky-500/50 bg-sky-950/30' : ''
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-300 flex-shrink-0">
+                        <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-slate-800 flex items-center justify-center text-sm md:text-base font-bold text-slate-300 flex-shrink-0">
                           {index + 1}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-sm font-medium truncate">
+                          <div className="text-sm md:text-base lg:text-lg font-medium truncate">
                             {getCompetitorName(match.competitor1)} vs {getCompetitorName(match.competitor2)}
                           </div>
-                          <div className="text-xs text-slate-300 truncate">{division?.name}</div>
+                          <div className="text-xs md:text-sm lg:text-base text-slate-400 truncate">{division?.name}</div>
                         </div>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-slate-300 flex-shrink-0" />
+                      <ChevronRight className="h-5 w-5 md:h-6 md:w-6 text-slate-300 flex-shrink-0" />
                     </div>
                   );
                 })}
@@ -493,19 +501,19 @@ export default function PublicScoreboard() {
         </div>
 
         {/* Right Column - Recent Results & Stats */}
-        <div className="w-full md:w-1/2 p-4 md:p-6">
-          <div className="flex items-center mb-6">
-            <Award className="h-6 w-6 text-green-400 mr-2" />
-            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-green-400 uppercase tracking-wider">Recent Results</h2>
+        <div className="w-full md:w-1/2 p-4 md:p-6 lg:p-8">
+          <div className="flex items-center mb-6 md:mb-8">
+            <Award className="h-7 w-7 md:h-8 md:w-8 lg:h-10 lg:w-10 text-green-400 mr-3" />
+            <h2 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-green-400 uppercase tracking-wider">Recent Results</h2>
           </div>
 
           {recentResults.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-300">
-              <Trophy className="h-16 w-16 mb-4" />
-              <p className="text-xl">No results yet</p>
+              <Trophy className="h-20 w-20 md:h-24 md:w-24 mb-5" />
+              <p className="text-2xl md:text-3xl lg:text-4xl font-semibold">No results yet</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 md:space-y-4">
               {recentResults.map((match) => {
                 const division = getDivisionForMatch(match);
                 const winner =
@@ -518,22 +526,22 @@ export default function PublicScoreboard() {
                     : match.competitor1;
 
                 return (
-                  <Card key={match.id} className="bg-gray-900/50">
-                    <CardBody className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="text-sm text-gray-300 mb-1">{division?.name}</div>
-                          <div className="flex items-center">
-                            <Award className="h-5 w-5 text-yellow-400 mr-2" />
-                            <span className="font-bold text-green-400">
+                  <Card key={match.id} className="bg-gray-900/60 border border-gray-700/50">
+                    <CardBody className="p-4 md:p-5 lg:p-6">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm md:text-base lg:text-lg text-gray-400 mb-2">{division?.name}</div>
+                          <div className="flex items-center flex-wrap gap-2">
+                            <Award className="h-5 w-5 md:h-6 md:w-6 text-yellow-400 flex-shrink-0" />
+                            <span className="font-bold text-green-400 text-base md:text-lg lg:text-xl truncate">
                               {getCompetitorName(winner)}
                             </span>
-                            <span className="mx-2 text-gray-300">defeated</span>
-                            <span className="text-gray-300">{getCompetitorName(loser)}</span>
+                            <span className="text-gray-400 text-sm md:text-base lg:text-lg">defeated</span>
+                            <span className="text-gray-300 text-base md:text-lg lg:text-xl truncate">{getCompetitorName(loser)}</span>
                           </div>
                         </div>
                         {(match.score1 || match.score2) && (
-                          <div className="text-lg font-mono font-bold text-gray-300">
+                          <div className="text-xl md:text-2xl lg:text-3xl font-mono font-bold text-gray-300 flex-shrink-0">
                             {match.score1 || '0'} - {match.score2 || '0'}
                           </div>
                         )}
@@ -546,10 +554,10 @@ export default function PublicScoreboard() {
           )}
 
           {/* Division Summary */}
-          <div className="mt-8">
-            <div className="flex items-center mb-4">
-              <Users className="h-5 w-5 text-purple-400 mr-2" />
-              <h3 className="text-xl font-semibold text-purple-400">DIVISION STATUS</h3>
+          <div className="mt-8 md:mt-10">
+            <div className="flex items-center mb-4 md:mb-5">
+              <Users className="h-6 w-6 md:h-7 md:w-7 text-purple-400 mr-3" />
+              <h3 className="text-xl md:text-2xl lg:text-3xl font-semibold text-purple-400">DIVISION STATUS</h3>
             </div>
             {(() => {
               // Show a division row only if it has a bracket with matches.
@@ -580,7 +588,7 @@ export default function PublicScoreboard() {
                 );
               }
               return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                   {divisionsWithBrackets.map((division) => {
                     const completed =
                       division.bracket?.matches?.filter((m) => m.status === 'completed').length || 0;
@@ -593,26 +601,26 @@ export default function PublicScoreboard() {
                   return (
                     <div
                       key={division.id}
-                      className={`p-3 rounded-lg ${
+                      className={`p-4 md:p-5 rounded-xl ${
                         isActive
-                          ? 'bg-yellow-900/30 border border-yellow-500/50'
+                          ? 'bg-yellow-900/30 border-2 border-yellow-500/50 shadow-lg'
                           : isDone
-                          ? 'bg-green-900/20 border border-green-500/30'
-                          : 'bg-gray-900/50'
+                          ? 'bg-green-900/20 border-2 border-green-500/30'
+                          : 'bg-gray-900/60 border border-gray-700/40'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold text-sm truncate flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-semibold text-sm md:text-base lg:text-lg truncate flex-1">
                           {division.name}
                         </div>
-                        {isActive && <Zap className="h-4 w-4 text-yellow-400 ml-2" />}
+                        {isActive && <Zap className="h-5 w-5 md:h-6 md:w-6 text-yellow-400 flex-shrink-0" />}
                       </div>
-                      <div className="text-xs text-gray-300 mt-1">
+                      <div className="text-xs md:text-sm lg:text-base text-gray-400 mt-1.5 font-medium">
                         {completed}/{total} complete
                       </div>
-                      <div className="mt-1 h-1 bg-gray-800 rounded-full overflow-hidden">
+                      <div className="mt-2 h-1.5 md:h-2 bg-gray-800 rounded-full overflow-hidden">
                         <div
-                          className={`h-full ${isDone ? 'bg-green-500' : 'bg-blue-500'}`}
+                          className={`h-full ${isDone ? 'bg-green-500' : 'bg-blue-500'} transition-all duration-500`}
                           style={{ width: `${total > 0 ? (completed / total) * 100 : 0}%` }}
                         />
                       </div>

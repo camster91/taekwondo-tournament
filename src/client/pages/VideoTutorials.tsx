@@ -58,7 +58,6 @@ export default function VideoTutorials() {
       <PageHeader
         title="Video Tutorials"
         description="Step-by-step video guides to help you master Bowin tournament operations."
-        icon={PlayCircle}
       />
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

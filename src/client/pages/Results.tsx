@@ -599,14 +599,14 @@ export default function Results() {
                               ))}
                           </div>
                           {/* Match Videos Section (P2-9 follow-up) */}
-                          {division.bracket?.matches?.some((m: { videoUrl?: string | null }) => m.videoUrl) && (
+                          {division.bracket?.matches?.some(m => m.videoUrl) && (
                             <div className="mt-4 border-t border-gray-200 dark:border-gray-600 pt-4">
                               <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Match Videos</h4>
                               <div className="space-y-2">
                                 {division.bracket.matches
-                                  .filter((m: { videoUrl?: string | null; status: string }) => m.videoUrl && m.status === 'completed')
-                                  .sort((a: { matchNumber: number }, b: { matchNumber: number }) => a.matchNumber - b.matchNumber)
-                                  .map((match: { id: string; matchNumber: number; videoUrl: string; competitor1?: { competitor: { firstName: string; lastName: string } } | null; competitor2?: { competitor: { firstName: string; lastName: string } } | null }) => (
+                                  .filter(m => m.videoUrl && m.status === 'completed')
+                                  .sort((a, b) => a.matchNumber - b.matchNumber)
+                                  .map(match => (
                                     <div key={match.id} className="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-700/50 p-2 rounded">
                                       <span className="text-gray-700 dark:text-gray-300">
                                         Match #{match.matchNumber}
@@ -617,7 +617,7 @@ export default function Results() {
                                         )}
                                       </span>
                                       <a
-                                        href={match.videoUrl}
+                                        href={match.videoUrl ?? ''}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium"
