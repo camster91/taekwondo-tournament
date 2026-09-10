@@ -309,6 +309,16 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
     const ageAtTournament = calculateAge(dob, tournament.date);
     const isMinor = calculateAge(dob, new Date()) < 18;
 
+    // P1.1: Require parent contact for minors when guardianAttested
+    if (isMinor && guardianAttested) {
+      if (!parentName?.trim()) {
+        return res.status(400).json({ error: 'Parent/Guardian name is required for competitors under 18' });
+      }
+      if (!parentEmail?.trim()) {
+        return res.status(400).json({ error: 'Parent/Guardian email is required for competitors under 18' });
+      }
+    }
+
     const consent = buildRegistrationConsent(
       { privacyAccepted, rulesAccepted, guardianAttested },
       isMinor,

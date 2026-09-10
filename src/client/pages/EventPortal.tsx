@@ -232,7 +232,7 @@ export default function EventPortal() {
                   Register to compete in this event
                 </p>
                 <Link
-                  to={event.registerUrl}
+                  to={`/register?portal=${orgSlug}/${eventSlug}`}
                   className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:shadow-md"
                   style={{ backgroundColor: brandColor }}
                 >
