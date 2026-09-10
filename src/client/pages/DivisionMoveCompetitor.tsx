@@ -121,12 +121,24 @@ export default function DivisionMoveCompetitorModal({
   });
 
   const handleConfirm = (result: {
-    type: 'move';
+    type: 'move' | 'create' | 'merge';
     auditReason: string;
     toDivisionId?: string;
     assignmentId?: string;
+    divisionData?: {
+      name: string;
+      beltLevel: string;
+      gender: string;
+      eventType: string;
+      ageMin: number;
+      ageMax: number;
+      weightClass?: string | null;
+      tournamentId: string;
+    };
+    sourceDivisionIds?: string[];
+    targetDivisionId?: string;
   }) => {
-    if (!result.toDivisionId || !result.assignmentId) {
+    if (result.type !== 'move' || !result.toDivisionId || !result.assignmentId) {
       showToast('Invalid move parameters', 'error');
       return;
     }
