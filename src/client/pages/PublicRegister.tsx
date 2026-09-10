@@ -34,6 +34,15 @@ interface Tournament {
   brandPrimaryColor?: string | null;
   brandLogoUrl?: string | null;
   _count: { registrations: number };
+  // Capacity status (#191)
+  capacityStatus?: {
+    maxCapacity: number | null;
+    waitlistEnabled: boolean;
+    activeCount: number;
+    waitlistCount: number;
+    spotsRemaining: number | null;
+    isFull: boolean;
+  } | null;
 }
 
 interface TournamentSettings {
@@ -895,6 +904,59 @@ export default function PublicRegister() {
                       </div>
                       {selectedTournamentFeeNotes && (
                         <div className="mt-0.5 text-xs">{selectedTournamentFeeNotes}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {/* #191: Capacity status messaging (spots left / waitlist / closed) */}
+                {selectedTournament?.capacityStatus && selectedTournament.capacityStatus.maxCapacity && (
+                  <div
+                    data-testid="capacity-status"
+                    className={`mt-2 flex items-start gap-2 rounded-md border p-3 text-sm ${
+                      selectedTournament.capacityStatus.isFull
+                        ? selectedTournament.capacityStatus.waitlistEnabled
+                          ? 'border-warning-200 bg-warning/50 dark:border-warning-700 dark:bg-warning/900/30 text-warning-900 dark:text-warning-200'
+                          : 'border-danger-200 bg-danger/50 dark:border-danger-700 dark:bg-danger/900/30 text-danger-900 dark:text-danger-200'
+                        : selectedTournament.capacityStatus.spotsRemaining !== null && selectedTournament.capacityStatus.spotsRemaining <= 10
+                        ? 'border-warning-200 bg-warning/50 dark:border-warning-700 dark:bg-warning/900/30 text-warning-900 dark:text-warning-200'
+                        : 'border-info-200 bg-info/50 dark:border-info-700 dark:bg-info/900/30 text-info-900 dark:text-info-200'
+                    }`}
+                    role="status"
+                  >
+                    <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                    <div>
+                      {selectedTournament.capacityStatus.isFull ? (
+                        selectedTournament.capacityStatus.waitlistEnabled ? (
+                          <>
+                            <div className="font-semibold">Tournament at capacity</div>
+                            <div className="mt-0.5 text-xs">
+                              New registrations will be added to the waitlist ({selectedTournament.capacityStatus.waitlistCount} currently waitlisted).
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-semibold">Registration closed</div>
+                            <div className="mt-0.5 text-xs">
+                              This tournament has reached its maximum capacity ({selectedTournament.capacityStatus.maxCapacity} competitors).
+                            </div>
+                          </>
+                        )
+                      ) : selectedTournament.capacityStatus.spotsRemaining !== null && selectedTournament.capacityStatus.spotsRemaining <= 10 ? (
+                        <>
+                          <div className="font-semibold">
+                            {selectedTournament.capacityStatus.spotsRemaining} {selectedTournament.capacityStatus.spotsRemaining === 1 ? 'spot' : 'spots'} remaining
+                          </div>
+                          <div className="mt-0.5 text-xs">
+                            Register soon — capacity: {selectedTournament.capacityStatus.activeCount}/{selectedTournament.capacityStatus.maxCapacity}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-semibold">Spots available</div>
+                          <div className="mt-0.5 text-xs">
+                            {selectedTournament.capacityStatus.activeCount}/{selectedTournament.capacityStatus.maxCapacity} registered
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
