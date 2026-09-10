@@ -42,6 +42,7 @@ import {
   updateSearchParams,
 } from '../utils/url-state';
 import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner';
+import PendingOperationsPanel from '../components/PendingOperationsPanel';
 
 interface Match {
   id: string;
@@ -383,7 +384,13 @@ export default function Scorekeeper() {
           notes: data.notes,
         }),
       });
-      if (!res.ok) throw new Error('Failed to record match result');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Unknown error' }));
+        const error: any = new Error(body.error || 'Failed to record match result');
+        error.status = res.status;
+        error.isConflict = res.status === 409;
+        throw error;
+      }
       return res.json();
     },
     onSuccess: async (_result, data) => {
@@ -407,10 +414,18 @@ export default function Scorekeeper() {
       queryClient.invalidateQueries({ queryKey: ['director-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['divisions'] });
       finishResultEntry(false);
+      addToast('Result saved', 'success');
     },
-    onError: (error: Error, data) => {
+    onError: (error: any, data) => {
       if (error instanceof TypeError) {
         stageScoreResult(data, true);
+        return;
+      }
+      // 409 conflict: another scorekeeper updated first (#138 conflict detection)
+      if (error.isConflict || error.status === 409) {
+        addToast('Conflict: Another scorekeeper updated this match. Refresh before continuing.', 'error');
+        setAnnounce('Conflict: Another scorekeeper updated this match. Refresh the division to see the latest state.');
+        queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
         return;
       }
       addToast(error.message || 'Operation failed', 'error');
@@ -745,6 +760,22 @@ export default function Scorekeeper() {
     }
     if (result.persistenceFailuresAfterRejection > 0) {
       addToast('A result was rejected, but this device could not save the rejection details. It has been quarantined from retry; refresh and review it.', 'error');
+    }
+  };
+
+  const retryAllFailed = async () => {
+    const needsReview = offlineOperations.needsReview;
+    if (needsReview.length === 0) return;
+    let syncedCount = 0;
+    for (const op of needsReview) {
+      const result = await offlineOperations.retry(op.id);
+      if (result?.outcome === 'synced') {
+        syncedCount++;
+      }
+    }
+    if (syncedCount > 0) {
+      addToast(`Retried ${syncedCount} of ${needsReview.length} failed operations`, 'success');
+      await queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
     }
   };
 
