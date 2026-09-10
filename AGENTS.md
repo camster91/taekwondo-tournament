@@ -1,3 +1,7 @@
+# Ship handoff
+
+> **Read `docs/AGENT_HANDOFF.md` first** for product status, next agent track, and Cameron-gated work.
+
 # AGENTS.md
 
 See `CLAUDE.md` for the full codebase guide (architecture, routes, DB
