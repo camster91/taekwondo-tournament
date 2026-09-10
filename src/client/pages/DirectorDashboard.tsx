@@ -123,7 +123,11 @@ interface SOSAlert {
   category: string;
   title: string;
   description: string | null;
-  ring: number | null;
+  // SH-4 scope: Match.ring became a free-form string. SOSAlert's
+  // ringNumber is a separate column (see 20260909_add_video_url_
+  // and_sos_alerts) and is NOT part of the SH-4 reconciliation,
+  // so the SOSAlert client snapshot keeps the legacy field name.
+  ringNumber: number | null;
   divisionId: string | null;
   resolved: boolean;
   resolvedAt: string | null;
@@ -1206,4 +1210,6 @@ export default function DirectorDashboard() {
     </div>
   );
 }
+
+
 

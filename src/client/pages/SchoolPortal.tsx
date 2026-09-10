@@ -66,7 +66,7 @@ interface SchoolData {
       score1: string | null;
       score2: string | null;
       winnerId: string | null;
-      ring: number | null;
+      ring: string | null;
       divisionId: string;
       divisionName: string;
       competitor1Name: string | null;
@@ -82,7 +82,7 @@ interface SchoolData {
       id: string;
       matchNumber: number;
       status: string;
-      ring: number | null;
+      ring: string | null;
       divisionName: string;
     } | null;
   }>;
@@ -90,7 +90,7 @@ interface SchoolData {
     id: string;
     matchNumber: number;
     status: string;
-    ring: number | null;
+    ring: string | null;
     divisionName: string;
     competitorName: string;
     opponentName: string | null;
@@ -779,4 +779,5 @@ export default function SchoolPortal() {
     </div>
   );
 }
+
 

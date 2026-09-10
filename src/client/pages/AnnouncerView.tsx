@@ -12,7 +12,7 @@ interface Match {
   competitor2Name: string | null;
   competitor1School: string | null;
   competitor2School: string | null;
-  ring: number | null;
+  ring: string | null;
 }
 
 interface Division {
@@ -24,7 +24,7 @@ interface Division {
       id: string;
       matchNumber: number;
       status: string;
-      ring: number | null;
+      ring: string | null;
       competitor1?: {
         competitor: {
           firstName: string;
@@ -339,4 +339,5 @@ function AnnouncerView() {
 }
 
 export default AnnouncerView;
+
 
