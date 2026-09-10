@@ -489,8 +489,16 @@ router.get('/:id/qr-poster', authenticate, requireTournamentAccess('viewer'), as
       date: true,
       location: true,
       publicSlug: true,
+      eventSlug: true,
+      portalPublished: true,
       brandName: true,
       brandPrimaryColor: true,
+      organizationId: true,
+      organization: {
+        select: {
+          slug: true,
+        },
+      },
     },
   });
 
@@ -501,8 +509,23 @@ router.get('/:id/qr-poster', authenticate, requireTournamentAccess('viewer'), as
   }
 
   const publicUrl = publicAppUrlFromEnv(process.env);
-  const registrationUrl = `${publicUrl}/register/${tournament.id}`;
-  const scoreboardUrl = `${publicUrl}/display/${tournament.id}?key=${encodeURIComponent(tournament.publicSlug)}`;
+  
+  // Prefer portal URLs if event is published to portal
+  let registrationUrl: string;
+  let scoreboardUrl: string;
+  
+  if (tournament.portalPublished && tournament.eventSlug && tournament.organization?.slug) {
+    // Portal-scoped URLs (tenant-branded)
+    registrationUrl = `${publicUrl}/events/${tournament.organization.slug}/${tournament.eventSlug}`;
+    // P2.5: Scoreboard URL must point to actual scoreboard display, not EventPortal
+    scoreboardUrl = tournament.publicSlug
+      ? `${publicUrl}/display/${tournament.id}?key=${encodeURIComponent(tournament.publicSlug)}`
+      : `${publicUrl}/scoreboard/${tournament.publicSlug}`;
+  } else {
+    // Legacy UUID-based URLs (backward compatible)
+    registrationUrl = `${publicUrl}/register/${tournament.id}`;
+    scoreboardUrl = `${publicUrl}/display/${tournament.id}?key=${encodeURIComponent(tournament.publicSlug)}`;
+  }
 
   const pdfBuffer = await generateQRPoster({
     tournamentName: tournament.name,
@@ -732,9 +755,10 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
     }
     const tournamentId = getParam(req.params.id);
     const tournament = await prisma.$transaction(async (tx) => {
-      const current = settings
-        ? await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { settings: true, status: true, organizationId: true } })
-        : await tx.tournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { status: true, organizationId: true } });
+      const current = await tx.tournament.findUniqueOrThrow({
+        where: { id: tournamentId },
+        select: { settings: true, status: true, organizationId: true }
+      });
       
       const updatedTournament = await tx.tournament.update({
         where: { id: tournamentId },
@@ -743,7 +767,7 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
           date: date ? new Date(date) : undefined,
           location,
           status,
-          settings: settings ? JSON.stringify(mergeGeneralSettings(current!.settings, settings)) : undefined,
+          settings: settings ? JSON.stringify(mergeGeneralSettings(current.settings, settings)) : undefined,
         },
       });
 

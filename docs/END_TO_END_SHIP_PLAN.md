@@ -9,7 +9,8 @@
 **Latest Update:** 2026-09-10  
 **Recent Progress:**  
 - ✅ PR #238: Support diagnostics auth (#195) + public registrations visible in check-in (#187)
-- ✅ This PR: Tenant-branded event portals (#212) — canonical organizer portal URLs, event slug management, publish/unpublish controls, fail-closed security
+- ✅ PR #239: Tenant-branded event portals (#212) — canonical organizer portal URLs, event slug management, publish/unpublish controls, fail-closed security
+- ✅ This PR: Portal registration tenant-scoped operations (#213) — connect public portal registrations to org operations, fail-closed cross-tenant protection, portal-aware registration flow
 
 ---
 
