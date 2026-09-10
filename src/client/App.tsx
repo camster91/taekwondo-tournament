@@ -40,6 +40,7 @@ import CloseButton from './components/ui/CloseButton';
 import Spinner from './components/ui/Spinner';
 import { BowinLogo } from './components/brand/BowinLogo';
 import { CommandPalette, useCommandPalette } from './components/CommandPalette';
+import DemoDataDisclosure from './components/DemoDataDisclosure';
 
 // All page components are loaded lazily so the initial bundle ships
 // only the App shell + chrome. A director who only opens Scorekeeper
@@ -530,6 +531,9 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header>
+
+        {/* Demo Data Disclosure (shown only for demo accounts) */}
+        <DemoDataDisclosure />
 
         {/* Content */}
         <main id="main-content" className="flex-1 min-w-0">

@@ -1467,7 +1467,7 @@ export default function Divisions() {
           onClose={() => setMoveTarget(null)}
           assignment={moveTarget.assignment}
           currentDivision={moveTarget.division}
-          tournamentId={tournamentId as string}
+          tournamentId={id as string}
         />
       )}
     </div>
