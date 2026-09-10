@@ -16,7 +16,6 @@ import {
   getStaleBannerMessage,
 } from '../utils/scoreboard-availability';
 import { fetchJson } from '../utils/api-status';
-import { resolveParentScoreboardState } from '../utils/parent-scoreboard-state';
 
 interface Match {
   id: string;
@@ -269,22 +268,23 @@ export default function PublicScoreboard() {
         </div>
       )}
       {/* Main board — only render once we have a valid tournament. */}
-      {false && ( /* Removed - covered by unavailable state above */ 
-        <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center" role="alert">
-          <AlertCircle className="h-20 w-20 text-warning400 mb-6" aria-hidden="true" />
-          <h1 className="text-3xl font-bold mb-3">Live scoreboard unavailable</h1>
-          <p className="text-surface-300 max-w-md">{scoreboardUnavailableMessage}</p>
-          <button type="button" onClick={() => void retryScoreboard()} className="mt-5 min-h-11 rounded-lg border border-surface-500 px-4 py-2 font-semibold">Try again</button>
-        </div>
-      )}
       {scoreboardState.showMainBoard && (
       <>
       {scoreboardState.showStaleBanner && (
-        <div role="alert" className="border-b border-amber-400/40 bg-warning/400/15 px-4 py-3 text-center text-warning100">
-          <p className="font-semibold">Showing the last confirmed scoreboard</p>
-          <p className="text-sm">Live updates are temporarily unavailable. Match information below may be out of date.</p>
+        <div role="alert" className="border-b border-warning400/40 bg-warning400/15 px-4 py-3 text-center text-warning100">
+          <p className="font-semibold">{staleBanner.headline}</p>
+          <p className="text-sm">{staleBanner.detail}</p>
           {lastFetchAt && <p className="mt-1 text-xs">Last confirmed at {lastFetchAt.toLocaleTimeString()}.</p>}
-          <button type="button" onClick={() => { if (tournamentError) void retryTournament(); if (scoreboardError) void retryScoreboard(); }} className="mt-2 min-h-11 rounded-lg border border-amber-300/60 px-4 py-2 text-sm font-semibold">Try again</button>
+          <button 
+            type="button" 
+            onClick={() => { 
+              if (tournamentError) void retryTournament(); 
+              if (scoreboardError) void retryScoreboard(); 
+            }} 
+            className="mt-2 min-h-11 rounded-lg border border-warning300/60 px-4 py-2 text-sm font-semibold hover:bg-warning400/20"
+          >
+            Try again
+          </button>
         </div>
       )}
       {/* Header */}
