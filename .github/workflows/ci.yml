@@ -104,3 +104,10 @@ jobs:
         run: npx playwright test --config playwright.config.ts
         env:
           JWT_SECRET: ci-throwaway-secret-not-used-in-tests-min-32-chars-xx
+
+      - name: Fresh migration test
+        # Validates that `prisma migrate deploy` brings a fresh database to the
+        # exact current schema. This is the release gate for schema changes.
+        run: ./scripts/test-fresh-migration.sh
+        env:
+          JWT_SECRET: ci-throwaway-secret-not-used-in-tests-min-32-chars-xx

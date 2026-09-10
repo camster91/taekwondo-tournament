@@ -208,9 +208,6 @@ model Division {
   matchupQuality    Float? // Overall matchup fairness score
   avgSkillRating    Float? // Average skill rating of competitors
 
-  // Waitlist support (P2-1)
-  maxCompetitors Int? // Optional cap per division; null = no cap
-
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   assignments DivisionAssignment[]
   bracket     Bracket?
