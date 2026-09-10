@@ -38,6 +38,8 @@ import {
   Undo2,
   GripVertical,
   ArrowRight,
+  Plus,
+  Merge,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -57,6 +59,11 @@ import { StatTile } from '../components/ui';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
 import DivisionMoveCompetitorModal from './DivisionMoveCompetitor';
+import DivisionExceptionDialog, {
+  type DivisionExceptionParams,
+  type DivisionCreateParams,
+  type DivisionMergeParams,
+} from '../components/DivisionExceptionDialog';
 import {
   parseDivisionFilters,
   serializeDivisionFilters,
@@ -226,6 +233,8 @@ export default function Divisions() {
   const [resultMessage, setResultMessage] = useState<{ title: string; message: string } | null>(null);
   const [recommendationStatus, setRecommendationStatus] = useState<{ state: OperationState; message: string } | null>(null);
   const [applyRecommendationConfirm, setApplyRecommendationConfirm] = useState(false);
+  const [divisionExceptionParams, setDivisionExceptionParams] = useState<DivisionExceptionParams | null>(null);
+  const [selectedDivisionsForMerge, setSelectedDivisionsForMerge] = useState<Set<string>>(new Set());
   const { addToast } = useToast();
 
   // Sync filters to URL when they change
@@ -446,6 +455,132 @@ export default function Divisions() {
       });
     },
   });
+
+  const createDivisionMutation = useMutation({
+    mutationFn: async (divisionData: {
+      name: string;
+      beltLevel: string;
+      gender: string;
+      eventType: string;
+      ageMin: number;
+      ageMax: number;
+      weightClass?: string | null;
+      tournamentId: string;
+    }) => {
+      const res = await fetch(`/api/divisions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(divisionData),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to create division');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+      setDivisionExceptionParams(null);
+      addToast(`Created division: ${data.name}`, 'success');
+    },
+    onError: (error: Error) => {
+      addToast(error.message, 'error');
+    },
+  });
+
+  const mergeDivisionsMutation = useMutation({
+    mutationFn: async ({
+      sourceDivisionIds,
+      targetDivisionId,
+      auditReason,
+    }: {
+      sourceDivisionIds: string[];
+      targetDivisionId: string;
+      auditReason: string;
+    }) => {
+      const res = await fetch(`/api/divisions/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ sourceDivisionIds, targetDivisionId, auditReason }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        if (error.code === 'ACTIVE_BRACKETS') {
+          throw new Error(
+            `Cannot merge: ${error.warning}. ${error.suggestion || 'Clear brackets before merging.'}`
+          );
+        }
+        throw new Error(error.error || 'Failed to merge divisions');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+      setDivisionExceptionParams(null);
+      setSelectedDivisionsForMerge(new Set());
+      addToast(data.message || 'Divisions merged successfully', 'success');
+    },
+    onError: (error: Error) => {
+      addToast(error.message, 'error');
+    },
+  });
+
+  const handleDivisionExceptionConfirm = (result: {
+    type: 'move' | 'create' | 'merge';
+    auditReason: string;
+    toDivisionId?: string;
+    assignmentId?: string;
+    divisionData?: {
+      name: string;
+      beltLevel: string;
+      gender: string;
+      eventType: string;
+      ageMin: number;
+      ageMax: number;
+      weightClass?: string | null;
+      tournamentId: string;
+    };
+    sourceDivisionIds?: string[];
+    targetDivisionId?: string;
+  }) => {
+    if (result.type === 'create' && result.divisionData) {
+      createDivisionMutation.mutate(result.divisionData);
+    } else if (result.type === 'merge' && result.sourceDivisionIds && result.targetDivisionId) {
+      mergeDivisionsMutation.mutate({
+        sourceDivisionIds: result.sourceDivisionIds,
+        targetDivisionId: result.targetDivisionId,
+        auditReason: result.auditReason,
+      });
+    }
+    // Note: 'move' is handled by DivisionMoveCompetitorModal
+  };
+
+  const handleMergeSelected = () => {
+    if (!divisions || selectedDivisionsForMerge.size < 2) {
+      addToast('Select at least 2 divisions to merge', 'error');
+      return;
+    }
+
+    const sourceDivs = divisions.filter((d) => selectedDivisionsForMerge.has(d.id));
+    const availableTargets = divisions.filter((d) => !selectedDivisionsForMerge.has(d.id));
+
+    const mergeParams: DivisionMergeParams = {
+      type: 'merge',
+      sourceDivisions: sourceDivs.map((d) => ({
+        id: d.id,
+        name: d.name,
+        competitorCount: d._count.assignments,
+        hasActiveBracket: Boolean(d.bracket),
+      })),
+      availableTargets: availableTargets.map((d) => ({
+        id: d.id,
+        name: d.name,
+        hasActiveBracket: Boolean(d.bracket),
+      })),
+    };
+
+    setDivisionExceptionParams(mergeParams);
+  };
 
   // Manual assignment UI for #50 — backend endpoints exist
   // (POST /api/divisions/:id/assign, DELETE /api/divisions/:id/assign/:id),
@@ -1047,7 +1182,38 @@ export default function Divisions() {
               </Select>
             </div>
             {divisions?.length ? (
-              <div className="ml-auto">
+              <div className="ml-auto flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    // Prompt for basic division parameters for exception case
+                    const createParams: DivisionCreateParams = {
+                      type: 'create',
+                      tournamentId: id as string,
+                      suggestedName: `Manual Division ${(divisions?.length || 0) + 1}`,
+                      eventType: 'patterns',
+                      beltLevel: 'CB',
+                      gender: 'M',
+                      ageMin: 6,
+                      ageMax: 99,
+                    };
+                    setDivisionExceptionParams(createParams);
+                  }}
+                  className="text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Division
+                </Button>
+                {selectedDivisionsForMerge.size >= 2 && (
+                  <Button
+                    variant="secondary"
+                    onClick={handleMergeSelected}
+                    className="text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                  >
+                    <Merge className="h-4 w-4 mr-2" />
+                    Merge {selectedDivisionsForMerge.size} Selected
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   onClick={() => setClearConfirm(true)}
@@ -1154,6 +1320,16 @@ export default function Divisions() {
                       onManageCompetitors={() => setAssignTarget(div)}
                       onSplit={() => setSplitTarget(div)}
                       onDelete={() => setDeleteTarget(div)}
+                      isSelected={selectedDivisionsForMerge.has(div.id)}
+                      onToggleSelect={(divisionId) => {
+                        const newSelection = new Set(selectedDivisionsForMerge);
+                        if (newSelection.has(divisionId)) {
+                          newSelection.delete(divisionId);
+                        } else {
+                          newSelection.add(divisionId);
+                        }
+                        setSelectedDivisionsForMerge(newSelection);
+                      }}
                     />
                   ))}
                 </SortableContext>
@@ -1493,6 +1669,18 @@ export default function Divisions() {
           tournamentId={id as string}
         />
       )}
+
+      {/* Division Exception Dialog (Create / Merge) */}
+      <DivisionExceptionDialog
+        isOpen={!!divisionExceptionParams}
+        onClose={() => {
+          setDivisionExceptionParams(null);
+          setSelectedDivisionsForMerge(new Set());
+        }}
+        onConfirm={handleDivisionExceptionConfirm}
+        params={divisionExceptionParams}
+        isLoading={createDivisionMutation.isPending || mergeDivisionsMutation.isPending}
+      />
     </div>
     </DndContext>
   );
@@ -1654,12 +1842,16 @@ function SortableDivisionRow({
   onManageCompetitors,
   onSplit,
   onDelete,
+  isSelected,
+  onToggleSelect,
 }: {
   div: Division;
   tournamentId: string;
   onManageCompetitors: () => void;
   onSplit: () => void;
   onDelete: () => void;
+  isSelected?: boolean;
+  onToggleSelect?: (divisionId: string) => void;
 }) {
   const {
     attributes,
@@ -1680,9 +1872,18 @@ function SortableDivisionRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isDragging ? 'bg-primary-50 dark:bg-primary-900/20 shadow-lg z-10' : ''}`}
+      className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isDragging ? 'bg-primary-50 dark:bg-primary-900/20 shadow-lg z-10' : ''} ${isSelected ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500' : ''}`}
     >
       <div className="flex items-center min-w-0 flex-1">
+        {onToggleSelect && (
+          <input
+            type="checkbox"
+            checked={isSelected || false}
+            onChange={() => onToggleSelect(div.id)}
+            className="mr-3 h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+            aria-label={`Select ${div.name} for merge`}
+          />
+        )}
         <button
           {...attributes}
           {...listeners}

@@ -845,6 +845,161 @@ router.post('/:id/split', authenticate, async (req: AuthenticatedRequest, res: R
   res.json(newDivisions);
 });
 
+// Merge multiple divisions (requires authentication + admin/director role)
+router.post('/merge', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { sourceDivisionIds, targetDivisionId, auditReason } = req.body;
+
+  if (!Array.isArray(sourceDivisionIds) || sourceDivisionIds.length === 0) {
+    return res.status(400).json({ error: 'sourceDivisionIds must be a non-empty array' });
+  }
+  if (!targetDivisionId) {
+    return res.status(400).json({ error: 'targetDivisionId is required' });
+  }
+
+  // Resolve target division for tournament access check
+  const targetDivision = await prisma.division.findUnique({
+    where: { id: targetDivisionId },
+    select: {
+      id: true,
+      name: true,
+      tournamentId: true,
+      deletedAt: true,
+      bracket: {
+        select: {
+          id: true,
+          matches: {
+            where: {
+              status: { in: ['completed', 'in_progress'] },
+            },
+            select: { id: true, status: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!targetDivision || targetDivision.deletedAt) {
+    return res.status(404).json({ error: 'Target division not found' });
+  }
+
+  const access = await checkTournamentAccess(req, prisma, targetDivision.tournamentId, 'director');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+
+  // Fetch all source divisions with bracket status
+  const sourceDivisions = await prisma.division.findMany({
+    where: {
+      id: { in: sourceDivisionIds },
+      deletedAt: null,
+    },
+    include: {
+      bracket: {
+        select: {
+          id: true,
+          matches: {
+            where: {
+              status: { in: ['completed', 'in_progress'] },
+            },
+            select: { id: true, status: true },
+          },
+        },
+      },
+      assignments: {
+        select: { id: true, registrationId: true },
+      },
+    },
+  });
+
+  if (sourceDivisions.length !== sourceDivisionIds.length) {
+    return res.status(404).json({
+      error: 'One or more source divisions not found',
+      expected: sourceDivisionIds.length,
+      found: sourceDivisions.length,
+    });
+  }
+
+  // Cross-tournament check: all divisions must belong to the same tournament
+  const differentTournament = sourceDivisions.find((d) => d.tournamentId !== targetDivision.tournamentId);
+  if (differentTournament) {
+    return res.status(400).json({
+      error: 'All divisions must belong to the same tournament',
+      violatingDivisionId: differentTournament.id,
+    });
+  }
+
+  // Check if target is in the source list (can't merge a division into itself)
+  if (sourceDivisionIds.includes(targetDivisionId)) {
+    return res.status(400).json({
+      error: 'Target division cannot be in the source list',
+    });
+  }
+
+  // Check for active brackets
+  const activeBrackets = [];
+  if (targetDivision.bracket && targetDivision.bracket.matches.length > 0) {
+    activeBrackets.push({
+      divisionId: targetDivision.id,
+      divisionName: targetDivision.name,
+      matchCount: targetDivision.bracket.matches.length,
+    });
+  }
+  for (const source of sourceDivisions) {
+    if (source.bracket && source.bracket.matches.length > 0) {
+      activeBrackets.push({
+        divisionId: source.id,
+        divisionName: source.name,
+        matchCount: source.bracket.matches.length,
+      });
+    }
+  }
+
+  if (activeBrackets.length > 0) {
+    return res.status(409).json({
+      error: 'Cannot merge divisions with active brackets',
+      code: 'ACTIVE_BRACKETS',
+      activeBrackets,
+      warning: `${activeBrackets.length} division(s) have completed or in-progress matches`,
+      suggestion: 'Regenerate brackets after merge, or clear brackets before merging',
+    });
+  }
+
+  // Perform merge in a transaction
+  const result = await prisma.$transaction(async (tx) => {
+    // Move all assignments from source divisions to target
+    const movedAssignments = [];
+    for (const source of sourceDivisions) {
+      const assignments = await tx.divisionAssignment.updateMany({
+        where: { divisionId: source.id },
+        data: {
+          divisionId: targetDivisionId,
+          manualOverride: true,
+        },
+      });
+      movedAssignments.push({ sourceDivisionId: source.id, count: assignments.count });
+    }
+
+    // Delete source divisions
+    await tx.division.deleteMany({
+      where: { id: { in: sourceDivisionIds } },
+    });
+
+    return { movedAssignments };
+  });
+
+  res.json({
+    success: true,
+    targetDivisionId,
+    targetDivisionName: targetDivision.name,
+    mergedDivisions: sourceDivisions.map((d) => ({ id: d.id, name: d.name })),
+    movedAssignments: result.movedAssignments,
+    totalAssignmentsMoved: result.movedAssignments.reduce((sum, m) => sum + m.count, 0),
+    auditReason,
+    message: `Merged ${sourceDivisions.length} division(s) into ${targetDivision.name}`,
+  });
+});
+
 // Get current backup state for a tournament (requires authentication)
 router.get('/tournament/:tournamentId/backup', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
