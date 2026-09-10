@@ -12,7 +12,8 @@
 - ✅ PR #239: Tenant-branded event portals (#212) — canonical organizer portal URLs, event slug management, publish/unpublish controls, fail-closed security
 - ✅ PR #240: Portal registration tenant-scoped operations (#213) — connect public portal registrations to org operations, fail-closed cross-tenant protection, portal-aware registration flow
 - ✅ PR #241: VPS-first ops — remove hard SaaS dependencies (GlitchTip/Uptime Kuma/manual payment docs, env-gated Crisp/Sentry/Stripe)
-- 🔄 **This PR (#242)**: Tenant isolation proof & release readiness (#214) — two-org isolation matrix tests, portal health monitoring docs, migration/rollback rehearsal steps
+- ✅ PR #242: Tenant isolation proof & release readiness (#214) — two-org isolation matrix tests, portal health monitoring docs, migration/rollback rehearsal steps
+- 🔄 **This PR (#TBD)**: P0-5 database backups — fresh-DB migration proof (CI job + script), backup/restore automation with encryption, restore-drill template, destructive migration policy
 
 ---
 
@@ -75,7 +76,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P0-2 | #237 | **✅ VERIFIED: HttpOnly cookies + CSRF** | SESSION_COOKIE with httpOnly:true + double-submit CSRF protection on mutations; Bearer tokens exempt — **FULLY TESTED** (auth-csrf-protection.test.ts, 11 tests covering cookie attributes, CSRF gates, Bearer exemption) | S (verify) |
 | P0-3 | #TBD | **Uptime monitoring** | Add **Uptime Kuma** (self-hosted on Ashbi VPS) for /api/health/ready; 5xx rate alerts to email/Slack — **VPS-first: no third-party SaaS required** | S |
 | P0-4 | #TBD | **Error tracking** | Integrate **GlitchTip** (self-hosted Sentry-compatible on Ashbi VPS); capture user context, breadcrumbs — **VPS-first: no third-party SaaS required** | S |
-| P0-5 | #TBD | **Database backups** | Automate daily encrypted backups to off-host storage; test restore drill — **VPS-capable: see BACKUP-RECOVERY.md** | M |
+| P0-5 | #120 (partial) | **✅ AGENT-SHIPABLE COMPLETE: Database backups** | Fresh-DB migrate proof (CI job + script); backup/restore automation with encryption tested in ephemeral DB; restore-drill evidence template with RPO/RTO; destructive migration gate docs. **Cameron VPS install remains:** daily cron + off-host sync to S3/rsync, baseline production restore drill, rotation of `BACKUP_ENCRYPTION_KEY` env var. | M |
 | P0-6 | #232 | **✅ Privacy policy v1** | Legal.tsx published at /legal/privacy; linked from footer + public registration — **SHIPPED** in PR #232 (pending counsel approval of copy) | M (legal review) |
 | P0-7 | #232 | **✅ Terms of service v1** | Legal.tsx published at /legal/terms; linked from footer + public registration — **SHIPPED** in PR #232 (pending counsel approval of copy) | M (legal review) |
 | P0-8 | #232 | **✅ VERIFIED: Parental consent flow** | Public registration requires guardianAttested checkbox for minors (age < 18); parent email required and verified via email link with 48h TTL — **FULLY IMPLEMENTED** (ParentalConsentVerification model + service + routes in PR #232) | M |

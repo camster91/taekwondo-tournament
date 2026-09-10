@@ -65,10 +65,11 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
     exit 1
 fi
 
+# BACKUP_ENCRYPTION_KEY is optional (warn if missing)
 if [[ -z "${BACKUP_ENCRYPTION_KEY:-}" ]]; then
-    error "BACKUP_ENCRYPTION_KEY is not set"
-    error "Generate one with: openssl rand -base64 32"
-    exit 1
+    warn "BACKUP_ENCRYPTION_KEY is not set"
+    warn "Backup will be created WITHOUT encryption"
+    warn "For production use, generate a key: openssl rand -base64 32"
 fi
 
 # Create backup directory if it doesn't exist
@@ -101,7 +102,7 @@ if PGPASSWORD="${DB_PASS}" pg_dump \
     --file="${BACKUP_FILE}" \
     --verbose \
     --no-owner \
-    --no-acl; then
+    --no-acl 2>&1 | grep -v "^pg_dump:"; then
     log "Database dump completed: ${BACKUP_FILE}"
 else
     error "pg_dump failed"
@@ -112,22 +113,30 @@ fi
 BACKUP_SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
 log "Backup size: ${BACKUP_SIZE}"
 
-# Encrypt backup
-log "Encrypting backup..."
-if echo "${BACKUP_ENCRYPTION_KEY}" | gpg \
-    --batch \
-    --yes \
-    --passphrase-fd 0 \
-    --symmetric \
-    --cipher-algo AES256 \
-    --output "${ENCRYPTED_FILE}" \
-    "${BACKUP_FILE}"; then
-    log "Backup encrypted: ${ENCRYPTED_FILE}"
-    # Remove unencrypted backup
-    rm -f "${BACKUP_FILE}"
+# Encrypt backup (only if encryption key is set)
+if [[ -n "${BACKUP_ENCRYPTION_KEY}" ]]; then
+    log "Encrypting backup..."
+    if echo "${BACKUP_ENCRYPTION_KEY}" | gpg \
+        --batch \
+        --yes \
+        --passphrase-fd 0 \
+        --symmetric \
+        --cipher-algo AES256 \
+        --output "${ENCRYPTED_FILE}" \
+        "${BACKUP_FILE}"; then
+        log "Backup encrypted: ${ENCRYPTED_FILE}"
+        # Remove unencrypted backup
+        rm -f "${BACKUP_FILE}"
+    else
+        error "Encryption failed"
+        exit 3
+    fi
 else
-    error "Encryption failed"
-    exit 3
+    warn "BACKUP_ENCRYPTION_KEY not set - backup is unencrypted"
+    warn "Set BACKUP_ENCRYPTION_KEY to enable encryption"
+    # Rename to indicate unencrypted
+    mv "${BACKUP_FILE}" "${BACKUP_FILE}.UNENCRYPTED"
+    ENCRYPTED_FILE="${BACKUP_FILE}.UNENCRYPTED"
 fi
 
 # Calculate checksum
