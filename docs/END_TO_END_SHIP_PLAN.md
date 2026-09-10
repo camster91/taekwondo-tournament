@@ -6,6 +6,11 @@
 **Repository:** camster91/taekwondo-tournament  
 **Product name:** Bowin Tournament OS
 
+**Latest Update:** 2026-09-10  
+**Recent Progress:**  
+- ✅ PR #238: Support diagnostics auth (#195) + public registrations visible in check-in (#187)
+- ✅ This PR: Tenant-branded event portals (#212) — canonical organizer portal URLs, event slug management, publish/unpublish controls, fail-closed security
+
 ---
 
 ## Vision & Paid Offer
