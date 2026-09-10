@@ -47,7 +47,7 @@ Bowin is currently being prepared as an approval-based managed pilot. Taekwondo 
 | Styling | Tailwind CSS v4 |
 | Charts | Recharts |
 | PDF Export | jsPDF |
-| Deployment | Docker / Coolify |
+| Deployment | Docker + Traefik (VPS) |
 
 ## Prerequisites
 
@@ -169,21 +169,36 @@ The system accepts `.xlsm` files with competitor rosters. Expected columns:
 
 ## Deployment
 
-### Docker
+**Production deployment** is performed via `scripts/deploy-production.sh`, which executes an immutable, rollback-safe deployment to the Ashbi VPS (187.77.26.99). The script:
+
+1. Uploads a verified source archive to the VPS
+2. Builds a Docker image on-host from the immutable source
+3. Validates a private candidate container
+4. Performs a stopped-write cutover with automatic database backup
+5. Runs `prisma migrate deploy` to apply pending migrations
+6. Automatically rolls back (DB + container) if health checks fail
+
+**Reverse proxy:** Traefik on the VPS terminates TLS and routes `tkd.ashbi.ca` to the live container port.
+
+**Rollback:** Manual rollback procedure is documented in `scripts/deploy-production.sh` with < 5 minute RTO.
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for full deployment runbook and [scripts/deploy-production.sh](scripts/deploy-production.sh) for the deployment script.
+
+### Local Docker (development/testing)
 
 ```bash
-# Build image
-docker build -t tournament-app .
+# Build image locally
+docker build -t bowin-tournament .
 
-# Run container
-docker run --env-file .env.production -p 3001:3001 tournament-app
+# Run with environment file
+docker run --env-file .env -p 3001:3001 bowin-tournament
 ```
 
-### Docker Compose
+### Docker Compose (local development)
 
 ```bash
-POSTGRES_PASSWORD="replace-with-a-strong-password" \
-JWT_SECRET="replace-with-at-least-32-random-characters" \
+POSTGRES_PASSWORD="strong-password" \
+JWT_SECRET="at-least-32-random-characters" \
 docker-compose up -d
 ```
 

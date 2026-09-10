@@ -1,6 +1,8 @@
 # Production deployment
 
-The supported production topology is the full-stack Docker image plus PostgreSQL, deployed through Coolify. The Node process serves both the Vite build and `/api`; do not deploy the Vite client separately unless an explicit same-origin API gateway is configured.
+The supported production topology is the full-stack Docker image plus PostgreSQL, deployed to an Ashbi VPS (187.77.26.99) via `scripts/deploy-production.sh`. The Node process serves both the Vite build and `/api`; do not deploy the Vite client separately unless an explicit same-origin API gateway is configured.
+
+**Deployment method:** Immutable, rollback-safe manual deployment via `scripts/deploy-production.sh`. The script requires a clean worktree, uploads a verified source archive to the VPS, builds a Docker image on-host, validates a private candidate container, performs a stopped-write cutover with automatic database backup, runs `prisma migrate deploy`, and automatically rolls back if health checks fail.
 
 ## Required configuration
 
@@ -44,19 +46,39 @@ Automatic retention is deliberately disabled by default. Verify a backup and obt
 
 ## Release sequence
 
-1. Back up PostgreSQL and verify that the backup can be read.
-2. Build and test the exact commit: `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build`.
-3. Review `npm audit` and the bounded exception in `SECURITY.md`.
-4. Run `npx prisma migrate deploy` against a staging database restored from production-compatible data.
-5. Deploy the immutable image. The Docker entrypoint runs `prisma migrate deploy` before starting Node.
-6. Require `/api/health` and `/api/health/ready` to return HTTP 200 before routing traffic, then verify `/api/internal/metrics` rejects anonymous requests and succeeds with the collector token.
-7. Smoke-test admin sign-in, invitation email, tournament creation, public registration, private registration-management link, public scoreboard key rotation, check-in, scoring, and result correction.
-8. Confirm the previous image and pre-deploy database backup remain available for rollback.
+1. **Verify CI passes:** Ensure GitHub Actions CI (lint, typecheck, unit tests, E2E tests, build) passes on the commit to be deployed.
+2. **Local verification (optional but recommended):** `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` on the exact commit.
+3. **Review security advisories:** Check `npm audit` output and bounded exceptions documented in `SECURITY.md` or `docs/ADVISORY-TRACKING-*.md`.
+4. **Staging validation (recommended):** Deploy to staging VPS via `scripts/deploy-staging.sh` against a database restored from production snapshot. Run smoke tests.
+5. **Production deploy:** Execute `scripts/deploy-production.sh` from a clean worktree. The script:
+   - Uploads immutable source archive to VPS with SHA256 verification
+   - Builds Docker image on VPS
+   - Validates health checks on candidate container
+   - Performs stopped-write cutover with automatic DB backup
+   - Runs `prisma migrate deploy` to apply pending migrations
+   - Starts new live container on same port
+   - Automatically rolls back (DB + container) if health checks fail
+6. **Post-deploy verification:** The script validates `/api/health/ready` both internally and via public URL. Additionally verify:
+   - Admin sign-in works
+   - Invitation email sends
+   - Tournament creation succeeds
+   - Public registration form renders
+   - Registration-management token link works
+   - Check-in and scoring flows work
+7. **Rollback readiness:** Previous container is renamed to `taekwondo-tournament-rollback` and DB backup is at `/var/backups/taekwondo/pre-{timestamp}-{SHA}.dump`. Manual rollback procedure is documented in `scripts/deploy-production.sh` comments (< 5 minute RTO).
 
 ## Rollback
 
 Application rollback means redeploying the previous immutable image. Database rollback is restore-based because Prisma production migrations are forward-only. Never restore over the live database without first retaining a snapshot of the failed state. Validate tenant counts and a representative tournament after restoration.
 
-## GitHub and Coolify
+## GitHub CI and VPS deployment
 
-CI runs on pushes and pull requests to `main`. Production deployment is manual-only and targets the GitHub `production` environment. Configure required reviewers for that environment and store `COOLIFY_URL`, `COOLIFY_TOKEN`, `COOLIFY_APP_UUID`, and `DEPLOY_HEALTHCHECK_URL` there. A non-2xx/3xx Coolify response fails the workflow, and the workflow then polls the database-aware readiness endpoint for up to five minutes.
+**CI:** GitHub Actions runs on pushes and pull requests to `main`. Workflows include:
+- `.github/workflows/ci.yml`: lint, typecheck, unit tests, E2E tests (Playwright), build verification
+- `.github/workflows/build-and-push.yml`: multi-arch Docker image build (amd64 + arm64) and push to `ghcr.io/camster91/taekwondo-tournament`
+
+**Deployment:** Production deployment is **manual-only** via `scripts/deploy-production.sh` executed from a developer's local machine (requires SSH key for VPS). There is NO automated GitHub Actions deployment workflow. The script performs an immutable, rollback-safe deploy with automatic health-check validation.
+
+**VPS access:** Deployment requires SSH access to the Ashbi VPS (187.77.26.99) with the appropriate SSH key (`BOWIN_PRODUCTION_SSH_KEY` env var, defaults to `/c/Users/camst/.ssh/id_ed25519_hostinger`). Environment variables for the live container are preserved from the previous deployment and updated only for changed legal/consent fields.
+
+**Traefik reverse proxy:** The VPS runs Traefik for TLS termination and routing. Public URL `tkd.ashbi.ca` routes to `127.0.0.1:{LIVE_PORT}` where `{LIVE_PORT}` is the port allocated to the `taekwondo-tournament` container. Custom domain support (PR #256) requires dynamic Traefik configuration to route tenant-specific hostnames.

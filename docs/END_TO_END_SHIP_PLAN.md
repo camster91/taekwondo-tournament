@@ -305,8 +305,8 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 - [ ] **P0-1 to P0-8 complete** (auth, monitoring, backups, legal)
 - [ ] **Staging environment** deployed at `staging.bowin.io` with synthetic data
 - [ ] **Production environment** deployed at `app.bowin.io` with real DB
-- [ ] **DNS & SSL** configured (Caddy for TLS, Let's Encrypt certs)
-- [ ] **Monitoring live:** UptimeRobot pinging `/api/health/ready` every 5min; Sentry capturing errors
+- [ ] **DNS & SSL** configured (Traefik for TLS termination, Let's Encrypt certs)
+- [ ] **Monitoring live:** Uptime Kuma pinging `/api/health/ready` every 5min; GlitchTip capturing errors
 - [ ] **Backup verified:** Restore drill passed (< 5min RTO, zero data loss)
 - [ ] **Pilot invite sent** to 2 friendly organizers (existing Newton's contacts)
 - [ ] **Support SLA defined:** Cameron available by phone/Slack during event hours (6am–8pm ET)
@@ -349,13 +349,18 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 5. **Case studies:** Interview 3 pilot customers for testimonials (BD/recruiting, not blocker)
 6. **Production Bowin domain cutover** (if any): DNS/TLS for bowin.app or bowin.io
 7. **Production deploy:** VPS deploy script execution, health validation
-8. **VPS migrations:** Next production deploy must run `prisma migrate deploy` to apply: `20260910_add_tournament_templates` (org-level templates) and `20260910_add_custom_domains` (custom domain support). Demo VPS operations still pending for #164 (isolated demo hostname, DB, Traefik config, deploy-demo.sh).
+8. **VPS migrations:** Next production deploy will automatically run `prisma migrate deploy` via `scripts/deploy-production.sh` to apply:
+   - `20260910_add_tournament_templates` (org-level templates, PR #255)
+   - `20260910_add_custom_domains` (custom domain support, PR #256)
+   - `20260910_add_capacity_waitlist` (division capacity + waitlist, latest commit f63d190)
+   
+   The deploy script applies migrations during the stopped-write cutover phase and automatically rolls back if migrations or health checks fail. Demo VPS operations still pending for #164 (isolated demo hostname, DB, Traefik config, deploy-demo.sh).
 
 **✅ Already LIVE on HH VPS (2026-09-09):**
 - Uptime Kuma (status.ashbi.ca / uptime.ashbi.ca) monitoring /api/health/ready
 - GlitchTip (glitchtip.ashbi.ca) error tracking (HH client DSN live; Bowin DSN staged)
 - Daily encrypted backups (02:00 UTC → /opt/backups/bowin/, 14d retention)
-- VPS-first / PWA SaaS (Coolify stays OFF)
+- VPS-first deployment via `scripts/deploy-production.sh` (immutable, rollback-safe)
 
 **Tech debt (polish, not blockers):**
 - ~~Email template HTML design pass (magic-link, registration confirmation)~~ — ✅ **COMPLETE** (PR #247)
@@ -396,7 +401,7 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 - Uptime Kuma (status.ashbi.ca / uptime.ashbi.ca)
 - GlitchTip (glitchtip.ashbi.ca)
 - Daily backups (02:00 UTC → /opt/backups/bowin/, 14d)
-- VPS-first / PWA SaaS (Coolify OFF)
+- VPS-first deployment (Traefik reverse proxy, Docker)
 
 **Still Cameron-gated:**
 10. **Domain purchase:** Buy `bowin.io` or `bowin.app` if switching from current domain (Cameron)
@@ -419,13 +424,13 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 
 ---
 
-## Ship Gate: VPS/Coolify Verification Plan
+## Ship Gate: VPS Deployment Verification Plan
 
 **Rule:** GitHub Actions CI is NOT the ship gate. VPS production deploy must verify every release.
 
-### Actual Deploy Flow (Manual `workflow_dispatch` Only)
+### Actual Deploy Flow (Manual)
 
-**Reality check:** There is NO automated staging → production pipeline. The `.github/workflows/deploy-coolify.yml` workflow is `workflow_dispatch` only (manual trigger). Production deployment uses `scripts/deploy-production.sh` with explicit approval at action time.
+**Reality check:** There is NO automated staging → production pipeline. Production deployment uses `scripts/deploy-production.sh` executed manually from a developer's local machine with SSH access to the VPS. The script performs an immutable, rollback-safe deployment with automatic health-check validation and database backup/rollback on failure.
 
 ### Verification Steps
 
