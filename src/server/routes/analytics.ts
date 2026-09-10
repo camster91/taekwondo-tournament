@@ -1,9 +1,15 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { authenticate, requireTournamentAccess, buildTournamentAccessFilter, checkTournamentAccess } from '../middleware/auth.js';
 import type { AuthenticatedRequest } from '../middleware/auth.js';
 import { buildDashboardWhereClauses } from './analytics-validation.js';
+import {
+  AGE_BUCKETS,
+  bucketizeAgeGroups,
+  buildAgeBucketQuery,
+  type AgeBucketCounts,
+} from '../services/analytics-age-buckets.js';
 
 const router = Router();
 
@@ -79,31 +85,36 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
       _count: true,
     });
 
-    // Get age distribution (approximate using birth year)
-    const competitors = await prisma.competitor.findMany({
-      where: where.competitor,
-      select: { dateOfBirth: true },
-    });
+    // Get age distribution (HIGH #4). The previous handler
+    // did an unbounded `prisma.competitor.findMany` to pull
+    // every dateOfBirth into Node, then bucketed in JS —
+    // OOM at scale, plus a PII hot path. The replacement runs
+    // the bucketing in SQL via a parameterized query and
+    // returns just the six counts. See
+    // src/server/services/analytics-age-buckets.ts.
+    //
+    // The WHERE clause mirrors the JS bucketing's predicate
+    // exactly: soft-delete (deletedAt IS NULL) plus, when a
+    // tenant filter is in effect, the EXISTS subquery against
+    // Registration + Tournament. We use parameterized SQL
+    // throughout — no string interpolation of user input.
+    const accessPredicate = tournamentFilter
+      ? Prisma.sql`EXISTS (
+          SELECT 1 FROM "Registration" r
+          JOIN "Tournament" t ON t."id" = r."tournamentId"
+          WHERE r."competitorId" = "Competitor"."id"
+            AND t."deletedAt" IS NULL
+        )`
+      : Prisma.empty;
+    const whereSql =
+      tournamentFilter
+        ? Prisma.sql`"deletedAt" IS NULL AND ${accessPredicate}`
+        : Prisma.sql`"deletedAt" IS NULL`;
 
-    const ageGroups: Record<string, number> = {
-      '4-7': 0,
-      '8-11': 0,
-      '12-14': 0,
-      '15-17': 0,
-      '18-35': 0,
-      '36+': 0,
-    };
-
-    const now = new Date();
-    competitors.forEach((c) => {
-      const age = Math.floor((now.getTime() - new Date(c.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-      if (age >= 4 && age <= 7) ageGroups['4-7']++;
-      else if (age >= 8 && age <= 11) ageGroups['8-11']++;
-      else if (age >= 12 && age <= 14) ageGroups['12-14']++;
-      else if (age >= 15 && age <= 17) ageGroups['15-17']++;
-      else if (age >= 18 && age <= 35) ageGroups['18-35']++;
-      else if (age >= 36) ageGroups['36+']++;
-    });
+    const ageBucketRows = await prisma.$queryRaw<Array<{ bucket: string; count: bigint | number }>>(
+      buildAgeBucketQuery(whereSql),
+    );
+    const ageGroups: AgeBucketCounts = bucketizeAgeGroups(ageBucketRows);
 
     res.json({
       totals: {
@@ -129,9 +140,9 @@ router.get('/dashboard', authenticate, async (req: AuthenticatedRequest, res: Re
         status: m.status,
         count: m._count,
       })),
-      ageDistribution: Object.entries(ageGroups).map(([range, count]) => ({
+      ageDistribution: AGE_BUCKETS.map((range) => ({
         range,
-        count,
+        count: ageGroups[range],
       })),
     });
   } catch (error) {
