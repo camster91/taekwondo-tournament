@@ -9,7 +9,7 @@
 
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import rateLimit from 'express-rate-limit';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { normalizeBelt } from '../../shared/constants/belts.js';
@@ -437,7 +437,16 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
       return res.status(400).json({ error: 'Competitors must be at least 4 years old' });
     }
 
-    // Check for existing competitor (case-insensitive)
+    // SH-5: Resolve-or-create the Competitor atomically. The previous
+    // findFirst + create pair was a TOCTOU — a same-second double-submit
+    // could both miss the findFirst, then both inserts succeeded and
+    // the auto-categorization engine put the same person in two
+    // divisions. The @@unique([firstName, lastName, dateOfBirth]) on
+    // Competitor (migration 20260910_competitor_unique_sh5) is the
+    // source of truth. The case-insensitive findFirst still runs first
+    // to reuse a row that was previously stored with different casing
+    // (closes B7); the unique index just guarantees the race resolves
+    // to 409 instead of a duplicate row.
     let competitor = await prisma.competitor.findFirst({
       where: {
         firstName: { equals: firstName.trim(), mode: 'insensitive' },
@@ -446,24 +455,38 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
       },
     });
 
-    if (competitor) {
-      // Existing competitor found — reuse
-    } else {
-      // Create new competitor
-      competitor = await prisma.competitor.create({
-        data: {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          gender,
-          dateOfBirth: dob,
-          belt: normalizedBelt,
-          danRank: normalizedBelt === 'Black' ? (danRank || 1) : null,
-          heightInches: heightInches || null,
-          weightLbs: weightLbs || null,
-          schoolDojang: schoolDojang?.trim() || null,
-          specialNeeds: specialNeeds?.trim() || null,
-        },
-      });
+    if (!competitor) {
+      try {
+        competitor = await prisma.competitor.create({
+          data: {
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            gender,
+            dateOfBirth: dob,
+            belt: normalizedBelt,
+            danRank: normalizedBelt === 'Black' ? (danRank || 1) : null,
+            heightInches: heightInches || null,
+            weightLbs: weightLbs || null,
+            schoolDojang: schoolDojang?.trim() || null,
+            specialNeeds: specialNeeds?.trim() || null,
+          },
+        });
+      } catch (error) {
+        // P2002: a concurrent request inserted the same
+        // (firstName, lastName, dateOfBirth) between our findFirst
+        // and create. The user-visible effect is "already registered"
+        // — the form was double-submitted and the competitor and
+        // (likely) the registration already exist on the winner's
+        // transaction. Surface a clear 409 so the client can refresh
+        // to see the existing registration.
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          return res.status(409).json({
+            error: 'Already registered',
+            message: `${firstName} ${lastName} is already registered. Please refresh to see your registration.`,
+          });
+        }
+        throw error;
+      }
     }
 
     // Check for existing registration
@@ -577,7 +600,36 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
 
           checkoutUrl = session.url ?? undefined;
         } catch (error) {
+          // SH-5: Stripe checkout session creation failed. The
+          // previous behavior silently swallowed the error and
+          // returned 201 with checkoutUrl undefined — the user
+          // was left with a `pending` registration and no recovery
+          // path. Mark the registration as `failed` (a value the
+          // schema already supports) so staff can see it on the
+          // registration list and manually mark paid/waived, and
+          // surface a 502 so the client can show a clear message
+          // instead of pretending the registration was successful.
           console.error('[portal/register] Failed to create checkout session:', error);
+          try {
+            await prisma.registration.update({
+              where: { id: registration.id },
+              data: { paymentStatus: 'failed' },
+            });
+          } catch (cleanupError) {
+            // If even the failure-mark fails, log loudly — the row
+            // is now stuck in `pending` and ops needs to know.
+            console.error(
+              '[portal/register] Failed to mark registration paymentStatus=failed after Stripe error:',
+              cleanupError,
+            );
+          }
+          return res.status(502).json({
+            error: 'Payment system unavailable',
+            message:
+              'Your registration was saved, but we could not set up payment. Please contact the tournament organizer to complete payment, or try again later.',
+            registrationId: registration.id,
+            paymentStatus: 'failed',
+          });
         }
       }
     }

@@ -40,6 +40,20 @@ model Competitor {
   competitorHistory CompetitorHistory[]
   ratings           CompetitorRating[]
 
+  // SH-5: Uniqueness invariant on (firstName, lastName, dateOfBirth).
+  // Closes the TOCTOU + non-atomic race in /api/public/register
+  // and the portal register handler — a same-second double-submit
+  // previously created duplicate Competitor rows because the
+  // findFirst + create pair wasn't atomic. The unique constraint
+  // is the source of truth; route handlers catch P2002 and return
+  // 409 with "already registered" so the user gets a clear answer
+  // and can refresh to see their existing registration.
+  // Note: Competitor is a persistent registry (no tournamentId);
+  // case sensitivity follows PostgreSQL defaults, matching the
+  // existing case-sensitive `create` payload. The route still
+  // does a case-insensitive findFirst to reuse an existing row
+  // regardless of how the name was previously stored.
+  @@unique([firstName, lastName, dateOfBirth])
   @@index([lastName, firstName])
   @@index([schoolDojang])
   @@index([region])
