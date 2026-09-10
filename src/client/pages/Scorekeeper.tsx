@@ -919,8 +919,9 @@ export default function Scorekeeper() {
           </div>
 
           {isLoading ? (
-            <div className="text-center py-12">
-              <Spinner size="lg" label="Loading divisions" />
+            <div className="text-center py-12" role="status" aria-live="polite">
+              <Spinner size="lg" />
+              <span className="sr-only">Loading divisions</span>
             </div>
           ) : divisionsError ? (
             <OperationStatus
