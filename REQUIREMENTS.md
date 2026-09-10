@@ -12,7 +12,7 @@ This document outlines the features, improvements, and enhancements needed for t
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Testing Framework | ✅ Done | Vitest with 69 unit tests |
+| Testing Framework | ✅ Done | Vitest — **1,284 tests** across 156 files (1,192 passing, 13 failing, 79 skipped) as of 2026-09-10. See `package.json` `test` script; run with `npm test`. |
 | Authentication Backend | ✅ Done | JWT auth, roles, middleware |
 | PDF Export | ✅ Done | Single, batch, results PDFs |
 | Match Advancement | ✅ Done | Full double-elimination logic |
@@ -468,7 +468,7 @@ Complete these to run a tournament:
 ## Technical Notes
 
 ### Recently Completed
-- Vitest testing framework (69 tests passing)
+- Vitest testing framework (**1,284 tests** across 156 files — 1,192 passing, 13 failing, 79 skipped, as of 2026-09-10; count drifts as the suite grows — re-run `npm test` for the current number)
 - JWT authentication with roles
 - Match advancement service
 - PDF export (jsPDF)
