@@ -10,6 +10,7 @@
 **Recent Progress:**  
 - ✅ PR #282: Ship-plan sync + measured bundle budgets (#65)
 - ✅ PR #283: Artifact publishing and deployment fail-closed hardening (#119 agent slice)
+- ✅ PR #284: Staff invitation lifecycle automated coverage (#46 agent slice) — 29 comprehensive lifecycle tests (invitation send/resend/cancel/verify/accept, duplicate detection, expiry handling, role validation, rate limiting) with email delivery stubbed; staff-invitation-recovery.md operational guide; leftover: live Mailgun delivery verification (Cameron)
 - ✅ PR #238: Support diagnostics auth (#195) + public registrations visible in check-in (#187)
 - ✅ PR #239: Tenant-branded event portals (#212) — canonical organizer portal URLs, event slug management, publish/unpublish controls, fail-closed security
 - ✅ PR #240: Portal registration tenant-scoped operations (#213) — connect public portal registrations to org operations, fail-closed cross-tenant protection, portal-aware registration flow
@@ -104,7 +105,20 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 **Overall estimated completion:** ~95% (custom domains API+UI complete #256/#257, live schedule delay propagation #125/#259 complete; day-of operations ~97%; UX Wave 0 trust items #135/#140/#141/#134/#136/#146 complete; day-of trust batch #138 complete, #139 partially complete — check-in weight override shipped, full division move/merge workflow deferred; design token migration #150 COMPLETE across all pages #271/#272/#273; API contracts Phase 1 + Phase 2 #130/#277/#279 complete; a11y Slice 1 #278 + Slice 2 #281 complete)  
 **Blocker count:** 3 critical items (Cameron Stripe dashboard setup for self-service billing, legal counsel final approval, production deploy execution with demo video/case studies for marketing)
 
-**Next Agent Track:** After PR #283 (#119 agent slice complete), prefer P1 agent-shippable work NOT Cameron-gated. Candidates: #46 automated invitation lifecycle coverage (no live Mailgun required); #15 release-records docs (supersede stale PR #178); #63 compose host-port hardening (supersede stale PR #181). **Explicitly out of scope**: #128 Slice 3+ physical venue/SR sign-off + every browser×AT combo (Cameron/waiver path via docs/DEVICE-ACCESSIBILITY-ACCEPTANCE.md); API contracts Phase 3 runtime validation (deferred pending perf benchmarking); #192 ring staffing; SSO; #148 notifications; agency BD; Cameron Stripe/counsel/videos/demo VPS/production deploy execution.
+**Next Agent Track:** After PR #284 (#46 agent slice complete), prefer P1 agent-shippable work NOT Cameron-gated. Candidates: #15 release-records docs (supersede stale PR #178); #63 compose host-port hardening (supersede stale PR #181). **Explicitly out of scope**: #128 Slice 3+ physical venue/SR sign-off + every browser×AT combo (Cameron/waiver path via docs/DEVICE-ACCESSIBILITY-ACCEPTANCE.md); API contracts Phase 3 runtime validation (deferred pending perf benchmarking); #192 ring staffing; SSO; #148 notifications; agency BD; Cameron Stripe/counsel/videos/demo VPS/production deploy execution.
+
+**#46 Status (Staff invitation and account lifecycle verification):**
+- ✅ **Agent-shippable slice COMPLETE** (PR #284):
+  - 29 automated lifecycle tests covering invitation create/resend/cancel/verify/accept, duplicate email detection (case-insensitive), expiry handling (72h TTL), role validation, rate limiting
+  - Email delivery stubbed — tests pass without Mailgun credentials
+  - Fail-closed behavior verified: expired/cancelled tokens rejected, duplicate emails blocked, role changes invalidate sessions
+  - Recovery documentation: `docs/staff-invitation-recovery.md` with 6 failure scenarios, operational commands, schema reference, monitoring alerts
+  - Deterministic lifecycle paths: invitation states (pending/accepted/expired), token hash storage, tokenVersion bump on role change
+- ⏸️ **Cameron-gated remaining items** (live verification, NOT code):
+  - Live Mailgun delivery verification (send test invitation to real email, verify SPF/DKIM headers, test bounce/spam handling)
+  - Email template audit in multiple clients (Gmail, Outlook, Apple Mail, mobile)
+  - Monitoring dashboard for invitation metrics (accept-to-invite ratio, delivery failure rate)
+  - SSO integration (Google Workspace, Microsoft Entra ID, SAML 2.0) — future, not in #46 scope
 
 **#119 Status (Make artifact publishing and production deployment fail closed):**
 - ✅ **Agent-shippable slice COMPLETE** (PR #283):
