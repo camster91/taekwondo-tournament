@@ -26,6 +26,8 @@
 - ✅ PR #255: Org-level tournament templates — reusable tournament setup templates (settings, rules, weight classes, sport defaults) scoped to organization; create tournaments from templates; fail-closed tenant isolation; **migration prisma/migrations/20260910_add_tournament_templates requires `prisma migrate deploy` on next VPS deploy**
 - ✅ PR #256: Custom domain support for organizer-branded public portals — attach/verify/activate/revoke custom hostnames for org-branded event registration and scoreboard pages; DNS TXT/CNAME verification flow; host-based routing with fail-closed cross-tenant protection; abuse prevention (reject Bowin-owned domains, prevent squatting); audit logging; operator DNS + TLS/Traefik documentation; **API-complete, UI follows in next PR**
 - ✅ PR #257: Custom domain UI + ship-plan sync post-#256 — organizer Custom Domain management UI in OrganizationSettings, wired to existing custom-domains API (list, attach, verify, activate, disable, revoke); fail-closed messaging for errors; **Branding Key Gap custom domains now API+UI complete**
+- ✅ PR #258: Demo isolation Phase 1 hardening + ship-plan sync post-#257 — isolated public demo (agent work complete; Cameron/VPS ops remain: demo hostname, isolated DB, Traefik, deploy-demo.sh)
+- ✅ PR #259: Live schedule delay propagation (#125) — director records ring/division delay with preview + confirmation; deterministic propagation preserves completed/in-progress matches; conflict detection; audit trail + undo; unit tests for propagation logic, multi-ring, end-of-day boundaries
 
 ---
 
@@ -60,7 +62,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Registration (public) | 100% | 🟢 Strong | Self-serve form, waitlist, payment gateway, confirmation emails, token security complete |
 | Divisions & categorization | 95% | 🟢 Strong | Auto-generation, manual override UX, merge conflicts UI (amber warning banner) complete |
 | Brackets | 90% | 🟢 Strong | DE generation, real-time collab, print layout complete; QR poster service exists |
-| Day-of operations | 90% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view (TV-optimized with larger fonts and ring badges) complete; offline mode, ring sync shipped |
+| Day-of operations | 95% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view (TV-optimized with larger fonts and ring badges), live schedule delay propagation (#125) complete; offline mode, ring sync shipped |
 | Scoring & results | 90% | 🟢 Strong | Match scoring, audit trail, undo/redo UI, video review integration (labeled, with help text) complete |
 | Public display | 90% | 🟢 Strong | Public scoreboard by slug complete; auto-refresh config shipped; TV-optimized layout polish complete (4K-safe fonts, improved contrast, better spacing); QR poster service exists |
 | **Non-product** | | | |
@@ -71,7 +73,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Support & docs | 70% | 🟢 Strong | In-app tour complete; help center v1 shipped; video tutorial structure ready (awaiting Cameron recordings); first-party support tickets working |
 | Marketing & onboarding | 70% | 🟢 Strong | Landing page drafted; onboarding checklist shipped; needs case studies, demo video (Cameron-gated) |
 
-**Overall estimated completion:** ~91% (custom domains API+UI complete #256/#257)  
+**Overall estimated completion:** ~92% (custom domains API+UI complete #256/#257, live schedule delay propagation #125 complete)  
 **Blocker count:** 3 critical items (Cameron Stripe dashboard setup for self-service billing, legal counsel final approval, production deploy execution with demo video/case studies for marketing)
 
 ---

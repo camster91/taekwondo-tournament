@@ -9,6 +9,7 @@ import {
   RefreshCw,
   AlertTriangle,
   Monitor,
+  AlertCircle,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
@@ -91,6 +92,34 @@ interface ScheduleConditions {
 
 interface TournamentIncident { id: string; type: string; severity: string; actionTaken: string | null; deletedAt: string | null }
 
+interface ScheduleDelayPreview {
+  before: any;
+  after: any;
+  impact: {
+    affectedDivisionIds: string[];
+    affectedDivisionNames: string[];
+    divisionMoves: Array<{
+      divisionId: string;
+      divisionName: string;
+      oldStartTime: string;
+      newStartTime: string;
+      oldEndTime: string;
+      newEndTime: string;
+      ring: number;
+    }>;
+    warnings: string[];
+    endTimeOverruns: string[];
+    conflicts: Array<{
+      type: string;
+      description: string;
+      divisionIds: string[];
+    }>;
+  };
+  expectedUpdatedAt: string;
+  expectedInputVersion: string;
+  operationKey: string;
+}
+
 export default function Schedule() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -129,6 +158,14 @@ export default function Schedule() {
   const [ringDelays, setRingDelays] = useState<Record<number, string>>({});
   const [incidentRings, setIncidentRings] = useState<Record<string, string>>({});
   const [conditionsHydratedForId, setConditionsHydratedForId] = useState<string | null>(null);
+  const [delayModalOpen, setDelayModalOpen] = useState(false);
+  const [delayType, setDelayType] = useState<'ring' | 'division'>('ring');
+  const [delayRing, setDelayRing] = useState<number>(1);
+  const [delayDivisionId, setDelayDivisionId] = useState<string>('');
+  const [delayMinutes, setDelayMinutes] = useState<number>(15);
+  const [delayReason, setDelayReason] = useState<string>('');
+  const [delayPreview, setDelayPreview] = useState<ScheduleDelayPreview | null>(null);
+  const [delayConfirmOpen, setDelayConfirmOpen] = useState(false);
 
   const { data: scheduleConditions, isLoading: conditionsLoading, isError: scheduleConditionsError, refetch: refetchConditions } = useQuery<ScheduleConditions>({
     queryKey: ['schedule-conditions', id], enabled: Boolean(id), retry: false,
@@ -349,6 +386,67 @@ export default function Schedule() {
     onError: (error) => setOperationError(error instanceof Error ? error.message : 'Could not check schedule operation status'),
   });
 
+  const delayPreviewMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/tournaments/${id}/schedule/delay/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          delayType,
+          ringNumber: delayType === 'ring' ? delayRing : undefined,
+          divisionId: delayType === 'division' ? delayDivisionId : undefined,
+          delayMinutes,
+          reason: delayReason,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to preview delay');
+      }
+      return res.json() as Promise<ScheduleDelayPreview>;
+    },
+    onSuccess: (preview) => {
+      setDelayPreview(preview);
+      setDelayModalOpen(false);
+      setDelayConfirmOpen(true);
+    },
+    onError: (error) => setOperationError(error instanceof Error ? error.message : 'Failed to preview delay'),
+  });
+
+  const delayApplyMutation = useMutation({
+    mutationFn: async (preview: ScheduleDelayPreview) => {
+      const res = await fetch(`/api/tournaments/${id}/schedule/delay/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          delayInput: {
+            delayType,
+            ringNumber: delayType === 'ring' ? delayRing : undefined,
+            divisionId: delayType === 'division' ? delayDivisionId : undefined,
+            delayMinutes,
+            reason: delayReason,
+          },
+          expectedUpdatedAt: preview.expectedUpdatedAt,
+          expectedInputVersion: preview.expectedInputVersion,
+          operationKey: preview.operationKey,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to apply delay');
+      }
+      return res.json();
+    },
+    onSuccess: async (result) => {
+      await refetch();
+      setDelayPreview(null);
+      setDelayConfirmOpen(false);
+      setLastAuditId(result.auditId);
+      setOperationError(null);
+    },
+    onError: (error) => setOperationError(error instanceof Error ? error.message : 'Failed to apply delay'),
+  });
+
   useEffect(() => {
     if (schedule?.config && !preview) setConfig(schedule.config);
   }, [preview, schedule?.config]);
@@ -523,6 +621,15 @@ export default function Schedule() {
             >
               <Clock className="h-4 w-4 mr-2" aria-hidden="true" />
               <span className="hidden sm:inline">Optimize live</span>
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setDelayModalOpen(true)}
+              disabled={scheduleBusy || !schedule?.schedule.length}
+              aria-label="Record schedule delay"
+            >
+              <AlertCircle className="h-4 w-4 mr-2" aria-hidden="true" />
+              <span className="hidden sm:inline">Record Delay</span>
             </Button>
             <Button
               variant="primary"
@@ -994,6 +1101,183 @@ export default function Schedule() {
           </div>
         )}
       </Modal>
+
+      {/* Delay Recording Modal */}
+      <Modal
+        isOpen={delayModalOpen}
+        onClose={() => { if (!delayPreviewMutation.isPending) setDelayModalOpen(false); }}
+        closeDisabled={delayPreviewMutation.isPending}
+        title="Record Schedule Delay"
+        subtitle="Preview the impact before confirming propagation"
+        size="md"
+        footer={
+          <div className="flex w-full justify-end gap-3">
+            <Button variant="secondary" onClick={() => setDelayModalOpen(false)} disabled={delayPreviewMutation.isPending}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={delayPreviewMutation.isPending}
+              onClick={() => delayPreviewMutation.mutate()}
+              disabled={!delayReason.trim() || (delayType === 'division' && !delayDivisionId)}
+            >
+              Preview Impact
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="delay-type">Delay Type</Label>
+            <Select
+              id="delay-type"
+              value={delayType}
+              onChange={(e) => setDelayType(e.target.value as 'ring' | 'division')}
+            >
+              <option value="ring">Ring Delay</option>
+              <option value="division">Division-Specific Delay</option>
+            </Select>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              {delayType === 'ring'
+                ? 'Delays all pending divisions in the selected ring'
+                : 'Delays a specific division and downstream divisions'}
+            </p>
+          </div>
+
+          {delayType === 'ring' ? (
+            <div>
+              <Label htmlFor="delay-ring">Ring Number</Label>
+              <Input
+                id="delay-ring"
+                type="number"
+                min={1}
+                max={schedule?.config.ringCount || 10}
+                value={delayRing}
+                onChange={(e) => setDelayRing(Number(e.target.value))}
+              />
+            </div>
+          ) : (
+            <div>
+              <Label htmlFor="delay-division">Division</Label>
+              <Select
+                id="delay-division"
+                value={delayDivisionId}
+                onChange={(e) => setDelayDivisionId(e.target.value)}
+              >
+                <option value="">Select a division...</option>
+                {schedule?.schedule.map((div) => (
+                  <option key={div.divisionId} value={div.divisionId}>
+                    {div.divisionName} - Ring {div.ring} @ {div.startTime}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+
+          <div>
+            <Label htmlFor="delay-minutes">Delay (minutes)</Label>
+            <Input
+              id="delay-minutes"
+              type="number"
+              min={1}
+              max={480}
+              value={delayMinutes}
+              onChange={(e) => setDelayMinutes(Number(e.target.value))}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="delay-reason">Reason</Label>
+            <Input
+              id="delay-reason"
+              type="text"
+              placeholder="e.g., Equipment issue, longer matches than expected"
+              value={delayReason}
+              onChange={(e) => setDelayReason(e.target.value)}
+              maxLength={500}
+            />
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              Provide a brief explanation for the delay (for audit trail)
+            </p>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delay Confirmation Modal */}
+      <ConfirmDialog
+        isOpen={delayConfirmOpen}
+        onClose={() => { if (!delayApplyMutation.isPending) { setDelayConfirmOpen(false); setDelayPreview(null); } }}
+        closeDisabled={delayApplyMutation.isPending}
+        isLoading={delayApplyMutation.isPending}
+        title="Confirm Schedule Delay"
+        confirmText={`Apply ${delayMinutes}-minute delay`}
+        variant="warning"
+        message={
+          delayPreview ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">Affected Divisions</p>
+                  <p className="text-xl font-semibold">{delayPreview.impact.affectedDivisionIds.length}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">Delay</p>
+                  <p className="text-xl font-semibold">{delayMinutes} min</p>
+                </div>
+              </div>
+
+              {delayPreview.impact.divisionMoves.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-sm text-gray-900 dark:text-white mb-2">
+                    Time Changes
+                  </h4>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {delayPreview.impact.divisionMoves.map((move) => (
+                      <div
+                        key={move.divisionId}
+                        className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded px-2 py-1"
+                      >
+                        <span className="font-medium">{move.divisionName}</span> (Ring {move.ring})
+                        <br />
+                        <span className="text-gray-600 dark:text-gray-400">
+                          {move.oldStartTime}-{move.oldEndTime} → {move.newStartTime}-{move.newEndTime}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {delayPreview.impact.warnings.length > 0 && (
+                <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                  <p className="font-semibold mb-2">Warnings</p>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {delayPreview.impact.warnings.map((warning, i) => (
+                      <li key={i}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {delayPreview.impact.conflicts.length > 0 && (
+                <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/30 dark:text-red-100">
+                  <p className="font-semibold mb-2">Conflicts Detected</p>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {delayPreview.impact.conflicts.map((conflict, i) => (
+                      <li key={i}>{conflict.description}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                This delay will be recorded in the audit trail and can be undone if no further schedule changes occur.
+              </p>
+            </div>
+          ) : (
+            ''
+          )
+        }
+        onConfirm={() => delayPreview && delayApplyMutation.mutate(delayPreview)}
+      />
     </div>
   );
 }
