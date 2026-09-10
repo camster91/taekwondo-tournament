@@ -88,7 +88,7 @@ export async function getTournamentCapacityStatus(
   ]);
 
   const hasCapacityLimit = tournament.maxCapacity != null && tournament.maxCapacity > 0;
-  const spotsRemaining = hasCapacityLimit
+  const spotsRemaining = hasCapacityLimit && tournament.maxCapacity != null
     ? Math.max(0, tournament.maxCapacity - activeCount)
     : null;
   const isFull = hasCapacityLimit && spotsRemaining === 0;
