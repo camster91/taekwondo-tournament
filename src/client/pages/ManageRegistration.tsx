@@ -7,9 +7,9 @@
 //   - update weight / specialNeeds / competeWithOlder
 //   - withdraw the registration entirely (kid is sick, etc.)
 //
-// This closes H1 from the UI audit — the #1 missing feature.
+// This closes H1 from the UI audit - the #1 missing feature.
 // Backend at /api/public/registrations/:code (GET/PATCH/DELETE).
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -57,6 +57,7 @@ export default function ManageRegistration() {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [registration, setRegistration] = useState<ManageRegistration | null>(null);
+  const lookupErrorRef = useRef<HTMLDivElement>(null);
 
   // Step 2: edit form
   const [editMode, setEditMode] = useState(false);
@@ -75,6 +76,12 @@ export default function ManageRegistration() {
     }
   // Run once for the tokenized link; lookupRegistration updates these states.
   }, [managementToken]);
+
+  useEffect(() => {
+    if (lookupError) {
+      lookupErrorRef.current?.focus();
+    }
+  }, [lookupError]);
 
   const lookupRegistration = async () => {
     if (!managementToken) {
@@ -541,7 +548,10 @@ export default function ManageRegistration() {
             <form onSubmit={handleLookup} className="space-y-4" aria-describedby={lookupError ? 'lookup-error' : undefined}>
               {lookupError && (
                 <div
+                  ref={lookupErrorRef}
+                  id="lookup-error"
                   role="alert"
+                  tabIndex={-1}
                   className="p-3 rounded-md bg-danger/10 dark:bg-danger/20 border border-danger/30 dark:border-danger/50 text-sm text-danger dark:text-danger flex items-start gap-2"
                 >
                   <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />

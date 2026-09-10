@@ -1695,32 +1695,14 @@ export default function Scorekeeper() {
       {showKeyboardHelp && (
         <div
           className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
-          onKeyDown={(e) => {
-            if (e.key === 'Tab') {
-              const focusables = (e.currentTarget as HTMLDivElement).querySelectorAll<HTMLElement>(
-                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-              );
-              if (focusables.length === 0) return;
-              const first = focusables[0];
-              const last = focusables[focusables.length - 1];
-              if (e.shiftKey && document.activeElement === first) {
-                e.preventDefault();
-                last.focus();
-              } else if (!e.shiftKey && document.activeElement === last) {
-                e.preventDefault();
-                first.focus();
-              }
-            }
-          }}
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="keyboard-help-title"
+          <AccessibleDialog
+            label="Keyboard shortcuts"
+            onClose={() => setShowKeyboardHelp(false)}
             className="bg-gray-800 rounded-xl p-6 max-w-md w-full"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 id="keyboard-help-title" className="text-xl font-bold flex items-center">
+              <h3 className="text-xl font-bold flex items-center">
                 <Keyboard className="h-5 w-5 mr-2" aria-hidden="true" /> Keyboard Shortcuts
               </h3>
               <CloseButton
@@ -1781,7 +1763,7 @@ export default function Scorekeeper() {
             <Button variant="secondary" className="w-full mt-4" onClick={() => setShowKeyboardHelp(false)}>
               Close
             </Button>
-          </div>
+          </AccessibleDialog>
         </div>
       )}
 

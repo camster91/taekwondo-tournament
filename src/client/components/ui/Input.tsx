@@ -2,11 +2,9 @@ import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string;
-  /** Class on the inner <input>. Use to override padding/typography (e.g. icon-prefixed searches). */
+  errorId?: string;
   inputClassName?: string;
-  /** Optional icon rendered inside a left-padded wrapper (auto-adjusts input padding). */
   leftIcon?: ReactNode;
-  /** Optional icon rendered inside a right-padded wrapper. */
   rightIcon?: ReactNode;
 }
 
@@ -14,6 +12,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
   (
     {
       error,
+      errorId,
       className = '',
       inputClassName = '',
       leftIcon,
@@ -23,7 +22,6 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     ref,
   ) => {
     const inputClasses = [
-      /* 44px on every viewport: consistent alignment and a mobile-safe target. */
       'w-full h-11 px-3 rounded-lg border border-surface-200 dark:border-surface-700',
       'bg-white dark:bg-surface-900',
       'text-sm text-surface-900 dark:text-surface-100',
@@ -39,11 +37,16 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       .filter(Boolean)
       .join(' ');
 
+    const ariaInvalid = error ? true : props['aria-invalid'];
+    const ariaDescribedBy = errorId && error ? errorId : props['aria-describedby'];
+
     if (!leftIcon && !rightIcon) {
       return (
         <input
           ref={ref}
           className={[inputClasses, className].filter(Boolean).join(' ')}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedBy}
           {...props}
         />
       );
@@ -59,6 +62,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         <input
           ref={ref}
           className={inputClasses}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedBy}
           {...props}
         />
         {rightIcon && (

@@ -2,10 +2,13 @@ import { forwardRef, type TextareaHTMLAttributes } from 'react';
 
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   error?: string;
+  errorId?: string;
 }
 
 const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ error, className = '', ...props }, ref) => {
+  ({ error, errorId, className = '', ...props }, ref) => {
+    const ariaInvalid = error ? true : props['aria-invalid'];
+    const ariaDescribedBy = errorId && error ? errorId : props['aria-describedby'];
     return (
       <textarea
         ref={ref}
@@ -21,6 +24,8 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         ]
           .filter(Boolean)
           .join(' ')}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
         {...props}
       />
     );

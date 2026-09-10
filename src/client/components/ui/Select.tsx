@@ -3,16 +3,18 @@ import { ChevronDown } from 'lucide-react';
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   error?: string;
+  errorId?: string;
 }
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ error, className = '', children, ...props }, ref) => {
+  ({ error, errorId, className = '', children, ...props }, ref) => {
+    const ariaInvalid = error ? true : props['aria-invalid'];
+    const ariaDescribedBy = errorId && error ? errorId : props['aria-describedby'];
     return (
       <div className="relative">
         <select
           ref={ref}
           className={[
-            /* 44px on every viewport: consistent alignment and a mobile-safe target. */
             'h-11 px-3 pr-10 rounded-lg border border-surface-200 dark:border-surface-700',
             'bg-white dark:bg-surface-900',
             'text-sm text-surface-900 dark:text-surface-100',
@@ -23,6 +25,8 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ]
             .filter(Boolean)
             .join(' ')}
+          aria-invalid={ariaInvalid}
+          aria-describedby={ariaDescribedBy}
           {...props}
         >
           {children}
