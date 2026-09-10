@@ -1,6 +1,6 @@
 // P2-18: Onboarding checklist component — contextual, recoverable, keyboard-safe
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tantml:parameter>
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { X, CheckCircle, Circle, Building2, Upload, Trophy, Eye, UserPlus, ArrowRight } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
