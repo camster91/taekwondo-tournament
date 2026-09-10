@@ -527,8 +527,8 @@ export default function PublicRegister() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="flex items-center text-gray-600 dark:text-gray-400">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-900 flex items-center justify-center">
+        <div className="flex items-center text-surface-600 dark:text-surface-400">
           <Spinner className="mr-2" />
           Loading tournaments...
         </div>
@@ -538,9 +538,9 @@ export default function PublicRegister() {
 
   if (loadError) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-900 py-12 px-4">
         <div className="max-w-md mx-auto text-center">
-          <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-5 mb-4 text-red-700 dark:text-red-300">
+          <div role="alert" className="bg-danger/50 dark:bg-danger/900/20 border border-danger200 dark:border-danger800 rounded-lg p-5 mb-4 text-danger700 dark:text-danger300">
             {loadError}
           </div>
           <Button variant="primary" onClick={() => void loadRegistrationConfig()}>Retry</Button>
@@ -551,13 +551,13 @@ export default function PublicRegister() {
 
   if (result) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-900 py-12 px-4">
         <div className="max-w-md mx-auto">
           <Card>
             <CardBody className="p-8 text-center">
-              <CheckCircle className="h-16 w-16 text-green-500 dark:text-green-400 mx-auto mb-4" />
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Registration Complete!</h1>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">{result.message}</p>
+              <CheckCircle className="h-16 w-16 text-success500 dark:text-success400 mx-auto mb-4" />
+              <h1 className="text-2xl font-bold text-surface-900 dark:text-white mb-2">Registration Complete!</h1>
+              <p className="text-surface-600 dark:text-surface-400 mb-6">{result.message}</p>
 
               {result.registration.confirmationCode && (
                 <div className="bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700 rounded-lg p-5 mb-6">
@@ -607,30 +607,30 @@ export default function PublicRegister() {
                 </div>
               )}
 
-              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 text-left mb-6">
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Registration Details</h3>
+              <div className="bg-surface-50 dark:bg-surface-700/50 rounded-lg p-4 text-left mb-6">
+                <h3 className="font-semibold text-surface-900 dark:text-white mb-3">Registration Details</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Competitor:</span>
-                    <span className="font-medium text-gray-900 dark:text-white">{result.registration.competitorName}</span>
+                    <span className="text-surface-600 dark:text-surface-400">Competitor:</span>
+                    <span className="font-medium text-surface-900 dark:text-white">{result.registration.competitorName}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Tournament:</span>
-                    <span className="font-medium text-gray-900 dark:text-white">{result.registration.tournamentName}</span>
+                    <span className="text-surface-600 dark:text-surface-400">Tournament:</span>
+                    <span className="font-medium text-surface-900 dark:text-white">{result.registration.tournamentName}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Date:</span>
-                    <span className="font-medium text-gray-900 dark:text-white">
+                    <span className="text-surface-600 dark:text-surface-400">Date:</span>
+                    <span className="font-medium text-surface-900 dark:text-white">
                       {new Date(result.registration.tournamentDate).toLocaleDateString()}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Age Group:</span>
-                    <span className="font-medium text-gray-900 dark:text-white">{result.registration.ageGroup}</span>
+                    <span className="text-surface-600 dark:text-surface-400">Age Group:</span>
+                    <span className="font-medium text-surface-900 dark:text-white">{result.registration.ageGroup}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Events:</span>
-                    <span className="font-medium text-gray-900 dark:text-white">
+                    <span className="text-surface-600 dark:text-surface-400">Events:</span>
+                    <span className="font-medium text-surface-900 dark:text-white">
                       {[
                         result.registration.events.patterns && (sportProfile.eventTypes[0]?.name || 'Patterns'),
                         result.registration.events.sparring && (sportProfile.eventTypes[1]?.name || 'Sparring'),
@@ -733,11 +733,11 @@ export default function PublicRegister() {
 
   if (tournaments.length === 0) {
     return (
-      <main className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+      <main className="min-h-screen bg-surface-50 dark:bg-surface-900 py-12 px-4">
         <div className="max-w-md mx-auto text-center">
-          <Trophy aria-hidden="true" className="h-16 w-16 text-gray-600 dark:text-gray-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">No Open Tournaments</h1>
-          <p className="text-gray-600 dark:text-gray-400">
+          <Trophy aria-hidden="true" className="h-16 w-16 text-surface-600 dark:text-surface-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-surface-900 dark:text-white mb-2">No Open Tournaments</h1>
+          <p className="text-surface-600 dark:text-surface-400">
             There are currently no tournaments open for registration. Please check back later.
           </p>
           <Button as={Link} to="/" variant="secondary" className="mt-6">
@@ -754,7 +754,7 @@ export default function PublicRegister() {
   const brandLogoUrl = selectedTournament?.brandLogoUrl;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4">
+    <div className="min-h-screen bg-surface-50 dark:bg-surface-900 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
@@ -763,8 +763,8 @@ export default function PublicRegister() {
           ) : (
             <Trophy className="h-12 w-12 mx-auto mb-3" style={{ color: brandColor }} />
           )}
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{brandName}</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
+          <h1 className="text-3xl font-bold text-surface-900 dark:text-white">{brandName}</h1>
+          <p className="text-surface-600 dark:text-surface-400 mt-2">
             Register for an upcoming tournament
           </p>
           {/* Fee note — pulled from tournament.settings.registrationFee.
@@ -779,7 +779,7 @@ export default function PublicRegister() {
               const fee = settings?.registrationFee;
               if (!fee) return null;
               return (
-                <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-200 text-sm font-medium">
+                <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-warning/50 dark:bg-warning/900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-warning800 dark:text-warning200 text-sm font-medium">
                   <CreditCard className="h-4 w-4" aria-hidden="true" />
                   <span>Fee: {fee}</span>
                 </div>
@@ -798,19 +798,19 @@ export default function PublicRegister() {
             aria-live="assertive"
             aria-atomic="true"
             tabIndex={-1}
-            className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6"
+            className="bg-danger/50 dark:bg-danger/900/20 border border-danger200 dark:border-danger800 rounded-lg p-4 mb-6"
           >
             <div className="flex items-start">
-              <AlertCircle className="h-5 w-5 text-red-500 dark:text-red-400 mt-0.5 mr-2" aria-hidden="true" />
+              <AlertCircle className="h-5 w-5 text-danger500 dark:text-danger400 mt-0.5 mr-2" aria-hidden="true" />
               <div>
-                {error && <p className="text-red-700 dark:text-red-300 font-medium">{error}</p>}
+                {error && <p className="text-danger700 dark:text-danger300 font-medium">{error}</p>}
                 {confirmationUncertain && (
-                  <a href="/check-registration" className="mt-2 inline-block font-medium text-red-800 underline dark:text-red-200">
+                  <a href="/check-registration" className="mt-2 inline-block font-medium text-danger800 underline dark:text-danger200">
                     Check registration status
                   </a>
                 )}
                 {validationErrors.length > 0 && (
-                  <ul className="text-red-700 dark:text-red-300 text-sm list-disc list-inside">
+                  <ul className="text-danger700 dark:text-danger300 text-sm list-disc list-inside">
                     {validationErrors.map((err, i) => (
                       <li key={i}>{err}</li>
                     ))}
@@ -833,13 +833,13 @@ export default function PublicRegister() {
             >
               {/* Step Indicator */}
               <div className="flex items-center gap-2 mb-2">
-                <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' : 'bg-gray-100 text-gray-700'}`}>
+                <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 1 ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' : 'bg-surface-100 text-surface-700'}`}>
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-white text-[10px]">1</span>
                   <span>Athlete</span>
                 </div>
-                <div className={`h-px flex-1 min-w-[1rem] ${step >= 2 ? 'bg-primary-400' : 'bg-gray-200 dark:bg-gray-700'}`} />
-                <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 2 ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' : 'bg-gray-100 text-gray-700'}`}>
-                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-primary-600 text-white' : 'bg-gray-300 text-gray-600'}`}>2</span>
+                <div className={`h-px flex-1 min-w-[1rem] ${step >= 2 ? 'bg-primary-400' : 'bg-surface-200 dark:bg-surface-700'}`} />
+                <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 ${step >= 2 ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' : 'bg-surface-100 text-surface-700'}`}>
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step >= 2 ? 'bg-primary-600 text-white' : 'bg-surface-300 text-surface-600'}`}>2</span>
                   {/* Show "Parent" on small screens, "Parent & Consent" on
                       sm+ — both labels fit in the pill without truncating. */}
                   <span>
@@ -885,7 +885,7 @@ export default function PublicRegister() {
                 {selectedTournament && selectedTournamentFeeCents > 0 && (
                   <div
                     data-testid="tournament-fee-notice"
-                    className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30 p-3 text-sm text-amber-900 dark:text-amber-200"
+                    className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-warning/50 dark:border-amber-700 dark:bg-warning/900/30 p-3 text-sm text-warning900 dark:text-warning200"
                     role="note"
                   >
                     <CreditCard className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
@@ -902,8 +902,8 @@ export default function PublicRegister() {
               </div>
 
               {/* Competitor Information */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+              <div className="border-t border-surface-200 dark:border-surface-700 pt-6">
+                <h3 className="text-lg font-semibold text-surface-900 dark:text-white mb-4 flex items-center">
                   <User className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" aria-hidden="true" />
                   Competitor Information
                 </h3>
@@ -997,7 +997,7 @@ export default function PublicRegister() {
                           <> · {ageBandPreview.tier}</>
                         )}
                         {formData.competeWithOlder && (
-                          <span className="text-amber-700 dark:text-amber-400">
+                          <span className="text-warning700 dark:text-warning400">
                             {' '}· eligible to compete up to {ageBandPreview.nextBandLabel}
                           </span>
                         )}
@@ -1008,8 +1008,8 @@ export default function PublicRegister() {
               </div>
 
               {/* Belt Information */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+              <div className="border-t border-surface-200 dark:border-surface-700 pt-6">
+                <h3 className="text-lg font-semibold text-surface-900 dark:text-white mb-4 flex items-center">
                   <Award className="h-5 w-5 mr-2 text-primary-600 dark:text-primary-400" aria-hidden="true" />
                   Belt Rank
                 </h3>
@@ -1074,8 +1074,8 @@ export default function PublicRegister() {
               </div>
 
               {/* Physical Info */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <div className="border-t border-surface-200 dark:border-surface-700 pt-6">
+                <h3 className="text-lg font-semibold text-surface-900 dark:text-white mb-4">
                   Physical Information
                 </h3>
 
@@ -1116,7 +1116,7 @@ export default function PublicRegister() {
                       inputMode="numeric"
                     />
                     {formData.sparring && (
-                      <p id="weightLbs-help" className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      <p id="weightLbs-help" className="text-xs text-surface-600 dark:text-surface-400 mt-1">
                         Required for {eventType1?.name ?? 'combat'} events
                       </p>
                     )}
@@ -1137,18 +1137,18 @@ export default function PublicRegister() {
                 </div>
 
                 {/* v2: Compete with older */}
-                <div className="mt-4 flex items-start gap-2 p-2 -ml-2 rounded hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
+                <div className="mt-4 flex items-start gap-2 p-2 -ml-2 rounded hover:bg-surface-50 dark:hover:bg-slate-800/50 transition-colors">
                   <input
                     type="checkbox"
                     name="competeWithOlder"
                     id="competeWithOlder"
                     checked={formData.competeWithOlder}
                     onChange={handleChange}
-                    className="mt-1 h-5 w-5 min-w-[20px] min-h-[20px] rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="mt-1 h-5 w-5 min-w-[20px] min-h-[20px] rounded border-surface-300 text-info600 focus:ring-blue-500"
                   />
-                  <Label htmlFor="competeWithOlder" className="text-sm text-gray-700 dark:text-gray-300 mb-0">
+                  <Label htmlFor="competeWithOlder" className="text-sm text-surface-700 dark:text-surface-300 mb-0">
                     <span className="font-medium">Compete in older age band</span>
-                    <span id="competeWithOlder-desc" className="block text-xs text-gray-600">
+                    <span id="competeWithOlder-desc" className="block text-xs text-surface-600">
                       Check this if your child is near the top of their age band and you'd like them considered for the next age group up (subject to the tournament's age-flex rules).
                     </span>
                   </Label>
@@ -1156,11 +1156,11 @@ export default function PublicRegister() {
               </div>
 
               {/* Event Selection */}
-              <fieldset className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <legend className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                  Event Selection <span className="text-red-500" aria-hidden="true">*</span>
+              <fieldset className="border-t border-surface-200 dark:border-surface-700 pt-6">
+                <legend className="text-lg font-semibold text-surface-900 dark:text-white mb-1">
+                  Event Selection <span className="text-danger500" aria-hidden="true">*</span>
                 </legend>
-                <p id="event-selection-help" className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                <p id="event-selection-help" className="text-sm text-surface-600 dark:text-surface-400 mb-4">
                   Select at least one event to compete in
                 </p>
 
@@ -1171,7 +1171,7 @@ export default function PublicRegister() {
                   aria-label="Event selection"
                 >
                   {eventType0 && (
-                    <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <label className="flex items-center p-4 border border-surface-200 dark:border-surface-700 rounded-lg cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-700/50 transition-colors">
                       <input
                         type="checkbox"
                         name="patterns"
@@ -1181,8 +1181,8 @@ export default function PublicRegister() {
                         aria-describedby="event-patterns-desc"
                       />
                       <div className="ml-3">
-                        <span className="font-medium text-gray-900 dark:text-white">{eventType0.name}</span>
-                        <p id="event-patterns-desc" className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className="font-medium text-surface-900 dark:text-white">{eventType0.name}</span>
+                        <p id="event-patterns-desc" className="text-sm text-surface-600 dark:text-surface-400">
                           {eventType0.description}
                         </p>
                       </div>
@@ -1190,7 +1190,7 @@ export default function PublicRegister() {
                   )}
 
                   {eventType1 && (
-                    <label className="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <label className="flex items-center p-4 border border-surface-200 dark:border-surface-700 rounded-lg cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-700/50 transition-colors">
                       <input
                         type="checkbox"
                         name="sparring"
@@ -1200,11 +1200,11 @@ export default function PublicRegister() {
                         aria-describedby="event-sparring-desc"
                       />
                       <div className="ml-3">
-                        <span className="font-medium text-gray-900 dark:text-white">
+                        <span className="font-medium text-surface-900 dark:text-white">
                           {eventType1.name}
                           {eventType1.hasWeightClasses && ' (requires weight)'}
                         </span>
-                        <p id="event-sparring-desc" className="text-sm text-gray-600 dark:text-gray-400">
+                        <p id="event-sparring-desc" className="text-sm text-surface-600 dark:text-surface-400">
                           {eventType1.description}
                         </p>
                       </div>
@@ -1214,7 +1214,7 @@ export default function PublicRegister() {
               </fieldset>
 
               {/* Step 1 → Step 2 navigation */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex flex-col sm:flex-row justify-end gap-3">
+              <div className="border-t border-surface-200 dark:border-surface-700 pt-6 flex flex-col sm:flex-row justify-end gap-3">
                 <Button
                   type="button"
                   variant="primary"
@@ -1247,8 +1247,8 @@ export default function PublicRegister() {
 
               {step === 2 && (<>
               {/* Parent/Guardian Info */}
-              <fieldset className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <legend className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <fieldset className="border-t border-surface-200 dark:border-surface-700 pt-6">
+                <legend className="text-lg font-semibold text-surface-900 dark:text-white mb-4">
                   {isMinor ? 'Parent/Guardian Contact (Required for minors)' : 'Parent/Guardian Contact (Optional)'}
                 </legend>
 
@@ -1299,62 +1299,62 @@ export default function PublicRegister() {
                 </div>
               </fieldset>
 
-              <fieldset className="border-t border-gray-200 dark:border-gray-700 pt-6 space-y-4">
-                <legend className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              <fieldset className="border-t border-surface-200 dark:border-surface-700 pt-6 space-y-4">
+                <legend className="text-lg font-semibold text-surface-900 dark:text-white mb-2">
                   Notices and authorization
                 </legend>
-                <label className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
+                <label className="flex items-start gap-3 text-sm text-surface-700 dark:text-surface-300">
                   <input
                     type="checkbox"
                     name="privacyAccepted"
                     checked={formData.privacyAccepted}
                     onChange={handleChange}
                     required
-                    className="mt-0.5 h-5 w-5 min-w-[20px] rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="mt-0.5 h-5 w-5 min-w-[20px] rounded border-surface-300 text-info600 focus:ring-blue-500"
                   />
                   <span>
                     I have read and accept the{' '}
-                    <a className="font-medium text-blue-700 underline dark:text-blue-300" href={legalConfig?.privacyNoticeUrl} target="_blank" rel="noopener noreferrer">
+                    <a className="font-medium text-info700 underline dark:text-info300" href={legalConfig?.privacyNoticeUrl} target="_blank" rel="noopener noreferrer">
                       privacy notice
                     </a>.
                   </span>
                 </label>
-                <label className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
+                <label className="flex items-start gap-3 text-sm text-surface-700 dark:text-surface-300">
                   <input
                     type="checkbox"
                     name="rulesAccepted"
                     checked={formData.rulesAccepted}
                     onChange={handleChange}
                     required
-                    className="mt-0.5 h-5 w-5 min-w-[20px] rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="mt-0.5 h-5 w-5 min-w-[20px] rounded border-surface-300 text-info600 focus:ring-blue-500"
                   />
                   <span>
                     I accept the{' '}
-                    <a className="font-medium text-blue-700 underline dark:text-blue-300" href={legalConfig?.tournamentTermsUrl} target="_blank" rel="noopener noreferrer">
+                    <a className="font-medium text-info700 underline dark:text-info300" href={legalConfig?.tournamentTermsUrl} target="_blank" rel="noopener noreferrer">
                       tournament terms and rules
                     </a>.
                   </span>
                 </label>
                 {isMinor && (
-                  <label className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
+                  <label className="flex items-start gap-3 text-sm text-surface-700 dark:text-surface-300">
                     <input
                       type="checkbox"
                       name="guardianAttested"
                       checked={formData.guardianAttested}
                       onChange={handleChange}
                       required
-                      className="mt-0.5 h-5 w-5 min-w-[20px] rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="mt-0.5 h-5 w-5 min-w-[20px] rounded border-surface-300 text-info600 focus:ring-blue-500"
                     />
                     <span>I confirm that I am the competitor's parent/legal guardian or am otherwise authorized to register this minor.</span>
                   </label>
                 )}
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-surface-500 dark:text-surface-400">
                   Document version: {legalConfig?.consentVersion ?? 'unavailable'}
                 </p>
               </fieldset>
 
               {/* Submit Button */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6 flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center">
+              <div className="border-t border-surface-200 dark:border-surface-700 pt-6 flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center">
                 <Button
                   type="button"
                   variant="secondary"

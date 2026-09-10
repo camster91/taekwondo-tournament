@@ -236,17 +236,17 @@ export default function PublicScoreboard() {
           case for TV operators who paste the wrong URL mid-event. */}
       {pageState === 'tournament-unavailable' && (
         <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center">
-          <AlertCircle className="h-20 w-20 text-red-400 mb-6" />
+          <AlertCircle className="h-20 w-20 text-danger400 mb-6" />
           <h1 className="text-3xl font-bold mb-3">
             {tournamentError?.message || 'Could not load tournament'}
           </h1>
-          <p className="text-slate-300 max-w-md">
+          <p className="text-surface-300 max-w-md">
             Check the URL with the tournament director. The display link looks like
-            <code className="block mt-3 px-3 py-2 bg-slate-800/60 rounded text-sm font-mono">
+            <code className="block mt-3 px-3 py-2 bg-surface-800/60 rounded text-sm font-mono">
               /display/&lt;tournament-id&gt;
             </code>
           </p>
-          <button type="button" onClick={() => void retryTournament()} className="mt-5 min-h-11 rounded-lg border border-slate-500 px-4 py-2 font-semibold">Try again</button>
+          <button type="button" onClick={() => void retryTournament()} className="mt-5 min-h-11 rounded-lg border border-surface-500 px-4 py-2 font-semibold">Try again</button>
         </div>
       )}
       {/* Loading state. Spinner only shown while the tournament query is
@@ -257,22 +257,22 @@ export default function PublicScoreboard() {
         <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center">
           <Loader2 className="h-16 w-16 text-primary-400 mb-6 animate-spin" />
           <h1 className="text-2xl font-bold mb-2">Loading tournament…</h1>
-          <p className="text-slate-300">Fetching live brackets and match data</p>
+          <p className="text-surface-300">Fetching live brackets and match data</p>
         </div>
       )}
       {/* Main board — only render once we have a valid tournament. */}
       {pageState === 'scoreboard-unavailable' && (
         <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center" role="alert">
-          <AlertCircle className="h-20 w-20 text-amber-400 mb-6" aria-hidden="true" />
+          <AlertCircle className="h-20 w-20 text-warning400 mb-6" aria-hidden="true" />
           <h1 className="text-3xl font-bold mb-3">Live scoreboard unavailable</h1>
-          <p className="text-slate-300 max-w-md">{scoreboardUnavailableMessage}</p>
-          <button type="button" onClick={() => void retryScoreboard()} className="mt-5 min-h-11 rounded-lg border border-slate-500 px-4 py-2 font-semibold">Try again</button>
+          <p className="text-surface-300 max-w-md">{scoreboardUnavailableMessage}</p>
+          <button type="button" onClick={() => void retryScoreboard()} className="mt-5 min-h-11 rounded-lg border border-surface-500 px-4 py-2 font-semibold">Try again</button>
         </div>
       )}
       {(pageState === 'ready' || pageState === 'stale-scoreboard') && (
       <>
       {pageState === 'stale-scoreboard' && (
-        <div role="alert" className="border-b border-amber-400/40 bg-amber-400/15 px-4 py-3 text-center text-amber-100">
+        <div role="alert" className="border-b border-amber-400/40 bg-warning/400/15 px-4 py-3 text-center text-warning100">
           <p className="font-semibold">Showing the last confirmed scoreboard</p>
           <p className="text-sm">Live updates are temporarily unavailable. Match information below may be out of date.</p>
           {lastFetchAt && <p className="mt-1 text-xs">Last confirmed at {lastFetchAt.toLocaleTimeString()}.</p>}
@@ -293,12 +293,12 @@ export default function PublicScoreboard() {
                 <h1 className="text-2xl md:text-4xl lg:text-5xl xl:text-6xl font-bold tracking-tight">{tournament?.brandName || tournament?.name || 'Tournament'}</h1>
                 <span
                   data-testid="live-badge"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/20 border border-red-500/40 text-red-200 text-sm md:text-base lg:text-lg font-bold uppercase tracking-wider"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-danger/500/20 border border-red-500/40 text-danger200 text-sm md:text-base lg:text-lg font-bold uppercase tracking-wider"
                 >
-                  <span className="h-2.5 w-2.5 rounded-full bg-red-400 animate-pulse" /> Live
+                  <span className="h-2.5 w-2.5 rounded-full bg-danger/400 animate-pulse" /> Live
                 </span>
               </div>
-              <p className="text-slate-300 text-base md:text-lg lg:text-xl xl:text-2xl flex items-center gap-2 mt-1">
+              <p className="text-surface-300 text-base md:text-lg lg:text-xl xl:text-2xl flex items-center gap-2 mt-1">
                 {tournament?.location && <><MapPin className="h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6" /> {tournament.location} ·</>}
                 {tournament?.date && new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </p>
@@ -309,7 +309,7 @@ export default function PublicScoreboard() {
               <div className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-mono font-bold text-white tabular-nums">
                 {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
-              <div className="text-slate-300 text-sm md:text-base lg:text-lg xl:text-xl font-medium">
+              <div className="text-surface-300 text-sm md:text-base lg:text-lg xl:text-xl font-medium">
                 {stats.completed} / {stats.totalMatches} matches complete
               </div>
             </div>
@@ -324,7 +324,7 @@ export default function PublicScoreboard() {
                   level="M"
                 />
               </div>
-              <div className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">
+              <div className="text-[10px] text-surface-400 uppercase tracking-wider font-medium">
                 Scan to view on phone
               </div>
             </div>
@@ -351,7 +351,7 @@ export default function PublicScoreboard() {
               variant="ghost"
               size="sm"
               onClick={() => { setActiveRing('all'); setCycleEnabled(false); }}
-              className={`rounded-t-lg ${effectiveRing === 'all' ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10' : 'text-slate-300 hover:text-white'}`}
+              className={`rounded-t-lg ${effectiveRing === 'all' ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10' : 'text-surface-300 hover:text-white'}`}
             >
               All rings
             </Button>
@@ -361,9 +361,9 @@ export default function PublicScoreboard() {
                 variant="ghost"
                 size="sm"
                 onClick={() => { setActiveRing(ring); setCycleEnabled(false); }}
-                className={`rounded-t-lg flex items-center gap-2 ${effectiveRing === ring ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10' : 'text-slate-300 hover:text-white'}`}
+                className={`rounded-t-lg flex items-center gap-2 ${effectiveRing === ring ? 'bg-[#0a0e1a] text-white border-t border-l border-r border-white/10' : 'text-surface-300 hover:text-white'}`}
               >
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-success/400 animate-pulse" />
                 Ring {ring}
                 <span className="text-xs opacity-60">
                   ({matchesByRing[ring]?.filter((m) => m.status === 'in_progress').length || 0} live)
@@ -375,15 +375,15 @@ export default function PublicScoreboard() {
                 variant="ghost"
                 size="sm"
                 onClick={() => { setActiveRing('all'); setCycleEnabled(true); }}
-                className="ml-2 text-xs text-slate-300 hover:text-white"
+                className="ml-2 text-xs text-surface-300 hover:text-white"
               >
                 Resume auto-cycle
               </Button>
             )}
           </div>
           </div>
-          <div className={`text-xs pb-3 flex items-center gap-2 ${isStale ? 'text-amber-400' : 'text-slate-300'}`}>
-            <span className={`h-2 w-2 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
+          <div className={`text-xs pb-3 flex items-center gap-2 ${isStale ? 'text-warning400' : 'text-surface-300'}`}>
+            <span className={`h-2 w-2 rounded-full ${isStale ? 'bg-warning/400' : 'bg-success/400 animate-pulse'}`} />
             <span data-testid="auto-refresh-status">
               {isStale
                 ? `STALE — no update for ${staleSeconds}s. Check venue Wi-Fi.`
@@ -393,7 +393,7 @@ export default function PublicScoreboard() {
         </div>
 
         {/* Progress Bar */}
-        <div className="h-1 bg-slate-800/60">
+        <div className="h-1 bg-surface-800/60">
           <div
             className="h-full bg-gradient-to-r from-primary-500 via-accent-500 to-pink-500 transition-all duration-500"
             style={{ width: `${stats.totalMatches > 0 ? (stats.completed / stats.totalMatches) * 100 : 0}%` }}
@@ -405,15 +405,15 @@ export default function PublicScoreboard() {
         {/* Left Column - Current Matches (TV hero) */}
         <div className="w-full md:w-1/2 p-4 md:p-6 lg:p-8 border-r border-white/5 overflow-hidden">
           <div className="flex items-center mb-6 md:mb-8">
-            <Zap className="h-7 w-7 md:h-8 md:w-8 lg:h-10 lg:w-10 text-amber-400 mr-3" />
-            <h2 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-amber-400 uppercase tracking-wider">Now competing</h2>
+            <Zap className="h-7 w-7 md:h-8 md:w-8 lg:h-10 lg:w-10 text-warning400 mr-3" />
+            <h2 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-warning400 uppercase tracking-wider">Now competing</h2>
           </div>
 
           {inProgressMatches.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-slate-300">
+            <div className="flex flex-col items-center justify-center h-64 text-surface-300">
               <Clock className="h-24 w-24 md:h-28 md:w-28 lg:h-32 lg:w-32 mb-6 opacity-50" />
               <p className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-semibold">No matches in progress</p>
-              <p className="text-lg md:text-xl lg:text-2xl text-slate-400 mt-3">Stand by for the next match</p>
+              <p className="text-lg md:text-xl lg:text-2xl text-surface-400 mt-3">Stand by for the next match</p>
             </div>
           ) : (
             <div className="space-y-4 md:space-y-5 overflow-y-auto max-h-[calc(100vh-320px)] pr-2">
@@ -423,14 +423,14 @@ export default function PublicScoreboard() {
                   <Card key={match.id} className="overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-900 border-2 border-amber-500/40 shadow-2xl">
                     <CardBody className="p-6 md:p-7 lg:p-8">
                       <div className="relative">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-warning/500/10 rounded-full blur-3xl" />
                         <div className="relative">
                           <div className="flex items-center justify-between mb-5 md:mb-6">
-                            <div className="text-base md:text-lg lg:text-xl xl:text-2xl text-amber-300 font-semibold uppercase tracking-wider">
+                            <div className="text-base md:text-lg lg:text-xl xl:text-2xl text-warning300 font-semibold uppercase tracking-wider">
                               {division?.name} · Match #{match.matchNumber}
                             </div>
-                            <div className="flex items-center gap-2 text-sm md:text-base lg:text-lg xl:text-xl text-amber-300 font-bold">
-                              <span className="h-2 w-2 md:h-2.5 md:w-2.5 rounded-full bg-amber-400 animate-pulse" /> LIVE
+                            <div className="flex items-center gap-2 text-sm md:text-base lg:text-lg xl:text-xl text-warning300 font-bold">
+                              <span className="h-2 w-2 md:h-2.5 md:w-2.5 rounded-full bg-warning/400 animate-pulse" /> LIVE
                             </div>
                           </div>
                           <div className="grid grid-cols-[1fr_auto_1fr] gap-4 md:gap-5 lg:gap-6 items-center">
@@ -438,16 +438,16 @@ export default function PublicScoreboard() {
                               <div className="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold tracking-tight leading-tight">
                                 {getCompetitorName(match.competitor1)}
                               </div>
-                              <div className="text-slate-300 text-base md:text-lg lg:text-xl xl:text-2xl mt-1.5 md:mt-2">
+                              <div className="text-surface-300 text-base md:text-lg lg:text-xl xl:text-2xl mt-1.5 md:mt-2">
                                 {getCompetitorSchool(match.competitor1) || '—'}
                               </div>
                             </div>
-                            <div className="px-3 md:px-5 text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black text-slate-300 tracking-widest">VS</div>
+                            <div className="px-3 md:px-5 text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black text-surface-300 tracking-widest">VS</div>
                             <div className="min-w-0 text-right">
                               <div className="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold tracking-tight leading-tight">
                                 {getCompetitorName(match.competitor2)}
                               </div>
-                              <div className="text-slate-300 text-base md:text-lg lg:text-xl xl:text-2xl mt-1.5 md:mt-2">
+                              <div className="text-surface-300 text-base md:text-lg lg:text-xl xl:text-2xl mt-1.5 md:mt-2">
                                 {getCompetitorSchool(match.competitor2) || '—'}
                               </div>
                             </div>
@@ -468,7 +468,7 @@ export default function PublicScoreboard() {
               <h3 className="text-base md:text-lg lg:text-xl font-semibold text-sky-400 uppercase tracking-wider">Up next</h3>
             </div>
             {readyMatches.length === 0 ? (
-              <p className="text-slate-300 text-base md:text-lg">No upcoming matches</p>
+              <p className="text-surface-300 text-base md:text-lg">No upcoming matches</p>
             ) : (
               <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                 {readyMatches.map((match, index) => {
@@ -476,22 +476,22 @@ export default function PublicScoreboard() {
                   return (
                     <div
                       key={match.id}
-                      className={`bg-slate-900/60 rounded-lg px-4 py-3 flex items-center justify-between transition-colors ${
+                      className={`bg-surface-900/60 rounded-lg px-4 py-3 flex items-center justify-between transition-colors ${
                         index === 0 ? 'ring-2 ring-sky-500/50 bg-sky-950/30' : ''
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-slate-800 flex items-center justify-center text-sm md:text-base font-bold text-slate-300 flex-shrink-0">
+                        <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-surface-800 flex items-center justify-center text-sm md:text-base font-bold text-surface-300 flex-shrink-0">
                           {index + 1}
                         </div>
                         <div className="min-w-0">
                           <div className="text-sm md:text-base lg:text-lg font-medium truncate">
                             {getCompetitorName(match.competitor1)} vs {getCompetitorName(match.competitor2)}
                           </div>
-                          <div className="text-xs md:text-sm lg:text-base text-slate-400 truncate">{division?.name}</div>
+                          <div className="text-xs md:text-sm lg:text-base text-surface-400 truncate">{division?.name}</div>
                         </div>
                       </div>
-                      <ChevronRight className="h-5 w-5 md:h-6 md:w-6 text-slate-300 flex-shrink-0" />
+                      <ChevronRight className="h-5 w-5 md:h-6 md:w-6 text-surface-300 flex-shrink-0" />
                     </div>
                   );
                 })}
@@ -503,12 +503,12 @@ export default function PublicScoreboard() {
         {/* Right Column - Recent Results & Stats */}
         <div className="w-full md:w-1/2 p-4 md:p-6 lg:p-8">
           <div className="flex items-center mb-6 md:mb-8">
-            <Award className="h-7 w-7 md:h-8 md:w-8 lg:h-10 lg:w-10 text-green-400 mr-3" />
-            <h2 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-green-400 uppercase tracking-wider">Recent Results</h2>
+            <Award className="h-7 w-7 md:h-8 md:w-8 lg:h-10 lg:w-10 text-success400 mr-3" />
+            <h2 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-success400 uppercase tracking-wider">Recent Results</h2>
           </div>
 
           {recentResults.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-300">
+            <div className="flex flex-col items-center justify-center h-64 text-surface-300">
               <Trophy className="h-20 w-20 md:h-24 md:w-24 mb-5" />
               <p className="text-2xl md:text-3xl lg:text-4xl font-semibold">No results yet</p>
             </div>
@@ -526,22 +526,22 @@ export default function PublicScoreboard() {
                     : match.competitor1;
 
                 return (
-                  <Card key={match.id} className="bg-gray-900/60 border border-gray-700/50">
+                  <Card key={match.id} className="bg-surface-900/60 border border-surface-700/50">
                     <CardBody className="p-4 md:p-5 lg:p-6">
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm md:text-base lg:text-lg text-gray-400 mb-2">{division?.name}</div>
+                          <div className="text-sm md:text-base lg:text-lg text-surface-400 mb-2">{division?.name}</div>
                           <div className="flex items-center flex-wrap gap-2">
                             <Award className="h-5 w-5 md:h-6 md:w-6 text-yellow-400 flex-shrink-0" />
-                            <span className="font-bold text-green-400 text-base md:text-lg lg:text-xl truncate">
+                            <span className="font-bold text-success400 text-base md:text-lg lg:text-xl truncate">
                               {getCompetitorName(winner)}
                             </span>
-                            <span className="text-gray-400 text-sm md:text-base lg:text-lg">defeated</span>
-                            <span className="text-gray-300 text-base md:text-lg lg:text-xl truncate">{getCompetitorName(loser)}</span>
+                            <span className="text-surface-400 text-sm md:text-base lg:text-lg">defeated</span>
+                            <span className="text-surface-300 text-base md:text-lg lg:text-xl truncate">{getCompetitorName(loser)}</span>
                           </div>
                         </div>
                         {(match.score1 || match.score2) && (
-                          <div className="text-xl md:text-2xl lg:text-3xl font-mono font-bold text-gray-300 flex-shrink-0">
+                          <div className="text-xl md:text-2xl lg:text-3xl font-mono font-bold text-surface-300 flex-shrink-0">
                             {match.score1 || '0'} - {match.score2 || '0'}
                           </div>
                         )}
@@ -569,9 +569,9 @@ export default function PublicScoreboard() {
               const hasAnyDivisions = (divisions?.length ?? 0) > 0;
               if (!hasAnyDivisions) {
                 return (
-                  <div className="bg-gray-900/30 border border-gray-700/50 rounded-lg p-6 text-center">
-                    <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                    <p className="text-sm text-gray-300">
+                  <div className="bg-surface-900/30 border border-surface-700/50 rounded-lg p-6 text-center">
+                    <Users className="h-8 w-8 text-surface-300 mx-auto mb-2" />
+                    <p className="text-sm text-surface-300">
                       No divisions generated yet. The director is still setting up categories.
                     </p>
                   </div>
@@ -579,9 +579,9 @@ export default function PublicScoreboard() {
               }
               if (divisionsWithBrackets.length === 0) {
                 return (
-                  <div className="bg-gray-900/30 border border-gray-700/50 rounded-lg p-6 text-center">
-                    <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                    <p className="text-sm text-gray-300">
+                  <div className="bg-surface-900/30 border border-surface-700/50 rounded-lg p-6 text-center">
+                    <Users className="h-8 w-8 text-surface-300 mx-auto mb-2" />
+                    <p className="text-sm text-surface-300">
                       Divisions are set, but brackets haven't been generated yet.
                     </p>
                   </div>
@@ -605,8 +605,8 @@ export default function PublicScoreboard() {
                         isActive
                           ? 'bg-yellow-900/30 border-2 border-yellow-500/50 shadow-lg'
                           : isDone
-                          ? 'bg-green-900/20 border-2 border-green-500/30'
-                          : 'bg-gray-900/60 border border-gray-700/40'
+                          ? 'bg-success/900/20 border-2 border-green-500/30'
+                          : 'bg-surface-900/60 border border-surface-700/40'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -615,12 +615,12 @@ export default function PublicScoreboard() {
                         </div>
                         {isActive && <Zap className="h-5 w-5 md:h-6 md:w-6 text-yellow-400 flex-shrink-0" />}
                       </div>
-                      <div className="text-xs md:text-sm lg:text-base text-gray-400 mt-1.5 font-medium">
+                      <div className="text-xs md:text-sm lg:text-base text-surface-400 mt-1.5 font-medium">
                         {completed}/{total} complete
                       </div>
-                      <div className="mt-2 h-1.5 md:h-2 bg-gray-800 rounded-full overflow-hidden">
+                      <div className="mt-2 h-1.5 md:h-2 bg-surface-800 rounded-full overflow-hidden">
                         <div
-                          className={`h-full ${isDone ? 'bg-green-500' : 'bg-blue-500'} transition-all duration-500`}
+                          className={`h-full ${isDone ? 'bg-success/500' : 'bg-info/500'} transition-all duration-500`}
                           style={{ width: `${total > 0 ? (completed / total) * 100 : 0}%` }}
                         />
                       </div>

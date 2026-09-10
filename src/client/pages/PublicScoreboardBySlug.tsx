@@ -13,11 +13,11 @@ import { buildResolvedScoreboardPath } from '../utils/public-scoreboard-url';
 export function ScoreboardStatus({ error }: { error: string | null }) {
   if (error) {
     return (
-      <main className="min-h-screen bg-gray-900 flex items-center justify-center p-8">
+      <main className="min-h-screen bg-surface-900 flex items-center justify-center p-8">
         <div className="max-w-md text-center">
           <AlertCircle className="h-20 w-20 text-red-400 mx-auto mb-6" />
           <h1 className="text-3xl font-bold text-white mb-3">Scoreboard not found</h1>
-          <p className="text-gray-300">{error}</p>
+          <p className="text-surface-300">{error}</p>
         </div>
       </main>
     );
@@ -26,7 +26,7 @@ export function ScoreboardStatus({ error }: { error: string | null }) {
   return (
     <main
       aria-label="Loading scoreboard"
-      className="min-h-screen bg-gray-900 flex items-center justify-center"
+      className="min-h-screen bg-surface-900 flex items-center justify-center"
     >
       <Loader2 className="h-16 w-16 text-primary-400 animate-spin" />
     </main>
