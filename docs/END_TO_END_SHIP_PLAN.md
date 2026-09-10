@@ -30,7 +30,8 @@
 - ✅ PR #259: Live schedule delay propagation (#125) — director records ring/division delay with preview + confirmation; deterministic propagation preserves completed/in-progress matches; conflict detection; audit trail + undo; unit tests for propagation logic, multi-ring, end-of-day boundaries
 - ✅ PR #260: UX Wave 0 trust batch 1 (#135, #140, #141) — completed tournament routing (results vs detail based on status), modal/confirmation safety (cancel-first focus for danger, aria connections, loading lock, body scroll lock), truthful settings save state (SaveState machine replacing hasChanges boolean, beforeunload protection, dynamic status banner)
 - ✅ PR #261: UX Wave 0 trust batch 2 utilities (#134, #136, #146) — foundational utilities: role-aware navigation (3 functions), URL state (5 filter sets + parse/serialize), async state machine (AsyncState + MutationState + list helpers); 76 unit tests
-- 🚧 PR #262: UX Wave 0 trust batch 2 wiring (#134, #136, #146) — wired utilities into real pages: role-aware nav in Dashboard + Tournaments; URL state in CheckIn, Divisions, Tournaments, DirectorDashboard, Scorekeeper; async state helpers in Tournaments (error banner with retry + mutation error display)
+- ✅ PR #262: UX Wave 0 trust batch 2 wiring (#134, #136, #146) — wired utilities into real pages: role-aware nav in Dashboard + Tournaments; URL state in CheckIn, Divisions, Tournaments, DirectorDashboard, Scorekeeper; async state helpers in Tournaments (error banner with retry + mutation error display)
+- 🚧 PR #TBD: Day-of trust batch (#138, #139) — offline resilience (ConnectionStatusBanner with pending counts, clearer error messages, truthful uncertain-delivery warnings), director override workflow (DirectorOverrideDialog component, check-in + division override types, audit-friendly reason selection, ConfirmDialog safety); 26 unit tests
 
 ---
 
@@ -65,7 +66,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Registration (public) | 100% | 🟢 Strong | Self-serve form, waitlist, payment gateway, confirmation emails, token security complete |
 | Divisions & categorization | 95% | 🟢 Strong | Auto-generation, manual override UX, merge conflicts UI (amber warning banner) complete |
 | Brackets | 90% | 🟢 Strong | DE generation, real-time collab, print layout complete; QR poster service exists |
-| Day-of operations | 95% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view (TV-optimized with larger fonts and ring badges), live schedule delay propagation (#125/#259) complete; offline mode, ring sync shipped |
+| Day-of operations | 97% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view (TV-optimized with larger fonts and ring badges), live schedule delay propagation (#125/#259) complete; offline mode, ring sync shipped; offline resilience improvements (#138) + director override UI (#139) in review |
 | Scoring & results | 90% | 🟢 Strong | Match scoring, audit trail, undo/redo UI, video review integration (labeled, with help text) complete |
 | Public display | 90% | 🟢 Strong | Public scoreboard by slug complete; auto-refresh config shipped; TV-optimized layout polish complete (4K-safe fonts, improved contrast, better spacing); QR poster service exists |
 | **Non-product** | | | |
@@ -76,10 +77,10 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Support & docs | 70% | 🟢 Strong | In-app tour complete; help center v1 shipped; video tutorial structure ready (awaiting Cameron recordings); first-party support tickets working |
 | Marketing & onboarding | 70% | 🟢 Strong | Landing page drafted; onboarding checklist shipped; needs case studies, demo video (Cameron-gated) |
 
-**Overall estimated completion:** ~92% (custom domains API+UI complete #256/#257, live schedule delay propagation #125/#259 complete; day-of operations ~95%; UX Wave 0 trust items #135/#140/#141 complete)  
+**Overall estimated completion:** ~93% (custom domains API+UI complete #256/#257, live schedule delay propagation #125/#259 complete; day-of operations ~97%; UX Wave 0 trust items #135/#140/#141/#134/#136/#146 complete; day-of trust batch #138/#139 in review)  
 **Blocker count:** 3 critical items (Cameron Stripe dashboard setup for self-service billing, legal counsel final approval, production deploy execution with demo video/case studies for marketing)
 
-**Next Agent Track:** APP-COMPLETION Phase 5 / UX Wave 0 trust batch 2 (#134, #136, #146) **COMPLETE** — role-aware tournament navigation wired into Dashboard + Tournaments (6 pages total use role-aware routing with proper labels/aria-labels). URL state preservation wired into CheckIn, Divisions, Tournaments, DirectorDashboard, Scorekeeper (filters survive refresh, URLs are shareable). Async state helpers wired into Tournaments list page (error banner with retry) + create mutation (inline error display). All 76 unit tests pass; client-side tests green.
+**Next Agent Track:** APP-COMPLETION Phase 5 / Day-of trust batch (#138, #139) **IN REVIEW** — offline resilience improvements (ConnectionStatusBanner showing truthful online/offline state + pending operation counts; clearer rejection/uncertain-delivery error messages; no silent data loss through delivery-uncertain path). Director override workflow UI (DirectorOverrideDialog component with ConfirmDialog safety; check-in + division override types; standard + custom override reasons; required weight input for check-in when applicable; audit-friendly confirmation messages; warning variant for safety). 26 unit tests (17 offline resilience + 9 director override logic).
 
 ---
 
