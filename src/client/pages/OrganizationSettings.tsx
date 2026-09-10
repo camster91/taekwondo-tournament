@@ -116,6 +116,14 @@ export default function OrganizationSettings() {
   const [showDraftDialog, setShowDraftDialog] = useState(false);
   const [draftOrg, setDraftOrg] = useState<DraftOrganization | null>(null);
 
+  // Query organizations (must be declared before draft effects that reference it)
+  const organizationsQuery = useQuery({
+    queryKey: ['organizations', 'current'],
+    queryFn: async () => responseJson<{ organizations: Organization[] }>(
+      await fetch('/api/organizations/current', { headers: getAuthHeaders() }),
+    ),
+  });
+
   // Load draft on mount
   useEffect(() => {
     const draft = loadDraft<DraftOrganization>('organization');
@@ -131,13 +139,6 @@ export default function OrganizationSettings() {
       saveDraft<DraftOrganization>('organization', { name: name.trim() });
     }
   }, [name, organizationsQuery.data]);
-
-  const organizationsQuery = useQuery({
-    queryKey: ['organizations', 'current'],
-    queryFn: async () => responseJson<{ organizations: Organization[] }>(
-      await fetch('/api/organizations/current', { headers: getAuthHeaders() }),
-    ),
-  });
 
   const usageQuery = useQuery({
     queryKey: ['billing', 'usage', organizationsQuery.data?.organizations[0]?.id],
