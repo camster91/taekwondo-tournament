@@ -161,7 +161,11 @@ grep -q '^DATABASE_URL=' "$ENV_FILE"; grep -q '^JWT_SECRET=' "$ENV_FILE"; grep -
 grep -q '^REGISTRATION_CONSENT_VERSION=' "$ENV_FILE"; grep -q '^PRIVACY_NOTICE_URL=' "$ENV_FILE"; grep -q '^TOURNAMENT_TERMS_URL=' "$ENV_FILE"
 
 echo "==> Starting private candidate while production remains live"
-docker run -d --name "$CANDIDATE" --network markup-net --env-file "$ENV_FILE" "$IMAGE" node server.js >/dev/null
+# `--init` injects tini as PID 1, which forwards SIGTERM to its child and reaps
+# zombie subprocesses. The Dockerfile's entrypoint then `exec`s node, so node
+# is a direct child of tini and the graceful-shutdown block at
+# `src/server/index.ts:412` runs on `docker stop`. Closes SH-8.
+docker run -d --init --name "$CANDIDATE" --network markup-net --env-file "$ENV_FILE" "$IMAGE" >/dev/null
 echo "Waiting for candidate health check..."
 CANDIDATE_HEALTHY=0
 for attempt in $(seq 1 45); do 
@@ -193,17 +197,24 @@ docker exec -i markup-postgres pg_restore -U markup --list < "$BACKUP" >/dev/nul
 
 DB_MUTATED=1
 echo "==> Migrating database"
-docker run --rm --network markup-net --env-file "$ENV_FILE" "$IMAGE" sh -c './node_modules/.bin/prisma migrate deploy'
+# `--init` on the one-shot migrate container keeps signal handling consistent
+# with the live container (Closes SH-8). The entrypoint runs the same
+# `prisma migrate deploy` as the live container; the explicit CMD override
+# below is belt-and-suspenders for clarity at the deploy log tail.
+docker run --rm --init --network markup-net --env-file "$ENV_FILE" "$IMAGE" sh -c './node_modules/.bin/prisma migrate deploy'
 if [ "$RESET_DEMO" = 1 ]; then
   grep -q '^DEMO_ISOLATED_DATA=1$' "$ENV_FILE" || { echo "Refusing demo reset outside an isolated synthetic environment" >&2; exit 1; }
   echo "==> Resetting marker-protected synthetic showcase"
-  docker run --rm --network markup-net --env-file "$ENV_FILE" -e DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 "$IMAGE" npm run demo:reset:production
+  docker run --rm --init --network markup-net --env-file "$ENV_FILE" -e DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 "$IMAGE" npm run demo:reset:production
 else
   echo "==> Demo reset skipped (not an isolated synthetic environment)"
 fi
 
 echo "==> Publishing new release on port ${LIVE_PORT}"
-docker run -d --name "$LIVE" --restart unless-stopped --network markup-net -p "127.0.0.1:${LIVE_PORT}:3001" --env-file "$ENV_FILE" "$IMAGE" >/dev/null
+# `--init` makes tini PID 1; the entrypoint `exec`s node so node is tini's
+# direct child, and SIGTERM from `docker stop` reaches the graceful-shutdown
+# block at `src/server/index.ts:412`. Closes SH-8.
+docker run -d --init --name "$LIVE" --restart unless-stopped --network markup-net -p "127.0.0.1:${LIVE_PORT}:3001" --env-file "$ENV_FILE" "$IMAGE" >/dev/null
 wait_for_health "http://127.0.0.1:${LIVE_PORT}/api/health/ready" "new release internal" || {
   echo "FAIL-CLOSED: New release failed internal health check; initiating automatic rollback" >&2
   exit 1

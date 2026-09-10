@@ -98,7 +98,10 @@ docker build \
 test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"
 
 docker rm -f "$CANDIDATE" >/dev/null 2>&1 || true
-docker run -d --name "$CANDIDATE" --network markup-net --env-file "$ENV_FILE" "$IMAGE" >/dev/null
+# `--init` injects tini as PID 1 so SIGTERM is forwarded to the entrypoint
+# (which `exec`s node). Closes SH-8 — see `docker-entrypoint.sh` for the
+# full rationale.
+docker run -d --init --name "$CANDIDATE" --network markup-net --env-file "$ENV_FILE" "$IMAGE" >/dev/null
 wait_for_ready "http://$(docker inspect "$CANDIDATE" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'):3001/api/health/ready"
 docker rm -f "$CANDIDATE" >/dev/null
 
@@ -108,7 +111,8 @@ docker stop "$LIVE" >/dev/null
 docker rename "$LIVE" "$ROLLBACK"
 PREVIOUS_RENAMED=1
 CUTOVER_STARTED=1
-docker run -d --name "$LIVE" --restart unless-stopped --network markup-net -p 127.0.0.1:18305:3001 --env-file "$ENV_FILE" "$IMAGE" >/dev/null
+# `--init` on the live demo container — same rationale as production. Closes SH-8.
+docker run -d --init --name "$LIVE" --restart unless-stopped --network markup-net -p 127.0.0.1:18305:3001 --env-file "$ENV_FILE" "$IMAGE" >/dev/null
 wait_for_ready http://127.0.0.1:18305/api/health/ready
 wait_for_ready "$DEMO_URL/api/health/ready"
 test "$(docker inspect "$LIVE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"

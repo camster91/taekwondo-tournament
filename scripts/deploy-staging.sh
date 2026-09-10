@@ -181,7 +181,10 @@ docker exec -i bowin-staging-db pg_restore --list < "$BACKUP" >/dev/null
 echo "==> Running migrations and reset in a private candidate"
 DB_MUTATION_STARTED=1
 docker rm -f bowin-staging-candidate >/dev/null 2>&1 || true
-docker run -d \
+# `--init` injects tini as PID 1 so SIGTERM is forwarded to the entrypoint
+# (which `exec`s node). Closes SH-8 — see `docker-entrypoint.sh` for the
+# full rationale.
+docker run -d --init \
   --name bowin-staging-candidate \
   --network bowin-staging-net \
   --env-file "$ENV_FILE" \
@@ -201,7 +204,8 @@ fi
 
 echo "==> Publishing validated release"
 docker rm -f bowin-staging-candidate >/dev/null
-docker run -d \
+# `--init` on the live staging container — same rationale as production. Closes SH-8.
+docker run -d --init \
   --name bowin-staging-app \
   --restart unless-stopped \
   --network bowin-staging-net \
