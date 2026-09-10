@@ -17,9 +17,11 @@ Custom domains allow organizations to serve their public-facing event registrati
 
 ## User Workflow (Organization Admin)
 
+**UI Location:** Organization Settings page (`/organization`) — Custom Domains card appears above the Organization Branding section for organization owners and admins.
+
 ### 1. Attach a Custom Domain
 
-In the Bowin app, navigate to **Organization Settings → Custom Domains** and add your domain:
+In the Bowin app, navigate to **Organization Settings → Custom Domains** and click **Add custom domain**:
 
 ```
 Hostname: register.myclub.com
@@ -30,7 +32,7 @@ The app will generate DNS verification instructions.
 
 ### 2. Add DNS Records
 
-Add one of the following records to your DNS provider (e.g., Cloudflare, Route53, Namecheap):
+The UI displays DNS verification instructions with copy-to-clipboard buttons. Add one of the following records to your DNS provider (e.g., Cloudflare, Route53, Namecheap):
 
 **Option A: TXT Record** (recommended)
 ```
@@ -50,7 +52,12 @@ TTL: 300 (or default)
 
 ### 3. Verify Ownership
 
-Click **Verify** in the Bowin app. The system will check for the DNS record and mark the domain as **verified**.
+Click **Verify** in the Bowin app (or open DNS instructions modal from the domain list). The system checks for the DNS record and marks the domain as **verified**.
+
+**Error handling:** The UI shows fail-closed messaging for common errors:
+- Bowin-owned domains (`bowin.app`, `ashbi.ca`) are rejected at attach time
+- DNS verification failures show clear error messages
+- Cross-org squatting is prevented (hostname uniqueness enforced)
 
 ### 4. Activate the Domain
 
@@ -58,7 +65,7 @@ Once verified, click **Activate** to start serving traffic on your custom domain
 
 ### 5. Configure DNS for Production
 
-After activation, update your DNS records to point to the Ashbi VPS:
+After activation, the UI shows the production DNS record to copy. Update your DNS to point to the Ashbi VPS:
 
 **Replace the verification record with a CNAME:**
 ```

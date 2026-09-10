@@ -18,6 +18,7 @@ import { useToast } from '../context/ToastContext';
 import { Button, Card, Input, Label, Modal, PageHeader, Spinner } from '../components/ui';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
+import CustomDomainSettings from '../components/CustomDomainSettings';
 
 type Entitlements = {
   maxTournaments: number;
@@ -409,6 +410,12 @@ export default function OrganizationSettings() {
           )}
         </Card>
       </div>
+
+      {/* Custom domains (post-#256) */}
+      <CustomDomainSettings
+        organizationId={organization.id}
+        canManage={canManageBilling}
+      />
 
       {/* Organization branding section (P1-11) */}
       <Card className="mb-8">
