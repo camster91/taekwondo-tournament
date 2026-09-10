@@ -119,6 +119,8 @@ These tests **fail early** when:
 
 **Success criteria met**: High-risk pages import from `@/shared/contracts`; `api-types.ts` marked deprecated but retained for rollback safety.
 
+**Ship note**: PR #279 completed Phase 2 client migration. Remaining surfaces (CheckIn, Results, Schedule) will migrate gradually during feature work.
+
 ### 🔮 Phase 3: Server-side validation (staged rollout)
 
 **Planned scope** (requires performance testing):
