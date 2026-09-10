@@ -23,7 +23,7 @@ npm run test:e2e
 - `tests/e2e/login.spec.ts` — "axe scan on login page"
 - `tests/e2e/public-register-a11y.spec.ts` — all 3 axe scan tests (step 1 empty, step 1 with tournament, step 2)
 - `tests/e2e/scorekeeper-a11y.spec.ts` — both axe scan tests (division list, match view)
-- `tests/e2e/public-scoreboard-a11y.spec.ts` — "public scoreboard renders with semantic HTML"
+- `tests/e2e/public-scoreboard-a11y.spec.ts` — "public scoreboard renders with semantic HTML and is scannable"
 
 **If any axe test fails:** The release is blocked until violations are fixed.
 
