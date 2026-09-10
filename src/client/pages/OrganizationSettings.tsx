@@ -117,6 +117,25 @@ export default function OrganizationSettings() {
     ),
   });
 
+  const usageQuery = useQuery({
+    queryKey: ['billing', 'usage', organizationsQuery.data?.organizations[0]?.id],
+    enabled: Boolean(organizationsQuery.data?.organizations[0]),
+    queryFn: async () => {
+      const orgId = organizationsQuery.data?.organizations[0]?.id;
+      if (!orgId) throw new Error('No organization');
+      return responseJson<{
+        totalTournaments: number;
+        totalCompetitors: number;
+        recentUsage: Array<{
+          tournamentId: string;
+          tournamentName: string;
+          competitorCount: number;
+          recordedAt: string;
+        }>;
+      }>(await fetch(`/api/billing/usage/${orgId}`, { headers: getAuthHeaders() }));
+    },
+  });
+
   const supportConfigQuery = useQuery({
     queryKey: ['support', 'config'],
     enabled: Boolean(organizationsQuery.data?.organizations[0]),
@@ -152,7 +171,7 @@ export default function OrganizationSettings() {
   });
 
   const billingMutation = useMutation({
-    mutationFn: async ({ endpoint, plan }: { endpoint: 'checkout' | 'portal'; plan?: 'starter' | 'pro' }) => {
+    mutationFn: async ({ endpoint, plan }: { endpoint: 'checkout' | 'portal'; plan?: 'starter' | 'pro' | 'per_event_small' | 'per_event_medium' | 'per_event_large' }) => {
       const organization = organizationsQuery.data?.organizations[0];
       if (!organization) throw new Error('Create an organization first.');
       return responseJson<{ url: string }>(await fetch(`/api/billing/${endpoint}`, {
@@ -486,44 +505,127 @@ export default function OrganizationSettings() {
         </div>
       </Card>
 
+      {/* Usage History */}
+      {usageQuery.data && usageQuery.data.totalTournaments > 0 && (
+        <Card className="mb-6">
+          <div className="mb-5 flex items-center gap-3">
+            <Trophy className="h-5 w-5 text-primary-500" />
+            <h2 className="font-semibold text-slate-950 dark:text-white">Usage history</h2>
+          </div>
+          <div className="mb-4 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-800">
+              <p className="text-sm text-slate-600 dark:text-slate-400">Total tournaments completed</p>
+              <p className="mt-1 text-2xl font-bold text-slate-950 dark:text-white">{usageQuery.data.totalTournaments}</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-800">
+              <p className="text-sm text-slate-600 dark:text-slate-400">Total competitors served</p>
+              <p className="mt-1 text-2xl font-bold text-slate-950 dark:text-white">{usageQuery.data.totalCompetitors.toLocaleString()}</p>
+            </div>
+          </div>
+          {usageQuery.data.recentUsage.length > 0 && (
+            <div className="mt-5">
+              <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Recent activity</h3>
+              <div className="space-y-2">
+                {usageQuery.data.recentUsage.slice(0, 5).map((usage) => (
+                  <div key={usage.tournamentId} className="flex items-center justify-between rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                    <div>
+                      <p className="font-medium text-slate-950 dark:text-white">{usage.tournamentName}</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        {new Date(usage.recordedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-primary-600 dark:text-primary-400">{usage.competitorCount}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">competitors</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
       <div className="mb-4">
         <h2 className="text-xl font-bold text-slate-950 dark:text-white">Plans built for tournament day</h2>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Plan changes take effect only after Stripe confirms the subscription.</p>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Choose annual subscriptions for unlimited events, or pay per-event for one-off tournaments.</p>
       </div>
-      <div className="grid gap-5 lg:grid-cols-3">
-        {([
-          { plan: 'free' as const, label: 'Free', tournaments: 1, members: 1, rings: 1, icon: ShieldCheck },
-          { plan: 'starter' as const, label: 'Starter', tournaments: 10, members: 15, rings: 8, icon: Sparkles },
-          { plan: 'pro' as const, label: 'Pro', tournaments: 100, members: 100, rings: 32, icon: Trophy },
-        ]).map((item) => {
-          const Icon = item.icon;
-          const current = organization.plan === item.plan;
-          return (
-            <Card key={item.plan} className={item.plan === 'starter' ? 'border-primary-300 dark:border-primary-700' : ''}>
-              <Icon className="h-6 w-6 text-primary-500" />
+
+      {/* Annual Plans */}
+      <div className="mb-6">
+        <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Annual Subscriptions</h3>
+        <div className="grid gap-5 lg:grid-cols-3">
+          {([
+            { plan: 'free' as const, label: 'Free Trial', tournaments: 1, competitors: 30, members: 1, rings: 1, icon: ShieldCheck, price: null },
+            { plan: 'starter' as const, label: 'Starter', tournaments: 10, competitors: 100, members: 15, rings: 8, icon: Sparkles, price: '$999/year' },
+            { plan: 'pro' as const, label: 'Pro', tournaments: 100, competitors: 9999, members: 100, rings: 32, icon: Trophy, price: '$2,499/year' },
+          ]).map((item) => {
+            const Icon = item.icon;
+            const current = organization.plan === item.plan;
+            return (
+              <Card key={item.plan} className={item.plan === 'starter' ? 'border-primary-300 dark:border-primary-700' : ''}>
+                <Icon className="h-6 w-6 text-primary-500" />
+                <h3 className="mt-4 text-lg font-bold text-slate-950 dark:text-white">{item.label}</h3>
+                {item.price && <p className="mt-1 text-sm font-semibold text-primary-600 dark:text-primary-400">{item.price}</p>}
+                <ul className="mt-5 space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                  <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Up to {item.tournaments} tournament{item.tournaments === 1 ? '' : 's'}</li>
+                  <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.competitors === 9999 ? 'Unlimited' : `Up to ${item.competitors}`} competitors</li>
+                  <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.members} team member{item.members === 1 ? '' : 's'}</li>
+                  <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Up to {item.rings} ring{item.rings === 1 ? '' : 's'}</li>
+                  <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.plan === 'free' ? 'Draft evaluation' : 'Public registration + event operations'}</li>
+                </ul>
+                {item.plan === 'free' ? (
+                  <Button className="mt-6 w-full" variant="secondary" disabled>{current ? 'Current plan' : 'Free evaluation'}</Button>
+                ) : (
+                  <Button
+                    className="mt-6 w-full"
+                    variant={item.plan === 'starter' ? 'primary' : 'secondary'}
+                    disabled={!canManageBilling || current}
+                    loading={billingMutation.isPending}
+                    onClick={() => billingMutation.mutate({ endpoint: 'checkout', plan: item.plan })}
+                  >
+                    {current ? 'Current plan' : `Choose ${item.label}`}
+                  </Button>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Per-Event Plans */}
+      <div className="mb-8">
+        <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Per-Event Pricing</h3>
+        <p className="mb-4 text-sm text-slate-600 dark:text-slate-400">One-time purchase for a single tournament. Perfect for occasional events.</p>
+        <div className="grid gap-5 lg:grid-cols-3">
+          {([
+            { plan: 'per_event_small' as const, label: 'Small Event', competitors: 100, price: '$99', description: 'Up to 100 competitors' },
+            { plan: 'per_event_medium' as const, label: 'Medium Event', competitors: 250, price: '$199', description: 'Up to 250 competitors' },
+            { plan: 'per_event_large' as const, label: 'Large Event', competitors: 500, price: '$299', description: 'Up to 500 competitors' },
+          ]).map((item) => (
+            <Card key={item.plan}>
+              <CreditCard className="h-6 w-6 text-primary-500" />
               <h3 className="mt-4 text-lg font-bold text-slate-950 dark:text-white">{item.label}</h3>
+              <p className="mt-1 text-2xl font-bold text-primary-600 dark:text-primary-400">{item.price}</p>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{item.description}</p>
               <ul className="mt-5 space-y-3 text-sm text-slate-600 dark:text-slate-300">
-                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.tournaments} active tournament{item.tournaments === 1 ? '' : 's'}</li>
-                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.members} team member{item.members === 1 ? '' : 's'}</li>
-                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Up to {item.rings} ring{item.rings === 1 ? '' : 's'}</li>
-                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.plan === 'free' ? 'Draft evaluation' : 'Public registration and event operations'}</li>
+                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Single tournament access</li>
+                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> {item.competitors} competitor limit</li>
+                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Public registration</li>
+                <li className="flex gap-2"><Check className="h-4 w-4 text-emerald-500" /> Full event operations</li>
               </ul>
-              {item.plan === 'free' ? (
-                <Button className="mt-6 w-full" variant="secondary" disabled>{current ? 'Current plan' : 'Free evaluation'}</Button>
-              ) : (
-                <Button
-                  className="mt-6 w-full"
-                  variant={item.plan === 'starter' ? 'primary' : 'secondary'}
-                  disabled={!canManageBilling || current}
-                  loading={billingMutation.isPending}
-                  onClick={() => billingMutation.mutate({ endpoint: 'checkout', plan: item.plan })}
-                >
-                  {current ? 'Current plan' : `Choose ${item.label}`}
-                </Button>
-              )}
+              <Button
+                className="mt-6 w-full"
+                variant="secondary"
+                disabled={!canManageBilling}
+                loading={billingMutation.isPending}
+                onClick={() => billingMutation.mutate({ endpoint: 'checkout', plan: item.plan })}
+              >
+                Purchase {item.label}
+              </Button>
             </Card>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
       {organization.membershipRole === 'owner' && (

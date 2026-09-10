@@ -301,3 +301,27 @@ export function waitlistPromotionEmail(params: {
     `, params.organizerBrandName),
   };
 }
+
+export function paymentFailedEmail(params: {
+  organizationName: string;
+  gracePeriodDays: number;
+  billingPortalUrl: string;
+  failureReason?: string;
+}): { subject: string; html: string } {
+  const content = `
+    <p>Hi there,</p>
+    <p>We were unable to process the payment for <strong>${escapeHtml(params.organizationName)}</strong>.</p>
+    ${params.failureReason ? `<p class="muted">Reason: ${escapeHtml(params.failureReason)}</p>` : ''}
+    <p>Your account will remain active for the next <strong>${params.gracePeriodDays} days</strong> while you update your payment method.</p>
+    <p>After the grace period expires, your account will be automatically downgraded to the free tier.</p>
+    <p style="margin: 28px 0; text-align: center;">
+      <a href="${escapeHtml(params.billingPortalUrl)}" class="btn">Update Payment Method</a>
+    </p>
+    <p class="muted">If you have any questions, please reply to this email or contact our support team.</p>
+  `;
+  
+  return {
+    subject: `Payment Failed — ${escapeHtml(params.organizationName)}`,
+    html: layout(content),
+  };
+}

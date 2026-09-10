@@ -97,6 +97,7 @@ model Tournament {
   sosAlerts             SOSAlert[]
   organization        Organization?          @relation(fields: [organizationId], references: [id])
   sportProfile        SportProfile?          @relation(fields: [sportProfileId], references: [id])
+  usageRecords        OrganizationUsageRecord[]
 
   // Closes P13: every list query filters on deletedAt; without
   // an index the planner may scan. The tournaments list also
@@ -593,6 +594,7 @@ model Organization {
   planChanges         OrganizationPlanChange[]
   invitations         Invitation[]
   auditLogs           UserAuditLog[]
+  usageRecords        OrganizationUsageRecord[]
 
   @@index([slug])
 }
@@ -607,6 +609,9 @@ model OrganizationBillingSubscription {
   plan                   String    @default("free")
   currentPeriodEnd       DateTime?
   cancelAtPeriodEnd      Boolean   @default(false)
+  gracePeriodEndsAt      DateTime?
+  paymentFailedAt        DateTime?
+  lastPaymentFailureReason String?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
@@ -614,6 +619,7 @@ model OrganizationBillingSubscription {
 
   @@index([status])
   @@index([plan])
+  @@index([gracePeriodEndsAt])
 }
 
 model OrganizationPlanChange {
@@ -641,6 +647,27 @@ model BillingWebhookEvent {
 
   @@index([type])
   @@index([processedAt])
+}
+
+model OrganizationUsageRecord {
+  id                  String    @id @default(uuid())
+  organizationId      String
+  tournamentId        String
+  competitorCount     Int       @default(0)
+  recordedAt          DateTime  @default(now())
+  billingPeriodStart  DateTime?
+  billingPeriodEnd    DateTime?
+  reportedToStripe    Boolean   @default(false)
+  reportedAt          DateTime?
+  createdAt           DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tournament   Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([tournamentId])
+  @@index([recordedAt])
+  @@index([reportedToStripe])
 }
 
 // Organization membership

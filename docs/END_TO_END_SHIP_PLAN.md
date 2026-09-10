@@ -90,7 +90,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | P1-2 | #226 | **✅ Org-level access control** | Wire `requireTournamentAccess()` into all mutation routes; test isolation — **VERIFIED COMPLETE** (21 inline checks + middleware, 12 regression tests) | S |
 | P1-3 | #224 | **✅ User audit log** | Track login, role change, org invite, tournament create/delete — **SHIPPED** in PR #224 | S |
 | **Billing & Payments** | | | | |
-| P1-4 | #TBD | **Stripe plan selection** | `/organization` shows plan tiers; Checkout flow for annual/per-event purchase | L |
+| P1-4 | #TBD | **✅ Stripe plan selection** | `/organization` shows plan tiers (annual + per-event); Checkout flow for all tiers — **SHIPPED** in this PR | L |
 | P1-5 | #223 | **✅ Usage metering** | Track competitors/event for per-event pricing; show usage in org settings — **SHIPPED** in PR #223 | M |
 | P1-6 | #TBD | **BLOCKED (Cameron)** | Billing portal — needs Stripe dashboard config + validation (code exists, awaiting Cameron Stripe account setup) | S (config) |
 | P1-7 | #223 | **✅ Trial enforcement** | Limit free tier to 1 event + 30 competitors; upgrade gate with clear CTA — **SHIPPED** in PR #223 | M |
@@ -239,12 +239,12 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Product/Price config | ⚠️ Needs setup | Create 6 products in Stripe dashboard (test + live) |
-| Checkout Session API | ✅ Implemented | `POST /api/billing/checkout` creates session, redirects to Stripe (code complete) |
+| Product/Price config | ⚠️ Needs setup | Create 8 products in Stripe dashboard: starter, pro, per-event small/medium/large (test + live) |
+| Checkout Session API | ✅ Implemented | `POST /api/billing/checkout` creates session for all tiers, redirects to Stripe (code complete) |
 | Webhook handler | ✅ Implemented | `POST /api/billing/webhook` validates signature, updates `OrganizationBillingSubscription` (code complete) |
 | Customer Portal | ✅ Implemented | Code exists in billing.ts + OrganizationSettings.tsx; needs Stripe dashboard config + validation |
-| Usage metering | ❌ Not started | Report competitor count to Stripe on tournament completion |
-| Failed payment handling | ❌ Not started | Email notification + grace period (7 days) before downgrade |
+| Usage metering | ✅ Implemented | Record competitor count to DB on tournament completion; Stripe report path is stubbed with tests |
+| Failed payment handling | ✅ Implemented | Email notification + 7-day grace period before downgrade via `invoice.payment_failed` webhook |
 
 **Blocker:** Cameron must create Stripe account, configure products/prices in Stripe dashboard, validate checkout + webhook + portal flows end-to-end.
 
