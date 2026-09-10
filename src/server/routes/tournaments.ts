@@ -791,7 +791,12 @@ router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer')
   const prisma: PrismaClient = req.app.locals.prisma;
   const { notInDivision } = req.query;
 
-  const where: Record<string, unknown> = { tournamentId: getParam(req.params.id) };
+  const where: Record<string, unknown> = {
+    tournamentId: getParam(req.params.id),
+    // Only show active and promoted registrations (exclude waitlisted).
+    // Ensures check-in sees all completed public registrations (#187).
+    waitlistStatus: { in: ['active', 'promoted'] },
+  };
   // `?notInDivision=<id>` returns only registrations that have no
   // DivisionAssignment for this specific division. Used by the
   // BracketEditor "Add competitor" picker. Closes H2 from the UI audit.

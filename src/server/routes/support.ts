@@ -466,8 +466,9 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
   // Public support chat can create a ticket, but must never expose platform
   // diagnostics or tournament operational data. Those are available only to
   // authenticated users with access to the requested tournament.
+  // Only admin/director roles can access diagnostics to prevent leakage.
   let supportAssist: SupportAssistOutput | null = null;
-  if (req.user) {
+  if (req.user && (req.user.role === 'admin' || req.user.role === 'director')) {
     if (requestedTournamentId) {
       const access = await checkTournamentAccess(req, prisma, requestedTournamentId, 'viewer');
       if (!access.ok) {
