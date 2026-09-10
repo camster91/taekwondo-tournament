@@ -83,7 +83,7 @@ export default function Profile() {
   if (!user) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-600 dark:text-gray-400">Please log in to view your profile.</p>
+        <p className="text-surface-600 dark:text-surface-400">Please log in to view your profile.</p>
         <Button as={Link} to="/login" variant="primary" className="mt-4">
           Go to Login
         </Button>
@@ -100,7 +100,7 @@ export default function Profile() {
       >
         <Link
           to="/dashboard"
-          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Dashboard
@@ -113,30 +113,30 @@ export default function Profile() {
         <CardBody>
           <div className="space-y-4">
             <div className="flex items-center">
-              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg mr-3">
-                <Mail className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              <div className="p-2 bg-surface-100 dark:bg-surface-700 rounded-lg mr-3">
+                <Mail className="h-5 w-5 text-surface-600 dark:text-surface-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Email</p>
-                <p className="font-medium text-gray-900 dark:text-white">{user.email}</p>
+                <p className="text-sm text-surface-600 dark:text-surface-400">Email</p>
+                <p className="font-medium text-surface-900 dark:text-white">{user.email}</p>
               </div>
             </div>
             <div className="flex items-center">
-              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg mr-3">
-                <Shield className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              <div className="p-2 bg-surface-100 dark:bg-surface-700 rounded-lg mr-3">
+                <Shield className="h-5 w-5 text-surface-600 dark:text-surface-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Role</p>
-                <p className="font-medium text-gray-900 dark:text-white capitalize">{user.role}</p>
+                <p className="text-sm text-surface-600 dark:text-surface-400">Role</p>
+                <p className="font-medium text-surface-900 dark:text-white capitalize">{user.role}</p>
               </div>
             </div>
             <div className="flex items-center">
-              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg mr-3">
-                <Calendar className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              <div className="p-2 bg-surface-100 dark:bg-surface-700 rounded-lg mr-3">
+                <Calendar className="h-5 w-5 text-surface-600 dark:text-surface-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Member Since</p>
-                <p className="font-medium text-gray-900 dark:text-white">
+                <p className="text-sm text-surface-600 dark:text-surface-400">Member Since</p>
+                <p className="font-medium text-surface-900 dark:text-white">
                   {user.createdAt
                     ? new Date(user.createdAt).toLocaleDateString()
                     : 'N/A'}
@@ -205,7 +205,7 @@ export default function Profile() {
         <CardHeader title="Data Export" />
         <CardBody>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="max-w-lg text-sm text-gray-600 dark:text-gray-400">
+            <p className="max-w-lg text-sm text-surface-600 dark:text-surface-400">
               Download all your personal data in JSON format. This includes your profile, organization memberships, tournament access, and audit logs (GDPR compliance).
             </p>
             <Button 
@@ -242,7 +242,7 @@ export default function Profile() {
         <CardHeader title="Delete account" />
         <CardBody>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="max-w-lg text-sm text-gray-600 dark:text-gray-400">
+            <p className="max-w-lg text-sm text-surface-600 dark:text-surface-400">
               First export and close every organization you own. Account deletion removes your profile and sign-in records permanently.
             </p>
             <Button variant="danger" onClick={() => setShowDelete(true)}>
@@ -271,7 +271,7 @@ export default function Profile() {
           </>
         )}
       >
-        <p className="mb-4 text-sm text-gray-700 dark:text-gray-300">
+        <p className="mb-4 text-sm text-surface-700 dark:text-surface-300">
           Type <strong className="font-mono">DELETE MY ACCOUNT</strong> to confirm.
         </p>
         <Label htmlFor="account-delete-confirmation">Confirmation phrase</Label>
