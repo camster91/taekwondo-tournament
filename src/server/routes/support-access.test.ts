@@ -175,9 +175,13 @@ describe('support access boundaries', () => {
 
   it('checks tournament access before authenticated support diagnostics', async () => {
     mocks.checkTournamentAccess.mockResolvedValueOnce({ ok: false, status: 403, error: 'Forbidden' });
-    const prisma: any = { organizationMember: { findMany: vi.fn().mockResolvedValue([]) } };
+    const prisma: any = { 
+      organizationMember: { findMany: vi.fn().mockResolvedValue([]) },
+      tournament: { findUnique: vi.fn().mockResolvedValue(null) },
+      organization: { findUnique: vi.fn().mockResolvedValue(null) },
+    };
     const req: any = {
-      user: { id: 'user-a', email: 'a@example.test', role: 'viewer' },
+      user: { id: 'user-a', email: 'a@example.test', role: 'director' },
       body: { message: 'Who is next?', tournamentId: 'foreign-tournament' },
       app: { locals: { prisma } },
     };
@@ -197,7 +201,7 @@ describe('support access boundaries', () => {
       tournament: { count: vi.fn().mockResolvedValue(0) },
     };
     const req: any = {
-      user: { id: 'viewer-a', email: 'viewer@example.test', role: 'viewer' },
+      user: { id: 'director-a', email: 'director@example.test', role: 'director' },
       body: { message: 'Show the health snapshot', requestAssist: true },
       app: { locals: { prisma } },
     };
@@ -277,7 +281,7 @@ describe('support access boundaries', () => {
       supportTicket: { create: vi.fn().mockResolvedValue(ticket) },
     };
     const req: any = {
-      user: { id: 'multi-org-user', email: 'synthetic@example.test', role: 'viewer', firstName: 'Synthetic', lastName: 'User' },
+      user: { id: 'multi-org-user', email: 'synthetic@example.test', role: 'director', firstName: 'Synthetic', lastName: 'User' },
       body: { message: 'Please create a ticket', createTicket: true, tournamentId: 'tournament-b' },
       app: { locals: { prisma } },
     };
@@ -309,7 +313,7 @@ describe('support access boundaries', () => {
       supportTicket: { create: vi.fn().mockResolvedValue(ticket) },
     };
     const req: any = {
-      user: { id: 'user-a', email: 'synthetic@example.test', role: 'viewer', firstName: 'Synthetic', lastName: 'User' },
+      user: { id: 'user-a', email: 'synthetic@example.test', role: 'director', firstName: 'Synthetic', lastName: 'User' },
       body: { message: '<img src=x onerror=alert(1)>', createTicket: true },
       app: { locals: { prisma } },
     };
