@@ -34,6 +34,14 @@ export default defineConfig({
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
     },
+    {
+      name: 'mobile-chrome',
+      use: { 
+        ...devices['Pixel 5'],
+        // Override the default mobile viewport to match WCAG 2.2 AA touch target size testing
+        // Pixel 5: 393×851 logical pixels (physical: 1080×2340 at 2.75× device pixel ratio)
+      },
+    },
   ],
   // The .ts loader on Node 22+ fails on this code path. The actual
   // loader is installed correctly (--list works, tests run when
