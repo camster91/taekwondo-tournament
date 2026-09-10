@@ -51,43 +51,52 @@ describe('schedule-delay-propagation', () => {
       const schedule = createBasicSchedule();
       const settings = mergeCanonicalScheduleSettings(null, schedule);
 
-      (mockPrisma.tournament.findUnique as any).mockResolvedValueOnce({
-        id: 'tournament-1',
-        settings,
-        updatedAt: new Date('2024-01-01T00:00:00Z'),
-        divisions: [
-          {
-            id: 'div-1',
-            name: 'Division 1',
-            bracket: null,
-            assignments: [{ registrationId: 'reg-1' }],
-          },
-          {
-            id: 'div-2',
-            name: 'Division 2',
-            bracket: null,
-            assignments: [{ registrationId: 'reg-2' }],
-          },
-          {
-            id: 'div-3',
-            name: 'Division 3',
-            bracket: null,
-            assignments: [{ registrationId: 'reg-3' }],
-          },
-          {
-            id: 'div-4',
-            name: 'Division 4',
-            bracket: null,
-            assignments: [{ registrationId: 'reg-4' }],
-          },
-          {
-            id: 'div-5',
-            name: 'Division 5',
-            bracket: null,
-            assignments: [{ registrationId: 'reg-5' }],
-          },
-        ],
-      });
+      // Mock both preview and internal calculation calls
+      const mockFindUnique = vi.fn()
+        .mockResolvedValueOnce({
+          id: 'tournament-1',
+          settings,
+          updatedAt: new Date('2024-01-01T00:00:00Z'),
+        })
+        .mockResolvedValueOnce({
+          id: 'tournament-1',
+          settings,
+          updatedAt: new Date('2024-01-01T00:00:00Z'),
+          divisions: [
+            {
+              id: 'div-1',
+              name: 'Division 1',
+              bracket: null,
+              assignments: [{ registrationId: 'reg-1' }],
+            },
+            {
+              id: 'div-2',
+              name: 'Division 2',
+              bracket: null,
+              assignments: [{ registrationId: 'reg-2' }],
+            },
+            {
+              id: 'div-3',
+              name: 'Division 3',
+              bracket: null,
+              assignments: [{ registrationId: 'reg-3' }],
+            },
+            {
+              id: 'div-4',
+              name: 'Division 4',
+              bracket: null,
+              assignments: [{ registrationId: 'reg-4' }],
+            },
+            {
+              id: 'div-5',
+              name: 'Division 5',
+              bracket: null,
+              assignments: [{ registrationId: 'reg-5' }],
+            },
+          ],
+        });
+
+      (mockPrisma.tournament.findUnique as any) = mockFindUnique;
 
       const delayInput: ScheduleDelayInput = {
         tournamentId: 'tournament-1',
