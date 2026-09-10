@@ -7,10 +7,10 @@ type Size = 'sm' | 'md' | 'lg';
 const variantClasses: Record<Variant, string> = {
   primary: 'bg-primary-600 hover:bg-primary-700 text-white shadow-sm',
   secondary:
-    'bg-slate-100 hover:bg-slate-200 text-slate-900 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white',
-  ghost: 'bg-transparent hover:bg-slate-100 text-slate-700 dark:hover:bg-slate-800 dark:text-slate-200',
-  danger: 'bg-red-600 hover:bg-red-700 text-white shadow-sm',
-  success: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm',
+    'bg-surface-100 hover:bg-surface-200 text-surface-900 dark:bg-surface-800 dark:hover:bg-surface-700 dark:text-white border border-surface-200 dark:border-surface-700',
+  ghost: 'bg-transparent hover:bg-surface-100 text-surface-700 dark:hover:bg-surface-800 dark:text-surface-200',
+  danger: 'bg-danger hover:bg-danger/90 text-white shadow-sm',
+  success: 'bg-success hover:bg-success/90 text-white shadow-sm',
   gradient: 'btn-gradient text-white shadow-sm',
 };
 
@@ -23,7 +23,7 @@ const sizeClasses: Record<Size, string> = {
 };
 
 const baseClasses =
-  'btn inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-all duration-150 ' +
+  'btn inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-all duration-fast ' +
   'disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]';
 
 function buildClassName(

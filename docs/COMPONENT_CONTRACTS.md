@@ -2,7 +2,8 @@
 
 **Created:** 2026-09-10  
 **Owner:** Bowin Product Team  
-**Purpose:** Enforce consistent loading, empty, error, and success states across day-of surfaces
+**Purpose:** Enforce consistent loading, empty, error, and success states across day-of surfaces  
+**See also:** [DESIGN_TOKENS.md](./DESIGN_TOKENS.md) for visual token system
 
 ---
 
@@ -18,6 +19,7 @@ This document defines the behavioral contracts for shared UI components used in 
 - Dark mode support via Tailwind `dark:` variants
 - Loading states must be interruptible (cancel-first focus)
 - Error states must offer retry where applicable
+- **Use semantic design tokens** (see DESIGN_TOKENS.md): `surface-*`, `primary-*`, `accent-*`, `success`, `warning`, `danger`, `info`
 
 ---
 

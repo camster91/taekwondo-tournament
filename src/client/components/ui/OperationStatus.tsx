@@ -17,12 +17,12 @@ export function operationStatusLabel(state: OperationState): string {
 }
 
 const styles: Record<OperationState, string> = {
-  pending: 'border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100',
-  saved: 'border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100',
-  queued: 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100',
-  retrying: 'border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100',
-  rejected: 'border-rose-300 bg-rose-50 text-rose-950 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100',
-  resolved: 'border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100',
+  pending: 'border-info/20 bg-info/10 text-info dark:border-info/30 dark:bg-info/20 dark:text-info',
+  saved: 'border-success/20 bg-success/10 text-success dark:border-success/30 dark:bg-success/20 dark:text-success',
+  queued: 'border-warning/20 bg-warning/10 text-warning dark:border-warning/30 dark:bg-warning/20 dark:text-warning',
+  retrying: 'border-info/20 bg-info/10 text-info dark:border-info/30 dark:bg-info/20 dark:text-info',
+  rejected: 'border-danger/20 bg-danger/10 text-danger dark:border-danger/30 dark:bg-danger/20 dark:text-danger',
+  resolved: 'border-success/20 bg-success/10 text-success dark:border-success/30 dark:bg-success/20 dark:text-success',
 };
 
 const icons = {
@@ -49,7 +49,7 @@ export default function OperationStatus({ state, message, actionLabel, onAction,
       role={state === 'rejected' ? 'alert' : 'status'}
       aria-live={state === 'rejected' ? 'assertive' : 'polite'}
       aria-atomic="true"
-      className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm ${styles[state]} ${className}`}
+      className={`flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm ${styles[state]} ${className}`}
     >
       <Icon className={`h-5 w-5 shrink-0 ${active ? 'animate-spin' : ''}`} aria-hidden="true" />
       <div className="min-w-0 flex-1">

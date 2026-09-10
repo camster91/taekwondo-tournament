@@ -9,21 +9,21 @@ interface BadgeProps {
 }
 
 const variants = {
-  default: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-  success: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  warning: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-  danger: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  info: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  purple: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
+  default: 'bg-surface-100 text-surface-800 dark:bg-surface-700 dark:text-surface-300',
+  success: 'bg-success/10 text-success dark:bg-success/20 dark:text-success',
+  warning: 'bg-warning/10 text-warning dark:bg-warning/20 dark:text-warning',
+  danger: 'bg-danger/10 text-danger dark:bg-danger/20 dark:text-danger',
+  info: 'bg-info/10 text-info dark:bg-info/20 dark:text-info',
+  purple: 'bg-accent-100 text-accent-800 dark:bg-accent-900/30 dark:text-accent-400',
 };
 
 const dotColors = {
-  default: 'bg-gray-400',
-  success: 'bg-green-500',
-  warning: 'bg-yellow-500',
-  danger: 'bg-red-500',
-  info: 'bg-blue-500',
-  purple: 'bg-purple-500',
+  default: 'bg-surface-400',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-danger',
+  info: 'bg-info',
+  purple: 'bg-accent-500',
 };
 
 const sizes = {

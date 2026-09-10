@@ -16,9 +16,9 @@ export default function Card({
   return (
     <div
       className={[
-        'rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm',
+        'rounded-lg border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-900 shadow-sm',
         padded && 'p-6',
-        interactive && 'cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5',
+        interactive && 'cursor-pointer transition-all duration-base hover:shadow-md hover:-translate-y-0.5',
         className,
       ]
         .filter(Boolean)
