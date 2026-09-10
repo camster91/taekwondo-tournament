@@ -62,7 +62,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Registration (public) | 100% | 🟢 Strong | Self-serve form, waitlist, payment gateway, confirmation emails, token security complete |
 | Divisions & categorization | 95% | 🟢 Strong | Auto-generation, manual override UX, merge conflicts UI (amber warning banner) complete |
 | Brackets | 90% | 🟢 Strong | DE generation, real-time collab, print layout complete; QR poster service exists |
-| Day-of operations | 95% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view (TV-optimized with larger fonts and ring badges), live schedule delay propagation (#125) complete; offline mode, ring sync shipped |
+| Day-of operations | 95% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view (TV-optimized with larger fonts and ring badges), live schedule delay propagation (#125/#259) complete; offline mode, ring sync shipped |
 | Scoring & results | 90% | 🟢 Strong | Match scoring, audit trail, undo/redo UI, video review integration (labeled, with help text) complete |
 | Public display | 90% | 🟢 Strong | Public scoreboard by slug complete; auto-refresh config shipped; TV-optimized layout polish complete (4K-safe fonts, improved contrast, better spacing); QR poster service exists |
 | **Non-product** | | | |
@@ -73,8 +73,10 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Support & docs | 70% | 🟢 Strong | In-app tour complete; help center v1 shipped; video tutorial structure ready (awaiting Cameron recordings); first-party support tickets working |
 | Marketing & onboarding | 70% | 🟢 Strong | Landing page drafted; onboarding checklist shipped; needs case studies, demo video (Cameron-gated) |
 
-**Overall estimated completion:** ~92% (custom domains API+UI complete #256/#257, live schedule delay propagation #125 complete)  
+**Overall estimated completion:** ~92% (custom domains API+UI complete #256/#257, live schedule delay propagation #125/#259 complete; day-of operations ~95%)  
 **Blocker count:** 3 critical items (Cameron Stripe dashboard setup for self-service billing, legal counsel final approval, production deploy execution with demo video/case studies for marketing)
+
+**Next Agent Track:** APP-COMPLETION Phase 5 / UX Wave 0 trust items — focus on user experience polish, truthful UI states, and fail-safe interaction patterns rather than new Phase 0–2 feature IDs. Immediate priorities: completed tournament routing (#135), modal/confirmation safety (#140), truthful settings save state (#141).
 
 ---
 
@@ -330,6 +332,7 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 5. **Case studies:** Interview 3 pilot customers for testimonials (BD/recruiting, not blocker)
 6. **Production Bowin domain cutover** (if any): DNS/TLS for bowin.app or bowin.io
 7. **Production deploy:** VPS deploy script execution, health validation
+8. **VPS migrations:** Next production deploy must run `prisma migrate deploy` to apply: `20260910_add_tournament_templates` (org-level templates) and `20260910_add_custom_domains` (custom domain support). Demo VPS operations still pending for #164 (isolated demo hostname, DB, Traefik config, deploy-demo.sh).
 
 **✅ Already LIVE on HH VPS (2026-09-09):**
 - Uptime Kuma (status.ashbi.ca / uptime.ashbi.ca) monitoring /api/health/ready

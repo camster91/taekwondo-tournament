@@ -1,5 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useId, type ReactNode } from 'react';
 import Button from './Button';
 import CloseButton from './CloseButton';
 
@@ -20,12 +20,14 @@ const FOCUSABLE_SELECTOR =
   'a[href], area[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * Confirm dialog with the same a11y contract as Modal:
- *  - Escape closes (treated as Cancel).
+ * Confirm dialog with enhanced a11y and safety:
+ *  - Escape closes (treated as Cancel), but locked during isLoading.
  *  - Tab / Shift+Tab cycle inside the panel.
- *  - On open, focus moves to the confirm button.
- *  - On close, focus returns to the element that was focused
- *    before the dialog opened.
+ *  - On open, focus moves to the safe Cancel button for danger/warning variants (confirm button for info).
+ *  - On close, focus returns to the element that was focused before the dialog opened.
+ *  - aria-labelledby and aria-describedby connect the title and message.
+ *  - aria-busy signals loading state.
+ *  - Body scroll is locked while the dialog is open.
  */
 export default function ConfirmDialog({
   isOpen,
@@ -41,26 +43,45 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<Element | null>(null);
+  const titleId = useId();
+  const descriptionId = useId();
 
   useEffect(() => {
     if (!isOpen) return;
     previouslyFocusedRef.current = typeof document !== 'undefined'
       ? document.activeElement
       : null;
+
+    // Lock body scroll
+    const originalOverflow = document.body.style.overflow;
+    const originalPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+
     const id = window.setTimeout(() => {
       const panel = panelRef.current;
       if (!panel) return;
-      // Prefer the confirm button as the focus target — it's the
-      // action the user is being asked to take.
+      // For danger/warning variants, focus the safe Cancel button first.
+      // For info variants, focus the confirm button (neutral action).
+      const safeFirst = variant === 'danger' || variant === 'warning';
+      const cancelBtn = panel.querySelector<HTMLButtonElement>('[data-cancel-button]');
       const confirmBtn = panel.querySelector<HTMLButtonElement>('[data-confirm-button]');
-      const target = confirmBtn ?? panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      const target = safeFirst
+        ? (cancelBtn ?? confirmBtn ?? panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR))
+        : (confirmBtn ?? panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR));
       (target ?? panel).focus();
     }, 0);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        // Lock dismiss during loading
+        if (!isLoading && !closeDisabled) {
+          onClose();
+        }
         return;
       }
       if (e.key !== 'Tab') return;
@@ -93,12 +114,15 @@ export default function ConfirmDialog({
     return () => {
       window.clearTimeout(id);
       document.removeEventListener('keydown', handleKeyDown, true);
+      // Restore body scroll
+      document.body.style.overflow = originalOverflow;
+      document.body.style.paddingRight = originalPaddingRight;
       const prev = previouslyFocusedRef.current;
       if (prev && typeof (prev as HTMLElement).focus === 'function') {
         (prev as HTMLElement).focus();
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, variant, isLoading, closeDisabled]);
 
   if (!isOpen) return null;
 
@@ -114,13 +138,19 @@ export default function ConfirmDialog({
       <div className="flex min-h-full items-center justify-center p-4">
         <div
           className="fixed inset-0 bg-black/50 transition-opacity"
-          onClick={onClose}
+          onClick={() => {
+            if (!isLoading && !closeDisabled) {
+              onClose();
+            }
+          }}
         />
         <div
           ref={panelRef}
           role="dialog"
           aria-modal="true"
-          aria-label={title}
+          aria-labelledby={titleId}
+          aria-describedby={descriptionId}
+          aria-busy={isLoading}
           tabIndex={-1}
           className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full transform transition-all"
         >
@@ -138,10 +168,10 @@ export default function ConfirmDialog({
                 <AlertTriangle className="h-6 w-6" />
               </div>
               <div className="flex-1 pt-1">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h3 id={titleId} className="text-lg font-semibold text-gray-900 dark:text-white">
                   {title}
                 </h3>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                <p id={descriptionId} className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                   {message}
                 </p>
               </div>
@@ -154,6 +184,7 @@ export default function ConfirmDialog({
               onClick={onClose}
               disabled={isLoading || closeDisabled}
               className="w-full sm:w-auto"
+              data-cancel-button
             >
               {cancelText}
             </Button>

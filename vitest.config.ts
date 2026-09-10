@@ -12,7 +12,7 @@ export default defineConfig({
       DATABASE_URL: process.env.DATABASE_URL || 'postgresql://test:test@localhost:5432/test_db',
       ...process.env,
     },
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
     // Several authentication tests deliberately change process.env and reload
     // auth.ts to exercise deployment gates and rate-limit configuration. Files
     // must not overlap or one test server can inherit another file's limiter

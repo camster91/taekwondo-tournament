@@ -12,6 +12,7 @@ import {
   Copy,
   Check as CheckIcon,
   Award,
+  AlertCircle,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -29,6 +30,13 @@ import { Label } from '../components/ui';
 import { Select } from '../components/ui';
 import { DataTable, TableHead, TableBody } from '../components/ui';
 import { saveTournamentSettingsRequest } from '../utils/tournament-settings-save';
+import { 
+  getSaveStateLabel, 
+  getSaveStateVariant, 
+  shouldBlockNavigation, 
+  getBeforeUnloadMessage,
+  type SaveState 
+} from '../utils/tournament-settings-state';
 
 interface Tournament {
   id: string;
@@ -107,10 +115,10 @@ export default function TournamentSettings() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [settings, setSettings] = useState<TournamentSettings>(DEFAULT_SETTINGS);
-  const [hasChanges, setHasChanges] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>('clean');
+  const [saveError, setSaveError] = useState<string>('');
   const setupDirtyRef = useRef(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
   // Branding state
   const [branding, setBranding] = useState<BrandingSettings>({
@@ -143,6 +151,21 @@ export default function TournamentSettings() {
   // fields) and 'rules' (the rules engine — a sub-component with its
   // own save flow).
   const [tab, setTab] = useState<SettingsTab>('setup');
+
+  // Unsaved changes protection: block browser unload when dirty or saving
+  useEffect(() => {
+    const message = getBeforeUnloadMessage(saveState);
+    if (!message) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = message;
+      return message;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [saveState]);
 
   const { data: tournament, isLoading } = useQuery<Tournament>({
     queryKey: ['tournament', id],
@@ -376,22 +399,29 @@ export default function TournamentSettings() {
 
   const saveMutation = useMutation({
     mutationFn: async (newSettings: TournamentSettings) => {
+      setSaveState('saving');
+      setSaveError('');
       return saveTournamentSettingsRequest(fetch, id!, newSettings, getAuthHeaders());
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tournament', id] });
       setupDirtyRef.current = false;
-      setHasChanges(false);
-      setShowSaveSuccess(true);
-      setTimeout(() => setShowSaveSuccess(false), 3000);
+      setSaveState('saved');
+      setTimeout(() => {
+        setSaveState((current) => current === 'saved' ? 'clean' : current);
+      }, 3000);
     },
-    onError: (error: Error) => addToast(error.message, 'error'),
+    onError: (error: Error) => {
+      setSaveState('error');
+      setSaveError(error.message || 'Failed to save settings');
+      addToast(error.message, 'error');
+    },
   });
 
   const updateSettings = (updates: Partial<TournamentSettings>) => {
     setSettings((prev) => ({ ...prev, ...updates }));
     setupDirtyRef.current = true;
-    setHasChanges(true);
+    setSaveState('dirty');
   };
 
   const addAgeGroup = () => {
@@ -424,7 +454,7 @@ export default function TournamentSettings() {
   const resetToDefaults = () => {
     setSettings(DEFAULT_SETTINGS);
     setupDirtyRef.current = true;
-    setHasChanges(true);
+    setSaveState('dirty');
     setShowResetConfirm(false);
   };
 
@@ -479,7 +509,7 @@ export default function TournamentSettings() {
             <Button
               variant="primary"
               onClick={() => saveMutation.mutate(settings)}
-              disabled={!hasChanges || saveMutation.isPending}
+              disabled={saveState !== 'dirty' || saveMutation.isPending}
               loading={saveMutation.isPending}
             >
               <Save className="h-4 w-4 mr-2" />
@@ -1283,19 +1313,49 @@ export default function TournamentSettings() {
         </div>
       )}
 
-      {/* Unsaved Changes Warning */}
-      {hasChanges && (
-        <div className="fixed bottom-4 right-4 bg-yellow-100 dark:bg-yellow-900/80 border border-yellow-400 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3">
-          <span className="text-sm">You have unsaved changes</span>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => saveMutation.mutate(settings)}
-            disabled={saveMutation.isPending}
-            loading={saveMutation.isPending}
-          >
-            Save
-          </Button>
+      {/* Save State Status Banner */}
+      {saveState !== 'clean' && (
+        <div
+          role="status"
+          aria-live="polite"
+          aria-label={`Save status: ${getSaveStateLabel(saveState)}`}
+          className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 ${
+            saveState === 'dirty'
+              ? 'bg-yellow-100 dark:bg-yellow-900/80 border border-yellow-400 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200'
+              : saveState === 'saving'
+                ? 'bg-blue-100 dark:bg-blue-900/80 border border-blue-400 dark:border-blue-700 text-blue-800 dark:text-blue-200'
+                : saveState === 'saved'
+                  ? 'bg-green-100 dark:bg-green-900/80 border border-green-400 dark:border-green-700 text-green-800 dark:text-green-200'
+                  : 'bg-red-100 dark:bg-red-900/80 border border-red-400 dark:border-red-700 text-red-800 dark:text-red-200'
+          }`}
+        >
+          {saveState === 'error' && <AlertCircle className="h-5 w-5 flex-shrink-0" />}
+          <div className="flex-1">
+            <span className="text-sm font-medium">{getSaveStateLabel(saveState)}</span>
+            {saveState === 'error' && saveError && (
+              <p className="text-xs mt-0.5">{saveError}</p>
+            )}
+          </div>
+          {saveState === 'dirty' && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => saveMutation.mutate(settings)}
+              disabled={saveMutation.isPending}
+              loading={saveMutation.isPending}
+            >
+              Save
+            </Button>
+          )}
+          {saveState === 'error' && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => saveMutation.mutate(settings)}
+            >
+              Retry
+            </Button>
+          )}
         </div>
       )}
 
