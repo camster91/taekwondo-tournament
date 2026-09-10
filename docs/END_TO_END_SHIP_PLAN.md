@@ -20,6 +20,8 @@
 - ✅ PR #247: Pilot polish batch — public scoreboard refresh interval setting, email template design pass with tenant branding, multi-sport seed data examples (Karate/Judo), test-aware rate limit middleware
 - ✅ PR #250: Post-#249 typecheck fixes — resolved client typecheck errors in websocket.ts, CompetitorDuplicates, CompetitorProfile; sync ship plan
 - ✅ PR #251: Key Gaps polish — announcer view readability (bigger fonts, ring badges for TV display), video review integration polish (clearer labels, help text), division merge conflicts UI (amber warning banner showing replaced divisions & excluded registrations)
+- ✅ PR #252: Ship plan sync post-#251 + typecheck leftovers (@types/ws, Waitlist/sentry/DirectorDashboard/ToastContext/etc.) + #189 demo data disclosure
+- 🔄 **This PR**: Post-#252 typecheck completion + TV layout polish — fixed remaining typecheck errors (PublicScoreboard refetchInterval, Results videoUrl, VideoTutorials icon prop), TV-optimized public scoreboard (4K-safe fonts, improved contrast, better spacing for venue displays)
 
 ---
 
@@ -56,7 +58,7 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Brackets | 90% | 🟢 Strong | DE generation, real-time collab, print layout complete; QR poster service exists |
 | Day-of operations | 90% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view (TV-optimized with larger fonts and ring badges) complete; offline mode, ring sync shipped |
 | Scoring & results | 90% | 🟢 Strong | Match scoring, audit trail, undo/redo UI, video review integration (labeled, with help text) complete |
-| Public display | 85% | 🟢 Strong | Public scoreboard by slug complete; auto-refresh config shipped; QR poster service exists; needs TV-optimized layout polish |
+| Public display | 90% | 🟢 Strong | Public scoreboard by slug complete; auto-refresh config shipped; TV-optimized layout polish complete (4K-safe fonts, improved contrast, better spacing); QR poster service exists |
 | **Non-product** | | | |
 | Branding | 90% | 🟢 Strong | Bowin identity complete; organizer white-label shipped (logo upload, primary color); custom domains remain |
 | Billing & subscriptions | 80% | 🟢 Strong | Stripe integrated; plan selection, usage metering, billing portal code complete; needs Cameron Stripe dashboard setup |
@@ -335,6 +337,9 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 - ~~Multi-sport seed data (Karate/Judo) to prove sport-agnostic paths~~ — ✅ **COMPLETE** (PR #247)
 - ~~Test-specific rate-limit middleware (replace `RATE_LIMIT_DISABLED=1` blunt gate)~~ — ✅ **COMPLETE** (PR #247)
 - ~~Announcer view TV-optimized fonts and ring badges~~ — ✅ **COMPLETE** (PR #251)
+- ~~Missing `@types/ws` typecheck warning~~ — ✅ **COMPLETE** (PR #252)
+- ~~Client typecheck errors (PublicScoreboard refetchInterval, Results videoUrl, VideoTutorials icon)~~ — ✅ **COMPLETE** (this PR)
+- Support access tests (`support-access.test.ts`) failing with mocked Prisma — require live Postgres connection for org-scoped queries OR deeper mock refactor; mark as known tech debt (4 failures related to tournament access checks and org scoping)
 - ~~Video review integration labels and help text~~ — ✅ **COMPLETE** (PR #251)
 - ~~Division merge conflicts amber warning UI~~ — ✅ **COMPLETE** (PR #251)
 - Missing `@types/ws` for websocket.ts typecheck (install needed)
