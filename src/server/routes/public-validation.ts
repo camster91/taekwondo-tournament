@@ -70,24 +70,25 @@ export function registrationLegalConfigFromEnv(
   env: Record<string, string | undefined>,
   isProduction: boolean,
 ): RegistrationLegalConfig {
-  if (!isProduction) {
-    return {
-      consentVersion: env.REGISTRATION_CONSENT_VERSION ?? 'development-draft-v0',
-      privacyNoticeUrl: env.PRIVACY_NOTICE_URL ?? '/legal/privacy-draft',
-      tournamentTermsUrl: env.TOURNAMENT_TERMS_URL ?? '/legal/terms-draft',
-    };
+  // P0-6/P0-7: Legal pages are now published at /legal/privacy and /legal/terms.
+  // Default to those paths; production deploys can override with env vars if needed.
+  const consentVersion = isProduction
+    ? (env.REGISTRATION_CONSENT_VERSION?.trim() || '2026-08-24')
+    : (env.REGISTRATION_CONSENT_VERSION ?? 'development-draft-v0');
+  
+  const privacyNoticeUrl = env.PRIVACY_NOTICE_URL?.trim() || '/legal/privacy';
+  const tournamentTermsUrl = env.TOURNAMENT_TERMS_URL?.trim() || '/legal/terms';
+  
+  if (isProduction) {
+    // In production, validate that URLs are either absolute HTTPS or relative paths
+    if (privacyNoticeUrl.startsWith('http://')) {
+      throw new Error('PRIVACY_NOTICE_URL must be HTTPS or a relative path in production');
+    }
+    if (tournamentTermsUrl.startsWith('http://')) {
+      throw new Error('TOURNAMENT_TERMS_URL must be HTTPS or a relative path in production');
+    }
   }
-
-  const consentVersion = env.REGISTRATION_CONSENT_VERSION?.trim();
-  if (!consentVersion) throw new Error('REGISTRATION_CONSENT_VERSION is required in production');
-  const privacyNoticeUrl = env.PRIVACY_NOTICE_URL?.trim();
-  const tournamentTermsUrl = env.TOURNAMENT_TERMS_URL?.trim();
-  if (!privacyNoticeUrl || !tournamentTermsUrl) {
-    throw new Error('PRIVACY_NOTICE_URL and TOURNAMENT_TERMS_URL are required in production');
-  }
-  if (!privacyNoticeUrl.startsWith('https://') || !tournamentTermsUrl.startsWith('https://')) {
-    throw new Error('Production legal document URLs must use HTTPS');
-  }
+  
   return { consentVersion, privacyNoticeUrl, tournamentTermsUrl };
 }
 

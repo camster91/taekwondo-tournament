@@ -25,6 +25,7 @@ import {
   HelpCircle,
   Building2,
   LifeBuoy,
+  PlayCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -33,6 +34,7 @@ import { ToastProvider } from './context/ToastContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import SupportChatWidget from './components/SupportChatWidget';
+import LiveChatWidget from './components/LiveChatWidget';
 import Tour from './components/Tour';
 import CloseButton from './components/ui/CloseButton';
 import Spinner from './components/ui/Spinner';
@@ -79,6 +81,7 @@ const FairnessRules = lazy(() => import('./pages/FairnessRules'));
 const SchoolPortal = lazy(() => import('./pages/SchoolPortal'));
 const OrganizationSettings = lazy(() => import('./pages/OrganizationSettings'));
 const SupportTickets = lazy(() => import('./pages/SupportTickets'));
+const VideoTutorials = lazy(() => import('./pages/VideoTutorials'));
 
 // Fallback rendered while a lazy page chunk is fetched. Centred spinner
 // keeps the chrome stable so the page doesn't reflow when the real
@@ -326,10 +329,16 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           <div>
             {!sidebarCollapsed && (
               <div className="px-3 mb-2">
-                <span className="section-title text-white/40">Public</span>
+                <span className="section-title text-white/40">Help</span>
               </div>
             )}
             <div className={classNames('space-y-0.5', sidebarCollapsed && 'flex flex-col items-center')}>
+              <NavItem
+                item={{ name: 'Video Tutorials', href: '/tutorials', icon: PlayCircle }}
+                active={location.pathname === '/tutorials'}
+                onClick={closeMobile}
+                collapsed={sidebarCollapsed}
+              />
               <NavItem
                 item={{ name: 'Registration Portal', href: '/register', icon: UserPlus }}
                 active={false}
@@ -641,6 +650,7 @@ function AppRoutes() {
                 </ProtectedRoute>
               }
             />
+            <Route path="/tutorials" element={<VideoTutorials />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
             {/* Director+ pages - admin or director only */}
@@ -717,6 +727,7 @@ export default function App() {
         <ToastProvider>
           <AppRoutes />
           <SupportChatWidget />
+          <LiveChatWidget />
         </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
