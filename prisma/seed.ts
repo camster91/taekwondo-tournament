@@ -77,9 +77,16 @@ const competitors: CompetitorInput[] = [
 ];
 
 // ── Main seed function ───────────────────────────────────────────────
+// NOTE: This seed currently creates only a Taekwondo tournament.
+// For multi-sport examples (Karate, Judo), see prisma/seed-karate-judo.example.ts
+// which demonstrates sport-agnostic tournament creation with:
+// - Sport-specific belt systems (Brown Belt for Karate, Kyu/Dan for Judo)
+// - Sport-specific event types (Kata/Kumite, Randori/Shiai)
+// - Sport-specific weight classes
+// To enable: import and call seedKarateTournament() / seedJudoTournament() below.
 
 async function main() {
-  console.log('🥋 Seeding Spring Championship 2026...\n');
+  console.log('🥋 Seeding Spring Championship 2026 (Taekwondo)...\n');
 
   // Clean existing data (order matters for FK constraints)
   await prisma.matchAuditLog.deleteMany();

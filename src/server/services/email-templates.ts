@@ -19,35 +19,142 @@ const BRAND_PAPER = '#FAFAF9';
 const BRAND_SLATE = '#475569';
 const BRAND_MUTED = '#94A3B8';
 
-function layout(content: string, organizerBrandName?: string): string {
-  const displayName = organizerBrandName || 'bowin';
-  const tagline = organizerBrandName 
+interface BrandingOptions {
+  organizerBrandName?: string;
+  brandPrimaryColor?: string;
+  brandLogoUrl?: string;
+}
+
+/**
+ * Calculate a darker shade of a hex color for hover states.
+ * Simple approach: reduce RGB values by 15%.
+ */
+function darkenColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const darken = (c: number) => Math.max(0, Math.floor(c * 0.85));
+  const toHex = (c: number) => c.toString(16).padStart(2, '0');
+  return `#${toHex(darken(r))}${toHex(darken(g))}${toHex(darken(b))}`;
+}
+
+function layout(content: string, branding?: BrandingOptions): string {
+  const displayName = branding?.organizerBrandName || 'bowin';
+  const primaryColor = branding?.brandPrimaryColor || BRAND_RED;
+  const primaryColorDark = darkenColor(primaryColor);
+  const logoUrl = branding?.brandLogoUrl;
+  const tagline = branding?.organizerBrandName 
     ? 'Tournament Registration Confirmation'
     : 'Tournaments, run like a black belt.';
+  
+  // Logo section (if provided)
+  const logoHtml = logoUrl 
+    ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(displayName)}" style="max-height: 60px; max-width: 200px; display: block; margin: 0 auto 12px;" />`
+    : '';
   
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>${escapeHtml(displayName)}</title>
+  <!--[if mso]>
+  <style type="text/css">
+    body, table, td { font-family: Arial, Helvetica, sans-serif !important; }
+  </style>
+  <![endif]-->
   <style>
-    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: ${BRAND_PAPER}; color: ${BRAND_SLATE}; }
+    body { 
+      margin: 0; 
+      padding: 0; 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+      background: ${BRAND_PAPER}; 
+      color: ${BRAND_SLATE}; 
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
     .wrapper { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: ${BRAND_INK}; padding: 28px 24px; text-align: center; border-radius: 12px 12px 0 0; border-bottom: 3px solid ${BRAND_RED}; }
-    .header h1 { color: #fff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
-    .header .tag { color: ${BRAND_RED}; font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 4px; display: block; }
-    .body { background: #fff; padding: 32px 24px; }
-    .footer { background: ${BRAND_PAPER}; padding: 18px 24px; text-align: center; font-size: 12px; color: ${BRAND_MUTED}; border-radius: 0 0 12px 12px; border-top: 1px solid #E5E7EB; }
+    .header { 
+      background: ${BRAND_INK}; 
+      padding: 32px 24px; 
+      text-align: center; 
+      border-radius: 12px 12px 0 0; 
+      border-bottom: 4px solid ${primaryColor}; 
+    }
+    .header h1 { 
+      color: #fff; 
+      margin: 0; 
+      font-size: 26px; 
+      font-weight: 700; 
+      letter-spacing: -0.02em; 
+      line-height: 1.2;
+    }
+    .header .tag { 
+      color: ${primaryColor}; 
+      font-size: 11px; 
+      font-weight: 600; 
+      letter-spacing: 0.18em; 
+      text-transform: uppercase; 
+      margin-top: 8px; 
+      display: block; 
+    }
+    .body { 
+      background: #fff; 
+      padding: 36px 28px; 
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .footer { 
+      background: ${BRAND_PAPER}; 
+      padding: 20px 24px; 
+      text-align: center; 
+      font-size: 13px; 
+      color: ${BRAND_MUTED}; 
+      border-radius: 0 0 12px 12px; 
+      border-top: 1px solid #E5E7EB; 
+      line-height: 1.5;
+    }
     .footer p { margin: 0; }
-    .btn { display: inline-block; padding: 13px 36px; background: ${BRAND_RED}; color: #fff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; letter-spacing: 0.01em; }
-    .btn:hover { background: ${BRAND_RED_DARK}; }
-    p { color: ${BRAND_SLATE}; line-height: 1.6; margin: 0 0 16px; }
-    .muted { color: ${BRAND_MUTED}; font-size: 14px; }
+    .btn { 
+      display: inline-block; 
+      padding: 14px 40px; 
+      background: ${primaryColor}; 
+      color: #fff !important; 
+      text-decoration: none; 
+      border-radius: 8px; 
+      font-weight: 600; 
+      font-size: 16px; 
+      letter-spacing: 0.01em;
+      transition: background 0.2s ease;
+    }
+    .btn:hover { background: ${primaryColorDark}; }
+    p { 
+      color: ${BRAND_SLATE}; 
+      line-height: 1.65; 
+      margin: 0 0 18px; 
+      font-size: 15px;
+    }
+    .muted { 
+      color: ${BRAND_MUTED}; 
+      font-size: 14px; 
+      line-height: 1.5;
+    }
+    strong { color: ${BRAND_INK}; font-weight: 600; }
+    
+    /* Mobile responsive */
+    @media only screen and (max-width: 600px) {
+      .wrapper { padding: 12px; }
+      .header { padding: 24px 20px; border-radius: 8px 8px 0 0; }
+      .header h1 { font-size: 22px; }
+      .body { padding: 28px 20px; }
+      .btn { padding: 12px 32px; font-size: 15px; }
+    }
   </style>
 </head>
 <body>
   <div class="wrapper">
     <div class="header">
+      ${logoHtml}
       <h1>${escapeHtml(displayName)}</h1>
       <span class="tag">${escapeHtml(tagline)}</span>
     </div>
@@ -55,7 +162,7 @@ function layout(content: string, organizerBrandName?: string): string {
       ${content}
     </div>
     <div class="footer">
-      <p>${organizerBrandName ? escapeHtml(organizerBrandName) : 'bowin &middot; tournament management for martial arts schools'}</p>
+      <p>${branding?.organizerBrandName ? escapeHtml(branding.organizerBrandName) : 'bowin &middot; tournament management for martial arts schools'}</p>
     </div>
   </div>
 </body>
@@ -85,7 +192,7 @@ export function invitationEmail(params: {
       </p>
       <p class="muted">This invitation expires in ${params.expiresInHours} hours. If you didn't expect this invitation, you can safely ignore this email.</p>
       <p class="muted" style="word-break:break-all;">Or copy this link: ${safeInviteUrl}</p>
-    `),
+    `, undefined), // No branding for invitations (internal)
   };
 }
 
@@ -113,7 +220,7 @@ export function magicLinkEmail(params: {
       </p>
       <p class="muted">This link and code expire in 10 minutes. If you didn't request this, you can safely ignore this email.</p>
       <p class="muted" style="word-break:break-all;">Or copy this link: ${safeMagicUrl}</p>
-    `),
+    `, undefined), // No branding for magic-link (internal auth)
   };
 }
 
@@ -135,7 +242,7 @@ export function welcomeEmail(params: {
         <a href="${safeLoginUrl}" class="btn">Go to Dashboard</a>
       </p>
       <p class="muted">You can log in anytime using the email address this message was sent to.</p>
-    `),
+    `, undefined), // No branding for welcome (internal)
   };
 }
 
@@ -150,6 +257,8 @@ export function registrationConfirmationEmail(params: {
   confirmationCode: string;
   managementUrl: string;
   organizerBrandName?: string;
+  brandPrimaryColor?: string;
+  brandLogoUrl?: string;
 }): { subject: string; html: string } {
   const safeCompetitorName = escapeHtml(params.competitorName);
   const safeTournamentName = escapeHtml(params.tournamentName);
@@ -164,7 +273,7 @@ export function registrationConfirmationEmail(params: {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
   const locationLine = params.tournamentLocation 
-    ? `<p style="margin: 4px 0;"><strong>Location:</strong> ${escapeHtml(params.tournamentLocation)}</p>` 
+    ? `<p style="margin: 6px 0;"><strong>Location:</strong> ${escapeHtml(params.tournamentLocation)}</p>` 
     : '';
 
   return {
@@ -172,21 +281,25 @@ export function registrationConfirmationEmail(params: {
     html: layout(`
       <p>${greeting}</p>
       <p><strong>${safeCompetitorName}</strong> has been successfully registered for <strong>${safeTournamentName}</strong>.</p>
-      <div style="background: #F3F4F6; border-radius: 8px; padding: 16px; margin: 16px 0;">
-        <p style="margin: 4px 0;"><strong>Tournament:</strong> ${safeTournamentName}</p>
-        <p style="margin: 4px 0;"><strong>Hosted by:</strong> ${safeBrandName}</p>
-        <p style="margin: 4px 0;"><strong>Date:</strong> ${escapeHtml(tournamentDate)}</p>
+      <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 10px; padding: 20px; margin: 20px 0;">
+        <p style="margin: 6px 0; font-size: 15px;"><strong>Tournament:</strong> ${safeTournamentName}</p>
+        <p style="margin: 6px 0; font-size: 15px;"><strong>Hosted by:</strong> ${safeBrandName}</p>
+        <p style="margin: 6px 0; font-size: 15px;"><strong>Date:</strong> ${escapeHtml(tournamentDate)}</p>
         ${locationLine}
-        <p style="margin: 4px 0;"><strong>Events:</strong> ${safeEvents}</p>
-        <p style="margin: 4px 0;"><strong>Age Group:</strong> ${safeAgeGroup}</p>
-        <p style="margin: 4px 0;"><strong>Confirmation Code:</strong> <span style="font-family:monospace; background:#fff; padding:4px 8px; border-radius:4px;">${safeConfirmationCode}</span></p>
+        <p style="margin: 6px 0; font-size: 15px;"><strong>Events:</strong> ${safeEvents}</p>
+        <p style="margin: 6px 0; font-size: 15px;"><strong>Age Group:</strong> ${safeAgeGroup}</p>
+        <p style="margin: 6px 0; font-size: 15px;"><strong>Confirmation Code:</strong> <span style="font-family:monospace; background:#fff; padding:6px 10px; border-radius:6px; border: 1px solid #D1D5DB; font-weight: 600;">${safeConfirmationCode}</span></p>
       </div>
-      <p style="text-align:center; margin: 24px 0;">
+      <p style="text-align:center; margin: 28px 0;">
         <a href="${safeManagementUrl}" class="btn">Manage Registration</a>
       </p>
       <p class="muted">You can use the link above to update details or withdraw this registration before the tournament starts.</p>
       <p class="muted">Please keep this email for your records. You may be asked to provide your confirmation code at check-in.</p>
-    `, params.organizerBrandName),
+    `, {
+      organizerBrandName: params.organizerBrandName,
+      brandPrimaryColor: params.brandPrimaryColor,
+      brandLogoUrl: params.brandLogoUrl,
+    }),
   };
 }
 
@@ -199,6 +312,8 @@ export function parentalConsentVerificationEmail(params: {
   verificationUrl: string;
   code: string;
   organizerBrandName?: string;
+  brandPrimaryColor?: string;
+  brandLogoUrl?: string;
 }): { subject: string; html: string } {
   const greeting = params.parentName ? `Hi ${escapeHtml(params.parentName)},` : 'Hi,';
   const safeCompetitorName = escapeHtml(params.competitorName);
@@ -215,16 +330,20 @@ export function parentalConsentVerificationEmail(params: {
       <p>${greeting}</p>
       <p>A registration has been submitted for <strong>${safeCompetitorName}</strong> (under 18) to compete in <strong>${safeTournamentName}</strong> on ${escapeHtml(tournamentDate)}.</p>
       <p><strong>Please verify that you are the parent or legal guardian and authorize this registration by clicking the button below:</strong></p>
-      <p style="text-align:center; margin: 24px 0;">
+      <p style="text-align:center; margin: 28px 0;">
         <a href="${safeVerificationUrl}" class="btn">Verify Consent</a>
       </p>
       <p class="muted">If you cannot click the button, you can verify by entering this code on the registration page:</p>
-      <div style="text-align:center; margin: 16px 0;">
-        <span style="font-family:monospace; font-size:24px; font-weight:700; background:#F3F4F6; padding:8px 16px; border-radius:8px; display:inline-block;">${safeCode}</span>
+      <div style="text-align:center; margin: 18px 0;">
+        <span style="font-family:monospace; font-size:24px; font-weight:700; background:#F9FAFB; border: 1px solid #E5E7EB; padding:10px 18px; border-radius:8px; display:inline-block; color: ${BRAND_INK};">${safeCode}</span>
       </div>
       <p class="muted">This verification link expires in 48 hours. If you did not register your child for this tournament, please disregard this email.</p>
       <p class="muted" style="word-break:break-all;">Or copy this link: ${safeVerificationUrl}</p>
-    `, params.organizerBrandName),
+    `, {
+      organizerBrandName: params.organizerBrandName,
+      brandPrimaryColor: params.brandPrimaryColor,
+      brandLogoUrl: params.brandLogoUrl,
+    }),
   };
 }
 
@@ -261,7 +380,11 @@ export function waitlistNotificationEmail(params: {
         <a href="${safeManagementUrl}" class="btn">Manage Registration</a>
       </p>
       <p class="muted">You can withdraw from the waitlist anytime using the link above.</p>
-    `, params.organizerBrandName),
+    `, {
+      organizerBrandName: params.organizerBrandName,
+      brandPrimaryColor: undefined,
+      brandLogoUrl: undefined,
+    }),
   };
 }
 
@@ -298,7 +421,11 @@ export function waitlistPromotionEmail(params: {
         <a href="${safeManagementUrl}" class="btn">View Registration</a>
       </p>
       <p class="muted">Please keep this email for your records. You may be asked to provide your confirmation code at check-in.</p>
-    `, params.organizerBrandName),
+    `, {
+      organizerBrandName: params.organizerBrandName,
+      brandPrimaryColor: undefined,
+      brandLogoUrl: undefined,
+    }),
   };
 }
 

@@ -2,7 +2,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
-import rateLimit from 'express-rate-limit';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { normalizeBelt } from '../../shared/constants/belts.js';
 import {
@@ -36,12 +35,7 @@ const legalConfig = () => registrationLegalConfigFromEnv(
   process.env.NODE_ENV === 'production',
 );
 
-// In dev/test, set RATE_LIMIT_DISABLED=1 to bypass rate limiters entirely.
-// (Mirrors the same flag used in routes/auth.ts — keeps the e2e suite
-// fast and lets the dev server absorb self-imposed traffic without
-// hitting the cap.) NEVER honor in production.
-const rateLimitDisabled =
-  process.env.RATE_LIMIT_DISABLED === '1' && process.env.NODE_ENV !== 'production';
+import { createRateLimiter } from '../middleware/rate-limit.js';
 
 /** Expose only public-safe fields from tournament.settings JSON. */
 function publicRegistrationSettings(raw: string | null): { registrationFee?: string } | null {
@@ -57,13 +51,10 @@ function publicRegistrationSettings(raw: string | null): { registrationFee?: str
 }
 
 // Rate limit public registration to prevent abuse: 10 submissions per 15 minutes per IP
-const registrationLimiter = rateLimit({
+const registrationLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: 'Too many registration attempts. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: () => rateLimitDisabled,
 });
 
 // School portal share-link reads can dump a school's full roster and
@@ -72,13 +63,10 @@ const registrationLimiter = rateLimit({
 // polls every 15s when a school is selected (4 polls/minute per
 // browser) so this leaves headroom for a handful of concurrent viewers
 // while blocking scripted scrapes that enumerate schoolNames.
-const schoolPortalLimiter = rateLimit({
+const schoolPortalLimiter = createRateLimiter({
   windowMs: 60 * 1000,
   max: 30,
   message: { error: 'Too many requests. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: () => rateLimitDisabled,
 });
 
 router.get('/legal-config', (_req: Request, res: Response) => {
@@ -164,6 +152,7 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
       brandPrimaryColor: true,
       brandLogoUrl: true,
       organizationId: true,
+      publicScoreboardRefreshMs: true,
       organization: {
         select: {
           brandName: true,
@@ -628,12 +617,9 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
 // indistinguishable from a non-existent tournament (404).
 //
 // Rate-limited so a leaked slug can't be scraped in bulk.
-const scoreboardLimiter = rateLimit({
+const scoreboardLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
   max: 30,             // 30 requests per minute per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: () => rateLimitDisabled,
 });
 
 router.get('/scoreboard/:publicSlug', scoreboardLimiter, async (req: Request, res: Response) => {
@@ -800,12 +786,11 @@ router.get('/tournaments/:id/scoreboard', scoreboardLimiter, optionalAuthenticat
 //
 // Rate-limited: an attacker who guesses a name + DOB combo should
 // not be able to iterate the whole roster.
-const checkRegistrationLimiter = rateLimit({
+const checkRegistrationLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20,                  // 20 lookups per 15 min per IP
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => rateLimitDisabled,
 });
 
 router.get('/check-registration', checkRegistrationLimiter, async (req: Request, res: Response) => {
@@ -857,13 +842,12 @@ router.get('/check-registration', checkRegistrationLimiter, async (req: Request,
 // Returns the FULL registration + competitor + tournament data when
 // all three factors match. 404 if any factor is wrong (same shape as
 // check-registration, no enumeration via differential responses).
-const manageLimiter = rateLimit({
+const manageLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 30,
   message: { error: 'Too many lookups. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => rateLimitDisabled,
 });
 
 router.get('/registrations/:token', manageLimiter, async (req: Request, res: Response) => {
@@ -922,13 +906,12 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
   });
 });
 
-const manageUpdateLimiter = rateLimit({
+const manageUpdateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: 'Too many updates. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => rateLimitDisabled,
 });
 
 // Update a registration by confirmation code. Parents can fix typos,

@@ -3,7 +3,7 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
-import rateLimit, { type RateLimitExceededEventHandler } from 'express-rate-limit';
+import { type RateLimitExceededEventHandler } from 'express-rate-limit';
 import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, setCsrfCookie, type AuthenticatedRequest, invalidateAuthCache } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
@@ -12,16 +12,9 @@ import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
 import { maybeIssueOfflineCapability } from '../services/offline-capability.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
+import { createRateLimiter } from '../middleware/rate-limit.js';
 
 const router = Router();
-
-// Rate limiting for auth routes. In dev/test, set RATE_LIMIT_DISABLED=1 to
-// bypass entirely (the limiter is in-memory so test suites that hit the
-// endpoint multiple times in quick succession would otherwise hit the cap).
-// NEVER honor the bypass in production — a mis-set env would disable every
-// auth/public limiter on a live deploy.
-const rateLimitDisabled =
-  process.env.RATE_LIMIT_DISABLED === '1' && process.env.NODE_ENV !== 'production';
 
 /** Include JWT in JSON only outside production (Bearer tooling / e2e). Cookie is the real session. */
 function maybeTokenField(jwtToken: string): { token?: string } {
@@ -41,14 +34,12 @@ function setupKeyMatches(provided: unknown, expected: string): boolean {
 
 const MAX_CODE_ATTEMPTS = 10;
 
-const authLimiter = rateLimit({
+const authLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 attempts per window
   message: { error: 'Too many attempts, please try again later' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: () => rateLimitDisabled,
 });
+
 const demoRateLimitMax = Number.parseInt(process.env.DEMO_RATE_LIMIT_MAX ?? '30', 10);
 const demoLimitHandler: RateLimitExceededEventHandler = (req, res) => {
   const resetTime = (req as unknown as { rateLimit?: { resetTime?: Date } }).rateLimit?.resetTime;
@@ -60,21 +51,17 @@ const demoLimitHandler: RateLimitExceededEventHandler = (req, res) => {
     retryAfterSeconds,
   });
 };
-const demoLimiter = rateLimit({
+
+const demoLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: Number.isSafeInteger(demoRateLimitMax) && demoRateLimitMax > 0 ? demoRateLimitMax : 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: () => rateLimitDisabled,
   handler: demoLimitHandler,
 });
-const registerLimiter = rateLimit({
+
+const registerLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 3, // 3 registrations per hour per IP
   message: { error: 'Too many accounts created, please try again later' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: () => rateLimitDisabled,
 });
 
 // Validation schemas

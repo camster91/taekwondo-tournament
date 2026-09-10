@@ -38,6 +38,7 @@ interface Tournament {
   status: string;
   settings: string | null;
   publicSlug?: string | null;
+  publicScoreboardRefreshMs?: number | null;
   eventSlug?: string | null;
   portalPublished?: boolean;
   organizationId?: string | null;
@@ -125,6 +126,10 @@ export default function TournamentSettings() {
   const [shareSlug, setShareSlug] = useState<string | null>(null);
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+  
+  // Public scoreboard refresh interval state
+  const [refreshMs, setRefreshMs] = useState<number>(10000); // Default 10s
+  const [refreshMsDirty, setRefreshMsDirty] = useState(false);
 
   // Portal state — event slug and publication status
   const [eventSlug, setEventSlug] = useState<string>('');
@@ -229,6 +234,13 @@ export default function TournamentSettings() {
     }
   }, [tournament?.publicSlug]);
 
+  // Hydrate refresh interval from tournament
+  useEffect(() => {
+    if (tournament?.publicScoreboardRefreshMs !== undefined && tournament?.publicScoreboardRefreshMs !== null) {
+      setRefreshMs(tournament.publicScoreboardRefreshMs);
+    }
+  }, [tournament?.publicScoreboardRefreshMs]);
+
   // Hydrate portal state from tournament data
   useEffect(() => {
     if (tournament) {
@@ -283,6 +295,27 @@ export default function TournamentSettings() {
       addToast('Copy failed — please copy manually', 'error');
     }
   };
+
+  const saveRefreshIntervalMutation = useMutation({
+    mutationFn: async (intervalMs: number) => {
+      const res = await fetch(`/api/tournaments/${id}`, {
+        method: 'PUT',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicScoreboardRefreshMs: intervalMs }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to save refresh interval');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setRefreshMsDirty(false);
+      addToast('Refresh interval saved', 'success');
+      queryClient.invalidateQueries({ queryKey: ['tournament', id] });
+    },
+    onError: (error: Error) => addToast(error.message, 'error'),
+  });
 
   // Portal management mutations
   const saveEventSlugMutation = useMutation({
@@ -728,6 +761,61 @@ export default function TournamentSettings() {
         }}
         onClose={() => setRevokeOpen(false)}
       />
+
+      {/* Public Scoreboard Auto-Refresh Interval */}
+      <Card className="mb-6">
+        <CardHeader
+          title="Scoreboard Refresh Interval"
+          icon={Settings}
+          description="Control how often the public scoreboard automatically refreshes. Lower intervals keep spectators more up-to-date but increase server load."
+        />
+        <CardBody>
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <Label htmlFor="refreshInterval" className="w-32 shrink-0">
+                Refresh every:
+              </Label>
+              <Select
+                id="refreshInterval"
+                value={String(refreshMs)}
+                onChange={(e) => {
+                  setRefreshMs(Number(e.target.value));
+                  setRefreshMsDirty(true);
+                }}
+                className="w-48"
+              >
+                <option value="3000">3 seconds</option>
+                <option value="5000">5 seconds</option>
+                <option value="10000">10 seconds (default)</option>
+                <option value="15000">15 seconds</option>
+                <option value="30000">30 seconds</option>
+                <option value="60000">60 seconds</option>
+              </Select>
+              {refreshMsDirty && (
+                <Button
+                  variant="primary"
+                  onClick={() => saveRefreshIntervalMutation.mutate(refreshMs)}
+                  disabled={saveRefreshIntervalMutation.isPending}
+                  className="flex items-center gap-2"
+                >
+                  {saveRefreshIntervalMutation.isPending ? (
+                    <>
+                      <Spinner size="sm" /> Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" /> Save
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              This setting affects the public scoreboard for spectators. Tournament staff views always use real-time updates.
+            </p>
+          </div>
+        </CardBody>
+      </Card>
 
       {/* Event Portal — tenant-branded public event page */}
       {tournament?.organizationId && (
