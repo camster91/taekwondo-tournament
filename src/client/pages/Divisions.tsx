@@ -1,6 +1,6 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import {
   DndContext,
   closestCenter,
@@ -57,6 +57,11 @@ import { StatTile } from '../components/ui';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
 import DivisionMoveCompetitorModal from './DivisionMoveCompetitor';
+import {
+  parseDivisionFilters,
+  serializeDivisionFilters,
+  updateSearchParams,
+} from '../utils/url-state';
 
 interface Division {
   id: string;
@@ -196,11 +201,15 @@ type EventFlagRow = RegistrationRow & Record<string, boolean | undefined>;
 
 export default function Divisions() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  
+  // Read filters from URL
+  const urlFilters = parseDivisionFilters(searchParams);
   const [filter, setFilter] = useState({
-    beltLevel: '',
-    gender: '',
-    eventType: '',
+    beltLevel: urlFilters.beltLevel || '',
+    gender: urlFilters.gender === 'all' ? '' : (urlFilters.gender || ''),
+    eventType: urlFilters.eventType === 'all' ? '' : (urlFilters.eventType || ''),
   });
   const [exportingAll, setExportingAll] = useState(false);
   const exportLockRef = useRef(false);
@@ -218,6 +227,20 @@ export default function Divisions() {
   const [recommendationStatus, setRecommendationStatus] = useState<{ state: OperationState; message: string } | null>(null);
   const [applyRecommendationConfirm, setApplyRecommendationConfirm] = useState(false);
   const { addToast } = useToast();
+
+  // Sync filters to URL when they change
+  useEffect(() => {
+    const filters = serializeDivisionFilters({
+      eventType: (filter.eventType || undefined) as 'patterns' | 'sparring' | 'all' | undefined,
+      gender: (filter.gender || undefined) as 'male' | 'female' | 'all' | undefined,
+      beltLevel: filter.beltLevel || undefined,
+      search: urlFilters.search,
+    });
+    const newParams = updateSearchParams(searchParams, filters);
+    if (newParams.toString() !== searchParams.toString()) {
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [filter, urlFilters.search, searchParams, setSearchParams]);
 
   const { data: tournament } = useQuery<Tournament>({
     queryKey: ['tournament', id],

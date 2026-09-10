@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronLeft,
@@ -29,6 +29,11 @@ import { reconcileBulkCheckInResult, runBulkCheckInRequests } from '../utils/bul
 import { browserVenueDataSnapshotStore, loadVenueData } from '../utils/venue-data-snapshot';
 import { isCheckInRegistrationData } from '../utils/venue-data-contracts';
 import { buildCheckInRequestPayload, shouldQueueOfflineMutation } from '../utils/offline-delivery';
+import {
+  parseCheckInFilters,
+  serializeCheckInFilters,
+  updateSearchParams,
+} from '../utils/url-state';
 
 interface Registration {
   id: string;
@@ -58,6 +63,7 @@ interface Tournament {
 
 export default function CheckIn() {
   const { tournamentId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
   const { user, isOfflineSession } = useAuth();
@@ -69,9 +75,15 @@ export default function CheckIn() {
   const [unpersistedDeliveryWarning, setUnpersistedDeliveryWarning] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'checked' | 'unchecked'>('all');
-  const [filterEvent, setFilterEvent] = useState<'all' | 'patterns' | 'sparring'>('all');
+  // Read filters from URL
+  const urlFilters = parseCheckInFilters(searchParams);
+  const [searchTerm, setSearchTerm] = useState(urlFilters.search || '');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'checked' | 'unchecked'>(
+    urlFilters.showCheckedIn && !urlFilters.showUnchecked ? 'checked' :
+    !urlFilters.showCheckedIn && urlFilters.showUnchecked ? 'unchecked' :
+    'all'
+  );
+  const [filterEvent, setFilterEvent] = useState<'all' | 'patterns' | 'sparring'>(urlFilters.eventFilter || 'all');
   const [schoolFilter, setSchoolFilter] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'school' | 'status'>('name');
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null);
@@ -80,6 +92,20 @@ export default function CheckIn() {
   const [failedBulkIds, setFailedBulkIds] = useState<string[]>([]);
   const [failedBulkErrors, setFailedBulkErrors] = useState<Record<string, string>>({});
   const [uncertainBulkIds, setUncertainBulkIds] = useState<string[]>([]);
+
+  // Sync filters to URL when they change
+  useEffect(() => {
+    const filters = serializeCheckInFilters({
+      search: searchTerm || undefined,
+      showCheckedIn: filterStatus === 'all' || filterStatus === 'checked',
+      showUnchecked: filterStatus === 'all' || filterStatus === 'unchecked',
+      eventFilter: filterEvent === 'all' ? undefined : filterEvent,
+    });
+    const newParams = updateSearchParams(searchParams, filters);
+    if (newParams.toString() !== searchParams.toString()) {
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchTerm, filterStatus, filterEvent, searchParams, setSearchParams]);
 
   // Keyboard shortcut: "/" to focus search
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { isDemoUser } from '../utils/demo-progress';
@@ -30,6 +30,11 @@ import { Input } from '../components/ui';
 import { StatTile } from '../components/ui';
 import type { ApiDivision, ApiMatch, ApiTournamentSummary } from '../utils/api-types';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
+import {
+  parseDirectorDashboardFilters,
+  serializeDirectorDashboardFilters,
+  updateSearchParams,
+} from '../utils/url-state';
 
 interface DivisionStats {
   id: string;
@@ -128,17 +133,21 @@ const AVERAGE_MATCH_DURATION = 5; // minutes per match
 
 export default function DirectorDashboard() {
   const { id: tournamentId } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const demoReadOnly = isDemoUser(user);
   const offlineOperations = useOfflineOperations(tournamentId);
 
+  // Read filters from URL
+  const urlFilters = parseDirectorDashboardFilters(searchParams);
+  
   // Display mode state (M8). Three modes:
   // - 'all': auto-cycle through every ring with active matches (default)
   // - 'ring': pin to a single ring number
   // - 'featured': pin to a specific match ID (e.g. the finals)
   const [displayMode, setDisplayMode] = useState<'all' | 'ring' | 'featured'>('all');
-  const [displayRing, setDisplayRing] = useState<number>(1);
+  const [displayRing, setDisplayRing] = useState<number>(urlFilters.ring ? parseInt(urlFilters.ring) : 1);
   const [displayMatchId, setDisplayMatchId] = useState<string>('');
   const [operationalQuestion, setOperationalQuestion] = useState('');
   
@@ -154,6 +163,18 @@ export default function DirectorDashboard() {
   const [ringUpdates, setRingUpdates] = useState<Record<string, number>>({});
   const [currentTime, setCurrentTime] = useState(Date.now());
   const previousDataRef = useRef<string>('');
+
+  // Sync filters to URL when they change
+  useEffect(() => {
+    const filters = serializeDirectorDashboardFilters({
+      ring: displayMode === 'ring' ? String(displayRing) : undefined,
+      alertsOnly: urlFilters.alertsOnly,
+    });
+    const newParams = updateSearchParams(searchParams, filters);
+    if (newParams.toString() !== searchParams.toString()) {
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [displayMode, displayRing, urlFilters.alertsOnly, searchParams, setSearchParams]);
 
   // Update current time every second for relative timestamps
   useEffect(() => {
