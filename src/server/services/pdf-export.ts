@@ -28,6 +28,7 @@ export interface BracketMatch {
   score1?: number | null;
   score2?: number | null;
   status: string;
+  ringNumber?: number | null;
 }
 
 export interface DivisionInfo {
