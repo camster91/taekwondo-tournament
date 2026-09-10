@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsEmail, loginAsDemo } from './helpers';
+import { checkA11y } from './axe-helper';
 
 test.describe('login (magic link flow)', () => {
   test('brand home link returns to the marketing homepage', async ({ page }) => {
@@ -89,5 +90,13 @@ test.describe('login (magic link flow)', () => {
     expect(meResponse.ok()).toBeTruthy();
     const me = await meResponse.json();
     expect(me.role).toBe('admin');
+  });
+
+  test('axe scan on login page', async ({ page }) => {
+    await page.goto('/login');
+    await expect(page.getByText(/^bowin$/i).first()).toBeVisible();
+
+    const results = await checkA11y(page);
+    expect(results.violations).toEqual([]);
   });
 });
