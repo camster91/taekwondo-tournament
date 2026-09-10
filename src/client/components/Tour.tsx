@@ -83,6 +83,7 @@ interface PopoverPosition {
 }
 
 const POPOVER_WIDTH = 360;
+const POPOVER_MIN_WIDTH = 280; // For mobile
 const POPOVER_HEIGHT = 200;
 const GUTTER = 16;
 const ARROW_SIZE = 10;
@@ -301,9 +302,11 @@ export default function Tour({ force = false, onComplete }: TourProps) {
       {/* Popover — pointer-events-auto so its buttons are clickable */}
       {popover && (
         <div
-          className="absolute w-[360px] max-w-[calc(100vw-32px)] bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 animate-slide-up pointer-events-auto"
+          className="absolute w-[280px] sm:w-[360px] max-w-[calc(100vw-32px)] bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 animate-slide-up pointer-events-auto"
           style={{ top: popover.top, left: popover.left }}
           role="document"
+          aria-labelledby="tour-title"
+          aria-describedby="tour-body"
         >
           {/* Arrow */}
           {popover.arrow !== 'none' && (
@@ -323,38 +326,39 @@ export default function Tour({ force = false, onComplete }: TourProps) {
               aria-hidden="true"
             />
           )}
-          <div className="p-5">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+          <div className="p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-2 sm:gap-3 mb-2">
+              <h2 id="tour-title" className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
                 {currentStep.title}
               </h2>
               <button
                 type="button"
                 onClick={finish}
-                aria-label="Close tour"
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex-shrink-0"
+                aria-label="Close tour (Escape)"
+                title="Close (Escape)"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex-shrink-0 p-1 -mr-1"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-4">
+            <p id="tour-body" className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-3 sm:mb-4">
               {currentStep.body}
             </p>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {stepIndex + 1} of {TOUR_STEPS.length}
+                {stepIndex + 1}/{TOUR_STEPS.length}
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 {stepIndex > 0 && (
-                  <Button variant="ghost" size="sm" onClick={prev}>
-                    <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Back
+                  <Button variant="ghost" size="sm" onClick={prev} className="text-xs sm:text-sm px-2 sm:px-3">
+                    <ArrowLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1" /> Back
                   </Button>
                 )}
-                <Button variant="primary" size="sm" onClick={next}>
+                <Button variant="primary" size="sm" onClick={next} className="text-xs sm:text-sm px-2 sm:px-3">
                   {stepIndex < TOUR_STEPS.length - 1 ? (
-                    <>Next <ArrowRight className="h-3.5 w-3.5 ml-1" /></>
+                    <>Next <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5 ml-1" /></>
                   ) : (
-                    <><Check className="h-3.5 w-3.5 mr-1" /> Done</>
+                    <><Check className="h-3 w-3 sm:h-3.5 sm:w-3.5 mr-1" /> Done</>
                   )}
                 </Button>
               </div>
