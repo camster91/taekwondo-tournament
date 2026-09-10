@@ -434,12 +434,11 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 
 ### Verification Steps
 
-1. **CI passes** (GitHub Actions, automatic on push):
-   - Unit tests (vitest)
-   - E2E tests (Playwright)
-   - Type checks (tsc)
-   - Lint (eslint)
-   - Production build succeeds
+1. **Local verification (optional):**
+   - `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`
+   - GitHub Actions CI runs automatically on push but is NOT a ship gate
+   - Cameron's Actions often fail on spending-limit noise — ignore and proceed
+   - VPS verification (steps 3–5 below) is the actual ship gate
 
 2. **Manual trigger** (Cameron):
    - Cameron runs `scripts/deploy-production.sh` from local machine

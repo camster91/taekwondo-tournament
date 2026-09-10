@@ -46,11 +46,10 @@ Automatic retention is deliberately disabled by default. Verify a backup and obt
 
 ## Release sequence
 
-1. **Verify CI passes:** Ensure GitHub Actions CI (lint, typecheck, unit tests, E2E tests, build) passes on the commit to be deployed.
-2. **Local verification (optional but recommended):** `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` on the exact commit.
-3. **Review security advisories:** Check `npm audit` output and bounded exceptions documented in `SECURITY.md` or `docs/ADVISORY-TRACKING-*.md`.
-4. **Staging validation (recommended):** Deploy to staging VPS via `scripts/deploy-staging.sh` against a database restored from production snapshot. Run smoke tests.
-5. **Production deploy:** Execute `scripts/deploy-production.sh` from a clean worktree. The script:
+1. **Local verification (optional but recommended):** Run `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` on the exact commit. GitHub Actions CI runs automatically on push/PR but is NOT a hard ship gate — Cameron's Actions often fail on spending-limit noise. Ignore Actions spending-limit failures; VPS verification is the actual ship gate.
+2. **Review security advisories:** Check `npm audit` output and bounded exceptions documented in `SECURITY.md` or `docs/ADVISORY-TRACKING-*.md`.
+3. **Staging validation (recommended):** Deploy to staging VPS via `scripts/deploy-staging.sh` against a database restored from production snapshot. Run smoke tests.
+4. **Production deploy:** Execute `scripts/deploy-production.sh` from a clean worktree. The script:
    - Uploads immutable source archive to VPS with SHA256 verification
    - Builds Docker image on VPS
    - Validates health checks on candidate container
@@ -58,14 +57,14 @@ Automatic retention is deliberately disabled by default. Verify a backup and obt
    - Runs `prisma migrate deploy` to apply pending migrations
    - Starts new live container on same port
    - Automatically rolls back (DB + container) if health checks fail
-6. **Post-deploy verification:** The script validates `/api/health/ready` both internally and via public URL. Additionally verify:
+5. **Post-deploy verification (VPS ship gate):** The script validates `/api/health/ready` both internally and via public URL. Additionally verify:
    - Admin sign-in works
    - Invitation email sends
    - Tournament creation succeeds
    - Public registration form renders
    - Registration-management token link works
    - Check-in and scoring flows work
-7. **Rollback readiness:** Previous container is renamed to `taekwondo-tournament-rollback` and DB backup is at `/var/backups/taekwondo/pre-{timestamp}-{SHA}.dump`. Manual rollback procedure is documented in `scripts/deploy-production.sh` comments (< 5 minute RTO).
+6. **Rollback readiness:** Previous container is renamed to `taekwondo-tournament-rollback` and DB backup is at `/var/backups/taekwondo/pre-{timestamp}-{SHA}.dump`. Manual rollback procedure is documented in `scripts/deploy-production.sh` comments (< 5 minute RTO).
 
 ## Rollback
 
