@@ -146,15 +146,17 @@ dist-server/               # Production build (backend)
 
 ## API Endpoints
 
+> This table is a quick-reference. The full API surface is documented in `CLAUDE.md` ("API reference") — every route is mounted under `/api/{auth,tournaments,competitors,brackets,divisions,public,analytics,invites,sports,rules,incidents,support,recommendations,organizations,billing,sos-alerts,custom-domains,tournament-templates}`. The four endpoints below were previously mis-listed (they 404'd); they have been corrected to the real mounted routes.
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/tournaments` | List tournaments |
 | POST | `/api/tournaments` | Create tournament |
 | GET | `/api/tournaments/:id` | Get tournament details |
-| POST | `/api/tournaments/:id/import` | Import Excel roster |
-| GET | `/api/tournaments/:id/brackets` | Get brackets |
-| POST | `/api/brackets/:id/score` | Submit score |
-| GET | `/api/displays/:ring` | Get ring display data |
+| POST | `/api/competitors/import` | Import Excel roster (`src/server/routes/competitors.ts:643`) |
+| GET | `/api/brackets/division/:divisionId` | Get a division's bracket (`src/server/routes/brackets.ts:329`) |
+| PUT | `/api/brackets/match/:matchId` | Submit score for a match (`src/server/routes/brackets.ts:373`) |
+| GET | `/api/public/scoreboard/:publicSlug` | Get public scoreboard data by per-tournament slug (`src/server/routes/public.ts:681`) |
 
 ## Excel Import Format
 
