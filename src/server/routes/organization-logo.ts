@@ -6,12 +6,30 @@ import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
 import { existsSync } from 'fs';
+import { fileTypeFromBuffer } from 'file-type';
 
 const router = Router();
 
 // Logo storage configuration
 const LOGO_STORAGE_PATH = '/opt/cursor/logos';
-const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
+// SH-2: SVG is rejected entirely. SVG can carry <script> event handlers
+// and `javascript:` hrefs that fire when the image is rendered, which
+// combined with the CSP's `style-src 'unsafe-inline'` allowed stored XSS
+// across tenants. Use only raster formats that have unambiguous magic bytes
+// and that file-type can validate against the actual buffer.
+const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+]);
+// Extension is derived from the *sniffed* MIME, never the client header.
+const EXTENSION_BY_MIME: ReadonlyMap<string, string> = new Map([
+  ['image/png', 'png'],
+  ['image/jpeg', 'jpg'],
+  ['image/gif', 'gif'],
+  ['image/webp', 'webp'],
+]);
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 
 // Ensure logo directory exists
@@ -79,18 +97,18 @@ router.post('/:orgId/logo', authenticate, requireRole('admin', 'director'), asyn
 router.post('/:orgId/logo-base64', authenticate, requireRole('admin', 'director'), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { orgId } = req.params;
-  const { data, mimeType } = req.body;
+  const { data } = req.body;
 
   try {
     // Validation
     if (!data || typeof data !== 'string') {
       return res.status(400).json({ error: 'Missing or invalid base64 data field' });
     }
-    if (!mimeType || !ALLOWED_MIME_TYPES.includes(mimeType)) {
-      return res.status(400).json({
-        error: `Invalid MIME type. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`,
-      });
-    }
+    // The client-supplied `mimeType` (if any) is intentionally NOT trusted.
+    // The actual image type is determined by sniffing the decoded bytes
+    // below — see SH-2 fix. Storing a server-controlled value closes the
+    // SVG upload vector where a malicious director could push `<script>`
+    // and `javascript:` hrefs that fire when the logo renders.
 
     // Verify organization exists and user has access
     const organization = await prisma.organization.findUnique({
@@ -124,9 +142,21 @@ router.post('/:orgId/logo-base64', authenticate, requireRole('admin', 'director'
       });
     }
 
-    // Generate unique filename
+    // Magic-byte sniff: detect the real MIME from the decoded bytes.
+    // Rejects SVG (and any other non-allowlisted type) regardless of what
+    // the client claims. file-type returns `undefined` when the buffer
+    // is too small or doesn't match a known signature — treat as reject.
+    const detected = await fileTypeFromBuffer(new Uint8Array(buffer));
+    if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
+      return res.status(400).json({
+        error: 'Unsupported image type. Allowed: PNG, JPEG, GIF, WebP.',
+      });
+    }
+
+    // Generate unique filename — extension comes from the *sniffed* MIME,
+    // never from the client header.
     const hash = crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16);
-    const ext = mimeType.split('/')[1].replace('svg+xml', 'svg');
+    const ext = EXTENSION_BY_MIME.get(detected.mime)!;
     const filename = `${organization.slug}-${hash}.${ext}`;
 
     // Ensure directory exists

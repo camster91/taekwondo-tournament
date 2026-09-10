@@ -49,7 +49,7 @@ import {
   mountSentryErrorHandler,
   captureException as sentryCaptureException,
 } from './services/sentry.js';
-import { initializeWebSocket } from './services/websocket.js';
+import { initializeWebSocket, closeWebSocket } from './services/websocket.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -258,11 +258,18 @@ app.use('/api/organizations', organizationLogoRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/sos-alerts', sosAlertsRouter);
 
-// Serve uploaded organization logos (P1-11)
+// Serve uploaded organization logos (P1-11). `setHeaders` forces
+// `X-Content-Type-Options: nosniff` on every response so a future
+// regression in the upload allowlist cannot be turned into a stored-XSS
+// vector by a malicious actor who names a file with a misleading
+// extension — the browser will not reinterpret the bytes as HTML/SVG.
 app.use('/logos', express.static('/opt/cursor/logos', {
   maxAge: '1d',
   etag: true,
   lastModified: true,
+  setHeaders: (res: Response) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  },
 }));
 
 // Health check (liveness — the process is up and the HTTP server
@@ -389,8 +396,14 @@ const server = app.listen(Number(PORT), '0.0.0.0', async () => {
   }
 });
 
-// Initialize WebSocket server after HTTP server is listening
-initializeWebSocket(server);
+// Initialize WebSocket server after HTTP server is listening. Awaiting the
+// init means the pubsub's LISTEN client is up before the first request
+// can hit a route that calls `broadcast*`; otherwise an early match update
+// would race a not-yet-connected listener.
+initializeWebSocket(server).catch((err: unknown) => {
+  console.error('[startup] FATAL: failed to initialize WebSocket server:', err);
+  process.exit(1);
+});
 
 const shutdown = async (signal: string) => {
   console.log(`[shutdown] received ${signal}, draining...`);
@@ -401,6 +414,16 @@ const shutdown = async (signal: string) => {
     console.error('[shutdown] 25s grace exceeded, forcing exit');
     process.exit(1);
   }, 25_000).unref();
+  // Close the WebSocket server + the Postgres LISTEN/NOTIFY pubsub
+  // (closes SH-6: cross-instance fanout). Closing the pubsub before
+  // Prisma disconnect is fine — the pubsub uses raw `pg` clients,
+  // not Prisma's pool.
+  try {
+    await closeWebSocket();
+    console.log('[shutdown] WebSocket server closed');
+  } catch (err) {
+    console.error('[shutdown] WebSocket close error:', err);
+  }
   try {
     await prisma.$disconnect();
     console.log('[shutdown] Prisma disconnected');
