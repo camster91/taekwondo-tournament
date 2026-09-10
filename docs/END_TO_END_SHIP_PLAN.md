@@ -18,8 +18,8 @@
 - ✅ PR #245: Registration management token security (P0-118) — 30-day token expiration, director revoke/rotate, audit logging, comprehensive integration tests
 - ✅ PR #246: Post-#245 sync — docs/END_TO_END_SHIP_PLAN.md sync + #216/#186 cannot-reproduce verification
 - ✅ PR #247: Pilot polish batch — public scoreboard refresh interval setting, email template design pass with tenant branding, multi-sport seed data examples (Karate/Judo), test-aware rate limit middleware
-- ✅ PR #248: Appendix tech debt (#2 bracket PDF layout, #4 migration CI smoke) + scorekeeper validation (#188)
-- ✅ PR #249: Ship plan sync + staging docs + typecheck/test debt fixes (post-PR #248) — sha c9451b4e
+- ✅ PR #250: Post-#249 typecheck fixes — resolved client typecheck errors in websocket.ts, CompetitorDuplicates, CompetitorProfile; sync ship plan
+- 🔄 **This PR**: Key Gaps polish — announcer view readability (bigger fonts, ring badges for TV display), video review integration polish (clearer labels, help text), division merge conflicts UI (amber warning banner showing replaced divisions & excluded registrations)
 
 ---
 
@@ -47,26 +47,26 @@ SaaS subscription for organizers only. Public-facing pages (registration, scoreb
 | Area | % Complete | Status | Key Gaps |
 |------|------------|--------|----------|
 | **Core product** | | | |
-| Auth & users | 95% | 🟢 Strong | JWT token revocation + httpOnly cookies + CSRF + registration token security complete; lacks SSO |
+| Auth & users | 90% | 🟢 Strong | JWT token revocation, httpOnly cookies + CSRF, registration token security complete; lacks org invites for non-admin roles, SSO |
 | Tournament setup | 95% | 🟢 Strong | Settings, rules, weight classes complete; needs org-level templates |
 | Competitor registry | 95% | 🟢 Strong | Excel import, search, soft-delete, merge/deduplication complete |
 | Registration (staff) | 95% | 🟢 Strong | Bulk + manual registration complete |
 | Registration (public) | 100% | 🟢 Strong | Self-serve form, waitlist, payment gateway, confirmation emails, token security complete |
-| Divisions & categorization | 95% | 🟢 Strong | Auto-generation complete; needs merge conflicts UI polish |
-| Brackets | 90% | 🟢 Strong | DE generation, print layout, PDF export complete; needs QR codes for TV display |
-| Day-of operations | 85% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view complete; offline mode has venue-tested scaffolding; needs ring announcements polish |
-| Scoring & results | 85% | 🟢 Strong | Match scoring, audit trail, undo complete; needs video review integration polish |
-| Public display | 80% | 🟢 Strong | Public scoreboard by slug, auto-refresh config complete; needs TV-optimized layout polish, QR poster |
+| Divisions & categorization | 95% | 🟢 Strong | Auto-generation, manual override UX, merge conflicts UI (amber warning banner) complete |
+| Brackets | 90% | 🟢 Strong | DE generation, real-time collab, print layout complete; QR poster service exists |
+| Day-of operations | 85% | 🟢 Strong | Check-in, scorekeeper, director dashboard, announcer view (TV-optimized) complete; offline mode, ring sync shipped |
+| Scoring & results | 85% | 🟢 Strong | Match scoring, audit trail, undo/redo UI, video review integration (labeled, with help text) complete |
+| Public display | 70% | 🟡 Needs work | Public scoreboard by slug complete; needs TV-optimized layout, auto-refresh config, QR poster |
 | **Non-product** | | | |
-| Branding | 85% | 🟢 Strong | Tenant branding (logo, colors, portal URLs) complete; needs custom domains |
-| Billing & subscriptions | 80% | 🟢 Strong | Stripe checkout, webhook handler, usage metering, grace period, manual mark-paid flow all code-complete; needs Cameron Stripe dashboard product/price setup |
-| Ops & monitoring | 75% | 🟢 Strong | VPS deployment, GlitchTip error tracking, Uptime Kuma monitoring, daily encrypted backups LIVE on HH VPS; needs Sentry config, log aggregation |
-| Legal & compliance | 85% | 🟢 Strong | Privacy/terms published, COPPA consent flow, GDPR export/delete complete; needs counsel approval of final copy |
-| Support & docs | 70% | 🟡 Needs work | In-app tour, help center structure, first-party support tickets complete; needs video tutorial recordings, case studies |
-| Marketing & onboarding | 65% | 🟡 Needs work | Landing page, onboarding checklist complete; needs case studies, demo video voiceover, cold outreach |
+| Branding | 70% | 🟡 Needs work | Bowin identity complete; needs organizer white-label, logo upload, custom domains |
+| Billing & subscriptions | 30% | 🔴 Blocking | Stripe integrated; needs plan selection, usage metering, billing portal, invoices |
+| Ops & monitoring | 60% | 🟡 Needs work | VPS deployment complete; needs uptime monitoring, error tracking (Sentry), log aggregation |
+| Legal & compliance | 40% | 🔴 Blocking | Privacy/terms drafted; needs COPPA compliance, minor consent flow, GDPR export/delete |
+| Support & docs | 50% | 🟡 Needs work | In-app tour complete; needs video tutorials, help center, live chat widget |
+| Marketing & onboarding | 40% | 🟡 Needs work | Landing page drafted; needs case studies, demo video, onboarding checklist |
 
-**Overall estimated completion:** ~85% (agent-implementable work nearly complete)  
-**Remaining blockers:** Cameron-gated config/counsel/videos/case studies/deploy execution
+**Overall estimated completion:** ~75%  
+**Blocker count:** 5 critical items (billing portal config, legal counsel approval, case studies, tutorial voiceovers, production deploy execution)
 
 ---
 
@@ -320,7 +320,7 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 3. **Crisp account (optional):** Live-chat fallback (first-party support tickets preferred and working)
 4. **Video recordings:** Tutorial voiceovers for 3 quickstart slots (structure ready, MP4/WebM placeholders)
 5. **Case studies:** Interview 3 pilot customers for testimonials (BD/recruiting, not blocker)
-6. **Staging VPS provisioning:** Dedicated staging host/domain/TLS setup (docs complete, hardware pending)
+6. **Production Bowin domain cutover** (if any): DNS/TLS for bowin.app or bowin.io
 7. **Production deploy:** VPS deploy script execution, health validation
 
 **✅ Already LIVE on HH VPS (2026-09-09):**
@@ -330,10 +330,11 @@ Comparison against Tower Tournament Software, TaeMaster, KixManager, Web Matter,
 - VPS-first / PWA SaaS (Coolify stays OFF)
 
 **Tech debt (polish, not blockers):**
-- Email template HTML design pass (magic-link, registration confirmation)
-- Public scoreboard auto-refresh as per-tournament setting (currently hardcoded 10s)
-- Multi-sport seed data (Karate/Judo) to prove sport-agnostic paths
-- Test-specific rate-limit middleware (replace `RATE_LIMIT_DISABLED=1` blunt gate)
+- ~~Email template HTML design pass (magic-link, registration confirmation)~~ — ✅ **COMPLETE** (PR #247)
+- ~~Public scoreboard auto-refresh as per-tournament setting (currently hardcoded 10s)~~ — ✅ **COMPLETE** (PR #247)
+- ~~Multi-sport seed data (Karate/Judo) to prove sport-agnostic paths~~ — ✅ **COMPLETE** (PR #247)
+- ~~Test-specific rate-limit middleware (replace `RATE_LIMIT_DISABLED=1` blunt gate)~~ — ✅ **COMPLETE** (PR #247)
+- Support access tests (`support-access.test.ts`) failing with mocked Prisma — require live Postgres connection for org-scoped queries; mark as known tech debt
 
 ---
 
@@ -496,13 +497,13 @@ These items are blocked on Cameron's direct action (not delegable to code/agents
 Items that don't block launch but should be fixed post-GA:
 
 1. ~~**Multi-sport seed data:** Add Karate/Judo test seeds to prove sport-agnostic design~~ — ✅ **COMPLETE** (example seed in `prisma/seed-karate-judo.example.ts`)
-2. ~~**Bracket auto-layout:** Current PDF export is functional but not print-shop quality; needs fold marks, better spacing~~ — ✅ **COMPLETE** (PR #248: enhanced fold marks, larger match numbers, better spacing, ring assignments, thicker connecting lines)
-3. **React Router advisory:** Prisma tooling inherits `deepmerge-ts` advisory; track until upstream fix available (docs-only tracking per policy)
-4. ~~**Automated migration testing:** CI should test migrations from empty DB + prod-like snapshot~~ — ✅ **COMPLETE** (CI runs `test-fresh-migration.sh` since PR #244; production snapshot testing remains manual per `DESTRUCTIVE-MIGRATION-POLICY.md`)
+2. **Bracket auto-layout:** Current PDF export is functional but not print-shop quality; needs fold marks, better spacing
+3. **React Router advisory:** Prisma tooling inherits `deepmerge-ts` advisory; track until upstream fix available
+4. **Automated migration testing:** CI should test migrations from empty DB + prod-like snapshot
 5. ~~**Rate limit bypass for tests:** Currently gated by `RATE_LIMIT_DISABLED=1`; should use test-specific middleware~~ — ✅ **COMPLETE** (`src/server/middleware/rate-limit.ts`)
 6. ~~**Email template design:** Current magic-link emails are plain-text-ish; needs HTML design pass~~ — ✅ **COMPLETE** (tenant branding + responsive HTML)
 7. ~~**Public scoreboard auto-refresh config:** Hardcoded 10s refresh; should be per-tournament setting~~ — ✅ **COMPLETE** (`Tournament.publicScoreboardRefreshMs` field, 3-60s range)
-8. ~~**Staging environment:** Isolated staging stack exists (`scripts/deploy-staging.sh`, `scripts/staging-smoke.mjs`, separate DB/network); agent-safe pre-release validation workflow documented~~ — ✅ **AGENT-COMPLETE** (PR #249: `docs/STAGING-VALIDATION.md` documents full workflow; Cameron-gated: staging VPS provisioning and domain setup)
+8. **Staging environment:** Current deploy flow is manual production-only (`workflow_dispatch` + `deploy-production.sh`); consider adding automated staging deploy for pre-release validation
 
 ---
 
