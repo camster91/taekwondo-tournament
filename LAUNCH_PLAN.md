@@ -16,4 +16,4 @@
 - [x] Prepare app store assets (if mobile) or social media graphics
 - [ ] Submit to app stores (if applicable)
 - [x] Write launch post (Product Hunt, Twitter, LinkedIn)
-- [ ] Monitor logs and feedback post-launch
+- [x] Monitor logs and feedback post-launch
