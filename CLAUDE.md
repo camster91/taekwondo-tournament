@@ -78,11 +78,14 @@ nodemon+ts-node in parallel. Build: `prisma generate && vite build
 ├── ... CB Females / Males / Patterns / Sparring
 ├── docs/                                # audit reports, deployment notes
 ├── prisma/
-│   ├── schema.prisma                    # source of truth (no migrations dir)
+│   ├── schema.prisma                    # source of truth
+│   ├── migrations/                      # checked-in migration history
 │   └── seed.ts                          # dev seed (TKD-only, see "Multi-sport")
 ├── scripts/
-│   ├── deploy-to-vps.sh                 # build on Mac, ship to Coolify
-│   └── sync-caddy.sh                    # (Caddyfile sync, see "Deployment")
+│   ├── deploy-production.sh             # VPS production deploy (rollback-safe)
+│   ├── deploy-staging.sh                # VPS staging deploy
+│   ├── deploy-demo.sh                   # isolated public demo deploy
+│   └── deploy-to-vps.sh                 # legacy stub (use deploy-production.sh)
 ├── src/                                 # the actual app — there is NO `app/` dir
 │   ├── server/
 │   │   ├── index.ts                     # Express bootstrap, route mounts
@@ -710,32 +713,47 @@ list (`grep process.env.`):
 ## Deployment
 
 Production runs in a Docker container on the Ashbi VPS
-(187.77.26.99), built by `scripts/deploy-to-vps.sh`:
+(187.77.26.99), deployed via `scripts/deploy-production.sh`:
 
-1. Local build: `npm run build` produces `dist/` (client) and
-   `dist-server/` (server) plus `server.js` from the TS source.
-2. Local tar → scp/pipe to the VPS (scp is unreliable on this
-   box, so the script uses `cat local | ssh coolify cat > remote`).
-3. VPS-side Docker build with the on-host `Dockerfile`.
-4. Container runs with `--network markup-net` so it can reach
-   the existing `markup-postgres` container.
-5. Environment passed in via `--env-file` (not inline `-e`) so
-   the JWT secret doesn't end up in shell history.
-   `JWT_SECRET` is read from `/etc/taekwondo.d/jwt-secret` on
-   the VPS (chmod 600).
-6. Caddy on the VPS terminates TLS and reverse-proxies
-   `tkd.ashbi.ca` → `127.0.0.1:18301`. (NOT Traefik — Traefik
-   was tried and rolled back; the Caddyfile at
-   `/opt/caddy/Caddyfile` is the source of truth.)
+1. **Immutable source archive:** Script requires clean worktree,
+   creates `.tar.gz` from git HEAD, uploads to VPS at
+   `/opt/bowin-production-releases/{SHA}.tar.gz` with SHA256
+   verification.
+2. **VPS-side Docker build:** Builds `bowin-release:{SHA}` image
+   on VPS from the verified archive. Dockerfile is multi-stage
+   (Node 22 + production build + runtime).
+3. **Candidate validation:** Starts a private candidate container
+   (`taekwondo-tournament-candidate`) with `--network markup-net`
+   to reach the existing `markup-postgres` container. Validates
+   health check passes before proceeding.
+4. **Stopped-write cutover:** Stops live container, renames to
+   `taekwondo-tournament-rollback`, takes encrypted DB backup to
+   `/var/backups/taekwondo/pre-{timestamp}-{SHA}.dump`, runs
+   `prisma migrate deploy`, starts new live container on same port.
+5. **Automatic rollback:** If health checks fail, restores DB from
+   backup and reverts to previous container. Manual rollback is
+   documented in `scripts/deploy-production.sh` comments.
+6. **Environment:** Passed via `--env-file` (not inline `-e`) so
+   secrets don't appear in shell history. Required env vars:
+   `DATABASE_URL`, `JWT_SECRET`, `METRICS_TOKEN`,
+   `REGISTRATION_CONSENT_VERSION`, `PRIVACY_NOTICE_URL`,
+   `TOURNAMENT_TERMS_URL`, `MAILGUN_*`, `ALLOWED_ORIGINS`,
+   `PUBLIC_APP_URL`. Optional: `STRIPE_*` for billing,
+   `ENABLE_DEMO_LOGIN`/`DEMO_ISOLATED_DATA` for isolated demo.
+7. **Reverse proxy:** Traefik on the VPS terminates TLS and
+   reverse-proxies `tkd.ashbi.ca` → `127.0.0.1:{LIVE_PORT}`.
+   Traefik config lives in per-app Docker Compose or labels
+   (not centralized). Custom domain support (PR #256) requires
+   dynamic Traefik configuration for tenant hostnames.
 
-The Caddyfile is shared with sibling projects (animals, lull,
-markup-clone, etc.) and gets clobbered when those deploy.
-`scripts/sync-caddy.sh` (if it exists for this project — it
-doesn't yet) would re-assert the `tkd.ashbi.ca` block. The
-**Caddy wildcard default `*.ashbi.ca, ashbi.ca` is a footgun** —
-it catches every subdomain and conflicts with explicit apex
-blocks. Watch the Caddy logs for 429s if the wildcard starts
-capturing tkd.ashbi.ca's TLS cert.
+**Migration requirement:** Next production deploy must apply:
+- `20260910_add_tournament_templates` (org-level templates, PR #255)
+- `20260910_add_custom_domains` (custom domains, PR #256)
+- `20260910_add_capacity_waitlist` (capacity + waitlist, latest)
+
+The deploy script runs `prisma migrate deploy` automatically
+during cutover. Do NOT use `npm run db:push` on production —
+it bypasses migration history and is only for disposable local dev.
 
 ---
 
