@@ -68,6 +68,20 @@ concurrency:
 jobs:
   build:
     name: Build & push image
+    # GitHub-hosted runner. Refs #202: the build MUST NOT run on a
+    # self-hosted runner — Actions-side provisioning (account-level
+    # availability / billing) is the only failure mode that
+    # matters for the build step, and GH-hosted runners are the
+    # only path that surfaces it clearly. A self-hosted runner
+    # would mask the failure as a 0-job silent error and break
+    # the image publish path silently.
+    #
+    # The deploy is NOT in this workflow. It runs on the VPS via
+    # `scripts/deploy-production.sh` (raw `docker build` / `docker
+    # run` from an immutable source archive), so the GH-hosted
+    # build does not need to share cache with any deploy step.
+    # The image published here is for non-production use only;
+    # see the file header.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
