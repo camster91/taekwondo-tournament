@@ -75,22 +75,22 @@ interface AnalyticsData {
 }
 
 const BELT_COLORS: Record<string, string> = {
-  'White': 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  'White / Single Yellow Stripe': 'bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400',
-  'White / Double Yellow Stripe': 'bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400',
-  'Yellow': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-  'Yellow / Single Green Stripe': 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300',
-  'Yellow / Double Green Stripe': 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300',
-  'Green': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
-  'Green / Single Blue Stripe': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
-  'Green / Double Blue Stripe': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
+  'White': 'bg-surface-100 text-primary-700 dark:bg-primary-800 dark:text-primary-300',
+  'White / Single Yellow Stripe': 'bg-surface-50 text-primary-600 dark:bg-primary-800/50 dark:text-primary-400',
+  'White / Double Yellow Stripe': 'bg-surface-50 text-primary-600 dark:bg-primary-800/50 dark:text-primary-400',
+  'Yellow': 'bg-warning/100 text-warning800 dark:bg-warning/900/30 dark:text-warning300',
+  'Yellow / Single Green Stripe': 'bg-warning/50 text-warning700 dark:bg-warning/900/20 dark:text-warning300',
+  'Yellow / Double Green Stripe': 'bg-warning/50 text-warning700 dark:bg-warning/900/20 dark:text-warning300',
+  'Green': 'bg-success/100 text-success/800 dark:bg-success/900/30 dark:text-success/300',
+  'Green / Single Blue Stripe': 'bg-success/50 text-success/700 dark:bg-success/900/20 dark:text-success/300',
+  'Green / Double Blue Stripe': 'bg-success/50 text-success/700 dark:bg-success/900/20 dark:text-success/300',
   'Blue': 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300',
   'Blue / Single Red Stripe': 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300',
   'Blue / Double Red Stripe': 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300',
   'Red': 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300',
   'Red / Single Black Stripe': 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300',
   'Red / Double Black Stripe': 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300',
-  'Black': 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900',
+  'Black': 'bg-primary-900 text-white dark:bg-surface-100 dark:text-primary-900',
 };
 
 function compactNumber(n: number): string {
@@ -171,8 +171,8 @@ export default function Dashboard() {
       {demoUser && (
         <div className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-primary-900/60 dark:bg-primary-950/30">
           <div>
-            <p className="font-semibold text-slate-950 dark:text-white">Explore the fabricated live tournament</p>
-            <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">Choose a Director, Scorekeeper, Check-in, Parent, or Venue Display journey.</p>
+            <p className="font-semibold text-primary-950 dark:text-white">Explore the fabricated live tournament</p>
+            <p className="mt-0.5 text-sm text-primary-600 dark:text-primary-300">Choose a Director, Scorekeeper, Check-in, Parent, or Venue Display journey.</p>
           </div>
           <Button onClick={reopenDemoGuide} variant="primary" size="sm">Open demo guide</Button>
         </div>
@@ -187,12 +187,12 @@ export default function Dashboard() {
         onRetry={retryDemoGuide}
       />
       {/* ── Hero greeting ── */}
-      <div data-tour="dashboard-hero" className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-primary-950 p-6 lg:p-8 shadow-xl">
+      <div data-tour="dashboard-hero" className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-900 via-slate-900 to-primary-950 p-6 lg:p-8 shadow-xl">
         <div className="absolute top-0 right-0 w-72 h-72 bg-primary-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
         <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-accent-500/15 rounded-full blur-3xl translate-y-1/2" />
         <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/20 text-emerald-300 text-xs font-medium mb-3">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/500/15 border border-success/500/20 text-success/300 text-xs font-medium mb-3">
               <span className="live-dot" /> All systems normal
             </div>
             <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-white">
@@ -255,7 +255,7 @@ export default function Dashboard() {
                   {Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)}
                 </div>
               ) : tournaments && tournaments.length > 0 ? (
-                <div className="divide-y divide-slate-100 dark:divide-slate-800 border-t border-slate-100 dark:border-slate-800">
+                <div className="divide-y divide-surface-100 dark:divide-surface-800 border-t border-surface-100 dark:border-surface-800">
                   {tournaments.slice(0, 5).map((t, i) => {
                     const userRole = (user?.role || 'viewer') as UserRole;
                     const destination = getRoleAwareTournamentDestination(t, userRole);
@@ -265,31 +265,31 @@ export default function Dashboard() {
                       key={t.id}
                       to={destination}
                       aria-label={ariaLabel}
-                      className="group flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors animate-slide-up"
+                      className="group flex items-center gap-4 px-5 py-3.5 hover:bg-surface-50 dark:hover:bg-surface-800/40 transition-colors animate-slide-up"
                       style={{ animationDelay: `${i * 40}ms` }}
                     >
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center flex-shrink-0">
-                        <Trophy className="h-4.5 w-4.5 text-slate-600 dark:text-slate-400" />
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-800 dark:to-primary-700 flex items-center justify-center flex-shrink-0">
+                        <Trophy className="h-4.5 w-4.5 text-primary-600 dark:text-primary-400" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-slate-900 dark:text-white truncate group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">{t.name}</div>
-                        <div className="text-xs text-slate-600 mt-0.5 flex items-center gap-2 flex-wrap">
+                        <div className="font-medium text-sm text-primary-900 dark:text-white truncate group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">{t.name}</div>
+                        <div className="text-xs text-primary-600 mt-0.5 flex items-center gap-2 flex-wrap">
                           <span>{new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                          {t.location && <><span className="text-slate-300 dark:text-slate-600">·</span><span className="truncate">{t.location}</span></>}
+                          {t.location && <><span className="text-primary-300 dark:text-primary-600">·</span><span className="truncate">{t.location}</span></>}
                         </div>
                       </div>
-                      <div className="hidden sm:flex items-center gap-5 text-xs text-slate-600 flex-shrink-0">
+                      <div className="hidden sm:flex items-center gap-5 text-xs text-primary-600 flex-shrink-0">
                         <div className="text-right">
-                          <div className="font-semibold text-slate-900 dark:text-white">{t._count.registrations}</div>
+                          <div className="font-semibold text-primary-900 dark:text-white">{t._count.registrations}</div>
                           <div className="text-[10px] uppercase tracking-wider">kids</div>
                         </div>
                         <div className="text-right">
-                          <div className="font-semibold text-slate-900 dark:text-white">{t._count.divisions}</div>
+                          <div className="font-semibold text-primary-900 dark:text-white">{t._count.divisions}</div>
                           <div className="text-[10px] uppercase tracking-wider">divisions</div>
                         </div>
                       </div>
                       <StatusBadge status={t.status} />
-                      <ArrowUpRight className="h-4 w-4 text-slate-300 dark:text-slate-600 group-hover:text-primary-500 transition-colors" />
+                      <ArrowUpRight className="h-4 w-4 text-primary-300 dark:text-primary-600 group-hover:text-primary-500 transition-colors" />
                     </Link>
                   );
                   })}
@@ -314,7 +314,7 @@ export default function Dashboard() {
                 title="Belt distribution"
                 as="h2"
                 description={`Across your ${totalCompetitors.toLocaleString()} competitors`}
-                action={<Target className="h-4 w-4 text-slate-600" />}
+                action={<Target className="h-4 w-4 text-primary-600" />}
               />
               <CardBody className="px-5 pb-5 space-y-2.5">
                 {(() => {
@@ -329,7 +329,7 @@ export default function Dashboard() {
                   return entries.map(([belt, count]) => (
                     <div key={belt} className="flex items-center gap-3">
                       <span className={`pill ${BELT_COLORS[belt] || 'pill-neutral'} min-w-[68px] justify-center`}>{belt}</span>
-                      <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div className="flex-1 h-2 bg-surface-100 dark:bg-primary-800 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-700"
                           style={{
@@ -338,7 +338,7 @@ export default function Dashboard() {
                           }}
                         />
                       </div>
-                      <span className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums w-10 text-right">{count}</span>
+                      <span className="text-sm font-semibold text-primary-900 dark:text-white tabular-nums w-10 text-right">{count}</span>
                     </div>
                   ));
                 })()}
@@ -354,7 +354,7 @@ export default function Dashboard() {
             <CardHeader title="Quick actions" as="h2" />
             <CardBody className="px-3 pb-3 space-y-1">
               {[
-                              { label: 'Import competitors', sub: 'Excel file', icon: FileSpreadsheet, to: '/competitors', tone: 'from-emerald-500 to-teal-500' },
+                              { label: 'Import competitors', sub: 'Excel file', icon: FileSpreadsheet, to: '/competitors', tone: 'from-success/500 to-teal-500' },
                               // "Create tournament" was here but it duplicates the hero
                               // CTA + Getting Started step 2 — same prompt three times
                               // is confusing. Replaced with "View all tournaments"
@@ -365,16 +365,16 @@ export default function Dashboard() {
                 <Link
                   key={a.label}
                   to={a.to}
-                  className="group flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                  className="group flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-surface-50 dark:hover:bg-surface-800/40 transition-colors"
                 >
                   <div className={`h-9 w-9 rounded-lg bg-gradient-to-br ${a.tone} flex items-center justify-center shadow-sm flex-shrink-0`}>
                     <a.icon className="h-4 w-4 text-white" strokeWidth={2.5} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-slate-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">{a.label}</div>
-                    <div className="text-[11px] text-slate-600">{a.sub}</div>
+                    <div className="text-sm font-medium text-primary-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">{a.label}</div>
+                    <div className="text-[11px] text-primary-600">{a.sub}</div>
                   </div>
-                  <ArrowRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600 group-hover:text-slate-500 group-hover:translate-x-0.5 transition-all" />
+                  <ArrowRight className="h-3.5 w-3.5 text-primary-300 dark:text-primary-600 group-hover:text-primary-500 group-hover:translate-x-0.5 transition-all" />
                 </Link>
               ))}
             </CardBody>
@@ -387,7 +387,7 @@ export default function Dashboard() {
                 title="Top schools"
                 as="h2"
                 description="Most represented dojangs"
-                action={<School className="h-4 w-4 text-slate-600" />}
+                action={<School className="h-4 w-4 text-primary-600" />}
               />
               <CardBody className="px-5 pb-5 space-y-2.5">
                 {analytics.topSchools.slice(0, 6).map((school, index) => {
@@ -395,8 +395,8 @@ export default function Dashboard() {
                   return (
                     <div key={school.school} className="flex items-center gap-3">
                       <span className="text-base w-6 text-center flex-shrink-0">{medal}</span>
-                      <span className="text-sm text-slate-700 dark:text-slate-300 truncate flex-1">{school.school}</span>
-                      <span className="text-sm font-semibold text-slate-900 dark:text-white tabular-nums">{school.count}</span>
+                      <span className="text-sm text-primary-700 dark:text-primary-300 truncate flex-1">{school.school}</span>
+                      <span className="text-sm font-semibold text-primary-900 dark:text-white tabular-nums">{school.count}</span>
                     </div>
                   );
                 })}
@@ -427,10 +427,10 @@ export default function Dashboard() {
                       { text: 'Run the tournament day-of', done: steps[3] },
                     ].map((step, i) => (
                       <li key={i} className="flex items-start gap-3">
-                        <div className={`flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center ${step.done ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                        <div className={`flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center ${step.done ? 'bg-success/100 dark:bg-success/900/30 text-success/600 dark:text-success/400' : 'bg-surface-100 dark:bg-primary-800 text-primary-400'}`}>
                           {step.done ? <Check className="h-3 w-3" strokeWidth={3} /> : <span className="text-[10px] font-semibold">{i + 1}</span>}
                         </div>
-                        <span className={`text-sm leading-relaxed ${step.done ? 'text-slate-500 line-through decoration-slate-300 dark:decoration-slate-700' : 'text-slate-700 dark:text-slate-300'}`}>{step.text}</span>
+                        <span className={`text-sm leading-relaxed ${step.done ? 'text-primary-500 line-through decoration-slate-300 dark:decoration-slate-700' : 'text-primary-700 dark:text-primary-300'}`}>{step.text}</span>
                       </li>
                     ))}
                   </ol>

@@ -885,7 +885,7 @@ export default function Divisions() {
       >
         <Link
           to={`/tournaments/${id}`}
-          className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center mb-2"
+          className="text-sm text-surface-600 dark:text-surface-400 hover:text-surface-700 dark:hover:text-gray-300 flex items-center mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Tournament
@@ -917,7 +917,7 @@ export default function Divisions() {
             />
           )}
           {recommendationsLoading || recommendationsFetching && !recommendations ? (
-            <div role="status" className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+            <div role="status" className="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-300">
               <Spinner size="sm" /> Loading current recommendation state…
             </div>
           ) : recommendationsError ? (
@@ -929,7 +929,7 @@ export default function Divisions() {
             />
           ) : !latestRecommendation ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-gray-600 dark:text-gray-300">
+              <p className="text-sm text-surface-600 dark:text-surface-300">
                 Review sparse categories, incomplete registrations, and manual placements before changing divisions.
               </p>
               <Button
@@ -944,26 +944,26 @@ export default function Divisions() {
           ) : (
             <div className="space-y-4">
               <div>
-                <p className="font-medium text-gray-900 dark:text-white">{latestRecommendation.explanation}</p>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                <p className="font-medium text-surface-900 dark:text-white">{latestRecommendation.explanation}</p>
+                <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">
                   {latestRecommendation.proposedDiff.divisions.length} proposed divisions · {recommendationImpact?.retainedDivisions.length ?? 0} pinned divisions retained · {recommendationImpact?.retainedAssignments ?? 0} placements retained · {latestRecommendation.proposedDiff.excluded.length} registrations require review
                 </p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-xs text-surface-500 dark:text-surface-400">
                   Input completeness: {Math.round(latestRecommendation.confidence * 100)}% · Status: {latestRecommendation.status}
                 </p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-xs text-surface-500 dark:text-surface-400">
                   Deterministic means reproducible, not automatically correct. Review every proposed placement before approval.
                 </p>
               </div>
               
               {/* Merge Conflicts UI - show conflicts between auto-categorization and manual overrides */}
               {recommendationImpact && (recommendationImpact.replacedDivisions.length > 0 || latestRecommendation.proposedDiff.excluded.length > 0) && (
-                <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 rounded">
-                  <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-300 mb-2 flex items-center gap-2">
+                <div className="bg-warning/50 dark:bg-warning/900/20 border-l-4 border-warning500 p-4 rounded">
+                  <h4 className="text-sm font-semibold text-warning900 dark:text-warning300 mb-2 flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4" />
                     Conflicts & Manual Review Required
                   </h4>
-                  <div className="space-y-2 text-xs text-amber-800 dark:text-amber-200">
+                  <div className="space-y-2 text-xs text-warning800 dark:text-warning200">
                     {recommendationImpact.replacedDivisions.length > 0 && (
                       <div>
                         <p className="font-medium">
@@ -1001,17 +1001,17 @@ export default function Divisions() {
               )}
               
               <div>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Proposed divisions and placements</h3>
-                <div className="mt-2 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Proposed divisions and placements</h3>
+                <div className="mt-2 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-surface-200 p-3 dark:border-surface-700">
                   {latestRecommendation.proposedDiff.divisions.map((division) => (
-                    <div key={`${division.name}-${division.eventType}`} className="border-b border-gray-100 pb-2 last:border-0 dark:border-gray-800">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    <div key={`${division.name}-${division.eventType}`} className="border-b border-surface-100 pb-2 last:border-0 dark:border-surface-800">
+                      <p className="text-sm font-medium text-surface-900 dark:text-white">
                         {division.name} — {division.competitorCount} competitor{division.competitorCount === 1 ? '' : 's'}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="text-xs text-surface-500 dark:text-surface-400">
                         {division.eventType}; ages {division.ageMin}–{division.ageMax}{division.weightClass ? `; ${division.weightClass}` : ''}
                       </p>
-                      <ul className="mt-1 list-disc pl-5 text-xs text-gray-600 dark:text-gray-300">
+                      <ul className="mt-1 list-disc pl-5 text-xs text-surface-600 dark:text-surface-300">
                         {division.registrations.map((entry) => (
                           <li key={entry.registrationId}>{entry.competitorName}{entry.school ? ` — ${entry.school}` : ''}</li>
                         ))}
@@ -1022,12 +1022,12 @@ export default function Divisions() {
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pinned divisions retained in the final state</h3>
+                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Pinned divisions retained in the final state</h3>
                   {recommendationImpact?.retainedDivisions.length ? (
-                    <div className="mt-1 space-y-2 text-sm text-gray-600 dark:text-gray-300">
+                    <div className="mt-1 space-y-2 text-sm text-surface-600 dark:text-surface-300">
                       {recommendationImpact.retainedDivisions.map((division) => (
                         <div key={division.id}>
-                          <p className="font-medium text-gray-800 dark:text-gray-100">{division.name}</p>
+                          <p className="font-medium text-surface-800 dark:text-surface-100">{division.name}</p>
                           <p className="text-xs">{division.eventType}; ages {division.ageMin}–{division.ageMax}{division.weightClass ? `; ${division.weightClass}` : ''}</p>
                           <ul className="list-disc pl-5 text-xs">
                             {division.assignments.map((assignment) => (
@@ -1040,20 +1040,20 @@ export default function Divisions() {
                         </div>
                       ))}
                     </div>
-                  ) : <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">No manual placements are present.</p>}
+                  ) : <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">No manual placements are present.</p>}
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Requires manual review</h3>
+                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Requires manual review</h3>
                   {latestRecommendation.proposedDiff.excluded.length ? (
-                    <ul className="mt-1 list-disc pl-5 text-sm text-amber-700 dark:text-amber-300">
+                    <ul className="mt-1 list-disc pl-5 text-sm text-warning700 dark:text-warning300">
                       {latestRecommendation.proposedDiff.excluded.map((entry) => (
                         <li key={entry.registrationId}>{entry.competitorName}: {entry.reasons.join(', ')}</li>
                       ))}
                     </ul>
-                  ) : <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Every unpinned registration has the required facts.</p>}
+                  ) : <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">Every unpinned registration has the required facts.</p>}
                 </div>
               </div>
-              <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+              <div className="rounded-lg bg-surface-50 p-3 text-sm text-surface-700 dark:bg-surface-800 dark:text-surface-200">
                 <p className="font-medium">Concrete configuration</p>
                 <p>
                   Maximum size {latestRecommendation.inputSnapshot.config.divisionThreshold}; smart split {latestRecommendation.inputSnapshot.config.enableSmartSplitting ? 'on' : 'off'}; smart merge {latestRecommendation.inputSnapshot.config.enableSmartMerging ? 'on' : 'off'}; age flexibility {latestRecommendation.inputSnapshot.config.ageBoundaryTolerance ?? 0} months; age bands {latestRecommendation.inputSnapshot.config.useBlackBeltAgeGroups ? 'black-belt preset' : 'standard/custom rules'}; custom weight classes {latestRecommendation.inputSnapshot.config.customWeightClasses?.map((weightClass) => weightClass.name).join(', ') || 'none'}.
@@ -1061,18 +1061,18 @@ export default function Divisions() {
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Constraints honored</h3>
-                  <ul className="mt-1 list-disc pl-5 text-sm text-gray-600 dark:text-gray-300">
+                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Constraints honored</h3>
+                  <ul className="mt-1 list-disc pl-5 text-sm text-surface-600 dark:text-surface-300">
                     {latestRecommendation.constraintsConsidered.map((constraint) => <li key={constraint}>{constraint}</li>)}
                   </ul>
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Warnings and exceptions</h3>
+                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Warnings and exceptions</h3>
                   {latestRecommendation.warnings.length ? (
-                    <ul className="mt-1 list-disc pl-5 text-sm text-amber-700 dark:text-amber-300">
+                    <ul className="mt-1 list-disc pl-5 text-sm text-warning700 dark:text-warning300">
                       {latestRecommendation.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}
                     </ul>
-                  ) : <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">No incomplete registration warnings.</p>}
+                  ) : <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">No incomplete registration warnings.</p>}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1199,7 +1199,7 @@ export default function Divisions() {
                     };
                     setDivisionExceptionParams(createParams);
                   }}
-                  className="text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20"
+                  className="text-success600 dark:text-success400 hover:bg-success/50 dark:hover:bg-success/900/20"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Create Division
@@ -1217,7 +1217,7 @@ export default function Divisions() {
                 <Button
                   variant="secondary"
                   onClick={() => setClearConfirm(true)}
-                  className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  className="text-danger600 dark:text-danger400 hover:bg-danger/50 dark:hover:bg-danger/900/20"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Clear All
@@ -1237,12 +1237,12 @@ export default function Divisions() {
 
       {/* Warnings */}
       {(stats.smallDivisions > 0 || stats.largeDivisions > 0 || stats.emptyDivisions > 0) && (
-        <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+        <div className="mb-6 p-4 bg-warning/50 dark:bg-warning/900/20 border border-warning200 dark:border-warning800 rounded-lg">
           <div className="flex items-start">
-            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="h-5 w-5 text-warning600 dark:text-warning400 mr-3 flex-shrink-0 mt-0.5" />
             <div>
-              <h3 className="font-medium text-yellow-800 dark:text-yellow-200">Division Warnings</h3>
-              <ul className="mt-1 text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside">
+              <h3 className="font-medium text-warning800 dark:text-warning200">Division Warnings</h3>
+              <ul className="mt-1 text-sm text-warning700 dark:text-warning300 list-disc list-inside">
                 {stats.emptyDivisions > 0 && (
                   <li>{stats.emptyDivisions} division(s) with no competitors</li>
                 )}
@@ -1317,8 +1317,8 @@ export default function Divisions() {
                 <CardHeader>
                   <div className="flex items-center justify-between w-full">
                     <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-white">{category}</h3>
-                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                      <h3 className="font-semibold text-surface-900 dark:text-white">{category}</h3>
+                      <span className="text-sm text-surface-600 dark:text-surface-400">
                         {divs.length} division{divs.length !== 1 ? 's' : ''}
                       </span>
                     </div>
@@ -1405,12 +1405,12 @@ export default function Divisions() {
           }
         >
           {previewData.warnings.length > 0 && (
-            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800">
+            <div className="p-4 bg-warning/50 dark:bg-warning/900/20 border-b border-warning200 dark:border-warning800">
               <div className="flex items-start">
-                <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0" />
+                <AlertTriangle className="h-5 w-5 text-warning600 dark:text-warning400 mr-2 flex-shrink-0" />
                 <div>
-                  <p className="font-medium text-yellow-800 dark:text-yellow-200">Warnings:</p>
-                  <ul className="text-sm text-yellow-700 dark:text-yellow-300 list-disc list-inside">
+                  <p className="font-medium text-warning800 dark:text-warning200">Warnings:</p>
+                  <ul className="text-sm text-warning700 dark:text-warning300 list-disc list-inside">
                     {previewData.warnings.map((w, i) => (
                       <li key={i}>{w}</li>
                     ))}
@@ -1420,28 +1420,28 @@ export default function Divisions() {
             </div>
           )}
 
-          <div className="p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+          <div className="p-4 bg-surface-50 dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
             <div>
-              <div className="text-xl font-bold text-gray-900 dark:text-white">{previewData.divisions.length}</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Total Divisions</div>
+              <div className="text-xl font-bold text-surface-900 dark:text-white">{previewData.divisions.length}</div>
+              <div className="text-xs text-surface-600 dark:text-surface-400">Total Divisions</div>
             </div>
             <div>
-              <div className="text-xl font-bold text-green-600 dark:text-green-400">
+              <div className="text-xl font-bold text-success600 dark:text-success400">
                 {previewData.divisions.filter(d => d.competitorCount >= 3 && d.competitorCount <= 8).length}
               </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Optimal Size (3-8)</div>
+              <div className="text-xs text-surface-600 dark:text-surface-400">Optimal Size (3-8)</div>
             </div>
             <div>
-              <div className="text-xl font-bold text-yellow-600 dark:text-yellow-400">
+              <div className="text-xl font-bold text-warning600 dark:text-warning400">
                 {previewData.divisions.filter(d => d.competitorCount > 0 && d.competitorCount < 3).length}
               </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Small (&lt;3)</div>
+              <div className="text-xs text-surface-600 dark:text-surface-400">Small (&lt;3)</div>
             </div>
             <div>
               <div className="text-xl font-bold text-orange-600 dark:text-orange-400">
                 {previewData.divisions.filter(d => d.competitorCount > 8).length}
               </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Large (&gt;8)</div>
+              <div className="text-xs text-surface-600 dark:text-surface-400">Large (&gt;8)</div>
             </div>
           </div>
 
@@ -1451,28 +1451,28 @@ export default function Divisions() {
                 <div
                   key={index}
                   className={`p-4 rounded-lg border ${
-                    div.competitorCount === 0 ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20' :
-                    div.competitorCount < 3 ? 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20' :
+                    div.competitorCount === 0 ? 'border-danger200 dark:border-danger800 bg-danger/50 dark:bg-danger/900/20' :
+                    div.competitorCount < 3 ? 'border-warning200 dark:border-warning800 bg-warning/50 dark:bg-warning/900/20' :
                     div.competitorCount > 8 ? 'border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20' :
-                    'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                    'border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-gray-900 dark:text-white">{div.name}</h4>
+                    <h4 className="font-medium text-surface-900 dark:text-white">{div.name}</h4>
                     <div className="flex items-center gap-2">
                       <span className={`text-sm font-medium ${
-                        div.competitorCount === 0 ? 'text-red-600 dark:text-red-400' :
-                        div.competitorCount < 3 ? 'text-yellow-600 dark:text-yellow-400' :
+                        div.competitorCount === 0 ? 'text-danger600 dark:text-danger400' :
+                        div.competitorCount < 3 ? 'text-warning600 dark:text-warning400' :
                         div.competitorCount > 8 ? 'text-orange-600 dark:text-orange-400' :
-                        'text-green-600 dark:text-green-400'
+                        'text-success600 dark:text-success400'
                       }`}>
                         {div.competitorCount} competitors
                       </span>
                       {div.competitorCount === 0 && (
-                        <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 px-2 py-0.5 rounded">Empty</span>
+                        <span className="text-xs bg-danger/100 dark:bg-danger/900/30 text-danger800 dark:text-danger300 px-2 py-0.5 rounded">Empty</span>
                       )}
                       {div.competitorCount > 0 && div.competitorCount < 3 && (
-                        <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 px-2 py-0.5 rounded">Needs merge</span>
+                        <span className="text-xs bg-warning/100 dark:bg-warning/900/30 text-warning800 dark:text-warning300 px-2 py-0.5 rounded">Needs merge</span>
                       )}
                       {div.competitorCount > 8 && (
                         <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 px-2 py-0.5 rounded">Will be split</span>
@@ -1480,7 +1480,7 @@ export default function Divisions() {
                     </div>
                   </div>
                   {div.competitors.length > 0 && (
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className="text-sm text-surface-600 dark:text-surface-400">
                       {div.competitors.slice(0, 5).map((c, i) => (
                         <span key={i}>
                           {c.name}{c.school && ` (${c.school})`}
@@ -1488,7 +1488,7 @@ export default function Divisions() {
                         </span>
                       ))}
                       {div.competitors.length > 5 && (
-                        <span className="text-gray-600 dark:text-gray-500"> +{div.competitors.length - 5} more</span>
+                        <span className="text-surface-600 dark:text-surface-500"> +{div.competitors.length - 5} more</span>
                       )}
                     </div>
                   )}
@@ -1560,7 +1560,7 @@ export default function Divisions() {
             </Button>
           }
         >
-          <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{resultMessage.message}</p>
+          <p className="text-surface-600 dark:text-surface-400 whitespace-pre-wrap">{resultMessage.message}</p>
         </Modal>
       )}
 
@@ -1594,13 +1594,13 @@ export default function Divisions() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-h-[400px]">
             {/* LEFT: currently assigned */}
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="font-semibold text-surface-900 dark:text-white mb-2">
                 In this division ({assignDivision?.assignments?.length ?? 0})
               </h3>
               {assignDivisionLoading ? (
                 <CardSkeleton />
               ) : (assignDivision?.assignments ?? []).length === 0 ? (
-                <p className="text-sm text-gray-600 dark:text-gray-400">No competitors assigned yet.</p>
+                <p className="text-sm text-surface-600 dark:text-surface-400">No competitors assigned yet.</p>
               ) : (
                 // `assignDivision` is narrowed from the `length === 0`
                 // check above: if the length is > 0, the object is
@@ -1617,7 +1617,7 @@ export default function Divisions() {
 
             {/* RIGHT: available to add */}
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="font-semibold text-surface-900 dark:text-white mb-2">
                 Available ({availableRegistrations.length})
               </h3>
               <div className="relative mb-2">
@@ -1631,7 +1631,7 @@ export default function Divisions() {
                 />
               </div>
               {availableRegistrations.length === 0 ? (
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-surface-600 dark:text-surface-400">
                   {assignmentSearch ? 'No matches.' : 'All eligible competitors already assigned.'}
                 </p>
               ) : (
@@ -1642,7 +1642,7 @@ export default function Divisions() {
                     return (
                       <label
                         key={r.id}
-                        className="flex items-center gap-2 py-1.5 px-2 hover:bg-gray-50 dark:hover:bg-gray-800/40 rounded cursor-pointer"
+                        className="flex items-center gap-2 py-1.5 px-2 hover:bg-surface-50 dark:hover:bg-gray-800/40 rounded cursor-pointer"
                       >
                         <input
                           type="checkbox"
@@ -1656,10 +1656,10 @@ export default function Divisions() {
                           className="h-4 w-4"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          <p className="text-sm font-medium text-surface-900 dark:text-white truncate">
                             {c.firstName} {c.lastName}
                           </p>
-                          <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                          <p className="text-xs text-surface-600 dark:text-surface-400 truncate">
                             {c.belt}{c.schoolDojang && ` · ${c.schoolDojang}`}
                             {c.weightLbs != null && ` · ${c.weightLbs} lbs`}
                           </p>
@@ -1728,12 +1728,12 @@ function AssignedList({
         const c = a.registration?.competitor;
         if (!c) return null;
         return (
-          <div key={a.id} className="flex items-center justify-between gap-2 py-1.5 px-2 hover:bg-gray-50 dark:hover:bg-gray-800/40 rounded">
+          <div key={a.id} className="flex items-center justify-between gap-2 py-1.5 px-2 hover:bg-surface-50 dark:hover:bg-gray-800/40 rounded">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+              <p className="text-sm font-medium text-surface-900 dark:text-white truncate">
                 {c.firstName} {c.lastName}
               </p>
-              <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+              <p className="text-xs text-surface-600 dark:text-surface-400 truncate">
                 {c.belt}{c.schoolDojang && ` · ${c.schoolDojang}`}
               </p>
             </div>
@@ -1741,7 +1741,7 @@ function AssignedList({
               <button
                 onClick={() => onMove(a)}
                 disabled={unassignMutation.isPending}
-                className="text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 p-1"
+                className="text-surface-600 hover:text-info600 dark:hover:text-info400 p-1"
                 title="Move to another division"
                 aria-label={`Move ${c.firstName} ${c.lastName} to another division`}
               >
@@ -1750,7 +1750,7 @@ function AssignedList({
               <button
                 onClick={() => unassignMutation.mutate(a.id)}
                 disabled={unassignMutation.isPending}
-                className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 p-1"
+                className="text-surface-600 hover:text-danger600 dark:hover:text-danger400 p-1"
                 title="Remove from division"
                 aria-label={`Remove ${c.firstName} ${c.lastName}`}
               >
@@ -1809,17 +1809,17 @@ function BackupRestoreCard({ tournamentId, hasDivisions }: { tournamentId: strin
       <CardBody>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
-            <Undo2 className="h-5 w-5 text-slate-600 dark:text-slate-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
+            <Undo2 className="h-5 w-5 text-primary-600 dark:text-primary-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Backup &amp; Restore</h3>
+              <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Backup &amp; Restore</h3>
               {isLoading ? (
-                <p className="text-xs text-gray-600 dark:text-gray-400">Loading backup info…</p>
+                <p className="text-xs text-surface-600 dark:text-surface-400">Loading backup info…</p>
               ) : backup ? (
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Last backup: <span className="font-medium text-gray-900 dark:text-white">{new Date(backup.timestamp).toLocaleString()}</span> · {backup.divisionCount} division{backup.divisionCount === 1 ? '' : 's'}
+                <p className="text-xs text-surface-600 dark:text-surface-400">
+                  Last backup: <span className="font-medium text-surface-900 dark:text-white">{new Date(backup.timestamp).toLocaleString()}</span> · {backup.divisionCount} division{backup.divisionCount === 1 ? '' : 's'}
                 </p>
               ) : (
-                <p className="text-xs text-gray-600 dark:text-gray-400">
+                <p className="text-xs text-surface-600 dark:text-surface-400">
                   No backup yet. A backup is created automatically before auto-generating or clearing divisions.
                 </p>
               )}
@@ -1887,7 +1887,7 @@ function SortableDivisionRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isDragging ? 'bg-primary-50 dark:bg-primary-900/20 shadow-lg z-10' : ''} ${isSelected ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500' : ''}`}
+      className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-surface-50 dark:hover:bg-gray-700/50 ${isDragging ? 'bg-primary-50 dark:bg-primary-900/20 shadow-lg z-10' : ''} ${isSelected ? 'bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500' : ''}`}
     >
       <div className="flex items-center min-w-0 flex-1">
         {onToggleSelect && (
@@ -1895,7 +1895,7 @@ function SortableDivisionRow({
             type="checkbox"
             checked={isSelected || false}
             onChange={() => onToggleSelect(div.id)}
-            className="mr-3 h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+            className="mr-3 h-4 w-4 text-purple-600 border-surface-300 rounded focus:ring-purple-500"
             aria-label={`Select ${div.name} for merge`}
           />
         )}
@@ -1905,14 +1905,14 @@ function SortableDivisionRow({
           type="button"
           aria-label={`Drag to reorder ${div.name}. Or use Tab + Space + arrow keys.`}
           title="Drag to reorder"
-          className="touch-target flex-shrink-0 mr-3 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-primary-500 rounded"
+          className="touch-target flex-shrink-0 mr-3 text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-primary-500 rounded"
         >
           <GripVertical className="h-5 w-5" aria-hidden="true" />
         </button>
-        <LayoutGrid className="h-5 w-5 text-gray-600 dark:text-gray-500 mr-3 flex-shrink-0" />
+        <LayoutGrid className="h-5 w-5 text-surface-600 dark:text-surface-500 mr-3 flex-shrink-0" />
         <div className="min-w-0">
-          <p className="font-medium text-gray-900 dark:text-white">{div.name}</p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="font-medium text-surface-900 dark:text-white">{div.name}</p>
+          <p className="text-sm text-surface-600 dark:text-surface-400">
             {div.ageMin}-{div.ageMax} years
             {div.weightClass && ` • ${div.weightClass}`}
           </p>
@@ -1920,19 +1920,19 @@ function SortableDivisionRow({
       </div>
       <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
         <div className={`flex items-center text-sm ${
-          div._count.assignments === 0 ? 'text-red-500 dark:text-red-400' :
-          div._count.assignments < 3 ? 'text-yellow-600 dark:text-yellow-400' :
+          div._count.assignments === 0 ? 'text-danger500 dark:text-danger400' :
+          div._count.assignments < 3 ? 'text-warning600 dark:text-warning400' :
           div._count.assignments > 8 ? 'text-orange-600 dark:text-orange-400' :
-          'text-gray-500 dark:text-gray-400'
+          'text-surface-500 dark:text-surface-400'
         }`}>
           <Users className="h-4 w-4 mr-1" />
           {div._count.assignments}
         </div>
         {div._count.assignments === 0 && (
-          <span className="badge bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">Empty</span>
+          <span className="badge bg-danger/100 dark:bg-danger/900/30 text-danger800 dark:text-danger300">Empty</span>
         )}
         {div._count.assignments > 0 && div._count.assignments < 3 && (
-          <span className="badge bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">Small</span>
+          <span className="badge bg-warning/100 dark:bg-warning/900/30 text-warning800 dark:text-warning300">Small</span>
         )}
         {div._count.assignments > 8 && (
           <span className="badge bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300">Large</span>
@@ -1942,7 +1942,7 @@ function SortableDivisionRow({
         </span>
         <button
           onClick={onManageCompetitors}
-          className="text-gray-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
+          className="text-surface-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
           title="Manage Competitors"
           aria-label={`Manage competitors in ${div.name}`}
         >
@@ -1951,7 +1951,7 @@ function SortableDivisionRow({
         {div._count.assignments > 8 && (
           <button
             onClick={onSplit}
-            className="text-gray-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
+            className="text-surface-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
             title="Split Division"
           >
             <Scissors className="h-4 w-4" />
@@ -1959,7 +1959,7 @@ function SortableDivisionRow({
         )}
         <button
           onClick={onDelete}
-          className="text-gray-600 hover:text-red-600 dark:hover:text-red-400 touch-target"
+          className="text-surface-600 hover:text-danger600 dark:hover:text-danger400 touch-target"
           title="Delete Division"
         >
           <Trash2 className="h-4 w-4" />

@@ -462,29 +462,29 @@ export default function CheckIn() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <div className="min-h-screen bg-surface-50 dark:bg-surface-950">
       {/* Connection status banner (#138 offline resilience) */}
       <ConnectionStatusBanner pendingCount={offlineOperations.pending.length} />
       {cachedSnapshotAt && (
-        <div role="status" className="border-b border-amber-300 bg-amber-50 px-4 py-3 text-center text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+        <div role="status" className="border-b border-warning bg-warning/10 px-4 py-3 text-center text-sm text-warning dark:border-warning/30 dark:bg-warning/20 dark:text-warning">
           Cached check-in list from {new Date(cachedSnapshotAt).toLocaleTimeString()}. Server changes may be newer; offline actions remain queued until reconnection.
         </div>
       )}
       {/* Header */}
-      <div className="bg-white dark:bg-gray-800 shadow">
+      <div className="bg-white dark:bg-surface-900 shadow">
         <div className="px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <Link
                 to={`/tournaments/${tournamentId}`}
                 aria-label={CHECK_IN_ACCESSIBLE_LABELS.back}
-                className="mr-3 text-gray-600 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                className="mr-3 text-surface-600 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-300"
               >
                 <ChevronLeft className="h-6 w-6" />
               </Link>
               <div>
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Check-In</h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400">{tournament?.name}</p>
+                <h1 className="text-xl font-bold text-surface-900 dark:text-white">Check-In</h1>
+                <p className="text-sm text-surface-600 dark:text-surface-400">{tournament?.name}</p>
               </div>
             </div>
           </div>
@@ -499,13 +499,13 @@ export default function CheckIn() {
         </div>
         {/* Progress Bar */}
         <div className="px-4 pb-4">
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+          <div className="w-full bg-surface-200 dark:bg-surface-700 rounded-full h-2.5">
             <div
-              className="bg-green-500 dark:bg-green-400 h-2.5 rounded-full transition-all duration-500"
+              className="bg-success h-2.5 rounded-full transition-all duration-500"
               style={{ width: `${stats.total > 0 ? Math.round((stats.checkedIn / stats.total) * 100) : 0}%` }}
             />
           </div>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 text-center">
+          <p className="text-xs text-surface-600 dark:text-surface-400 mt-1 text-center">
             {stats.checkedIn} / {stats.total} checked in ({stats.total > 0 ? Math.round((stats.checkedIn / stats.total) * 100) : 0}%)
           </p>
         </div>
@@ -552,7 +552,7 @@ export default function CheckIn() {
       )}
 
       {/* Search and Filters */}
-      <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10 space-y-3">
+      <div className="p-4 bg-white dark:bg-surface-900 border-b border-surface-200 dark:border-surface-700 sticky top-0 z-10 space-y-3">
         <Input
           ref={searchRef}
           type="text"
@@ -671,33 +671,33 @@ export default function CheckIn() {
             {sortedRegistrations.map((registration) => (
               <div
                 key={registration.id}
-                className={`bg-white dark:bg-gray-800 rounded-lg shadow p-4 ${
-                  isCheckedIn(registration) ? 'border-l-4 border-green-500 dark:border-green-400' : ''
+                className={`bg-white dark:bg-surface-900 rounded-lg shadow p-4 ${
+                  isCheckedIn(registration) ? 'border-l-4 border-success' : ''
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center">
-                      <span className="font-semibold text-gray-900 dark:text-white">
+                      <span className="font-semibold text-surface-900 dark:text-white">
                         {registration.competitor.firstName} {registration.competitor.lastName}
                       </span>
                       {isCheckedIn(registration) && (
-                        <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400 ml-2" />
+                        <CheckCircle className="h-5 w-5 text-success ml-2" />
                       )}
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    <div className="text-sm text-surface-600 dark:text-surface-400 mt-1">
                       {registration.competitor.schoolDojang || 'No School'} •{' '}
                       {registration.competitor.belt}
                       {registration.ageAtTournament && ` • Age ${registration.ageAtTournament}`}
                     </div>
                     <div className="flex gap-2 mt-2">
                       {registration.patterns && (
-                        <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded">
+                        <span className="text-xs px-2 py-1 bg-info/10 text-info rounded">
                           Patterns
                         </span>
                       )}
                       {registration.sparring && (
-                        <span className="text-xs px-2 py-1 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded">
+                        <span className="text-xs px-2 py-1 bg-danger/10 text-danger rounded">
                           Sparring
                           {registration.weightAtRegistration && ` (${registration.weightAtRegistration} lbs)`}
                         </span>
@@ -707,7 +707,7 @@ export default function CheckIn() {
 
                   <div className="ml-4">
                     {stagedCheckInIds.has(registration.id) ? (
-                      <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Pending sync</span>
+                      <span className="text-sm font-medium text-warning">Pending sync</span>
                     ) : registration.checkedIn ? (
                       <Button
                         variant="secondary"
@@ -731,7 +731,7 @@ export default function CheckIn() {
                 </div>
 
                 {registration.checkedIn && registration.checkInWeight && (
-                  <div className="mt-2 text-sm text-gray-600 dark:text-gray-400 flex items-center">
+                  <div className="mt-2 text-sm text-surface-600 dark:text-surface-400 flex items-center">
                     <Scale className="h-4 w-4 mr-1" />
                     Weigh-in: {formatCheckInWeight(registration.checkInWeight)} lbs
                     {registration.weightAtRegistration &&
@@ -739,8 +739,8 @@ export default function CheckIn() {
                         <span
                           className={`ml-2 ${
                             registration.checkInWeight > registration.weightAtRegistration
-                              ? 'text-red-500 dark:text-red-400'
-                              : 'text-green-500 dark:text-green-400'
+                              ? 'text-danger'
+                              : 'text-success'
                           }`}
                         >
                           (
@@ -802,15 +802,15 @@ export default function CheckIn() {
             </>
           }
         >
-          <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <div className="text-sm text-gray-600 dark:text-gray-400">Registered Weight</div>
-            <div className="text-lg font-semibold text-gray-900 dark:text-white">
+          <div className="mb-4 p-3 bg-surface-50 dark:bg-surface-800 rounded-lg">
+            <div className="text-sm text-surface-600 dark:text-surface-400">Registered Weight</div>
+            <div className="text-lg font-semibold text-surface-900 dark:text-white">
               {selectedRegistration.weightAtRegistration || 'Not recorded'} lbs
             </div>
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
               <Scale className="h-4 w-4 inline mr-1" />
               Weigh-In Weight (lbs)
             </label>
@@ -825,16 +825,16 @@ export default function CheckIn() {
               autoFocus
             />
             {checkInWeight && (parseFloat(checkInWeight) < 20 || parseFloat(checkInWeight) > 400) && (
-              <p className="text-red-500 text-sm mt-1">Weight must be between 20 and 400 lbs</p>
+              <p className="text-danger text-sm mt-1">Weight must be between 20 and 400 lbs</p>
             )}
           </div>
 
           {checkInWeight &&
             selectedRegistration.weightAtRegistration &&
             Math.abs(parseFloat(checkInWeight) - selectedRegistration.weightAtRegistration) > 2 && (
-              <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-start">
-                <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-yellow-800 dark:text-yellow-200">
+              <div className="mb-4 p-3 bg-warning/10 border border-warning/30 rounded-lg flex items-start">
+                <AlertTriangle className="h-5 w-5 text-warning mr-2 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-warning dark:text-warning">
                   Weight differs by more than 2 lbs from registration. Consider verifying weight class eligibility.
                 </div>
               </div>
@@ -856,7 +856,7 @@ export default function CheckIn() {
         title="Discard unsynced check-in?"
         message={<>
           <span className="block">This permanently removes the local check-in change. The server registration will remain unchanged.</span>
-          {discardOfflineError && <span role="alert" className="mt-2 block text-red-700 dark:text-red-300">{discardOfflineError}</span>}
+          {discardOfflineError && <span role="alert" className="mt-2 block text-danger">{discardOfflineError}</span>}
         </>}
         confirmText="Discard local change"
         variant="danger"
