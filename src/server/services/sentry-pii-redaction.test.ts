@@ -49,7 +49,7 @@ describe('redactSentryEvent', () => {
         headers: {
           cookie: 'bowin_session=abc; bowin_csrf=def',
           'set-cookie': 'bowin_session=xyz; HttpOnly',
-          authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhdHRhY2tlciJ9.sig',
+          authorization: 'Bearer test-fixture-jwt-not-a-real-token',
           'x-csrf-token': 'csrf-secret-value',
           'x-api-key': 'api-key-secret',
           'user-agent': 'Mozilla/5.0',
@@ -73,7 +73,7 @@ describe('redactSentryEvent', () => {
     const event = {
       request: {
         data: { email: 'alice@example.com', token: 'magic-link-token' },
-        query_string: 'token=eyJhbGciOiJIUzI1NiJ9…&code=123456',
+        query_string: 'token=fixture-jwt-not-a-real-token&code=123456',
       },
     };
     const out = redactSentryEvent(event);

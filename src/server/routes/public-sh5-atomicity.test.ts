@@ -259,7 +259,7 @@ describe('SH-5: public registration atomicity (POST /api/public/portal/:orgSlug/
 
   describe('Stripe failure rollback (SH-5b)', () => {
     beforeEach(() => {
-      process.env.STRIPE_SECRET_KEY = 'sk_test_dummy';
+      process.env.STRIPE_SECRET_KEY = 'placeholder_strp_test_value'; // fixture, not a real key
       // Fee-bearing event: requires Stripe checkout
       setActiveEvent(prisma, {
         settings: JSON.stringify({ tournamentFeeCents: 2500 }),

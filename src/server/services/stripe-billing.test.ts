@@ -55,17 +55,17 @@ describe('stripePriceMapFromEnv', () => {
 describe('stripeRuntimeConfigFromEnv', () => {
   it('requires secret and webhook keys together with the plan prices', () => {
     expect(() => stripeRuntimeConfigFromEnv(env)).toThrow(/STRIPE_SECRET_KEY/);
-    expect(() => stripeRuntimeConfigFromEnv({ ...env, STRIPE_SECRET_KEY: 'sk_test_123' })).toThrow(/STRIPE_WEBHOOK_SECRET/);
+    expect(() => stripeRuntimeConfigFromEnv({ ...env, STRIPE_SECRET_KEY: 'placeholder_strp_test_value' })).toThrow(/STRIPE_WEBHOOK_SECRET/);
   });
 
   it('returns a complete Stripe billing configuration', () => {
     expect(stripeRuntimeConfigFromEnv({
       ...env,
-      STRIPE_SECRET_KEY: 'sk_test_123',
-      STRIPE_WEBHOOK_SECRET: 'whsec_123',
+      STRIPE_SECRET_KEY: 'placeholder_strp_test_value',
+      STRIPE_WEBHOOK_SECRET: 'webhook_secret_placeholder_value',
     })).toMatchObject({
-      secretKey: 'sk_test_123',
-      webhookSecret: 'whsec_123',
+      secretKey: 'placeholder_strp_test_value',
+      webhookSecret: 'webhook_secret_placeholder_value',
       prices: { price_starter: 'starter', price_pro: 'pro' },
     });
   });
