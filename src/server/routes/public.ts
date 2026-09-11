@@ -27,6 +27,7 @@ import {
   validateManagementTokenStatus,
 } from '../utils/registration-management-token.js';
 import { recordPublicDisplayHeartbeat } from '../services/public-display-heartbeat.js';
+import { auditLog } from '../utils/structured-logger.js';
 
 const router = Router();
 
@@ -937,7 +938,10 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
   }
 
   // #118 acceptance: Audit log (non-sensitive: no raw token, no full PII)
-  console.log(`[registration-manage-read] Registration ${registration.id.slice(0, 8)} accessed via management token`);
+  auditLog({
+    event: 'registration.manage.read',
+    registrationId: registration.id.slice(0, 8),
+  });
 
   res.json({
     registration: {
@@ -1030,7 +1034,10 @@ router.patch('/registrations/:token', manageUpdateLimiter, async (req: Request, 
   });
 
   // #118 acceptance: Audit log (non-sensitive)
-  console.log(`[registration-manage-update] Registration ${registration.id.slice(0, 8)} updated via management token`);
+  auditLog({
+    event: 'registration.manage.update',
+    registrationId: registration.id.slice(0, 8),
+  });
 
   // Invalidate bracket regeneration since the data changed.
   // Closes B4: the previous code did an unconditional
@@ -1095,7 +1102,10 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
   });
 
   // #118 acceptance: Audit log (non-sensitive)
-  console.log(`[registration-manage-withdraw] Registration ${registration.id.slice(0, 8)} withdrawn via management token`);
+  auditLog({
+    event: 'registration.manage.withdraw',
+    registrationId: registration.id.slice(0, 8),
+  });
 
   // Only promote from waitlist if this was an active registration (not itself waitlisted)
   if (registration.tournament.status === 'registration' && registration.waitlistStatus === 'active') {

@@ -734,6 +734,7 @@ model SupportTicket {
   @@index([requestedByEmail])
   @@index([userId])
   @@index([organizationId])
+  @@index([organizationId, createdAt])
   @@index([createdAt])
 }
 

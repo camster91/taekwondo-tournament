@@ -34,6 +34,7 @@ import { answerOperationalQuery } from '../services/operational-query.js';
 import { generateQRPoster } from '../services/qr-poster.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
 import { recordTournamentUsage } from '../services/usage-metering.js';
+import { auditLog } from '../utils/structured-logger.js';
 import {
   applyScheduleCorrection,
   buildScheduleImpact,
@@ -1602,7 +1603,11 @@ router.post('/:id/registrations/:regId/revoke-token', authenticate, requireTourn
     });
 
     // #118 acceptance: audit logging (non-sensitive)
-    console.log(`[registration-token-revoke] Registration ${registration.id.slice(0, 8)} (tournament: ${registration.tournament.name}) token revoked by director`);
+    auditLog({
+      event: 'registration.token.revoke',
+      registrationId: registration.id.slice(0, 8),
+      tournamentName: registration.tournament.name,
+    });
   }
 
   // If reissue=true, generate a new token and return it (works for both rotation and first-time issuance)
@@ -1622,7 +1627,11 @@ router.post('/:id/registrations/:regId/revoke-token', authenticate, requireTourn
 
     // #118 acceptance: audit logging (non-sensitive)
     const action = registration.managementTokenHash ? 'rotate' : 'issue';
-    console.log(`[registration-token-${action}] Registration ${registration.id.slice(0, 8)} issued new management token, expires ${newExpiry.toISOString()}`);
+    auditLog({
+      event: `registration.token.${action}`,
+      registrationId: registration.id.slice(0, 8),
+      expiresAt: newExpiry.toISOString(),
+    });
 
     return res.json({
       success: true,

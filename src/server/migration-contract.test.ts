@@ -47,6 +47,22 @@ describe('production migration contract', () => {
     expect(sql).toMatch(/CREATE UNIQUE INDEX "Registration_managementTokenHash_key"/);
   });
 
+  it('adds a (organizationId, createdAt) compound index to SupportTicket for the tenant ticket list query', () => {
+    const schema = readFileSync(join(process.cwd(), 'prisma', 'schema.prisma'), 'utf8');
+    const migrationsRoot = join(process.cwd(), 'prisma', 'migrations');
+    const sql = readdirSync(migrationsRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => readFileSync(join(migrationsRoot, entry.name, 'migration.sql'), 'utf8'))
+      .join('\n');
+
+    // Schema declares the compound index.
+    expect(schema).toMatch(/@@index\(\[organizationId, createdAt\]\)/);
+    // A migration creates the corresponding physical index.
+    expect(sql).toMatch(
+      /CREATE INDEX[^;]*"SupportTicket_organizationId_createdAt_idx"\s+ON "SupportTicket"\("organizationId",\s*"createdAt"/
+    );
+  });
+
   it.skip('persists and indexes demo-session expiry for safe bounded cleanup', () => {
     // TODO: Add demoExpiresAt field to User model if demo session cleanup is needed
     // Currently demo cleanup is handled via direct DB query for users where email LIKE 'demo-%@bowin.app'

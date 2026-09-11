@@ -13,6 +13,7 @@ import { publicAppUrlFromEnv } from '../services/production-config.js';
 import { maybeIssueOfflineCapability } from '../services/offline-capability.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 import { createRateLimiter } from '../middleware/rate-limit.js';
+import { auditLog } from '../utils/structured-logger.js';
 
 const router = Router();
 
@@ -256,7 +257,16 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
     }
 
     if (!emailResult.success) {
-      console.error(`Magic link requested for ${email} — email failed: ${emailResult.error}`);
+      // PII: do NOT log the full email. Operators need to know that
+      // delivery failed and roughly which account, not the address
+      // itself. Hash the address so logs are joinable by ops for a
+      // specific request but not readable at a glance.
+      auditLog({
+        event: 'magic_link.email_failed',
+        level: 'error',
+        emailHash: hashSecret(email),
+        error: emailResult.error,
+      });
     }
 
     res.json({ message: 'If an account exists, a sign-in link has been sent' });
