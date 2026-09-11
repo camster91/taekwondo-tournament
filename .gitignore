@@ -22,3 +22,8 @@ _p*-*.cjs
 _screenshot*.cjs
 _scorekeeper-check.cjs
 _walk*.cjs
+
+# debug artifacts from agent runs
+scripts/debug-regex.mjs
+vitest-output.txt
+
