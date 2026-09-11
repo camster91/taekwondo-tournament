@@ -47,6 +47,7 @@ import { StatTile } from '../components/ui';
 import { Modal } from '../components/ui';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { readAdminOperationError } from '../utils/admin-operation-error';
+import { useToast } from '../context/ToastContext';
 
 interface Tournament {
   id: string;
@@ -136,6 +137,7 @@ export default function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const [showAddModal, setShowAddModal] = useState(false);
   const [bulkRegisterError, setBulkRegisterError] = useState<string | null>(null);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
@@ -382,7 +384,7 @@ export default function TournamentDetail() {
       queryClient.invalidateQueries({ queryKey: ['tournaments'] });
       navigate(`/tournaments/${cloned.id}/settings`);
     },
-    onError: (e: Error) => alert(e.message || 'Clone failed'),
+    onError: (e: Error) => addToast(e.message || 'Clone failed', 'error'),
   });
   const handleClone = () => {
     if (!tournament) return;

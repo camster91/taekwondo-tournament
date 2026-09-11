@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
+import SafeLink from '../components/ui/SafeLink';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { isDemoUser } from '../utils/demo-progress';
@@ -1113,7 +1114,7 @@ export default function DirectorDashboard() {
           View Schedule
         </Button>
         <Button
-          as={Link}
+          as={SafeLink}
           to={`/scorekeeper/${tournamentId}`}
           target="_blank"
           variant="secondary"
@@ -1123,7 +1124,7 @@ export default function DirectorDashboard() {
           Scorekeeper
         </Button>
         <Button
-          as={Link}
+          as={SafeLink}
           to={`/display/${tournamentId}`}
           target="_blank"
           variant="secondary"

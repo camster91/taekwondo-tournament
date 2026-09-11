@@ -1840,7 +1840,7 @@ function BackupRestoreCard({ tournamentId, hasDivisions }: { tournamentId: strin
 // @dnd-kit's useSortable so it can be dragged to reorder. The drag handle
 // is the leftmost GripVertical icon (keyboard users can Tab to the row and
 // press Space to grab, then arrows to move).
-function SortableDivisionRow({
+export function SortableDivisionRow({
   div,
   tournamentId,
   onManageCompetitors,
@@ -1942,16 +1942,18 @@ function SortableDivisionRow({
             onClick={onSplit}
             className="text-surface-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
             title="Split Division"
+            aria-label={`Split ${div.name} division`}
           >
-            <Scissors className="h-4 w-4" />
+            <Scissors className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
         <button
           onClick={onDelete}
           className="text-surface-600 hover:text-danger600 dark:hover:text-danger400 touch-target"
           title="Delete Division"
+          aria-label={`Delete ${div.name} division`}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
         </button>
         <Link
           to={`/tournaments/${tournamentId}/divisions/${div.id}/bracket`}

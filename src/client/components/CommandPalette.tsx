@@ -267,21 +267,35 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
 
   return (
     <>
-      <div 
+      <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 animate-fadeIn"
         onClick={onClose}
       />
       <div className="fixed top-[20vh] left-1/2 -translate-x-1/2 w-full max-w-2xl z-50 animate-slideDown">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div
+          className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded={true}
+          aria-owns="cmdk-list"
+        >
           <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-            <Search className="w-5 h-5 text-gray-400" />
+            <Search className="w-5 h-5 text-gray-400" aria-hidden="true" />
             <input
               ref={inputRef}
               type="text"
+              aria-autocomplete="list"
+              aria-controls="cmdk-list"
+              aria-activedescendant={
+                filteredCommands.length > 0 && selectedIndex >= 0
+                  ? `cmdk-row-${selectedIndex}`
+                  : undefined
+              }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Search commands..."
+              aria-label="Command palette search"
               className="flex-1 bg-transparent border-none outline-none text-base text-gray-900 dark:text-gray-100 placeholder-gray-400"
             />
             <div className="flex items-center gap-1 text-xs text-gray-400">
@@ -295,24 +309,33 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
           <div className="max-h-[60vh] overflow-y-auto">
             {filteredCommands.length === 0 ? (
               <div className="px-5 py-12 text-center">
-                <Search className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-500 dark:text-gray-400">No commands found</p>
+                <Search className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" aria-hidden="true" />
+                <p className="text-gray-500 dark:text-gray-400" role="status">No commands found</p>
               </div>
             ) : (
-              <div className="py-2">
+              <div
+                id="cmdk-list"
+                role="listbox"
+                aria-label="Command results"
+                className="py-2"
+              >
                 {filteredCommands.map((command, index) => {
                   const Icon = command.icon;
                   const isSelected = index === selectedIndex;
-                  
+                  const rowId = `cmdk-row-${index}`;
+
                   return (
                     <button
                       key={command.id}
+                      id={rowId}
+                      role="option"
+                      aria-selected={isSelected}
                       onClick={() => handleSelect(command)}
                       onMouseEnter={() => setSelectedIndex(index)}
                       className={`
                         w-full px-5 py-3 flex items-center gap-3 text-left transition-colors
-                        ${isSelected 
-                          ? 'bg-red-50 dark:bg-red-900/20 border-l-2 border-red-600' 
+                        ${isSelected
+                          ? 'bg-red-50 dark:bg-red-900/20 border-l-2 border-red-600'
                           : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
                         }
                       `}
