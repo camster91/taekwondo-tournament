@@ -174,7 +174,7 @@ type CachedUser = {
   demoExpiresAt: Date | null;
 };
 
-const demoDeniedReadPrefixes = ['/api/auth/users', '/api/invites', '/api/billing', '/api/organizations', '/api/support'];
+const demoDeniedReadPrefixes = ['/api/auth/users', '/api/invites', '/api/billing', '/api/organizations', '/api/support', '/api/custom-domains'];
 
 export function isDemoRequestAllowed(method: string, originalUrl: string): boolean {
   let path: string;
@@ -461,6 +461,17 @@ export async function checkTournamentAccess(
 ): Promise<TournamentAccessResult> {
   if (!req.user) {
     return { ok: false, status: 401, error: 'Authentication required' };
+  }
+
+  // Demo principals never carry tenant authority, regardless of role.
+  // The demo session is issued with role 'admin' (see /api/auth/demo),
+  // which is only safe while demo data is isolated from real tenants.
+  // That isolation is a deployment property (DEMO_ISOLATED_DATA marker
+  // + separate database), not an authorization one. Refusing here makes
+  // demo containment a property of the authz layer, so a misconfigured
+  // deployment that points the demo at real data still cannot read it.
+  if (req.user.isDemo) {
+    return { ok: false, status: 403, error: 'No access to this tournament' };
   }
 
   // Admins have access to everything
