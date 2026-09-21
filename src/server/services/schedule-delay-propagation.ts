@@ -1,6 +1,14 @@
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { readCanonicalSchedule, type CanonicalScheduleSnapshot, mergeCanonicalScheduleSettings, canonicalScheduleVersion } from './canonical-schedule.js';
 import { invalidateScheduleRecommendations } from './schedule-recommendation-invalidation.js';
+
+/**
+ * Accept either the root client or a transaction client. Helpers that run
+ * inside `prisma.$transaction(tx => ...)` must take this union, otherwise
+ * passing `tx` fails to typecheck (the transaction client omits
+ * $connect/$disconnect/$on/$use/$extends).
+ */
+type Database = PrismaClient | Prisma.TransactionClient;
 
 export interface ScheduleDelayInput {
   tournamentId: string;
@@ -79,7 +87,7 @@ function timeToMinutes(time: string): number {
  * Preserve completed and in-progress matches by only moving "pending" divisions.
  */
 async function calculateDelayPropagation(
-  prisma: PrismaClient,
+  prisma: Database,
   tournamentId: string,
   delayInput: ScheduleDelayInput,
   currentCanonical: CanonicalScheduleSnapshot,
@@ -120,7 +128,7 @@ async function calculateDelayPropagation(
   if (!tournament) throw new Error('Tournament not found');
 
   const settings = parseSettings(tournament.settings);
-  const scheduleConfig = settings.schedule as any;
+  const scheduleConfig = settings.schedule as { endTime?: string } | undefined;
   const endMinutes = scheduleConfig?.endTime ? timeToMinutes(scheduleConfig.endTime) : 17 * 60; // Default 17:00
 
   // Build set of divisions with completed or in-progress matches (cannot be moved)

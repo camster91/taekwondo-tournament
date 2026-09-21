@@ -8,6 +8,10 @@ import { generateSchedule, validateScheduleConfig, DEFAULT_CONFIG, type Schedule
 import { validateRequest } from '../middleware/validate.js';
 import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
 import { generatePublicSlug, applySlugWithRetry, sanitizeBroadcastSubject } from './tournament-helpers.js';
+// Waitlist promotion issues a fresh management token for the promoted
+// registration. These were referenced without a top-level import, so the
+// promotion path threw at runtime (#289).
+import { generateManagementToken, getManagementTokenExpiry, hashManagementToken } from '../utils/registration-management-token.js';
 // requireRole stays in use for POST / (create new tournament) — there's
 // no parent tournament to scope-access yet. All other tournament-scoped
 // mutations use requireTournamentAccess.

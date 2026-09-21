@@ -8,7 +8,7 @@ const captured = vi.hoisted(() => [] as Array<{
 
 vi.mock('express', () => {
   const router: any = {};
-  for (const method of ['get', 'post', 'put', 'delete']) {
+  for (const method of ['get', 'post', 'put', 'patch', 'delete']) {
     router[method] = (path: string, ...handlers: any[]) => {
       captured.push({ method, path, middleware: handlers.slice(0, -1) });
       return router;

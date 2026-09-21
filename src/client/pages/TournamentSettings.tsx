@@ -569,7 +569,7 @@ export default function TournamentSettings() {
       </PageHeader>
 
       {/* Success Message */}
-      {showSaveSuccess && (
+      {saveState === 'saved' && (
         <div className="mb-6 p-4 bg-success/10 dark:bg-success/20 border border-success/30 dark:border-success rounded-lg text-success dark:text-success/30">
           Settings saved successfully!
         </div>

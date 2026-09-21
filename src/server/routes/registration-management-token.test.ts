@@ -6,6 +6,8 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import pg from 'pg';
 import {
   generateManagementToken,
   getManagementTokenExpiry,
@@ -14,7 +16,12 @@ import {
   validateManagementTokenStatus,
 } from '../utils/registration-management-token.js';
 
-const prisma = new PrismaClient();
+// Prisma 7 requires a driver adapter. The suite is skipped, but the client
+// is still constructed at import time, so it must be valid.
+const connectionString = process.env.DATABASE_URL || 'postgresql://localhost:5432/postgres';
+const pool = new pg.Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 describe.skip('Registration Management Token Security (#118)', () => {
   let tournamentId: string;

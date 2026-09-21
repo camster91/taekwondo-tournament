@@ -56,9 +56,16 @@ export const apiMatchSchema = z.object({
   ringNumber: z.number().int().min(1).nullable().optional(),
   competitor1: matchCompetitorSlotSchema,
   competitor2: matchCompetitorSlotSchema,
-  winner: matchCompetitorSlotSchema,
+  // The winner is returned as the winning registration's id (mirrors
+  // Match.winnerId in the database). A `winner` competitor slot was
+  // declared here previously, but no client or server code ever produced
+  // or consumed it — 24 call sites read `.winnerId` (#289).
+  winnerId: z.string().uuid().nullable().optional(),
   score1: z.string().nullable().optional(),
   score2: z.string().nullable().optional(),
+  // Returned by the scoreboard and divisions-with-matches endpoints
+  // (mirrors Match.scheduledTime in the database).
+  scheduledTime: z.string().nullable().optional(),
   startedAt: z.string().datetime().nullable().optional(),
   updatedAt: z.string().datetime().nullable().optional(),
   videoUrl: z.string().url().max(2048).nullable().optional(),

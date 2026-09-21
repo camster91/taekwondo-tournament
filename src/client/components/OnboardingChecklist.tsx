@@ -1,5 +1,5 @@
 // P2-18: Onboarding checklist component — contextual, recoverable, keyboard-safe
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type MouseEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { X, CheckCircle, Circle, Building2, Upload, Trophy, Eye, UserPlus, ArrowRight } from 'lucide-react';
@@ -258,18 +258,20 @@ export default function OnboardingChecklist() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={(e) => {
+                        onClick={(e: MouseEvent) => {
                           e.stopPropagation();
-                          if (step.action!.onClick) {
-                            step.action!.onClick();
+                          const action = step.action;
+                          if (!action) return;
+                          if (action.onClick) {
+                            action.onClick();
                           } else {
-                            navigate(step.action!.path);
+                            navigate(action.path);
                           }
                         }}
                         className="flex-shrink-0 text-xs px-2 py-1 h-auto"
-                        aria-label={`${step.action.label} (Step ${index + 1})`}
+                        aria-label={`${step.action?.label ?? step.label} (Step ${index + 1})`}
                       >
-                        {step.action.label}
+                        {step.action?.label}
                         <ArrowRight className="h-3 w-3 ml-1" />
                       </Button>
                     )}

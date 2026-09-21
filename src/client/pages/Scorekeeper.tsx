@@ -50,9 +50,9 @@ import type { ApiMatch, ApiDivision, ApiTournamentSummary } from '../../shared/c
 
 // Scorekeeper uses the full match shape from the contract, plus winnerId
 // which is derived client-side (winnerId = winner?.id ?? null)
-interface Match extends ApiMatch {
-  winnerId: string | null;
-}
+// ApiMatch already carries winnerId (mirroring Match.winnerId in the DB),
+// so no local widening is needed.
+type Match = ApiMatch;
 
 // Division shape matches the contract
 type Division = ApiDivision;
@@ -238,7 +238,9 @@ export default function Scorekeeper() {
           ...div.bracket,
           matches: div.bracket.matches.map((m): Match => ({
             ...m,
-            winnerId: m.winner?.id ?? null,
+            // The API already returns winnerId; the older `winner` slot
+            // mapping was left over from a previous contract shape.
+            winnerId: m.winnerId ?? null,
           })),
         } : null,
       }));
@@ -366,9 +368,12 @@ export default function Scorekeeper() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Unknown error' }));
-        const error: any = new Error(body.error || 'Failed to record match result');
-        error.status = res.status;
-        error.isConflict = res.status === 409;
+        // Attach HTTP metadata for the caller's conflict handling; a plain
+        // Error has no status field, so widen locally rather than `any`.
+        const error = Object.assign(
+          new Error(body.error || 'Failed to record match result'),
+          { status: res.status, isConflict: res.status === 409 },
+        );
         throw error;
       }
       return res.json();
@@ -396,20 +401,21 @@ export default function Scorekeeper() {
       finishResultEntry(false);
       addToast('Result saved', 'success');
     },
-    onError: (error: any, data) => {
+    onError: (error: unknown, data) => {
       if (error instanceof TypeError) {
         stageScoreResult(data, true);
         return;
       }
       // 409 conflict: another scorekeeper updated first (#138 conflict detection)
-      if (error.isConflict || error.status === 409) {
+      const httpError = error as { isConflict?: boolean; status?: number; message?: string };
+      if (httpError.isConflict || httpError.status === 409) {
         addToast('Conflict: Another scorekeeper updated this match. Refresh before continuing.', 'error');
         setAnnounce('Conflict: Another scorekeeper updated this match. Refresh the division to see the latest state.');
         queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
         return;
       }
-      addToast(error.message || 'Operation failed', 'error');
-      setAnnounce(`Error recording result: ${error.message || 'Operation failed'}`);
+      addToast(httpError.message || 'Operation failed', 'error');
+      setAnnounce(`Error recording result: ${httpError.message || 'Operation failed'}`);
     },
   });
 

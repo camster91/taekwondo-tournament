@@ -5,7 +5,8 @@
  * and cleaning up test data.
  */
 
-import express, { type Express } from 'express';
+import express from 'express';
+import type { Express } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import type { Request as SuperTestRequest } from 'supertest';
@@ -60,7 +61,9 @@ export async function cleanupTestData(
   const tablesToClean = tables.length > 0 ? tables : defaultTables;
 
   for (const table of tablesToClean) {
-    const model = prisma[table] as any;
+    // Dynamic table dispatch: the table name is not known at compile time,
+    // so index into the client and require only the delegate we call.
+    const model = (prisma as unknown as Record<string, { deleteMany?: (args: object) => Promise<unknown> }>)[String(table)];
     if (model && typeof model.deleteMany === 'function') {
       await model.deleteMany({});
     }
@@ -76,9 +79,10 @@ export function createAuthenticatedRequest(
   role: string = 'admin'
 ): SuperTestRequest {
   const token = createToken({
-    id: userId,
+    userId,
     email: `test-${userId}@example.com`,
     role,
+    tokenVersion: 0,
   });
 
   return request.set('Authorization', `Bearer ${token}`);

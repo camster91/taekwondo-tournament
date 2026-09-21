@@ -5,24 +5,14 @@ import { ArrowLeft, Save } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Button, Card, Input, Label, PageHeader, Spinner } from '../components/ui';
-import { DEFAULT_WEIGHT_CLASSES } from '../../shared/constants/weight-classes';
+import { DEFAULT_WEIGHT_CLASSES, type WeightClassConfig } from '../../shared/constants/weight-classes';
 import TournamentRulesEditor from '../components/TournamentRulesEditor';
 import { DEFAULT_TOURNAMENT_RULES, type TournamentRules } from '../../shared/constants/tournament-rules';
-
-interface WeightClass {
-  name: string;
-  gender?: string;
-  ageMin?: number;
-  ageMax?: number;
-  weightMinLbs?: number;
-  weightMaxLbs?: number;
-  displayOrder?: number;
-}
 
 interface TournamentSettings {
   divisionThreshold?: number;
   ageGroups?: Array<{ min: number; max: number; label: string }>;
-  weightClasses?: WeightClass[];
+  weightClasses?: WeightClassConfig[];
 }
 
 export default function TournamentTemplateForm() {
@@ -49,7 +39,7 @@ export default function TournamentTemplateForm() {
     ],
   });
   const [rules, setRules] = useState<TournamentRules>(DEFAULT_TOURNAMENT_RULES);
-  const [weightClasses, setWeightClasses] = useState<WeightClass[]>(DEFAULT_WEIGHT_CLASSES);
+  const [weightClasses, setWeightClasses] = useState<WeightClassConfig[]>(DEFAULT_WEIGHT_CLASSES);
 
   const { data: template, isLoading } = useQuery({
     queryKey: ['tournament-template', id],
@@ -108,7 +98,7 @@ export default function TournamentTemplateForm() {
       sportProfileSlug: string;
       settings: TournamentSettings;
       rules: TournamentRules;
-      weightClasses: WeightClass[];
+      weightClasses: WeightClassConfig[];
     }) => {
       const url = isEdit
         ? `/api/tournament-templates/${id}`
@@ -133,14 +123,14 @@ export default function TournamentTemplateForm() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournament-templates'] });
-      toast.show(
+      toast.addToast(
         isEdit ? 'Template updated successfully' : 'Template created successfully',
         'success'
       );
       navigate('/tournament-templates');
     },
     onError: (error: Error) => {
-      toast.show(error.message || 'Failed to save template', 'error');
+      toast.addToast(error.message || 'Failed to save template', 'error');
     },
   });
 
@@ -148,7 +138,7 @@ export default function TournamentTemplateForm() {
     e.preventDefault();
     
     if (!name.trim()) {
-      toast.show('Template name is required', 'error');
+      toast.addToast('Template name is required', 'error');
       return;
     }
     
@@ -174,8 +164,7 @@ export default function TournamentTemplateForm() {
     <div className="mx-auto max-w-5xl">
       <PageHeader
         title={isEdit ? 'Edit Template' : 'New Template'}
-        subtitle="Define default settings for faster tournament creation"
-        backTo="/tournament-templates"
+        description="Define default settings for faster tournament creation"
       />
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -251,7 +240,11 @@ export default function TournamentTemplateForm() {
           <h3 className="mb-4 text-lg font-semibold text-surface-800 dark:text-surface-100">
             Tournament Rules
           </h3>
-          <TournamentRulesEditor rules={rules} onChange={setRules} />
+          <TournamentRulesEditor
+            rules={rules}
+            onChange={setRules}
+            onReset={() => setRules(DEFAULT_TOURNAMENT_RULES)}
+          />
         </Card>
 
         <Card>

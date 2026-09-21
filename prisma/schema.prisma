@@ -54,7 +54,9 @@ model Tournament {
   id               String    @id @default(uuid())
   name             String
   date             DateTime
-  location         String
+  // Nullable in the database (Tournament.location); the schema declared it
+  // required, which broke creates that omit it (#289).
+  location         String?
   status           String    @default("draft") // draft, registration, in_progress, completed
   settings         String? // JSON
   sportProfileId   String?
@@ -165,6 +167,8 @@ model Registration {
   assignments DivisionAssignment[]
   matches1    Match[]              @relation("Competitor1")
   matches2    Match[]              @relation("Competitor2")
+  matchesWon  Match[]              @relation("Winner")
+  parentalConsentVerifications ParentalConsentVerification[]
 
   @@unique([tournamentId, competitorId])
   @@index([tournamentId])
@@ -183,6 +187,11 @@ model ParentalConsentVerification {
   verifiedAt     DateTime?
   createdAt      DateTime @default(now())
 
+  // DB: ParentalConsentVerification_registrationId_fkey. The relation was
+  // missing from the schema, so `include: { registration: ... }` resolved
+  // to `never` (#289).
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
   @@index([registrationId])
   @@index([token])
   @@index([expiresAt])
@@ -195,20 +204,36 @@ model Division {
   name         String
   gender       String
   beltLevel    String // BB or CB
-  beltColor    String? // for CB: White, Yellow, Green, Blue, Red
-  danRank      Int? // for BB: 1-6
+  // The database has no Division.beltColor / danRank / weightMin / weightMax
+  // columns (verified against a fully migrated database). Bracket/rank data
+  // lives in beltColors / danMin / danMax, and Competitor owns danRank.
+  // Declaring them here broke every Division create (#289).
   ageMin       Int
   ageMax       Int
-  weightMin    Float?
-  weightMax    Float?
   eventType    String // patterns or sparring
   createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  // NOTE: the database has no Division.updatedAt column (verified against
+  // a fully migrated database). Declaring it here broke every create
+  // because Prisma required a value the DB does not accept (#289).
   deletedAt    DateTime?
 
+
+  beltColors            String?
+  danMin                Int?
+  danMax                Int?
+  weightClass           String?
+  divisionNumber        Int @default(1)
+  isSpecialNeeds        Boolean @default(false)
+  displayOrder          Int?
+  bracketDifficulty     Float?
+  matchupQuality        Float?
+  avgSkillRating        Float?
   tournament  Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   assignments DivisionAssignment[]
-  brackets    Bracket[]
+  // Bracket.divisionId is UNIQUE in the database (Bracket_divisionId_key),
+  // so this is a 1:1 relation, not a list. The code uses the singular
+  // `bracket:` in 56 call sites; the plural form was schema drift (#289).
+  bracket     Bracket?
 
   @@index([tournamentId])
   @@index([deletedAt])
@@ -222,6 +247,9 @@ model DivisionAssignment {
   seed           Int? // 1-N for manual seeding
   createdAt      DateTime @default(now())
 
+
+  seedPosition          Int?
+  manualOverride        Boolean @default(false)
   division     Division     @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
@@ -238,6 +266,8 @@ model Bracket {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+
+  format                String @default("double_elim")
   division Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   matches  Match[]
 }
@@ -247,23 +277,30 @@ model Match {
   id           String    @id @default(uuid())
   bracketId    String
   matchNumber  Int
-  roundName    String? // Winners Round 1, Losers Round 2, Grand Finals, etc.
   competitor1Id String?
   competitor2Id String?
   winnerId     String?
   status       String    @default("pending") // pending, ready, in_progress, completed
-  scores       String? // JSON
-  ring         String? // Ring assignment (A, B, C, etc.)
-  scheduledAt  DateTime?
   startedAt    DateTime?
-  completedAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   videoUrl     String? // P2-9: Video review integration
 
+
+  roundNumber           Int
+  bracketType           String
+  score1                String?
+  score2                String?
+  scheduledTime         DateTime?
+  ringNumber            Int?
+  notes                 String?
   bracket     Bracket       @relation(fields: [bracketId], references: [id], onDelete: Cascade)
   competitor1 Registration? @relation("Competitor1", fields: [competitor1Id], references: [id], onDelete: SetNull)
   competitor2 Registration? @relation("Competitor2", fields: [competitor2Id], references: [id], onDelete: SetNull)
+  // Winner back-relation (DB: Match_winnerId_fkey). Used by the bracket
+  // routes to include the winning registration; was missing from the
+  // schema (#289).
+  winner      Registration? @relation("Winner", fields: [winnerId], references: [id], onDelete: SetNull)
   auditLog    MatchAuditLog[]
 
   @@index([bracketId])
@@ -276,13 +313,16 @@ model Match {
 model WeightClass {
   id           String @id @default(uuid())
   tournamentId String
-  division     String // CB or BB
-  gender       String // M or F
-  ageMin       Int
-  ageMax       Int
+  // The database shape is (name, gender?, ageMin?, ageMax?, weightMinLbs?,
+  // weightMaxLbs?, displayOrder?). The former `division` and `maxWeight`
+  // columns do not exist in any migration and have zero call sites (#289).
   name         String // Fin, Fly, Bantam, Feather, Light, Welter, Middle, Heavy
-  maxWeight    Float
-
+  gender       String?
+  ageMin       Int?
+  ageMax       Int?
+  weightMinLbs Float?
+  weightMaxLbs Float?
+  displayOrder Int?
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@index([tournamentId])
@@ -297,15 +337,23 @@ model User {
   role      String   @default("viewer") // admin, director, scorekeeper, viewer
   tokenVersion Int    @default(0) // P0-1: JWT token version for invalidation
   isActive  Boolean  @default(true) // P0-2: Account status (disabled accounts cannot log in)
+  passwordHash String? // legacy/optional local credential
+  lastLogin    DateTime?
+  // Marks an ephemeral demo principal so cleanup never relies on email
+  // patterns. Set by POST /api/auth/demo; read by cleanupExpiredDemoPrincipals()
+  // and by the auth middleware to derive `isDemo`.
+  demoExpiresAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  organizationMemberships OrganizationMember[]
+  organizationMembers OrganizationMember[]
   tournamentAccess        UserTournamentAccess[]
   auditLogs               UserAuditLog[]
+  onboardingChecklist     UserOnboardingChecklist?
 
   @@index([email])
   @@index([role])
+  @@index([demoExpiresAt])
 }
 
 // User-Tournament access control
@@ -332,8 +380,10 @@ model MagicLink {
   code      String // 6-digit code for manual entry
   expiresAt DateTime
   createdAt DateTime @default(now())
-  invalidatedAt DateTime? // Brute-force protection: invalidate after N wrong tries
 
+
+  usedAt                DateTime?
+  failedAttempts        Int @default(0)
   @@index([email])
   @@index([expiresAt])
 }
@@ -342,15 +392,27 @@ model MagicLink {
 model TournamentRule {
   id           String   @id @default(uuid())
   tournamentId String
-  key          String
-  value        String
+  // The database shape is (name, description?, category, ruleType,
+  // enforcement, parameters, priority, isActive, source, createdBy?).
+  // The former `value` column exists in no migration and has no call
+  // sites (#289).
+  name                  String
+  description           String?
+  category              String
+  ruleType              String
+  enforcement           String @default("hard")
+  parameters            String
+  priority              Int @default(50)
+  isActive              Boolean @default(true)
+  source                String @default("manual")
+  createdBy             String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
-  @@unique([tournamentId, key])
   @@index([tournamentId])
+  @@index([tournamentId, category])
+  @@index([ruleType])
 }
 
 // Competitor historical performance tracking (P2-13)
@@ -362,9 +424,12 @@ model CompetitorHistory {
   placement    Int? // 1, 2, 3, 4, or null (did not place)
   matchesWon   Int      @default(0)
   matchesLost  Int      @default(0)
-  totalPoints  Int      @default(0)
   createdAt    DateTime @default(now())
 
+
+  divisionId            String
+  divisionName          String
+  points                Float @default(0)
   competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
@@ -379,10 +444,14 @@ model CompetitorRating {
   eventType    String // patterns or sparring
   rating       Float    @default(1000) // Elo-style rating
   confidence   Float    @default(0) // 0-1, increases with more matches
-  lastMatchAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+
+  peakRating            Float @default(1000)
+  matchesPlayed         Int @default(0)
+  lastMatchDate         DateTime?
+  lastUpdated           DateTime @default(now())
   competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
 
   @@unique([competitorId, eventType])
@@ -396,8 +465,14 @@ model MatchupHistory {
   competitor1Id String
   competitor2Id String
   eventType     String // patterns or sparring
-  matchedAt     DateTime @default(now())
 
+
+  divisionId            String
+  matchId               String
+  winnerId              String?
+  roundNumber           Int
+  score                 String?
+  createdAt             DateTime @default(now())
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@index([tournamentId, competitor1Id])
@@ -408,9 +483,10 @@ model MatchupHistory {
 // Public display heartbeat (P1-12: Track public scoreboard viewer activity)
 model PublicDisplayHeartbeat {
   tournamentId    String   @id
-  lastHeartbeatAt DateTime @default(now())
-  activeViewers   Int      @default(1)
 
+
+  lastSeenAt            DateTime
+  updatedAt             DateTime @updatedAt
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 }
 
@@ -419,32 +495,63 @@ model TournamentOperationAudit {
   id           String   @id @default(uuid())
   tournamentId String
   userId       String?
-  operation    String // create_division, delete_division, generate_bracket, reset_bracket, etc.
-  entityType   String? // division, bracket, match, etc.
-  entityId     String?
   details      String? // JSON
   createdAt    DateTime @default(now())
 
+
+  operationType         String
+  // UNIQUE in the database (TournamentOperationAudit_operationKey_key);
+  // services look this row up with findUnique({ where: { operationKey } }).
+  operationKey          String   @unique
+  beforeState           String?
+  afterState            String
+  impactSummary         String
+  reversible            Boolean @default(false)
+  createdBy             String?
+  undoneAt              DateTime?
+  undoneBy              String?
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  // Back-relation for Recommendation.operationAuditId
+  // (DB: Recommendation_operationAuditId_fkey). Was missing from the schema.
+  recommendations Recommendation[]
 
   @@index([tournamentId, createdAt])
-  @@index([operation])
+  @@index([operationType])
 }
 
 // AI-generated recommendations (P2-10: Smart division splitting, seeding suggestions)
 model Recommendation {
   id           String   @id @default(uuid())
   tournamentId String
-  type         String // division_split, seeding_adjustment, schedule_optimization, etc.
-  targetId     String? // Division ID, Match ID, etc.
-  title        String
-  description  String
-  confidence   Float    @default(0) // 0-1
-  status       String   @default("pending") // pending, accepted, rejected, dismissed
-  createdAt    DateTime @default(now())
-  resolvedAt   DateTime?
-
+  // The database carries the normalised shape below (recommendationType,
+  // inputSnapshot, explanation, ...). The older fields (type / targetId /
+  // title / description / resolvedAt) exist nowhere in the migrations and
+  // have zero call sites, so they were removed rather than kept (#289).
+  recommendationType    String
+  inputSnapshot         String
+  explanation           String
+  constraintsConsidered String
+  confidence            Float
+  warnings              String
+  proposedDiff          String
+  validationResult      String
+  status                String   @default("proposed") // proposed, approved, rejected, applied
+  createdBy             String?
+  createdAt             DateTime @default(now())
+  approvedBy            String?
+  approvedAt            DateTime?
+  rejectedBy            String?
+  rejectedAt            DateTime?
+  rejectionReason       String?
+  appliedBy             String?
+  appliedAt             DateTime?
+  appliedResult         String?
+  undoReference         String?
+  operationAuditId      String?
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  // Forward relation to the audit row that captures this recommendation's
+  // applied change (DB: Recommendation_operationAuditId_fkey).
+  operationAudit TournamentOperationAudit? @relation(fields: [operationAuditId], references: [id], onDelete: SetNull)
 
   @@index([tournamentId, status])
   @@index([createdAt])
@@ -457,14 +564,19 @@ model SOSAlert {
   severity     String // info, warning, critical
   category     String // delay, injury, equipment, conflict, other
   title        String
-  message      String
   source       String? // ring, division, match, etc.
-  sourceId     String?
   status       String   @default("active") // active, acknowledged, resolved
   createdAt    DateTime @default(now())
-  acknowledgedAt DateTime?
   resolvedAt   DateTime?
 
+
+  description           String?
+  ringNumber            Int?
+  divisionId            String?
+  resolved              Boolean @default(false)
+  raisedBy              String?
+  raisedByName          String?
+  updatedAt             DateTime @updatedAt
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
   @@index([tournamentId, status])
@@ -482,10 +594,12 @@ model Invitation {
   organizationId String
   token          String    @unique
   status         String    @default("pending") // pending, accepted, expired
-  expiresAt      DateTime
-  acceptedAt     DateTime?
   createdAt      DateTime  @default(now())
 
+
+  tokenExpiry           DateTime
+  invitedBy             String
+  updatedAt             DateTime @updatedAt
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([email])
@@ -503,6 +617,10 @@ model MatchAuditLog {
   userId        String?
   createdAt     DateTime @default(now())
 
+
+  action                String
+  userEmail             String?
+  reason                String?
   match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
   @@index([matchId, createdAt])
@@ -810,4 +928,23 @@ model CustomDomain {
   @@index([organizationId])
   @@index([status])
   @@index([hostname]) // Already unique, but useful for lookups by status+hostname
+}
+
+// Per-user onboarding progress. Created with the COPPA/GDPR onboarding work
+// (migration 20260909_coppa_gdpr_onboarding). The table and its unique
+// userId index exist in the database; this model was missing from the schema,
+// which is part of the drift tracked in #289/#291.
+model UserOnboardingChecklist {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  orgProfileComplete  Boolean  @default(false)
+  importComplete      Boolean  @default(false)
+  firstTournamentDone Boolean  @default(false)
+  publicPageReviewed  Boolean  @default(false)
+  staffInvited        Boolean  @default(false)
+  dismissed           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

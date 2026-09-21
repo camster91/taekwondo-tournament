@@ -149,7 +149,7 @@ export function mountSentryErrorHandler(app: ExpressApp): void {
  * Capture an exception manually. Useful for caught errors you want to report.
  * No-op when SENTRY_DSN is unset.
  */
-export function captureException(error: Error, context?: Record<string, any>): void {
+export function captureException(error: Error, context?: Record<string, unknown>): void {
   if (!SENTRY_DSN) return;
 
   if (context) {
@@ -166,7 +166,7 @@ export function captureException(error: Error, context?: Record<string, any>): v
  * Add a breadcrumb manually. Useful for tracking custom events.
  * No-op when SENTRY_DSN is unset.
  */
-export function addBreadcrumb(message: string, category: string, data?: Record<string, any>): void {
+export function addBreadcrumb(message: string, category: string, data?: Record<string, unknown>): void {
   if (!SENTRY_DSN) return;
 
   Sentry.addBreadcrumb({

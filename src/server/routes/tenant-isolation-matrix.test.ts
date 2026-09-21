@@ -459,7 +459,7 @@ describe('Tenant Isolation Matrix — Portal Routes', () => {
       expect(validateManagementTokenStatus(null, null)).toEqual({ valid: true });
     });
 
-    it('rejects malformed tokens before any database lookup', () => {
+    it('rejects malformed tokens before any database lookup', async () => {
       const prisma = mockPrisma({ registration: { findFirst: vi.fn() } });
 
       // A confirmation-code-shaped string must never reach the lookup.

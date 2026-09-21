@@ -156,7 +156,10 @@ interface DivisionRecommendationRecord {
 interface AssignmentRow {
   id: string;
   registrationId: string;
+  // Required by DivisionMoveCompetitorModal's Assignment prop.
+  divisionId: string;
   registration: {
+    id: string;
     competitor: {
       firstName: string;
       lastName: string;
@@ -216,7 +219,7 @@ export default function Divisions() {
   const [deleteTarget, setDeleteTarget] = useState<Division | null>(null);
   const [splitTarget, setSplitTarget] = useState<Division | null>(null);
   const [assignTarget, setAssignTarget] = useState<Division | null>(null);
-  const [moveTarget, setMoveTarget] = useState<{ assignment: any; division: Division } | null>(null);
+  const [moveTarget, setMoveTarget] = useState<{ assignment: AssignmentRow; division: Division } | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [regenerateConfirm, setRegenerateConfirm] = useState(false);
   const [resultMessage, setResultMessage] = useState<{ title: string; message: string } | null>(null);

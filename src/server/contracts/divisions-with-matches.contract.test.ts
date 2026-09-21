@@ -24,6 +24,7 @@ const prisma = new PrismaClient({ adapter });
 let testTournamentId: string;
 let testDivisionId: string;
 let testCompetitorId: string;
+let testRegistrationId: string;
 
 beforeAll(async () => {
   // Skip tests if DB is not available
@@ -61,6 +62,18 @@ beforeAll(async () => {
   });
   testCompetitorId = competitor.id;
 
+  // DivisionAssignment points at a Registration, not a Competitor
+  // (DB: DivisionAssignment_registrationId_fkey).
+  const registration = await prisma.registration.create({
+    data: {
+      tournamentId: testTournamentId,
+      competitorId: testCompetitorId,
+      patterns: false,
+      sparring: true,
+    },
+  });
+  testRegistrationId = registration.id;
+
   const division = await prisma.division.create({
     data: {
       tournamentId: testTournamentId,
@@ -79,8 +92,8 @@ beforeAll(async () => {
   await prisma.divisionAssignment.create({
     data: {
       divisionId: testDivisionId,
-      competitorId: testCompetitorId,
-      seed: 1,
+      registrationId: testRegistrationId,
+      seedPosition: 1,
     },
   });
 
@@ -219,7 +232,9 @@ describe('Divisions-with-matches Contract', () => {
 
   it('rejects divisions with missing tournamentId field', async () => {
     const invalidDivision = {
-      id: 'test-id',
+      // Contract requires a UUID for id; keep the fixture valid so this
+      // test exercises the tournamentId behaviour it intends to.
+      id: '00000000-0000-4000-8000-000000000001',
       name: 'Test',
       eventType: 'sparring',
       // tournamentId is intentionally omitted, which is invalid for some contexts

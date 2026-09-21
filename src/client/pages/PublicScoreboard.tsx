@@ -18,7 +18,7 @@ import {
 import { fetchJson } from '../utils/api-status';
 
 // Use shared API contracts instead of local interfaces
-import type { ApiDivision } from '../../shared/contracts';
+import type { ApiDivision, ApiMatch } from '../../shared/contracts';
 
 type Division = ApiDivision;
 
@@ -121,6 +121,11 @@ export default function PublicScoreboard() {
   // Pre-compute the stale banner copy.
   const staleBanner = getStaleBannerMessage(!!scoreboardError, staleSeconds);
 
+  // Derived flag used by the auto-refresh status pill below. Kept separate
+  // from scoreboardState so the pill can show staleness independently of
+  // the loading/error modes.
+  const isStale = staleSeconds !== null && staleSeconds >= STALE_AFTER_SECONDS;
+
   useEffect(() => {
     // A heartbeat means this display has just received current scoreboard data.
     if (scoreboardState.status !== 'live') return;
@@ -143,7 +148,7 @@ export default function PublicScoreboard() {
   // default ring — they go into a separate "unassigned" bucket so the LIVE
   // badge count reflects reality, not a || 1 fallback. Closes #30.
   const matchesByRing = useMemo(() => {
-    const out: Record<number, Match[]> = { 1: [], 2: [], 3: [], 4: [] };
+    const out: Record<number, ApiMatch[]> = { 1: [], 2: [], 3: [], 4: [] };
     for (const d of divisions || []) {
       for (const m of d.bracket?.matches || []) {
         if (m.ringNumber == null) continue; // unassigned — render separately
@@ -194,17 +199,17 @@ export default function PublicScoreboard() {
   };
 
   // Helpers used by both the TV hero and the right column.
-  const getCompetitorName = (competitor: Match['competitor1']) => {
+  const getCompetitorName = (competitor: ApiMatch['competitor1']) => {
     if (!competitor) return 'TBD';
     return `${competitor.competitor.firstName} ${competitor.competitor.lastName}`;
   };
 
-  const getCompetitorSchool = (competitor: Match['competitor1']) => {
+  const getCompetitorSchool = (competitor: ApiMatch['competitor1']) => {
     if (!competitor) return '';
     return competitor.competitor.schoolDojang || '';
   };
 
-  const getDivisionForMatch = (match: Match) => {
+  const getDivisionForMatch = (match: ApiMatch) => {
     return divisions?.find((d) => d.bracket?.matches.some((m) => m.id === match.id));
   };
 

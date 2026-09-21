@@ -6,7 +6,7 @@ import {
   undoScheduleDelay,
   type ScheduleDelayInput,
 } from './schedule-delay-propagation.js';
-import { mergeCanonicalScheduleSettings, type CanonicalScheduleSnapshot } from './canonical-schedule.js';
+import { mergeCanonicalScheduleSettings, canonicalScheduleVersion, type CanonicalScheduleSnapshot } from './canonical-schedule.js';
 
 // Mock Prisma client
 const createMockPrisma = () => {
@@ -18,6 +18,11 @@ const createMockPrisma = () => {
     tournamentOperationAudit: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    // invalidateScheduleRecommendations() runs inside the apply/undo
+    // transaction and calls recommendation.updateMany().
+    recommendation: {
       updateMany: vi.fn(),
     },
     $transaction: vi.fn(),
@@ -129,7 +134,33 @@ describe('schedule-delay-propagation', () => {
       const schedule = createBasicSchedule();
       const settings = mergeCanonicalScheduleSettings(null, schedule);
 
-      (mockPrisma.tournament.findUnique as any).mockResolvedValueOnce({
+      (mockPrisma.tournament.findUnique as any)
+        .mockResolvedValueOnce({
+        id: 'tournament-1',
+        settings,
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+        divisions: [
+          {
+            id: 'div-1',
+            name: 'Division 1',
+            bracket: { matches: [{ id: 'match-1', status: 'completed' }] },
+            assignments: [{ registrationId: 'reg-1' }],
+          },
+          {
+            id: 'div-2',
+            name: 'Division 2',
+            bracket: null,
+            assignments: [{ registrationId: 'reg-2' }],
+          },
+          {
+            id: 'div-3',
+            name: 'Division 3',
+            bracket: null,
+            assignments: [{ registrationId: 'reg-3' }],
+          },
+        ],
+      })
+        .mockResolvedValueOnce({
         id: 'tournament-1',
         settings,
         updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -184,7 +215,21 @@ describe('schedule-delay-propagation', () => {
         schedule: { endTime: '17:00' },
       });
 
-      (mockPrisma.tournament.findUnique as any).mockResolvedValueOnce({
+      (mockPrisma.tournament.findUnique as any)
+        .mockResolvedValueOnce({
+        id: 'tournament-1',
+        settings,
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+        divisions: [
+          {
+            id: 'div-1',
+            name: 'Division 1',
+            bracket: null,
+            assignments: [{ registrationId: 'reg-1' }],
+          },
+        ],
+      })
+        .mockResolvedValueOnce({
         id: 'tournament-1',
         settings,
         updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -220,7 +265,33 @@ describe('schedule-delay-propagation', () => {
       const schedule = createBasicSchedule();
       const settings = mergeCanonicalScheduleSettings(null, schedule);
 
-      (mockPrisma.tournament.findUnique as any).mockResolvedValueOnce({
+      (mockPrisma.tournament.findUnique as any)
+        .mockResolvedValueOnce({
+        id: 'tournament-1',
+        settings,
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+        divisions: [
+          {
+            id: 'div-1',
+            name: 'Division 1',
+            bracket: null,
+            assignments: [{ registrationId: 'reg-1' }],
+          },
+          {
+            id: 'div-2',
+            name: 'Division 2',
+            bracket: null,
+            assignments: [{ registrationId: 'reg-2' }],
+          },
+          {
+            id: 'div-3',
+            name: 'Division 3',
+            bracket: null,
+            assignments: [{ registrationId: 'reg-3' }],
+          },
+        ],
+      })
+        .mockResolvedValueOnce({
         id: 'tournament-1',
         settings,
         updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -275,7 +346,27 @@ describe('schedule-delay-propagation', () => {
       };
       const settings = mergeCanonicalScheduleSettings(null, schedule);
 
-      (mockPrisma.tournament.findUnique as any).mockResolvedValueOnce({
+      (mockPrisma.tournament.findUnique as any)
+        .mockResolvedValueOnce({
+        id: 'tournament-1',
+        settings,
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+        divisions: [
+          {
+            id: 'div-1',
+            name: 'Division 1',
+            bracket: null,
+            assignments: [{ registrationId: 'reg-1' }], // Athlete reg-1 in div-1
+          },
+          {
+            id: 'div-2',
+            name: 'Division 2',
+            bracket: null,
+            assignments: [{ registrationId: 'reg-1' }], // Same athlete reg-1 in div-2
+          },
+        ],
+      })
+        .mockResolvedValueOnce({
         id: 'tournament-1',
         settings,
         updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -316,7 +407,19 @@ describe('schedule-delay-propagation', () => {
       const schedule = createBasicSchedule();
       const settings = mergeCanonicalScheduleSettings(null, schedule);
 
-      (mockPrisma.tournament.findUnique as any).mockResolvedValueOnce({
+      (mockPrisma.tournament.findUnique as any)
+        .mockResolvedValueOnce({
+        id: 'tournament-1',
+        settings,
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+        divisions: schedule.rows.map((row) => ({
+          id: row.divisionId,
+          name: `Division ${row.divisionId}`,
+          bracket: null,
+          assignments: [{ registrationId: `reg-${row.divisionId}` }],
+        })),
+      })
+        .mockResolvedValueOnce({
         id: 'tournament-1',
         settings,
         updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -394,7 +497,7 @@ describe('schedule-delay-propagation', () => {
         tournamentId: 'tournament-1',
         delayInput,
         expectedUpdatedAt: updatedAt.toISOString(),
-        expectedInputVersion: 'test-version',
+        expectedInputVersion: canonicalScheduleVersion(schedule),
         operationKey: 'op-123',
         approvedBy: 'user-1',
       });
@@ -442,7 +545,7 @@ describe('schedule-delay-propagation', () => {
           tournamentId: 'tournament-1',
           delayInput,
           expectedUpdatedAt: oldUpdatedAt.toISOString(),
-          expectedInputVersion: 'test-version',
+          expectedInputVersion: canonicalScheduleVersion(schedule),
           operationKey: 'op-123',
           approvedBy: 'user-1',
         })

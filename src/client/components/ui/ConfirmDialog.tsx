@@ -171,9 +171,12 @@ export default function ConfirmDialog({
                 <h3 id={titleId} className="text-lg font-semibold text-gray-900 dark:text-white">
                   {title}
                 </h3>
-                <p id={descriptionId} className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                {/* message is ReactNode and may contain block elements
+                    (paragraphs, form fields). A <p> wrapper would be invalid
+                    HTML and triggers hydration errors, so use a <div>. */}
+                <div id={descriptionId} className="mt-2 text-sm text-gray-600 dark:text-gray-300">
                   {message}
-                </p>
+                </div>
               </div>
               <CloseButton onClose={onClose} disabled={closeDisabled || isLoading} />
             </div>

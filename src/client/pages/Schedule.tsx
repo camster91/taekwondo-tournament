@@ -93,8 +93,9 @@ interface ScheduleConditions {
 interface TournamentIncident { id: string; type: string; severity: string; actionTaken: string | null; deletedAt: string | null }
 
 interface ScheduleDelayPreview {
-  before: any;
-  after: any;
+  // The server also returns `before`/`after` canonical snapshots, but this
+  // view only renders the impact summary, so they are intentionally not
+  // declared (previously typed `any` and never read).
   impact: {
     affectedDivisionIds: string[];
     affectedDivisionNames: string[];
