@@ -29,6 +29,7 @@ import {
 } from '../services/entitlements.js';
 import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from '../services/tournament-settings.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
+import { generateManagementToken, getManagementTokenExpiry, hashManagementToken } from '../utils/registration-management-token.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
 import { generateQRPoster } from '../services/qr-poster.js';
@@ -1607,7 +1608,6 @@ router.post('/:id/registrations/:regId/revoke-token', authenticate, requireTourn
 
   // If reissue=true, generate a new token and return it (works for both rotation and first-time issuance)
   if (reissue) {
-    const { generateManagementToken, getManagementTokenExpiry, hashManagementToken } = await import('../utils/registration-management-token.js');
     const newToken = generateManagementToken();
     const newExpiry = getManagementTokenExpiry();
 
