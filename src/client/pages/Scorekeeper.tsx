@@ -85,7 +85,7 @@ interface ScoreSubmission {
 function validateResult(
   resultType: ResultType,
   selectedWinner: string | null,
-  match: Match | undefined,
+  match: ApiMatch | undefined,
   score1: string,
   score2: string,
 ): string | null {
@@ -1500,11 +1500,11 @@ export default function Scorekeeper() {
             <div className="space-y-2">
               {completedMatches.map((match) => {
                 const winnerName =
-                  match.winnerId === match.competitor1?.id
+                  match.winner?.id === match.competitor1?.id
                     ? getCompetitorName(match.competitor1)
                     : getCompetitorName(match.competitor2);
                 const loserName =
-                  match.winnerId === match.competitor1?.id
+                  match.winner?.id === match.competitor1?.id
                     ? getCompetitorName(match.competitor2)
                     : getCompetitorName(match.competitor1);
 

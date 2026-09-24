@@ -29,6 +29,7 @@ import {
 } from '../services/entitlements.js';
 import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from '../services/tournament-settings.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
+import { generateManagementToken, getManagementTokenExpiry, hashManagementToken } from '../utils/registration-management-token.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
 import { generateQRPoster } from '../services/qr-poster.js';

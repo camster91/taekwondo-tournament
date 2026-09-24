@@ -52,11 +52,11 @@ export default function TournamentTemplates() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournament-templates'] });
-      toast.show('Template deleted successfully', 'success');
+      toast.showToast('Template deleted successfully', 'success');
       setDeleteId(null);
     },
     onError: (error: Error) => {
-      toast.show(error.message || 'Failed to delete template', 'error');
+      toast.showToast(error.message || 'Failed to delete template', 'error');
     },
   });
 
@@ -73,10 +73,10 @@ export default function TournamentTemplates() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournament-templates'] });
-      toast.show('Template restored successfully', 'success');
+      toast.showToast('Template restored successfully', 'success');
     },
     onError: (error: Error) => {
-      toast.show(error.message || 'Failed to restore template', 'error');
+      toast.showToast(error.message || 'Failed to restore template', 'error');
     },
   });
 
@@ -88,8 +88,7 @@ export default function TournamentTemplates() {
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Tournament Templates"
-        subtitle="Create reusable templates for faster tournament setup"
-        icon={FileText}
+        description="Create reusable templates for faster tournament setup"
         actions={[
           <Button
             key="new"
@@ -225,11 +224,11 @@ export default function TournamentTemplates() {
         title="Delete Template"
         message="Are you sure you want to delete this template? You can restore it from the deleted section for 7 days."
         confirmText="Delete"
-        confirmVariant="danger"
+        variant="danger"
         onConfirm={() => {
           if (deleteId) deleteMutation.mutate(deleteId);
         }}
-        onCancel={() => setDeleteId(null)}
+        onClose={() => setDeleteId(null)}
         isLoading={deleteMutation.isPending}
       />
     </div>

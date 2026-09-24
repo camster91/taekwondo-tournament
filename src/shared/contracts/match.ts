@@ -57,6 +57,8 @@ export const apiMatchSchema = z.object({
   competitor1: matchCompetitorSlotSchema,
   competitor2: matchCompetitorSlotSchema,
   winner: matchCompetitorSlotSchema,
+  winnerId: z.string().uuid().nullable().optional(),
+  scheduledTime: z.string().datetime().nullable().optional(),
   score1: z.string().nullable().optional(),
   score2: z.string().nullable().optional(),
   startedAt: z.string().datetime().nullable().optional(),

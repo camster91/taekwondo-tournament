@@ -14,7 +14,8 @@ export type AuditAction =
   | 'tournament_settings_updated'
   | 'bracket_generated'
   | 'match_scored'
-  | 'user_status_changed';
+  | 'user_status_changed'
+  | 'waitlist_promoted';
 
 export interface AuditLogOptions {
   userId: string;

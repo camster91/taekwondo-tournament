@@ -5,7 +5,7 @@
  * and cleaning up test data.
  */
 
-import express, { type Express } from 'express';
+import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import type { Request as SuperTestRequest } from 'supertest';
@@ -14,7 +14,7 @@ import { createToken } from '../server/middleware/auth.js';
 let testPrisma: PrismaClient | null = null;
 
 interface TestServer {
-  app: Express;
+  app: ReturnType<typeof express>;
   prisma: PrismaClient;
 }
 
@@ -76,9 +76,10 @@ export function createAuthenticatedRequest(
   role: string = 'admin'
 ): SuperTestRequest {
   const token = createToken({
-    id: userId,
+    userId,
     email: `test-${userId}@example.com`,
     role,
+    tokenVersion: 0,
   });
 
   return request.set('Authorization', `Bearer ${token}`);

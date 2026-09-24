@@ -11,7 +11,7 @@ import { DEFAULT_TOURNAMENT_RULES, type TournamentRules } from '../../shared/con
 
 interface WeightClass {
   name: string;
-  gender?: string;
+  gender?: string | null;
   ageMin?: number;
   ageMax?: number;
   weightMinLbs?: number;
@@ -133,14 +133,14 @@ export default function TournamentTemplateForm() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournament-templates'] });
-      toast.show(
+      toast.showToast(
         isEdit ? 'Template updated successfully' : 'Template created successfully',
         'success'
       );
       navigate('/tournament-templates');
     },
     onError: (error: Error) => {
-      toast.show(error.message || 'Failed to save template', 'error');
+      toast.showToast(error.message || 'Failed to save template', 'error');
     },
   });
 
@@ -148,7 +148,7 @@ export default function TournamentTemplateForm() {
     e.preventDefault();
     
     if (!name.trim()) {
-      toast.show('Template name is required', 'error');
+      toast.showToast('Template name is required', 'error');
       return;
     }
     
@@ -174,8 +174,7 @@ export default function TournamentTemplateForm() {
     <div className="mx-auto max-w-5xl">
       <PageHeader
         title={isEdit ? 'Edit Template' : 'New Template'}
-        subtitle="Define default settings for faster tournament creation"
-        backTo="/tournament-templates"
+        description="Define default settings for faster tournament creation"
       />
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -251,7 +250,7 @@ export default function TournamentTemplateForm() {
           <h3 className="mb-4 text-lg font-semibold text-surface-800 dark:text-surface-100">
             Tournament Rules
           </h3>
-          <TournamentRulesEditor rules={rules} onChange={setRules} />
+          <TournamentRulesEditor rules={rules} onChange={setRules} onReset={() => setRules(DEFAULT_TOURNAMENT_RULES)} />
         </Card>
 
         <Card>

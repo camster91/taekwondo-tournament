@@ -18,9 +18,10 @@ import {
 import { fetchJson } from '../utils/api-status';
 
 // Use shared API contracts instead of local interfaces
-import type { ApiDivision } from '../../shared/contracts';
+import type { ApiDivision, ApiMatch } from '../../shared/contracts';
 
 type Division = ApiDivision;
+type Match = ApiMatch;
 
 interface Tournament {
   id: string;
@@ -364,10 +365,10 @@ export default function PublicScoreboard() {
             )}
           </div>
           </div>
-          <div className={`text-xs pb-3 flex items-center gap-2 ${isStale ? 'text-warning400' : 'text-surface-300'}`}>
-            <span className={`h-2 w-2 rounded-full ${isStale ? 'bg-warning/400' : 'bg-success/400 animate-pulse'}`} />
+          <div className={`text-xs pb-3 flex items-center gap-2 ${scoreboardState.status === 'stale' ? 'text-warning400' : 'text-surface-300'}`}>
+            <span className={`h-2 w-2 rounded-full ${scoreboardState.status === 'stale' ? 'bg-warning/400' : 'bg-success/400 animate-pulse'}`} />
             <span data-testid="auto-refresh-status">
-              {isStale
+              {scoreboardState.status === 'stale'
                 ? `STALE — no update for ${staleSeconds}s. Check venue Wi-Fi.`
                 : `Auto-refresh every 5s · Last update ${lastFetchAt ? lastFetchAt.toLocaleTimeString() : currentTime.toLocaleTimeString()}`}
             </span>

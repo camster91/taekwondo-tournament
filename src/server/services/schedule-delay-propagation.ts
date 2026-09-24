@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { readCanonicalSchedule, type CanonicalScheduleSnapshot, mergeCanonicalScheduleSettings, canonicalScheduleVersion } from './canonical-schedule.js';
 import { invalidateScheduleRecommendations } from './schedule-recommendation-invalidation.js';
 
@@ -79,7 +79,7 @@ function timeToMinutes(time: string): number {
  * Preserve completed and in-progress matches by only moving "pending" divisions.
  */
 async function calculateDelayPropagation(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   tournamentId: string,
   delayInput: ScheduleDelayInput,
   currentCanonical: CanonicalScheduleSnapshot,
