@@ -148,6 +148,7 @@ const buildPrismaMock = (overrides: any = {}) => {
   };
   const magicLink: any = {
     deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    findMany: vi.fn().mockResolvedValue([]),
     create: vi.fn().mockResolvedValue({}),
     findFirst: vi.fn(),
     update: vi.fn().mockResolvedValue({}),
