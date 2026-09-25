@@ -315,6 +315,10 @@ Authorization precedence (first match wins):
    step 4), and no-org users never see org data.
 7. Otherwise — 403.
 
+`Tournament.createdById` records the creator. When a director creates
+their first organization, the org-less tournaments they created move
+into it (so they don't disappear behind rule 6).
+
 Regression tests: `src/server/middleware/auth-tournament-access.test.ts`
 and the opt-in Postgres suite
 `src/server/middleware/tenant-isolation.integration.test.ts`
@@ -768,6 +772,7 @@ Production runs in a Docker container on the Ashbi VPS
 - `20260910_add_custom_domains` (custom domains, PR #256)
 - `20260910_add_capacity_waitlist` (capacity + waitlist)
 - `20260924_registration_waitlist_fields` (Registration waitlist columns that were in the schema without a migration)
+- `20260925_tournament_created_by` (Tournament.createdById, backfilled from `tournament_created` audit entries)
 
 The deploy script runs `prisma migrate deploy` automatically
 during cutover. Do NOT use `npm run db:push` on production —

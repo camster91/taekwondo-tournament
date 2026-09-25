@@ -61,6 +61,9 @@ model Tournament {
   updatedAt DateTime @updatedAt
 
   organizationId   String?
+  // User who created the tournament. Lets a director's pre-org (orphan)
+  // tournaments move into the first organization they create.
+  createdById      String?
   sportProfileId   String?
   sportProfileSlug String? @default("taekwondo")
 
@@ -101,6 +104,7 @@ model Tournament {
   brandPrimaryColor String? @default("#DC2626") // Hex color code for accent/CTA elements
   brandLogoUrl      String? // Public URL to organizer's logo image
 
+  createdBy              User?                      @relation("TournamentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   registrations          Registration[]
   divisions              Division[]
   weightClasses          WeightClass[]
@@ -126,6 +130,7 @@ model Tournament {
   @@index([status])
   @@index([organizationId, eventSlug])
   @@index([portalPublished])
+  @@index([createdById])
 }
 
 // Competitor-Tournament registration link
@@ -343,6 +348,7 @@ model User {
   tournamentAccess    UserTournamentAccess[]
   organizationMembers OrganizationMember[]
   auditLogs           UserAuditLog[]
+  createdTournaments  Tournament[]             @relation("TournamentCreatedBy")
   onboardingChecklist UserOnboardingChecklist?
 
   @@index([demoExpiresAt])

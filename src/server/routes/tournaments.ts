@@ -277,6 +277,7 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
       status: 'draft',
       sportProfileSlug: sportProfileSlug || 'taekwondo',
       organizationId: resolvedOrgId,
+      createdById: authReq.user?.id ?? null,
     },
   });
 
@@ -370,6 +371,7 @@ router.post('/from-template/:templateId', authenticate, requireRole('admin', 'di
       status: 'draft',
       sportProfileSlug: template.sportProfileSlug,
       organizationId: membership.organizationId,
+      createdById: authReq.user.id,
       brandName: template.brandName,
       brandPrimaryColor: template.brandPrimaryColor,
       brandLogoUrl: template.brandLogoUrl,
@@ -724,6 +726,7 @@ router.post('/:id/clone', authenticate, requireTournamentAccess('director'), asy
       sportProfileSlug: original.sportProfileSlug,
       sportProfileId: original.sportProfileId,
       organizationId: original.organizationId,
+      createdById: (req as AuthenticatedRequest).user?.id ?? null,
     },
   });
 
