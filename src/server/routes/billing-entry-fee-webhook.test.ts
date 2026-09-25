@@ -1,7 +1,8 @@
 /**
  * Regression tests for entry-fee checkout.session.completed handling:
- * the session must match the stored checkout session id and the expected
- * amount before a registration is marked paid, and events that can never
+ * any server-created (metadata-tagged) paid session for the registration
+ * marks it paid — including an older session superseded by a later
+ * /checkout call — but only when the charged amount/currency match, and events that can never
  * succeed (unknown registration, mismatches) are acknowledged with 2xx so
  * Stripe stops retrying.
  */
@@ -25,11 +26,11 @@ describe('evaluateEntryFeeSession', () => {
     expect(evaluateEntryFeeSession(null, session)).toEqual({ action: 'ignore', reason: 'unknown_registration' });
   });
 
-  it('ignores a session that is not the one created for the registration', () => {
-    expect(evaluateEntryFeeSession(reg, { ...session, id: 'cs_other' }))
-      .toEqual({ action: 'ignore', reason: 'session_mismatch' });
+  it('marks paid for an older session that was superseded by a newer checkout', () => {
+    expect(evaluateEntryFeeSession({ ...reg, paymentIntentId: 'cs_newer' }, session))
+      .toEqual({ action: 'mark_paid' });
     expect(evaluateEntryFeeSession({ ...reg, paymentIntentId: null }, session))
-      .toEqual({ action: 'ignore', reason: 'session_mismatch' });
+      .toEqual({ action: 'mark_paid' });
   });
 
   it('ignores amount and currency mismatches', () => {
@@ -124,10 +125,37 @@ describe('stripeWebhookHandler entry_fee', () => {
     expect(tx.registration.update).not.toHaveBeenCalled();
   });
 
-  it('does not mark paid when the session id differs from the stored checkout session', async () => {
-    const res = await send({ id: 'cs_attacker' });
+  it('marks paid when the parent pays an older session than the one last stored', async () => {
+    registration = { ...registration!, paymentIntentId: 'cs_newer' };
+    const res = await send({ id: 'cs_older' });
     expect(res.status).toBe(200);
-    expect(res.body.reason).toBe('session_mismatch');
+    expect(res.body).toMatchObject({ processed: true, paid: true });
+    expect(tx.registration.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'reg-1' },
+      data: expect.objectContaining({ paymentStatus: 'paid', paymentAmountCents: 2500, paymentIntentId: 'cs_older' }),
+    }));
+  });
+
+  it('still rejects an older session whose amount does not match the expected fee', async () => {
+    registration = { ...registration!, paymentIntentId: 'cs_newer' };
+    const res = await send({ id: 'cs_older', amount_total: 1000 });
+    expect(res.status).toBe(200);
+    expect(res.body.reason).toBe('amount_mismatch');
+    expect(tx.registration.update).not.toHaveBeenCalled();
+  });
+
+  it('does not mark paid when the currency differs', async () => {
+    const res = await send({ currency: 'eur' });
+    expect(res.status).toBe(200);
+    expect(res.body.reason).toBe('currency_mismatch');
+    expect(tx.registration.update).not.toHaveBeenCalled();
+  });
+
+  it('does not re-mark an already paid registration', async () => {
+    registration = { ...registration!, paymentStatus: 'paid' };
+    const res = await send({ id: 'cs_older' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ processed: true, paid: false });
     expect(tx.registration.update).not.toHaveBeenCalled();
   });
 

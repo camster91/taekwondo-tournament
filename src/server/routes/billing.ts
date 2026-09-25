@@ -34,22 +34,26 @@ const CHECKOUT_EVENTS = new Set([
 export type EntryFeeWebhookOutcome =
   | { action: 'mark_paid' }
   | { action: 'noop' }
-  | { action: 'ignore'; reason: 'unknown_registration' | 'session_mismatch' | 'amount_mismatch' | 'currency_mismatch' };
+  | { action: 'ignore'; reason: 'unknown_registration' | 'amount_mismatch' | 'currency_mismatch' };
 
 /**
  * Decide what a checkout.session.completed entry-fee event may do to a
- * registration. The metadata registrationId alone is not trusted: the
- * session must be the one we created for that registration (stored in
- * paymentIntentId) and must have charged the amount we recorded.
+ * registration.
+ *
+ * The event is signature-verified and its metadata (registrationId,
+ * type=entry_fee) is only ever set by this server when it creates a
+ * Checkout session, so any completed + paid session carrying that
+ * metadata is a genuine payment for the registration. It does NOT have
+ * to be the most recent session we stored in paymentIntentId: a parent
+ * can open /checkout twice and pay in the older tab, and that charge
+ * must still mark the registration paid. What must match is the amount
+ * (and currency) we recorded as due for the registration.
  */
 export function evaluateEntryFeeSession(
-  registration: { paymentStatus: string | null; paymentIntentId: string | null; paymentAmountCents: number | null } | null,
+  registration: { paymentStatus: string | null; paymentAmountCents: number | null } | null,
   session: { id: string; payment_status?: string; amount_total?: number | null; currency?: string | null },
 ): EntryFeeWebhookOutcome {
   if (!registration) return { action: 'ignore', reason: 'unknown_registration' };
-  if (!registration.paymentIntentId || registration.paymentIntentId !== session.id) {
-    return { action: 'ignore', reason: 'session_mismatch' };
-  }
   if (registration.paymentStatus !== 'pending' || session.payment_status !== 'paid') {
     return { action: 'noop' };
   }
@@ -122,7 +126,7 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
 
           const registration = await tx.registration.findUnique({
             where: { id: registrationId },
-            select: { id: true, paymentStatus: true, paymentIntentId: true, paymentAmountCents: true },
+            select: { id: true, paymentStatus: true, paymentAmountCents: true },
           });
 
           const decision = evaluateEntryFeeSession(registration, session);
@@ -133,6 +137,9 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
                 paymentStatus: 'paid',
                 paymentReceivedAt: new Date(),
                 paymentAmountCents: session.amount_total ?? null,
+                // Point at the session that was actually paid (may be an
+                // older one than the last session we created).
+                paymentIntentId: session.id,
               },
             });
           }

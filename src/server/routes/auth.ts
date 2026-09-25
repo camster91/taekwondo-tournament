@@ -274,6 +274,30 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
   }
 });
 
+/**
+ * Atomically claim a magic link (single use) and, only if the claim wins,
+ * reset the failed-attempt counters on every recent link for that email.
+ * /request-magic-link carries the MAX failedAttempts across all links in
+ * the same MAGIC_LINK_WINDOW_MS window into a new code, so resetting only
+ * the claimed row would leave a user who just proved ownership with the
+ * nearly exhausted budget of an older, invalidated code.
+ */
+async function claimMagicLink(prisma: PrismaClient, linkId: string, email: string, now: Date): Promise<boolean> {
+  const windowStart = new Date(now.getTime() - MAGIC_LINK_WINDOW_MS);
+  return prisma.$transaction(async (tx) => {
+    const claimed = await tx.magicLink.updateMany({
+      where: { id: linkId, usedAt: null },
+      data: { usedAt: now, failedAttempts: 0 },
+    });
+    if (claimed.count !== 1) return false;
+    await tx.magicLink.updateMany({
+      where: { email, createdAt: { gte: windowStart }, failedAttempts: { gt: 0 } },
+      data: { failedAttempts: 0 },
+    });
+    return true;
+  });
+}
+
 // Verify magic link token or 6-digit code
 //
 // SECURITY: 6-digit codes have a 1M-key space. The global authLimiter
@@ -309,11 +333,7 @@ router.post('/verify-magic-link', authLimiter, async (req: Request, res: Respons
       }
       // Atomic single-use claim: of two concurrent requests with the
       // same token only one flips usedAt.
-      const claimed = await prisma.magicLink.updateMany({
-        where: { id: magicLink.id, usedAt: null },
-        data: { usedAt: now },
-      });
-      if (claimed.count !== 1) {
+      if (!(await claimMagicLink(prisma, magicLink.id, magicLink.email, now))) {
         return res.status(400).json({ error: 'Invalid or expired link/code' });
       }
     } else {
@@ -360,11 +380,7 @@ router.post('/verify-magic-link', authLimiter, async (req: Request, res: Respons
 
       // Correct code: claim the link atomically (single use). Proven
       // ownership resets the carried-over budget for later codes.
-      const claimed = await prisma.magicLink.updateMany({
-        where: { id: candidate.id, usedAt: null },
-        data: { usedAt: now, failedAttempts: 0 },
-      });
-      if (claimed.count !== 1) {
+      if (!(await claimMagicLink(prisma, candidate.id, candidate.email, now))) {
         return res.status(400).json({ error: 'Invalid or expired link/code' });
       }
       magicLink = candidate;

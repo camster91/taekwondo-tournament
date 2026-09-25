@@ -181,13 +181,15 @@ beforeEach(() => {
 describe('POST /verify-magic-link — atomic attempt budget', () => {
   const buildPrisma = (links: Partial<Link>[]) => {
     const magicLink = magicLinkTable(links);
-    return {
+    const prisma: any = {
       magicLink,
       user: {
         findUnique: vi.fn().mockResolvedValue(activeUser),
         update: vi.fn().mockResolvedValue(activeUser),
       },
     };
+    prisma.$transaction = vi.fn(async (fn: any) => fn(prisma));
+    return prisma;
   };
 
   it('50 parallel wrong guesses consume at most MAX_CODE_ATTEMPTS (10) and burn the code', async () => {
@@ -251,6 +253,59 @@ describe('POST /verify-magic-link — atomic attempt budget', () => {
 
     expect([a.statusCode, b.statusCode].sort()).toEqual([200, 400]);
     expect(prisma.magicLink.rows[0].usedAt).not.toBeNull();
+  });
+
+  it('a successful code resets failed attempts on all recent links, so the next code gets a full budget', async () => {
+    const recent = new Date(Date.now() - 5 * 60 * 1000);
+    const prisma = buildPrisma([
+      // Older, invalidated code that burned 9 attempts in the window.
+      { code: hashSecret('111111'), createdAt: recent, usedAt: recent, failedAttempts: 9 },
+      // Current code inherited the 9 spent attempts.
+      { code: hashSecret('123456'), failedAttempts: 9 },
+      // Another user's link must be untouched.
+      { email: 'other@example.com', failedAttempts: 6 },
+    ]);
+    const res = mockRes();
+
+    await handlerFor('post', '/verify-magic-link')(verifyReq(prisma, { email: 'user@example.com', code: '123456' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma.$transaction).toHaveBeenCalledOnce();
+    const [older, current, other] = prisma.magicLink.rows;
+    expect(older.failedAttempts).toBe(0);
+    expect(current.failedAttempts).toBe(0);
+    expect(current.usedAt).not.toBeNull();
+    expect(other.failedAttempts).toBe(6);
+
+    // A newly issued code inherits nothing.
+    const issue = { body: { email: 'user@example.com' }, app: { locals: { prisma } }, headers: {} };
+    await handlerFor('post', '/request-magic-link')(issue, mockRes());
+    expect(prisma.magicLink.create).toHaveBeenCalledOnce();
+    expect(prisma.magicLink.create.mock.calls[0][0].data.failedAttempts).toBe(0);
+  });
+
+  it('a successful magic-link token click also resets recent failed attempts', async () => {
+    const recent = new Date(Date.now() - 5 * 60 * 1000);
+    const prisma = buildPrisma([
+      { code: hashSecret('111111'), createdAt: recent, usedAt: recent, failedAttempts: 8 },
+      { token: hashSecret('a'.repeat(64)), failedAttempts: 8 },
+    ]);
+    const res = mockRes();
+
+    await handlerFor('post', '/verify-magic-link')(verifyReq(prisma, { token: 'a'.repeat(64) }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma.magicLink.rows.map((r: Link) => r.failedAttempts)).toEqual([0, 0]);
+  });
+
+  it('a failed claim does not reset anyone\'s budget', async () => {
+    const recent = new Date(Date.now() - 5 * 60 * 1000);
+    const prisma = buildPrisma([
+      { code: hashSecret('111111'), createdAt: recent, usedAt: recent, failedAttempts: 9 },
+      { code: hashSecret('123456'), failedAttempts: 3 },
+    ]);
+    await handlerFor('post', '/verify-magic-link')(verifyReq(prisma, { email: 'user@example.com', code: '000000' }), mockRes());
+    expect(prisma.magicLink.rows.map((r: Link) => r.failedAttempts)).toEqual([9, 4]);
   });
 
   it('never uses the non-atomic update() for attempt accounting', async () => {

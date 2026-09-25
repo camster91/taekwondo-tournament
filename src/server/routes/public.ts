@@ -33,6 +33,7 @@ import {
   type CreatePublicRegistrationResult,
 } from '../services/public-registration.js';
 import { promoteNextWaitlisted } from '../services/waitlist.js';
+import { expireCheckoutSessionBestEffort } from '../services/stripe-billing.js';
 import { publicScoreboardDivisionArgs } from './public-scoreboard-query.js';
 
 const router = Router();
@@ -1471,6 +1472,15 @@ router.post('/checkout', registrationLimiter, async (req: Request, res: Response
   const publicUrl = process.env.PUBLIC_APP_URL || 'http://localhost:5173';
   const successUrl = `${publicUrl}/register?payment=success&registration=${registration.id}`;
   const cancelUrl = `${publicUrl}/register?payment=cancelled&registration=${registration.id}`;
+
+  // A pending registration may already have an open Checkout session
+  // (e.g. the parent clicked "Pay" twice). Expire it so only the new
+  // session can be paid. Best-effort: an already completed/expired
+  // session errors and is ignored; a completed one is still honoured
+  // by the webhook.
+  if (registration.paymentIntentId) {
+    await expireCheckoutSessionBestEffort(stripe, registration.paymentIntentId);
+  }
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',

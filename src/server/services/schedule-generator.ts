@@ -26,12 +26,30 @@ export interface ScheduledDivision {
   locked?: boolean;
 }
 
+/**
+ * A division the generator could not place because it cannot start and
+ * finish before midnight on any ring. It is deliberately given no ring or
+ * times: clamping to 23:59 used to produce identical, overlapping slots.
+ */
+export interface UnscheduledDivision {
+  divisionId: string;
+  divisionName: string;
+  eventType: string;
+  beltLevel: string;
+  gender: string;
+  competitorCount: number;
+  estimatedDurationMinutes: number;
+  reason: 'past_midnight';
+}
+
 export interface TournamentSchedule {
   tournamentId: string;
   tournamentName: string;
   date: string;
   config: ScheduleConfig;
   schedule: ScheduledDivision[];
+  /** Divisions that did not fit before midnight (see warnings). */
+  unscheduled: UnscheduledDivision[];
   warnings: string[];
 }
 
@@ -236,6 +254,7 @@ export async function generateSchedule(
       date: tournament.date.toISOString(),
       config,
       schedule: [],
+      unscheduled: [],
       warnings: ['No divisions found. Generate divisions first.'],
     };
   }
@@ -270,8 +289,12 @@ export async function generateSchedule(
   // runs past midnight can't crash the generator by round-tripping a
   // "24:05" string through timeToMinutes.
   const minutesByDivision = new Map<string, { start: number; end: number }>();
+  // Emitted slots must start and end within the same day (end <= 23:59).
+  // Divisions that cannot are reported in `unscheduled` instead of being
+  // clamped to 23:59, which made distinct divisions look identical and
+  // overlap on the same ring.
   const LAST_MINUTE_OF_DAY = 24 * 60 - 1;
-  const displayTime = (minutes: number) => minutesToTime(Math.min(minutes, LAST_MINUTE_OF_DAY));
+  const unscheduled: UnscheduledDivision[] = [];
 
   // Function to schedule a division on the least busy ring
   const scheduleDivision = (div: typeof divisions[0]) => {
@@ -288,11 +311,25 @@ export async function generateSchedule(
     const startTimeMinutes = ringSchedules[ringIndex];
     const endTimeDivision = startTimeMinutes + duration;
 
+    if (endTimeDivision > LAST_MINUTE_OF_DAY) {
+      // Leave the ring's clock untouched so a later, shorter division can
+      // still use the remaining time before midnight.
+      unscheduled.push({
+        divisionId: div.id,
+        divisionName: div.name,
+        eventType: div.eventType,
+        beltLevel: div.beltLevel,
+        gender: div.gender,
+        competitorCount: div._count.assignments,
+        estimatedDurationMinutes: duration,
+        reason: 'past_midnight',
+      });
+      return;
+    }
+
     if (endTimeDivision > endTimeMinutes) {
       warnings.push(
-        endTimeDivision > LAST_MINUTE_OF_DAY
-          ? `Division "${div.name}" cannot finish before midnight (needs ${duration} min from ${displayTime(startTimeMinutes)}); add rings or split the day`
-          : `Division "${div.name}" may run past end time (scheduled to end at ${minutesToTime(endTimeDivision)})`
+        `Division "${div.name}" may run past end time (scheduled to end at ${minutesToTime(endTimeDivision)})`
       );
     }
 
@@ -312,8 +349,8 @@ export async function generateSchedule(
         .filter((n) => n.length > 0)
         .sort((a, b) => a.localeCompare(b)),
       ring: ringIndex + 1, // 1-indexed
-      startTime: displayTime(startTimeMinutes),
-      endTime: displayTime(endTimeDivision),
+      startTime: minutesToTime(startTimeMinutes),
+      endTime: minutesToTime(endTimeDivision),
       estimatedDurationMinutes: duration,
     });
 
@@ -393,19 +430,24 @@ export async function generateSchedule(
         if (seenWarnings.has(warnKey)) continue;
         seenWarnings.add(warnKey);
         warnings.push(
-          `Competitor "${name}" is double-booked across two divisions (${displayTime(first.start)} on ring ${first.ring} and ${displayTime(second.start)} on ring ${second.ring}). Re-assign one division or change the competitor's registration.`,
+          `Competitor "${name}" is double-booked across two divisions (${minutesToTime(first.start)} on ring ${first.ring} and ${minutesToTime(second.start)} on ring ${second.ring}). Re-assign one division or change the competitor's registration.`,
         );
       }
     }
   }
 
   // Check for late end time
-  const latestEnd = Math.max(...scheduled.map((slot) => minutesOf(slot).end));
+  const latestEnd = scheduled.length > 0 ? Math.max(...scheduled.map((slot) => minutesOf(slot).end)) : 0;
   if (latestEnd > endTimeMinutes) {
+    warnings.push(`Schedule extends past end time. Latest event ends at ${minutesToTime(latestEnd)}`);
+  }
+
+  if (unscheduled.length > 0) {
     warnings.push(
-      latestEnd > LAST_MINUTE_OF_DAY
-        ? `Schedule extends past midnight (${latestEnd - endTimeMinutes} min past end time)`
-        : `Schedule extends past end time. Latest event ends at ${minutesToTime(latestEnd)}`
+      `${unscheduled.length} division${unscheduled.length === 1 ? '' : 's'} could not be scheduled because `
+      + `${unscheduled.length === 1 ? 'it' : 'they'} cannot finish before midnight: `
+      + `${unscheduled.map((d) => `"${d.divisionName}" (${d.estimatedDurationMinutes} min)`).join(', ')}. `
+      + 'Add rings, start earlier, or split the day.'
     );
   }
 
@@ -415,6 +457,7 @@ export async function generateSchedule(
     date: tournament.date.toISOString(),
     config,
     schedule: scheduled,
+    unscheduled,
     warnings,
   };
 }

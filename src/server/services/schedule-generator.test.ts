@@ -261,12 +261,68 @@ describe('generateSchedule: soft-deleted divisions and late days', () => {
       tournament.id,
       { ringCount: 1, startTime: '22:00', endTime: '23:30' }
     );
-    expect(result.schedule).toHaveLength(2);
+    // Neither 155-minute division fits before midnight, so neither gets a
+    // (formerly clamped 23:59) slot.
+    expect(result.schedule).toHaveLength(0);
+    expect(result.unscheduled.map((d) => d.divisionId)).toEqual(['a', 'b']);
+    expect(result.warnings.some((w) => w.includes('midnight') && w.includes('"a"') && w.includes('"b"'))).toBe(true);
+  });
+
+  it('never emits clamped or overlapping slots when a late day overflows midnight', async () => {
+    // One ring from 20:00: 8-person DE sparring = 15 x 5 = 75 min each,
+    // plus a 5 min break. Slots: 20:00-21:15, 21:20-22:35, 22:40-23:55;
+    // the 4th and 5th (would start 00:00+) cannot finish before midnight.
+    const divs = ['d1', 'd2', 'd3', 'd4', 'd5'].map((id) => bigDivision(id, 8));
+    const result = await generateSchedule(
+      {
+        tournament: { findUnique: async () => tournament },
+        division: { findMany: async () => divs },
+      } as never,
+      tournament.id,
+      { ringCount: 1, startTime: '20:00', endTime: '23:00' }
+    );
+    expect(result.schedule.map((s) => [s.divisionId, s.startTime, s.endTime])).toEqual([
+      ['d1', '20:00', '21:15'],
+      ['d2', '21:20', '22:35'],
+      ['d3', '22:40', '23:55'],
+    ]);
+    expect(result.unscheduled.map((d) => d.divisionId)).toEqual(['d4', 'd5']);
+    const unscheduledWarning = result.warnings.find((w) => w.includes('could not be scheduled'));
+    expect(unscheduledWarning).toContain('"d4"');
+    expect(unscheduledWarning).toContain('"d5"');
+
+    const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+    const byRing = new Map<number, { start: number; end: number }[]>();
     for (const slot of result.schedule) {
-      expect(slot.startTime).toMatch(/^([01]\d|2[0-3]):[0-5]\d$/);
-      expect(slot.endTime).toMatch(/^([01]\d|2[0-3]):[0-5]\d$/);
+      expect(slot.endTime).not.toBe('23:59');
+      const start = toMin(slot.startTime);
+      const end = toMin(slot.endTime);
+      expect(end).toBeGreaterThan(start);
+      expect(end).toBeLessThan(24 * 60);
+      byRing.set(slot.ring, [...(byRing.get(slot.ring) ?? []), { start, end }]);
     }
-    expect(result.warnings.some((w) => w.includes('midnight'))).toBe(true);
+    for (const slots of byRing.values()) {
+      for (let i = 0; i < slots.length; i++) {
+        for (let j = i + 1; j < slots.length; j++) {
+          expect(slots[i].start < slots[j].end && slots[j].start < slots[i].end).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('still fits a shorter later division into the time left before midnight', async () => {
+    // 22:00 start: a 155-min division cannot fit, but a 2-person
+    // division (3 matches x 5 = 15 min) can.
+    const result = await generateSchedule(
+      {
+        tournament: { findUnique: async () => tournament },
+        division: { findMany: async () => [bigDivision('big', 16), bigDivision('small', 2)] },
+      } as never,
+      tournament.id,
+      { ringCount: 1, startTime: '22:00', endTime: '23:30' }
+    );
+    expect(result.schedule.map((s) => [s.divisionId, s.startTime, s.endTime])).toEqual([['small', '22:00', '22:15']]);
+    expect(result.unscheduled.map((d) => d.divisionId)).toEqual(['big']);
   });
 
   it('sizes a division by its double-elimination match count (2N-1)', async () => {

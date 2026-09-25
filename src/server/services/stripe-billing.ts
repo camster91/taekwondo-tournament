@@ -154,3 +154,25 @@ export function getPriceIdForTier(
       return null;
   }
 }
+
+/**
+ * Best-effort expiry of a previously created Checkout session so a parent
+ * cannot pay for the same registration twice from an older tab. Errors
+ * (session already completed/expired, unknown id, network) are swallowed:
+ * a completed session is still honoured by the webhook, and failing to
+ * expire must never block creating the replacement session.
+ */
+export async function expireCheckoutSessionBestEffort(
+  stripe: { checkout: { sessions: { expire: (id: string) => Promise<unknown> } } },
+  sessionId: string | null | undefined,
+): Promise<boolean> {
+  if (!sessionId || !sessionId.startsWith('cs_')) return false;
+  try {
+    await stripe.checkout.sessions.expire(sessionId);
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[stripe] could not expire previous checkout session ${sessionId}: ${message}`);
+    return false;
+  }
+}
