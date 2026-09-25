@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trophy, Clock, Users, ChevronRight, Award, Zap, Radio, MapPin, Loader2, AlertCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Card, CardBody } from '../components/ui';
+import { CardBody } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { Button } from '../components/ui';
 import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
@@ -212,6 +212,11 @@ export default function PublicScoreboard() {
 
   return (
     <div className="min-h-screen bg-[#0a0e1a] text-white overflow-hidden antialiased">
+      {/* Announces state transitions (loading, live, stale, unavailable) —
+          not every poll — to screen-reader users. */}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {scoreboardState.announcement}
+      </div>
       {/* Error / not-found state. Replaces the old behavior of rendering an
           empty scoreboard template (NOW COMPETING / UP NEXT headings with
           no body) when the tournament ID is invalid. Closes #35.
@@ -306,6 +311,7 @@ export default function PublicScoreboard() {
                   value={typeof window !== 'undefined' ? window.location.href : `/display/${tournament?.id ?? ''}`}
                   size={64}
                   level="M"
+                  title="QR code linking to this scoreboard"
                 />
               </div>
               <div className="text-[10px] text-surface-400 uppercase tracking-wider font-medium">
@@ -404,7 +410,7 @@ export default function PublicScoreboard() {
               {inProgressMatches.map((match) => {
                 const division = getDivisionForMatch(match);
                 return (
-                  <Card key={match.id} className="overflow-hidden rounded-2xl bg-gradient-to-br from-warning/15 via-surface-900 to-surface-900 border-2 border-warning/40 shadow-2xl">
+                  <div key={match.id} className="overflow-hidden rounded-2xl bg-gradient-to-br from-warning/15 via-surface-900 to-surface-900 border-2 border-warning/40 shadow-2xl">
                     <CardBody className="p-6 md:p-7 lg:p-8">
                       <div className="relative">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-warning/500/10 rounded-full blur-3xl" />
@@ -439,7 +445,7 @@ export default function PublicScoreboard() {
                         </div>
                       </div>
                     </CardBody>
-                  </Card>
+                  </div>
                 );
               })}
             </div>
@@ -510,7 +516,7 @@ export default function PublicScoreboard() {
                     : match.competitor1;
 
                 return (
-                  <Card key={match.id} className="bg-surface-900/60 border border-surface-700/50">
+                  <div key={match.id} className="rounded-lg bg-surface-900/60 border border-surface-700/50 shadow-sm">
                     <CardBody className="p-4 md:p-5 lg:p-6">
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">
@@ -531,7 +537,7 @@ export default function PublicScoreboard() {
                         )}
                       </div>
                     </CardBody>
-                  </Card>
+                  </div>
                 );
               })}
             </div>
