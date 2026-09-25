@@ -7,39 +7,52 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import pg from 'pg';
+import { randomUUID } from 'node:crypto';
 import {
   apiDivisionArraySchema,
   apiDivisionWithCountSchema,
 } from '../../shared/contracts/index.js';
+import { collectKeys } from '../routes/public-scoreboard-query.js';
+import { connectContractDb } from './db-probe.js';
 
-// Use a dedicated test instance with driver adapter (Prisma 7 requirement)
-const connectionString = process.env.DATABASE_URL || 'postgresql://taekwondo:taekwondo@localhost:5432/taekwondo_tournament';
-const pool = new pg.Pool({ connectionString });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+// With Prisma 7 driver adapters `$connect()` is lazy, so availability is
+// decided by a real query; suites skip (not fail) without a migrated DB.
+const prisma = await connectContractDb();
+const dbAvailable = prisma !== null;
 
 let testTournamentId: string;
 let testDivisionId: string;
 let testCompetitorId: string;
+let testRegistrationId: string;
 
+// Contact / medical / payment / token fields that must never be part of the
+// documented match-slot contract (parsed output strips unknown keys).
+const CONTRACT_FORBIDDEN_KEYS = [
+  'parentName',
+  'parentEmail',
+  'parentPhone',
+  'managementTokenHash',
+  'managementTokenExpiresAt',
+  'paymentIntentId',
+  'paymentStatus',
+  'dateOfBirth',
+  'weightAtRegistration',
+  'checkInWeight',
+];
+
+/** The contract describes the JSON wire format (Dates become ISO strings). */
+const wire = <T>(value: T): unknown => JSON.parse(JSON.stringify(value));
+
+const matchInclude = {
+  competitor1: { include: { competitor: true } },
+  competitor2: { include: { competitor: true } },
+  winner: { include: { competitor: true } },
+} as const;
+
+describe.skipIf(!dbAvailable)('Divisions-with-matches Contract (database)', () => {
 beforeAll(async () => {
-  // Skip tests if DB is not available
-  let dbAvailable = false;
-  try {
-    await prisma.$connect();
-    dbAvailable = true;
-  } catch {
-    console.warn('[contract-tests] Database not available, skipping integration tests');
-  }
-
-  if (!dbAvailable) {
-    return;
-  }
-
-  const tournament = await prisma.tournament.create({
+  const db = prisma!;
+  const tournament = await db.tournament.create({
     data: {
       name: 'Divisions Contract Test',
       date: new Date('2026-12-15'),
@@ -49,7 +62,7 @@ beforeAll(async () => {
   });
   testTournamentId = tournament.id;
 
-  const competitor = await prisma.competitor.create({
+  const competitor = await db.competitor.create({
     data: {
       firstName: 'Test',
       lastName: 'Competitor',
@@ -61,7 +74,21 @@ beforeAll(async () => {
   });
   testCompetitorId = competitor.id;
 
-  const division = await prisma.division.create({
+  const registration = await db.registration.create({
+    data: {
+      tournamentId: testTournamentId,
+      competitorId: testCompetitorId,
+      sparring: true,
+      parentName: 'Parent Secret',
+      parentEmail: 'parent.secret@example.test',
+      parentPhone: '555-0100',
+      managementTokenHash: `hash-${randomUUID()}`,
+      weightAtRegistration: 60,
+    },
+  });
+  testRegistrationId = registration.id;
+
+  const division = await db.division.create({
     data: {
       tournamentId: testTournamentId,
       name: 'Test Division',
@@ -76,16 +103,16 @@ beforeAll(async () => {
   testDivisionId = division.id;
 
   // Add an assignment to test _count
-  await prisma.divisionAssignment.create({
+  await db.divisionAssignment.create({
     data: {
       divisionId: testDivisionId,
-      competitorId: testCompetitorId,
-      seed: 1,
+      registrationId: testRegistrationId,
+      seedPosition: 1,
     },
   });
 
   // Create bracket with matches
-  await prisma.bracket.create({
+  await db.bracket.create({
     data: {
       divisionId: testDivisionId,
       format: 'double_elim',
@@ -104,6 +131,7 @@ beforeAll(async () => {
             bracketType: 'winners',
             status: 'pending',
             ringNumber: 1,
+            competitor1Id: testRegistrationId,
           },
         ],
       },
@@ -112,29 +140,21 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Only cleanup if tests actually ran
-  if (!testTournamentId) {
-    return;
-  }
-
+  const db = prisma!;
   try {
-    await prisma.match.deleteMany({ where: { bracket: { divisionId: testDivisionId } } });
-    await prisma.bracket.deleteMany({ where: { divisionId: testDivisionId } });
-    await prisma.divisionAssignment.deleteMany({ where: { divisionId: testDivisionId } });
-    await prisma.division.deleteMany({ where: { id: testDivisionId } });
-    await prisma.competitor.deleteMany({ where: { id: testCompetitorId } });
-    await prisma.tournament.deleteMany({ where: { id: testTournamentId } });
+    if (testTournamentId) await db.tournament.deleteMany({ where: { id: testTournamentId } });
+    if (testCompetitorId) await db.competitor.deleteMany({ where: { id: testCompetitorId } });
   } catch (err) {
     console.warn('[contract-tests] Cleanup failed:', err);
   } finally {
-    await prisma.$disconnect();
+    await db.$disconnect();
   }
 });
 
-describe('Divisions-with-matches Contract', () => {
-  it.skipIf(!testTournamentId)('validates the query used by GET /api/divisions/tournament/:id?withMatches=true', async () => {
-    // This is the ACTUAL query from src/server/routes/divisions.ts:67-112
-    const divisions = await prisma.division.findMany({
+  it('validates the query used by GET /api/divisions/tournament/:id?withMatches=true', async () => {
+    // Mirrors the include shape of src/server/routes/divisions.ts (withMatches),
+    // plus `winner`, which the shared match contract requires.
+    const divisions = await prisma!.division.findMany({
       where: {
         tournamentId: testTournamentId,
         deletedAt: null,
@@ -143,11 +163,7 @@ describe('Divisions-with-matches Contract', () => {
         bracket: {
           include: {
             matches: {
-              include: {
-                competitor1: { include: { competitor: true } },
-                competitor2: { include: { competitor: true } },
-                winner: { include: { competitor: true } },
-              },
+              include: matchInclude,
               orderBy: { matchNumber: 'asc' },
             },
           },
@@ -156,24 +172,20 @@ describe('Divisions-with-matches Contract', () => {
       orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
     });
 
-    expect(() => apiDivisionArraySchema.parse(divisions)).not.toThrow();
+    expect(() => apiDivisionArraySchema.parse(wire(divisions))).not.toThrow();
     expect(divisions).toHaveLength(1);
     expect(divisions[0].bracket?.matches).toBeDefined();
   });
 
-  it.skipIf(!testTournamentId)('validates the query WITH _count for division management endpoints', async () => {
+  it('validates the query WITH _count for division management endpoints', async () => {
     // Some endpoints include assignment counts
-    const divisions = await prisma.division.findMany({
+    const divisions = await prisma!.division.findMany({
       where: { tournamentId: testTournamentId },
       include: {
         bracket: {
           include: {
             matches: {
-              include: {
-                competitor1: { include: { competitor: true } },
-                competitor2: { include: { competitor: true } },
-                winner: { include: { competitor: true } },
-              },
+              include: matchInclude,
             },
           },
         },
@@ -183,23 +195,19 @@ describe('Divisions-with-matches Contract', () => {
       },
     });
 
-    expect(() => apiDivisionWithCountSchema.parse(divisions[0])).not.toThrow();
+    expect(() => apiDivisionWithCountSchema.parse(wire(divisions[0]))).not.toThrow();
     expect(divisions[0]._count?.assignments).toBe(1);
   });
 
-  it.skipIf(!testTournamentId)('validates matches have correct competitor slot shape', async () => {
+  it('validates matches have correct competitor slot shape', async () => {
     // Fetch the bracket and verify competitor slots are properly nested
-    const division = await prisma.division.findUnique({
+    const division = await prisma!.division.findUnique({
       where: { id: testDivisionId },
       include: {
         bracket: {
           include: {
             matches: {
-              include: {
-                competitor1: { include: { competitor: true } },
-                competitor2: { include: { competitor: true } },
-                winner: { include: { competitor: true } },
-              },
+              include: matchInclude,
             },
           },
         },
@@ -217,53 +225,103 @@ describe('Divisions-with-matches Contract', () => {
     }
   });
 
-  it('rejects divisions with missing tournamentId field', async () => {
-    const invalidDivision = {
-      id: 'test-id',
-      name: 'Test',
-      eventType: 'sparring',
-      // tournamentId is intentionally omitted, which is invalid for some contexts
-      bracket: null,
-    };
+  it('the documented match-slot contract carries no contact/token/payment PII', async () => {
+    // The raw include (full Registration + Competitor rows) DOES contain
+    // parent contact fields — which is exactly why public endpoints must
+    // use the explicit select in public-scoreboard-query.ts. The contract
+    // shape clients rely on must not include them.
+    const divisions = await prisma!.division.findMany({
+      where: { tournamentId: testTournamentId },
+      include: { bracket: { include: { matches: { include: matchInclude } } } },
+    });
+    const rawKeys = collectKeys(JSON.parse(JSON.stringify(divisions)));
+    expect(rawKeys.has('parentEmail')).toBe(true); // sanity: fixture is loaded with PII
 
-    // apiDivisionSchema marks tournamentId as optional (it's not always included),
-    // but apiDivisionWithCountSchema should still accept it
-    expect(() => apiDivisionWithCountSchema.parse(invalidDivision)).not.toThrow();
+    const parsed = apiDivisionArraySchema.parse(wire(divisions));
+    expect(parsed[0].bracket?.matches[0].competitor1?.competitor.firstName).toBe('Test');
+    const contractKeys = collectKeys(JSON.parse(JSON.stringify(parsed)));
+    for (const forbidden of CONTRACT_FORBIDDEN_KEYS) {
+      expect(contractKeys.has(forbidden), `contract exposes "${forbidden}"`).toBe(false);
+    }
   });
 
-  it.skipIf(!testTournamentId)('handles displayOrder and weightClass nullability correctly', async () => {
+  it('handles displayOrder and weightClass nullability correctly', async () => {
     // Create a division without displayOrder or weightClass
-    const minimal = await prisma.division.create({
+    const minimal = await prisma!.division.create({
       data: {
         tournamentId: testTournamentId,
         name: 'Minimal Division',
         eventType: 'patterns',
         beltLevel: 'BB',
+        gender: 'F',
+        ageMin: 8,
+        ageMax: 10,
         // displayOrder and weightClass are nullable
       },
     });
 
-    const result = await prisma.division.findUnique({
+    const result = await prisma!.division.findUnique({
       where: { id: minimal.id },
       include: {
         bracket: {
           include: {
             matches: {
-              include: {
-                competitor1: { include: { competitor: true } },
-                competitor2: { include: { competitor: true } },
-                winner: { include: { competitor: true } },
-              },
+              include: matchInclude,
             },
           },
         },
       },
     });
 
-    expect(() => apiDivisionArraySchema.parse([result])).not.toThrow();
+    expect(() => apiDivisionArraySchema.parse(wire([result]))).not.toThrow();
     expect(result?.displayOrder).toBeNull();
     expect(result?.weightClass).toBeNull();
 
-    await prisma.division.delete({ where: { id: minimal.id } });
+    await prisma!.division.delete({ where: { id: minimal.id } });
+  });
+});
+
+describe('Divisions-with-matches Contract (static)', () => {
+  it('accepts divisions without the optional tournamentId field', () => {
+    const division = {
+      id: randomUUID(),
+      name: 'Test',
+      eventType: 'sparring',
+      // tournamentId is intentionally omitted (not always included)
+      bracket: null,
+    };
+
+    expect(() => apiDivisionWithCountSchema.parse(division)).not.toThrow();
+  });
+
+  it('strips PII keys from match competitor slots when parsed through the contract', () => {
+    const division = {
+      id: randomUUID(),
+      name: 'Test',
+      eventType: 'sparring',
+      bracket: {
+        id: randomUUID(),
+        format: 'double_elim',
+        matches: [{
+          id: randomUUID(),
+          matchNumber: 1,
+          roundNumber: 1,
+          bracketType: 'winners',
+          status: 'pending',
+          competitor1: {
+            id: randomUUID(),
+            parentEmail: 'leak@example.test',
+            managementTokenHash: 'deadbeef',
+            competitor: { firstName: 'A', lastName: 'B', dateOfBirth: '2015-01-01' },
+          },
+          competitor2: null,
+          winner: null,
+        }],
+      },
+    };
+    const keys = collectKeys(apiDivisionArraySchema.parse([division]));
+    for (const forbidden of CONTRACT_FORBIDDEN_KEYS) {
+      expect(keys.has(forbidden)).toBe(false);
+    }
   });
 });

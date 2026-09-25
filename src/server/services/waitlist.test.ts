@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
-import { checkWaitlistStatus, getTournamentCapacityStatus } from './waitlist.js';
+import {
+  checkWaitlistStatus,
+  decideRegistrationSlot,
+  getTournamentCapacityStatus,
+  reserveRegistrationSlot,
+  TournamentFullError,
+} from './waitlist.js';
 
 // Mock Prisma client
 const createMockPrisma = () => ({
@@ -35,22 +41,39 @@ describe('waitlist service', () => {
         't1'
       );
 
-      expect(result).toEqual({ shouldWaitlist: false, position: null });
+      expect(result).toEqual({ shouldWaitlist: false, position: null, isFull: false });
     });
 
-    it('returns shouldWaitlist=false when waitlist is disabled', async () => {
+    it('returns shouldWaitlist=false when waitlist is disabled and under capacity', async () => {
       mockPrisma.tournament.findUnique.mockResolvedValue({
         id: 't1',
         maxCapacity: 100,
         waitlistEnabled: false,
       });
+      mockPrisma.registration.count.mockResolvedValue(10);
 
       const result = await checkWaitlistStatus(
         mockPrisma as unknown as PrismaClient,
         't1'
       );
 
-      expect(result).toEqual({ shouldWaitlist: false, position: null });
+      expect(result).toEqual({ shouldWaitlist: false, position: null, isFull: false });
+    });
+
+    it('reports isFull when at capacity and waitlist is disabled (capacity is still a limit)', async () => {
+      mockPrisma.tournament.findUnique.mockResolvedValue({
+        id: 't1',
+        maxCapacity: 100,
+        waitlistEnabled: false,
+      });
+      mockPrisma.registration.count.mockResolvedValue(100);
+
+      const result = await checkWaitlistStatus(
+        mockPrisma as unknown as PrismaClient,
+        't1'
+      );
+
+      expect(result).toEqual({ shouldWaitlist: false, position: null, isFull: true });
     });
 
     it('returns shouldWaitlist=false when under capacity', async () => {
@@ -66,7 +89,7 @@ describe('waitlist service', () => {
         't1'
       );
 
-      expect(result).toEqual({ shouldWaitlist: false, position: null });
+      expect(result).toEqual({ shouldWaitlist: false, position: null, isFull: false });
     });
 
     it('returns shouldWaitlist=true with position when at capacity', async () => {
@@ -85,7 +108,7 @@ describe('waitlist service', () => {
         't1'
       );
 
-      expect(result).toEqual({ shouldWaitlist: true, position: 3 });
+      expect(result).toEqual({ shouldWaitlist: true, position: 3, isFull: true });
     });
 
     it('handles no existing waitlist entries (first waitlisted)', async () => {
@@ -102,7 +125,7 @@ describe('waitlist service', () => {
         't1'
       );
 
-      expect(result).toEqual({ shouldWaitlist: true, position: 1 });
+      expect(result).toEqual({ shouldWaitlist: true, position: 1, isFull: true });
     });
 
     it('throws error when tournament not found', async () => {
@@ -199,6 +222,35 @@ describe('waitlist service', () => {
         spotsRemaining: 0,
         isFull: true,
       });
+    });
+  });
+
+  describe('decideRegistrationSlot', () => {
+    const base = { maxCapacity: 10, waitlistEnabled: true, activeCount: 0, maxWaitlistPosition: null };
+
+    it('is unlimited without a capacity', () => {
+      expect(decideRegistrationSlot({ ...base, maxCapacity: null, activeCount: 999 })).toEqual({ kind: 'active' });
+    });
+
+    it('rejects when full and the waitlist is disabled', () => {
+      expect(decideRegistrationSlot({ ...base, waitlistEnabled: false, activeCount: 10 })).toEqual({ kind: 'full' });
+    });
+
+    it('waitlists after the current max position when full', () => {
+      expect(decideRegistrationSlot({ ...base, activeCount: 10, maxWaitlistPosition: 4 }))
+        .toEqual({ kind: 'waitlisted', position: 5 });
+    });
+  });
+
+  describe('reserveRegistrationSlot', () => {
+    it('throws TournamentFullError (409) when full without a waitlist', async () => {
+      mockPrisma.registration.count.mockResolvedValue(5);
+      const error = await reserveRegistrationSlot(
+        mockPrisma as never,
+        { id: 't1', maxCapacity: 5, waitlistEnabled: false },
+      ).catch((e) => e);
+      expect(error).toBeInstanceOf(TournamentFullError);
+      expect(error.status).toBe(409);
     });
   });
 });

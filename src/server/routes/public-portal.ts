@@ -20,11 +20,13 @@ import {
   type RegistrationConsentResult,
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
-import { canAddRegistration, getPlanEntitlements } from '../services/entitlements.js';
 import {
-  generateManagementToken,
-  hashManagementToken,
-} from '../utils/registration-management-token.js';
+  createPublicRegistration,
+  entryFeeLineItems,
+  parseTournamentFeeCents,
+  publicRegistrationErrorResponse,
+  type CreatePublicRegistrationResult,
+} from '../services/public-registration.js';
 
 const router = Router();
 
@@ -392,18 +394,9 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
   }
 
   try {
-    // Check competitor limit for plan
+    // The plan limit is enforced inside createPublicRegistration under the
+    // tournament row lock (a pre-check here would race).
     const plan = organization.plan ?? 'free';
-    const existingCount = await prisma.registration.count({
-      where: { tournamentId: tournament.id },
-    });
-
-    if (!canAddRegistration(plan, existingCount)) {
-      const entitlements = getPlanEntitlements(plan);
-      return res.status(400).json({
-        error: `This event has reached its registration limit of ${entitlements.maxCompetitorsPerTournament} competitors.`,
-      });
-    }
 
     // Normalize belt
     const normalizedBelt = normalizeBelt(belt);
@@ -437,21 +430,20 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
       return res.status(400).json({ error: 'Competitors must be at least 4 years old' });
     }
 
-    // Check for existing competitor (case-insensitive)
-    let competitor = await prisma.competitor.findFirst({
-      where: {
-        firstName: { equals: firstName.trim(), mode: 'insensitive' },
-        lastName: { equals: lastName.trim(), mode: 'insensitive' },
-        dateOfBirth: dob,
-      },
-    });
+    // Parse tournament fee settings
+    const tournamentFeeCents = parseTournamentFeeCents(tournament.settings);
+    const feeRequired = tournamentFeeCents > 0;
 
-    if (competitor) {
-      // Existing competitor found — reuse
-    } else {
-      // Create new competitor
-      competitor = await prisma.competitor.create({
-        data: {
+    // Competitor lookup/creation (same-organization re-use only), plan
+    // limit, capacity/waitlist and the insert run in one transaction
+    // under a tournament row lock. See services/public-registration.ts.
+    let created: CreatePublicRegistrationResult;
+    try {
+      created = await createPublicRegistration(prisma, {
+        tournamentId: tournament.id,
+        organizationId: organization.id,
+        plan,
+        competitor: {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           gender,
@@ -463,73 +455,32 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
           schoolDojang: schoolDojang?.trim() || null,
           specialNeeds: specialNeeds?.trim() || null,
         },
-      });
-    }
-
-    // Check for existing registration
-    const existingRegistration = await prisma.registration.findUnique({
-      where: {
-        tournamentId_competitorId: {
-          tournamentId: tournament.id,
-          competitorId: competitor.id,
+        registration: {
+          patterns: patterns || false,
+          sparring: sparring || false,
+          weightAtRegistration: weightLbs || null,
+          ageAtTournament,
+          parentName: parentName?.trim() || null,
+          parentEmail: parentEmail?.trim() || null,
+          parentPhone: parentPhone?.trim() || null,
+          competeWithOlder: competeWithOlder === true,
+          specialNeeds: specialNeeds?.trim() || null,
+          paymentStatus: feeRequired ? 'pending' : 'not_required',
+          paymentAmountCents: feeRequired ? tournamentFeeCents : null,
+          ...consent.data,
         },
-      },
-    });
-
-    if (existingRegistration) {
-      return res.status(409).json({
-        error: 'Already registered',
-        message: `${firstName} ${lastName} is already registered for this event`,
       });
+    } catch (error) {
+      const handled = publicRegistrationErrorResponse(error, `${firstName} ${lastName}`, 'event');
+      if (handled) return res.status(handled.status).json(handled.body);
+      throw error;
     }
 
-    // Parse tournament fee settings
-    let tournamentFeeCents = 0;
-    let feeRequired = false;
-    try {
-      const settings = tournament.settings ? JSON.parse(tournament.settings) : {};
-      tournamentFeeCents = settings.tournamentFeeCents || 0;
-      feeRequired = tournamentFeeCents > 0;
-    } catch {
-      // Ignore parse errors; treat as no fee
-    }
-
-    // Check waitlist status
-    const { checkWaitlistStatus } = await import('../services/waitlist.js');
-    const { shouldWaitlist, position } = await checkWaitlistStatus(
-      prisma,
-      tournament.id,
-    );
-
-    // Create registration
-    const managementToken = generateManagementToken();
-    const registration = await prisma.registration.create({
-      data: {
-        tournamentId: tournament.id,
-        competitorId: competitor.id,
-        patterns: patterns || false,
-        sparring: sparring || false,
-        weightAtRegistration: weightLbs || null,
-        ageAtTournament,
-        parentName: parentName?.trim() || null,
-        parentEmail: parentEmail?.trim() || null,
-        parentPhone: parentPhone?.trim() || null,
-        competeWithOlder: competeWithOlder === true,
-        specialNeeds: specialNeeds?.trim() || null,
-        managementTokenHash: hashManagementToken(managementToken),
-        waitlistStatus: shouldWaitlist ? 'waitlisted' : 'active',
-        waitlistPosition: position,
-        paymentStatus: feeRequired ? 'pending' : 'not_required',
-        paymentAmountCents: feeRequired ? tournamentFeeCents : null,
-        ...consent.data,
-      },
-      include: {
-        competitor: true,
-        tournament: {
-          select: { name: true, date: true, location: true },
-        },
-      },
-    });
+    const { managementToken, competitor } = created;
+    const registration = {
+      ...created.registration,
+      tournament: { name: tournament.name, date: tournament.date, location: tournament.location },
+    };
 
     // Generate checkout URL if payment is required
     let checkoutUrl: string | undefined;
@@ -548,19 +499,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
           const session = await stripe.checkout.sessions.create({
             mode: 'payment',
             payment_method_types: ['card'],
-            line_items: [
-              {
-                price_data: {
-                  currency: 'usd',
-                  unit_amount: tournamentFeeCents,
-                  product_data: {
-                    name: `Entry Fee: ${registration.tournament.name}`,
-                    description: `Competitor: ${competitor.firstName} ${competitor.lastName}`,
-                  },
-                },
-                quantity: 1,
-              },
-            ],
+            line_items: entryFeeLineItems(registration.tournament.name, tournamentFeeCents),
             metadata: {
               registrationId: registration.id,
               tournamentId: registration.tournamentId,

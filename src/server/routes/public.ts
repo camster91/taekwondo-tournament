@@ -12,21 +12,28 @@ import {
   PUBLIC_REGISTRATION_LIMITS,
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
-import { canAddRegistration, getPlanEntitlements } from '../services/entitlements.js';
-import { escapeHtml } from '../services/email-templates.js';
 import {
   optionalAuthenticate,
   checkTournamentAccess,
   type AuthenticatedRequest,
 } from '../middleware/auth.js';
 import {
-  generateManagementToken,
-  getManagementTokenExpiry,
   hashManagementToken,
   isValidManagementToken,
   validateManagementTokenStatus,
 } from '../utils/registration-management-token.js';
 import { recordPublicDisplayHeartbeat } from '../services/public-display-heartbeat.js';
+import {
+  CHECKOUT_ALLOWED_PAYMENT_STATUSES,
+  createPublicRegistration,
+  entryFeeLineItems,
+  isCompetitorOwnedByRegistration,
+  parseTournamentFeeCents,
+  publicRegistrationErrorResponse,
+  type CreatePublicRegistrationResult,
+} from '../services/public-registration.js';
+import { promoteNextWaitlisted } from '../services/waitlist.js';
+import { publicScoreboardDivisionArgs } from './public-scoreboard-query.js';
 
 const router = Router();
 
@@ -282,7 +289,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       include: { organization: { select: { plan: true } } },
     });
 
-    if (!tournament) {
+    if (!tournament || tournament.deletedAt) {
       return res.status(404).json({ error: 'Tournament not found' });
     }
 
@@ -290,18 +297,9 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       return res.status(400).json({ error: 'Tournament is not open for registration' });
     }
 
-    // Check competitor limit for free plan (before checking existing competitor)
+    // The plan limit is enforced inside createPublicRegistration under the
+    // tournament row lock (a pre-check here would race).
     const plan = tournament.organization?.plan ?? 'free';
-    const existingCount = await prisma.registration.count({
-      where: { tournamentId },
-    });
-
-    if (!canAddRegistration(plan, existingCount)) {
-      const entitlements = getPlanEntitlements(plan);
-      return res.status(400).json({
-        error: `This tournament has reached its registration limit of ${entitlements.maxCompetitorsPerTournament} competitors.`,
-      });
-    }
 
     // Normalize belt
     const normalizedBelt = normalizeBelt(belt);
@@ -335,25 +333,23 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       return res.status(400).json({ error: 'Competitors must be at least 4 years old' });
     }
 
-    // Check for existing competitor by name + DOB.
-    // Closes B7: the previous query was case-sensitive, so a parent
-    // re-registering as "MINHO KIM" after registering as "Minho Kim"
-    // created a new competitor row. The auto-categorization engine
-    // then put the same person in two divisions.
-    let competitor = await prisma.competitor.findFirst({
-      where: {
-        firstName: { equals: firstName.trim(), mode: 'insensitive' },
-        lastName: { equals: lastName.trim(), mode: 'insensitive' },
-        dateOfBirth: dob,
-      },
-    });
+    // P2-2: Parse tournament fee settings
+    const tournamentFeeCents = parseTournamentFeeCents(tournament.settings);
+    const feeRequired = tournamentFeeCents > 0;
 
-    if (competitor) {
-      // Existing competitor found - use their existing data, don't overwrite
-    } else {
-      // Create new competitor
-      competitor = await prisma.competitor.create({
-        data: {
+    // Competitor lookup/creation, plan limit, capacity/waitlist and the
+    // insert all run in one transaction under a tournament row lock.
+    // Closes B7 (case-insensitive name + DOB match) but only re-uses an
+    // existing competitor from the same tenant, and never modifies it.
+    // The raw management token is returned/sent once; only its digest
+    // is persisted.
+    let created: CreatePublicRegistrationResult;
+    try {
+      created = await createPublicRegistration(prisma, {
+        tournamentId,
+        organizationId: tournament.organizationId,
+        plan,
+        competitor: {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           gender,
@@ -365,79 +361,34 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
           schoolDojang: schoolDojang?.trim() || null,
           specialNeeds: specialNeeds?.trim() || null,
         },
-      });
-    }
-
-    // Check for existing registration
-    const existingRegistration = await prisma.registration.findUnique({
-      where: {
-        tournamentId_competitorId: {
-          tournamentId,
-          competitorId: competitor.id,
+        registration: {
+          patterns: patterns || false,
+          sparring: sparring || false,
+          weightAtRegistration: weightLbs || null,
+          ageAtTournament,
+          parentName: parentName?.trim() || null,
+          parentEmail: parentEmail?.trim() || null,
+          parentPhone: parentPhone?.trim() || null,
+          // v2: parent opt-in fields
+          competeWithOlder: competeWithOlder === true,
+          specialNeeds: specialNeeds?.trim() || null,
+          // P2-2: Payment status
+          paymentStatus: feeRequired ? 'pending' : 'not_required',
+          paymentAmountCents: feeRequired ? tournamentFeeCents : null,
+          ...consent.data,
         },
-      },
-    });
-
-    if (existingRegistration) {
-      return res.status(409).json({
-        error: 'Already registered',
-        message: `${firstName} ${lastName} is already registered for this tournament`,
       });
+    } catch (error) {
+      const handled = publicRegistrationErrorResponse(error, `${firstName} ${lastName}`, 'tournament');
+      if (handled) return res.status(handled.status).json(handled.body);
+      throw error;
     }
 
-    // P2-2: Parse tournament fee settings
-    let tournamentFeeCents = 0;
-    let feeRequired = false;
-    try {
-      const settings = tournament.settings ? JSON.parse(tournament.settings) : {};
-      tournamentFeeCents = settings.tournamentFeeCents || 0;
-      feeRequired = tournamentFeeCents > 0;
-    } catch {
-      // Ignore parse errors; treat as no fee
-    }
-
-    // Check waitlist status
-    const { checkWaitlistStatus } = await import('../services/waitlist.js');
-    const { shouldWaitlist, position } = await checkWaitlistStatus(
-      prisma,
-      tournamentId,
-    );
-
-    // Create registration. The raw bearer token is returned/sent once;
-    // only its digest is persisted.
-    const managementToken = generateManagementToken();
-    const managementTokenExpiry = getManagementTokenExpiry(); // 30 days default
-    const registration = await prisma.registration.create({
-      data: {
-        tournamentId,
-        competitorId: competitor.id,
-        patterns: patterns || false,
-        sparring: sparring || false,
-        weightAtRegistration: weightLbs || null,
-        ageAtTournament,
-        parentName: parentName?.trim() || null,
-        parentEmail: parentEmail?.trim() || null,
-        parentPhone: parentPhone?.trim() || null,
-        // v2: parent opt-in fields
-        competeWithOlder: competeWithOlder === true,
-        specialNeeds: specialNeeds?.trim() || null,
-        managementTokenHash: hashManagementToken(managementToken),
-        managementTokenExpiresAt: managementTokenExpiry,
-        // Waitlist support
-        waitlistStatus: shouldWaitlist ? 'waitlisted' : 'active',
-        waitlistPosition: position,
-        // P2-2: Payment status
-        paymentStatus: feeRequired ? 'pending' : 'not_required',
-        paymentAmountCents: feeRequired ? tournamentFeeCents : null,
-        ...consent.data,
-      },
-      include: {
-        competitor: true,
-        tournament: {
-          select: { name: true, date: true, location: true },
-        },
-      },
-    });
+    const { managementToken, competitor } = created;
+    const registration = {
+      ...created.registration,
+      tournament: { name: tournament.name, date: tournament.date, location: tournament.location },
+    };
 
     // P2-2: If payment is required, generate checkout URL
     let checkoutUrl: string | undefined;
@@ -456,19 +407,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
           const session = await stripe.checkout.sessions.create({
             mode: 'payment',
             payment_method_types: ['card'],
-            line_items: [
-              {
-                price_data: {
-                  currency: 'usd',
-                  unit_amount: tournamentFeeCents,
-                  product_data: {
-                    name: `Entry Fee: ${registration.tournament.name}`,
-                    description: `Competitor: ${competitor.firstName} ${competitor.lastName}`,
-                  },
-                },
-                quantity: 1,
-              },
-            ],
+            line_items: entryFeeLineItems(registration.tournament.name, tournamentFeeCents),
             metadata: {
               registrationId: registration.id,
               tournamentId: registration.tournamentId,
@@ -647,39 +586,10 @@ router.get('/scoreboard/:publicSlug', scoreboardLimiter, async (req: Request, re
     return res.status(404).json({ error: 'Scoreboard not found' });
   }
 
-  const divisions = await prisma.division.findMany({
-    where: {
-      tournamentId: tournament.id,
-      // Only show divisions whose bracket is actually published —
-      // prevents leaking competitor lists of in-progress brackets.
-    },
-    include: {
-      bracket: {
-        include: {
-          matches: {
-            include: {
-              competitor1: {
-                include: {
-                  competitor: {
-                    select: { firstName: true, lastName: true, schoolDojang: true },
-                  },
-                },
-              },
-              competitor2: {
-                include: {
-                  competitor: {
-                    select: { firstName: true, lastName: true, schoolDojang: true },
-                  },
-                },
-              },
-            },
-            orderBy: { matchNumber: 'asc' },
-          },
-        },
-      },
-    },
-    orderBy: { displayOrder: 'asc' },
-  });
+  // Explicit select only — Registration rows carry parent contact
+  // details, medical notes, weights and token hashes (see
+  // public-scoreboard-query.ts).
+  const divisions = await prisma.division.findMany(publicScoreboardDivisionArgs(tournament.id));
 
   res.json(divisions);
 });
@@ -756,35 +666,7 @@ router.get('/tournaments/:id/scoreboard', scoreboardLimiter, optionalAuthenticat
     // settings JSON corrupt — fall through with empty displaySettings
   }
 
-  const divisions = await prisma.division.findMany({
-    where: { tournamentId: id },
-    include: {
-      bracket: {
-        include: {
-          matches: {
-            include: {
-              competitor1: {
-                include: {
-                  competitor: {
-                    select: { firstName: true, lastName: true, schoolDojang: true },
-                  },
-                },
-              },
-              competitor2: {
-                include: {
-                  competitor: {
-                    select: { firstName: true, lastName: true, schoolDojang: true },
-                  },
-                },
-              },
-            },
-            orderBy: { matchNumber: 'asc' },
-          },
-        },
-      },
-    },
-    orderBy: { displayOrder: 'asc' },
-  });
+  const divisions = await prisma.division.findMany(publicScoreboardDivisionArgs(id));
 
   res.json({ divisions, displaySettings });
 });
@@ -872,7 +754,9 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
       managementTokenHash: hashManagementToken(token),
     },
     include: {
-      competitor: true,
+      competitor: {
+        select: { firstName: true, lastName: true, dateOfBirth: true, gender: true, belt: true, schoolDojang: true },
+      },
       tournament: { select: { id: true, name: true, date: true, status: true } },
     },
   });
@@ -894,16 +778,23 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
   // #118 acceptance: Audit log (non-sensitive: no raw token, no full PII)
   console.log(`[registration-manage-read] Registration ${registration.id.slice(0, 8)} accessed via management token`);
 
+  // Competitor-profile fields (gender, belt, school) come from the shared
+  // Competitor row. If this registration re-used a pre-existing competitor
+  // (same tenant, matched by name + DOB) the token holder did not supply
+  // that data and must not be able to read it back.
+  const ownsProfile = await isCompetitorOwnedByRegistration(prisma, registration);
+
   res.json({
     registration: {
       confirmationCode: registration.id.slice(0, 8),
       firstName: registration.competitor.firstName,
       lastName: registration.competitor.lastName,
       dateOfBirth: registration.competitor.dateOfBirth,
-      gender: registration.competitor.gender,
-      belt: registration.competitor.belt,
+      gender: ownsProfile ? registration.competitor.gender : null,
+      belt: ownsProfile ? registration.competitor.belt : null,
       weight: registration.weightAtRegistration,
-      school: registration.competitor.schoolDojang,
+      school: ownsProfile ? registration.competitor.schoolDojang : null,
+      profileEditable: ownsProfile,
       specialNeeds: registration.specialNeeds,
       competeWithOlder: registration.competeWithOlder,
       patterns: registration.patterns,
@@ -965,24 +856,67 @@ router.patch('/registrations/:token', manageUpdateLimiter, async (req: Request, 
   // Build the patch object via the shared validator. The validator
   // normalizes fields, applies length caps, and surfaces clear 400
   // errors for any out-of-range value. See public-validation.ts.
-  const { ok, error, data, regData } = buildRegistrationPatch(req.body);
+  //
+  // GET hides competitor-profile fields (gender/belt/school) when the
+  // token holder does not own the competitor row, so the client echoes
+  // them back empty. Treat empty values for those fields as "unchanged"
+  // rather than as validation errors.
+  const body: Record<string, unknown> = { ...(req.body ?? {}) };
+  for (const key of ['gender', 'belt', 'school', 'danRank'] as const) {
+    if (body[key] === '' || body[key] === null) delete body[key];
+  }
+  const { ok, error, data, regData } = buildRegistrationPatch(body);
   if (!ok) {
     return res.status(400).json({ error: error ?? 'Invalid patch.' });
+  }
+
+  // specialNeeds and competeWithOlder are per-registration data (the
+  // Registration row has both columns; Competitor has no competeWithOlder),
+  // so they never touch the shared Competitor row.
+  for (const key of ['specialNeeds', 'competeWithOlder'] as const) {
+    if (key in data) {
+      regData[key] = data[key];
+      delete data[key];
+    }
   }
 
   if (Object.keys(data).length === 0 && Object.keys(regData).length === 0) {
     return res.status(400).json({ error: 'No editable fields supplied.' });
   }
 
-  // Use a transaction so competitor + registration stay consistent.
-  await prisma.$transaction(async (tx) => {
+  // Use a transaction so competitor + registration stay consistent. The
+  // management token only authorizes edits to the Competitor row when
+  // that row was created by this registration and is not registered
+  // anywhere else; otherwise it may be a record shared with other
+  // tournaments (or entered by the organizer) and a token holder must
+  // not overwrite it.
+  const outcome = await prisma.$transaction(async (tx) => {
     if (Object.keys(data).length > 0) {
-      await tx.competitor.update({ where: { id: registration.competitorId }, data });
+      const current = await tx.competitor.findUnique({
+        where: { id: registration.competitorId },
+        select: { firstName: true, gender: true, belt: true, danRank: true, schoolDojang: true },
+      });
+      const changed = Object.fromEntries(
+        Object.entries(data).filter(([key, value]) => current?.[key as keyof typeof current] !== value),
+      );
+      if (Object.keys(changed).length > 0) {
+        const owned = await isCompetitorOwnedByRegistration(tx, registration);
+        if (!owned) return 'profile_locked' as const;
+        await tx.competitor.update({ where: { id: registration.competitorId }, data: changed });
+      }
     }
     if (Object.keys(regData).length > 0) {
       await tx.registration.update({ where: { id: registration.id }, data: regData });
     }
+    return 'ok' as const;
   });
+
+  if (outcome === 'profile_locked') {
+    return res.status(409).json({
+      error: 'Name, gender, belt and school for this competitor are managed by the tournament organizer. Please contact them to change these details.',
+      code: 'COMPETITOR_PROFILE_LOCKED',
+    });
+  }
 
   // #118 acceptance: Audit log (non-sensitive)
   console.log(`[registration-manage-update] Registration ${registration.id.slice(0, 8)} updated via management token`);
@@ -1052,10 +986,20 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
   // #118 acceptance: Audit log (non-sensitive)
   console.log(`[registration-manage-withdraw] Registration ${registration.id.slice(0, 8)} withdrawn via management token`);
 
-  // Only promote from waitlist if this was an active registration (not itself waitlisted)
-  if (registration.tournament.status === 'registration' && registration.waitlistStatus === 'active') {
-    const { promoteNextWaitlisted } = await import('../services/waitlist.js');
-    await promoteNextWaitlisted(prisma, registration.tournamentId);
+  // The withdrawal has committed; waitlist maintenance is best-effort and
+  // must never turn a successful withdrawal into a 500. promoteNextWaitlisted
+  // re-checks capacity under the tournament lock, promotes at most one
+  // entry, and renumbers the remaining waitlist (also needed when the
+  // withdrawn registration was itself waitlisted).
+  if (registration.tournament.status === 'registration') {
+    try {
+      const { promotedRegistrationId } = await promoteNextWaitlisted(prisma, registration.tournamentId);
+      if (promotedRegistrationId) {
+        console.log(`[registration-manage-withdraw] Promoted waitlisted registration ${promotedRegistrationId.slice(0, 8)}`);
+      }
+    } catch (err) {
+      console.error('[registration-manage-withdraw] waitlist promotion failed:', err);
+    }
   }
 
   res.json({ success: true, message: 'Registration withdrawn.' });
@@ -1443,24 +1387,44 @@ router.get(
 // The registration must already exist (created by /api/public/register
 // with paymentStatus = 'pending'). This endpoint returns a Checkout URL
 // that redirects the parent to Stripe to complete payment.
+//
+// Authorization: the caller must present the registration's management
+// token (the bearer secret returned once at registration and emailed to
+// the parent). A registration UUID alone is not a secret — its first 8
+// characters are the printed confirmation code and it appears in Stripe
+// redirect URLs — so it is not accepted on its own.
 router.post('/checkout', registrationLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { registrationId } = req.body;
+  const { managementToken, registrationId } = (req.body ?? {}) as {
+    managementToken?: unknown;
+    registrationId?: unknown;
+  };
 
-  if (!registrationId || typeof registrationId !== 'string') {
-    return res.status(400).json({ error: 'registrationId is required' });
+  if (typeof managementToken !== 'string' || !isValidManagementToken(managementToken)) {
+    return res.status(400).json({ error: 'managementToken is required' });
   }
 
   // Load the registration + tournament to check fee config
   const registration = await prisma.registration.findUnique({
-    where: { id: registrationId },
-    include: {
-      tournament: { select: { id: true, name: true, settings: true } },
-      competitor: { select: { firstName: true, lastName: true } },
+    where: { managementTokenHash: hashManagementToken(managementToken) },
+    select: {
+      id: true,
+      paymentStatus: true,
+      paymentIntentId: true,
+      managementTokenExpiresAt: true,
+      managementTokenRevokedAt: true,
+      tournament: { select: { id: true, name: true, settings: true, deletedAt: true } },
     },
   });
 
-  if (!registration) {
+  // Same 404 for unknown token, expired/revoked token, a registrationId
+  // that doesn't match the token, or a deleted tournament.
+  if (
+    !registration
+    || registration.tournament.deletedAt
+    || !validateManagementTokenStatus(registration.managementTokenExpiresAt, registration.managementTokenRevokedAt).valid
+    || (registrationId !== undefined && registrationId !== registration.id)
+  ) {
     return res.status(404).json({ error: 'Registration not found' });
   }
 
@@ -1468,17 +1432,15 @@ router.post('/checkout', registrationLimiter, async (req: Request, res: Response
     return res.status(409).json({ error: 'This registration has already been paid' });
   }
 
-  // Parse tournament settings to get fee config
-  let tournamentFeeCents = 0;
-  try {
-    const settings = registration.tournament.settings
-      ? JSON.parse(registration.tournament.settings)
-      : {};
-    tournamentFeeCents = settings.tournamentFeeCents || 0;
-  } catch {
-    // Ignore parse errors; treat as no fee
+  // Only pending/failed registrations can start a checkout. waived /
+  // not_required (or any unknown state) must not be flipped back to
+  // pending by an anonymous caller.
+  const paymentStatus = registration.paymentStatus ?? 'not_required';
+  if (!(CHECKOUT_ALLOWED_PAYMENT_STATUSES as readonly string[]).includes(paymentStatus)) {
+    return res.status(409).json({ error: 'No payment is due for this registration' });
   }
 
+  const tournamentFeeCents = parseTournamentFeeCents(registration.tournament.settings);
   if (tournamentFeeCents <= 0) {
     return res.status(400).json({ error: 'This tournament has no entry fee configured' });
   }
@@ -1494,30 +1456,26 @@ router.post('/checkout', registrationLimiter, async (req: Request, res: Response
     });
   }
 
+  if (paymentStatus === 'failed') {
+    // Audit trail for retries (no PII, no token).
+    console.log(
+      `[public/checkout] Retrying payment for registration ${registration.id.slice(0, 8)} after failed status`
+      + (registration.paymentIntentId ? ` (previous session ${registration.paymentIntentId})` : ''),
+    );
+  }
+
   // Create Stripe checkout session
   const Stripe = (await import('stripe')).default;
   const stripe = new Stripe(stripeSecretKey);
 
   const publicUrl = process.env.PUBLIC_APP_URL || 'http://localhost:5173';
-  const successUrl = `${publicUrl}/register?payment=success&registration=${registrationId}`;
-  const cancelUrl = `${publicUrl}/register?payment=cancelled&registration=${registrationId}`;
+  const successUrl = `${publicUrl}/register?payment=success&registration=${registration.id}`;
+  const cancelUrl = `${publicUrl}/register?payment=cancelled&registration=${registration.id}`;
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     payment_method_types: ['card'],
-    line_items: [
-      {
-        price_data: {
-          currency: 'usd',
-          unit_amount: tournamentFeeCents,
-          product_data: {
-            name: `Entry Fee: ${registration.tournament.name}`,
-            description: `Competitor: ${registration.competitor.firstName} ${registration.competitor.lastName}`,
-          },
-        },
-        quantity: 1,
-      },
-    ],
+    line_items: entryFeeLineItems(registration.tournament.name, tournamentFeeCents),
     metadata: {
       registrationId: registration.id,
       tournamentId: registration.tournament.id,
@@ -1527,9 +1485,10 @@ router.post('/checkout', registrationLimiter, async (req: Request, res: Response
     cancel_url: cancelUrl,
   });
 
-  // Update registration with payment intent ID
+  // Record the session id + expected amount; the webhook only marks the
+  // registration paid when both match.
   await prisma.registration.update({
-    where: { id: registrationId },
+    where: { id: registration.id },
     data: {
       paymentStatus: 'pending',
       paymentIntentId: session.id,
