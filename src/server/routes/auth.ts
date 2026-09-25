@@ -33,6 +33,12 @@ function setupKeyMatches(provided: unknown, expected: string): boolean {
 }
 
 const MAX_CODE_ATTEMPTS = 10;
+// Per-email OTP issuance window. Within it at most
+// MAX_LINKS_PER_EMAIL_WINDOW codes are issued, and each new code
+// inherits the highest attempt count of the codes issued before it, so
+// requesting a fresh code never refills the brute-force budget.
+const MAGIC_LINK_WINDOW_MS = 15 * 60 * 1000;
+const MAX_LINKS_PER_EMAIL_WINDOW = 5;
 
 const authLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -99,17 +105,25 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
 
   try {
     const normalizedEmail = email.toLowerCase();
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - MAGIC_LINK_WINDOW_MS);
 
-    // Clean up expired AND unused magic links for this email (invalidate old codes)
+    // Drop links older than the issuance window; recent rows (used or
+    // not) are kept because they carry the per-email attempt budget.
     await prisma.magicLink.deleteMany({
-      where: {
-        email: normalizedEmail,
-        OR: [
-          { expiresAt: { lt: new Date() } },
-          { usedAt: null },
-        ],
-      },
+      where: { email: normalizedEmail, createdAt: { lt: windowStart } },
     });
+
+    const recentLinks = await prisma.magicLink.findMany({
+      where: { email: normalizedEmail, createdAt: { gte: windowStart } },
+      select: { failedAttempts: true },
+    });
+    if (recentLinks.length >= MAX_LINKS_PER_EMAIL_WINDOW) {
+      // Per-email issuance cap. Same generic response as every other
+      // branch so this can't be used for account enumeration.
+      return res.json({ message: 'If an account exists, a sign-in link has been sent' });
+    }
+    const inheritedAttempts = recentLinks.reduce((max, row) => Math.max(max, row.failedAttempts), 0);
 
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
@@ -170,12 +184,21 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
     const token = crypto.randomBytes(32).toString('hex');
     const code = String(crypto.randomInt(100000, 999999));
 
+    // Only the newest code is live: invalidate older unused ones (kept,
+    // not deleted, so their attempt counts still count for the window).
+    await prisma.magicLink.updateMany({
+      where: { email: normalizedEmail, usedAt: null },
+      data: { usedAt: now },
+    });
+
     await prisma.magicLink.create({
       data: {
         email: normalizedEmail,
         token: hashSecret(token),
         code: hashSecret(code),
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        // Carry the attempt budget over so a fresh code doesn't reset it.
+        failedAttempts: inheritedAttempts,
       },
     });
 
@@ -255,9 +278,12 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
 //
 // SECURITY: 6-digit codes have a 1M-key space. The global authLimiter
 // (5/15min per IP) is not enough — an attacker with a botnet can brute
-// force within hours. Failed attempts are stored on the MagicLink row
-// (`failedAttempts`) so the budget is shared across all replicas.
-// After MAX_CODE_ATTEMPTS wrong tries the link is invalidated.
+// force within hours. Every code attempt atomically reserves one unit
+// of the link's budget (`failedAttempts`, a conditional
+// `updateMany ... increment` in the DB) BEFORE the code is compared,
+// so parallel guesses across requests or replicas can never exceed
+// MAX_CODE_ATTEMPTS comparisons. Budgets carry over across re-issued
+// codes (see /request-magic-link).
 router.post('/verify-magic-link', authLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { token, email, code } = req.body;
@@ -268,66 +294,81 @@ router.post('/verify-magic-link', authLimiter, async (req: Request, res: Respons
 
   try {
     let magicLink = null;
+    const now = new Date();
 
     if (token) {
       magicLink = await prisma.magicLink.findFirst({
         where: {
           token: { in: secretLookupValues(String(token)) },
-          expiresAt: { gt: new Date() },
+          expiresAt: { gt: now },
           usedAt: null,
         },
       });
+      if (!magicLink) {
+        return res.status(400).json({ error: 'Invalid or expired link/code' });
+      }
+      // Atomic single-use claim: of two concurrent requests with the
+      // same token only one flips usedAt.
+      const claimed = await prisma.magicLink.updateMany({
+        where: { id: magicLink.id, usedAt: null },
+        data: { usedAt: now },
+      });
+      if (claimed.count !== 1) {
+        return res.status(400).json({ error: 'Invalid or expired link/code' });
+      }
     } else {
       const normalizedEmail = String(email).toLowerCase();
-      // Prefer the most recent unused link for this email (code may be
-      // hashed or legacy plaintext).
-      const candidates = await prisma.magicLink.findMany({
+      // Only the newest unused link is live (request-magic-link
+      // invalidates older ones).
+      const candidate = await prisma.magicLink.findFirst({
         where: {
           email: normalizedEmail,
-          expiresAt: { gt: new Date() },
+          expiresAt: { gt: now },
           usedAt: null,
         },
         orderBy: { createdAt: 'desc' },
-        take: 5,
       });
-      const codeHashes = new Set(secretLookupValues(String(code)));
-      magicLink = candidates.find((row) => codeHashes.has(row.code)) ?? null;
-
-      if (magicLink && magicLink.failedAttempts >= MAX_CODE_ATTEMPTS) {
+      if (!candidate) {
         return res.status(400).json({ error: 'Invalid or expired link/code' });
       }
-    }
 
-    if (!magicLink) {
-      // Wrong code — increment failedAttempts on active links for this email.
-      if (email && code && !token) {
-        const active = await prisma.magicLink.findMany({
-          where: {
-            email: String(email).toLowerCase(),
-            expiresAt: { gt: new Date() },
-            usedAt: null,
-          },
-          select: { id: true, failedAttempts: true },
+      // Reserve one attempt atomically before comparing. The WHERE on
+      // failedAttempts makes the increment conditional in the DB, so
+      // no interleaving of parallel requests can exceed the cap.
+      const reserved = await prisma.magicLink.updateMany({
+        where: { id: candidate.id, usedAt: null, failedAttempts: { lt: MAX_CODE_ATTEMPTS } },
+        data: { failedAttempts: { increment: 1 } },
+      });
+      if (reserved.count !== 1) {
+        await prisma.magicLink.updateMany({
+          where: { id: candidate.id, usedAt: null },
+          data: { usedAt: now },
         });
-        for (const row of active) {
-          const next = row.failedAttempts + 1;
-          await prisma.magicLink.update({
-            where: { id: row.id },
-            data: {
-              failedAttempts: next,
-              ...(next >= MAX_CODE_ATTEMPTS ? { usedAt: new Date() } : {}),
-            },
-          });
-        }
+        return res.status(400).json({ error: 'Invalid or expired link/code' });
       }
-      return res.status(400).json({ error: 'Invalid or expired link/code' });
-    }
 
-    // Mark as used
-    await prisma.magicLink.update({
-      where: { id: magicLink.id },
-      data: { usedAt: new Date(), failedAttempts: 0 },
-    });
+      const codeHashes = new Set(secretLookupValues(String(code)));
+      if (!codeHashes.has(candidate.code)) {
+        // Wrong code: the attempt stays consumed. Burn the link once
+        // the budget is exhausted.
+        await prisma.magicLink.updateMany({
+          where: { id: candidate.id, usedAt: null, failedAttempts: { gte: MAX_CODE_ATTEMPTS } },
+          data: { usedAt: now },
+        });
+        return res.status(400).json({ error: 'Invalid or expired link/code' });
+      }
+
+      // Correct code: claim the link atomically (single use). Proven
+      // ownership resets the carried-over budget for later codes.
+      const claimed = await prisma.magicLink.updateMany({
+        where: { id: candidate.id, usedAt: null },
+        data: { usedAt: now, failedAttempts: 0 },
+      });
+      if (claimed.count !== 1) {
+        return res.status(400).json({ error: 'Invalid or expired link/code' });
+      }
+      magicLink = candidate;
+    }
 
     // Look up user
     const user = await prisma.user.findUnique({
@@ -522,6 +563,38 @@ router.post('/logout', authenticate, async (req: AuthenticatedRequest, res: Resp
   res.json({ success: true });
 });
 
+/**
+ * Safeguards shared by every self-service account-deletion route
+ * (DELETE /account and DELETE /gdpr/delete-account):
+ *  - the account must not belong to any organization (export, close,
+ *    or leave them first — otherwise an org can lose its owner);
+ *  - the user must have signed in within the last 15 minutes;
+ *  - the last active, non-demo administrator can't delete themselves.
+ *    Demo accounts are excluded from the count: they expire on their
+ *    own and must never be what keeps the install administrable.
+ * Returns null when deletion may proceed.
+ */
+async function accountDeletionBlocker(
+  prisma: PrismaClient,
+  user: { id: string; role: string; lastLogin: Date | null; organizationMembers: { id: string }[] },
+): Promise<{ status: number; error: string } | null> {
+  if (user.organizationMembers.length) {
+    return { status: 409, error: 'Export, close, or leave every organization before deleting this account.' };
+  }
+  if (!user.lastLogin || Date.now() - user.lastLogin.getTime() > 15 * 60 * 1000) {
+    return { status: 403, error: 'Sign in again before permanently deleting this account.' };
+  }
+  if (user.role === 'admin') {
+    const otherActiveAdmins = await prisma.user.count({
+      where: { role: 'admin', isActive: true, demoExpiresAt: null, id: { not: user.id } },
+    });
+    if (otherActiveAdmins === 0) {
+      return { status: 409, error: 'Transfer system administration before deleting the last administrator.' };
+    }
+  }
+  return null;
+}
+
 router.delete('/account', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const user = await prisma.user.findUnique({
@@ -532,21 +605,9 @@ router.delete('/account', authenticate, async (req: AuthenticatedRequest, res: R
   if (req.body?.confirmation !== user.email) {
     return res.status(400).json({ error: 'Enter the exact account email to confirm permanent deletion.' });
   }
-  if (user.organizationMembers.length) {
-    return res.status(409).json({
-      error: 'Export, close, or leave every organization before deleting this account.',
-    });
-  }
-  if (!user.lastLogin || Date.now() - user.lastLogin.getTime() > 15 * 60 * 1000) {
-    return res.status(403).json({ error: 'Sign in again before permanently deleting this account.' });
-  }
-  if (user.role === 'admin') {
-    const otherActiveAdmins = await prisma.user.count({
-      where: { role: 'admin', isActive: true, id: { not: user.id } },
-    });
-    if (otherActiveAdmins === 0) {
-      return res.status(409).json({ error: 'Transfer system administration before deleting the last administrator.' });
-    }
+  const blocker = await accountDeletionBlocker(prisma, user);
+  if (blocker) {
+    return res.status(blocker.status).json({ error: blocker.error });
   }
 
   await prisma.$transaction([
@@ -758,6 +819,9 @@ router.put('/users/:userId/status', authenticate, requireRole('admin'), validate
         isActive: true,
       },
     });
+    // Drop the cached auth entry so the deactivation / version bump
+    // takes effect on the very next request, not after the cache TTL.
+    invalidateAuthCache(userId);
 
     // Audit log: user status change (P1-3)
     await createAuditLog(prisma, {
@@ -1275,20 +1339,23 @@ router.delete('/gdpr/delete-account', authenticate, async (req: AuthenticatedReq
   }
 
   try {
-    // Check if user is the sole admin
-    const adminCount = await prisma.user.count({
-      where: { role: 'admin', isActive: true },
-    });
-
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        lastLogin: true,
+        organizationMembers: { select: { id: true } },
+      },
     });
+    if (!user) return res.status(404).json({ error: 'Account not found' });
 
-    if (user?.role === 'admin' && adminCount === 1) {
-      return res.status(400).json({ 
-        error: 'Cannot delete the only admin account. Assign another admin first.' 
-      });
+    // Same safeguards as DELETE /account: org ownership/membership,
+    // recent sign-in, last (non-demo) admin.
+    const blocker = await accountDeletionBlocker(prisma, user);
+    if (blocker) {
+      return res.status(blocker.status).json({ error: blocker.error });
     }
 
     // Hard-delete user and cascade to related rows
@@ -1308,9 +1375,15 @@ router.delete('/gdpr/delete-account', authenticate, async (req: AuthenticatedReq
       // Delete onboarding checklist
       await tx.userOnboardingChecklist.deleteMany({ where: { userId } });
       
+      // Outstanding sign-in codes for this address
+      await tx.magicLink.deleteMany({ where: { email: user.email } });
+
       // Finally, delete the user account
       await tx.user.delete({ where: { id: userId } });
     });
+    invalidateAuthCache(userId);
+    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.clearCookie('bowin_csrf', { path: '/' });
 
     res.json({ 
       success: true, 
