@@ -359,3 +359,85 @@ describe('support access boundaries', () => {
     expect(prisma.supportTicket.update).not.toHaveBeenCalled();
   });
 });
+
+describe('anonymous support chat abuse limits', async () => {
+  // Snapshot limiter configs before any beforeEach clears mock history.
+  const rateLimit = (await import('express-rate-limit')).default as unknown as ReturnType<typeof vi.fn>;
+  const limiterConfigs = rateLimit.mock.calls.map((call) => call[0] as { max: number; windowMs: number });
+
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('never calls the LLM provider for anonymous callers even when a platform key is configured', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'platform-secret-must-not-be-burned');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const prisma: any = { supportTicket: { create: vi.fn() } };
+    const req: any = {
+      body: { message: 'How do I register?', createTicket: false },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/')(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(typeof res.body.answer).toBe('string');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('still uses the LLM provider for authenticated users', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'platform-key');
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'AI answer' } }] }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const { assertSafeSupportProviderUrl } = await import('../services/support-provider.js');
+    vi.mocked(assertSafeSupportProviderUrl).mockResolvedValueOnce(new URL('https://api.openai.com/v1') as never);
+    const prisma: any = {
+      organizationMember: { findMany: vi.fn().mockResolvedValue([]) },
+      supportTicket: { create: vi.fn() },
+    };
+    const req: any = {
+      user: { id: 'viewer-a', email: 'v@example.test', role: 'viewer', firstName: 'V', lastName: 'A' },
+      body: { message: 'How do I change a setting?', createTicket: false },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/')(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(res.body.answer).toBe('AI answer');
+  });
+
+  it('caps anonymous message length below the authenticated limit', async () => {
+    const prisma: any = { supportTicket: { create: vi.fn() } };
+    const req: any = {
+      body: {
+        message: 'x'.repeat(1001), createTicket: true,
+        contactName: 'Synthetic', contactEmail: 'synthetic@example.test',
+      },
+      app: { locals: { prisma } },
+    };
+    const res = response();
+
+    await handler('post', '/')(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(prisma.supportTicket.create).not.toHaveBeenCalled();
+  });
+
+  it('configures dedicated anonymous-chat (10/h) and anonymous-ticket (3/h) limiters', () => {
+    const hour = 60 * 60 * 1000;
+    expect(limiterConfigs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ max: 10, windowMs: hour }),
+      expect.objectContaining({ max: 3, windowMs: hour }),
+    ]));
+  });
+});

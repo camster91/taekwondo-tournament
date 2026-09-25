@@ -31,6 +31,7 @@ import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import supportRouter from './routes/support.js';
 import sosAlertsRouter from './routes/sos-alerts.js';
 import { isAppError, toApiError } from './utils/errors.js';
+import { mountLargeJsonBodyRoutes } from './middleware/large-json-body.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
 import {
   retentionConfigFromEnv,
@@ -176,15 +177,26 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: 
 // the global 1 MB limit is the default and only the specific
 // routes opt in to higher.
 const defaultJsonParser = express.json({ limit: '1mb' });
-// Closes D4: per-route higher body limit for the Excel auto-map
-// endpoint. The global defaultJsonParser is 1 MB; the auto-map
-// route accepts a 25 MB base64-encoded buffer, which inflates
-// from the original .xlsx via base64 ~33%. The mount order is
-// critical: the more-specific (longer prefix) express.json
-// here runs FIRST, parses the body, and Express's body-parser
-// only parses a request once per content-type — so the global
-// 1 MB limit no longer trips for this route.
-app.use('/api/competitors/auto-map', jsonBodyParser('40mb'));
+
+// Cookie parsing for JWT session tokens. Reads the HttpOnly
+// `bowin_session` cookie set on login. The auth middleware
+// accepts the cookie as the primary credential source; the
+// `Authorization: Bearer` header remains a fallback for tests
+// and other non-browser clients. Mounted before any body parser
+// because the large-body routes below authenticate first.
+app.use(cookieParser());
+
+// Closes D4: per-route higher body limit for the Excel endpoints.
+// The auto-map route accepts a 25 MB base64-encoded buffer (base64
+// inflates the .xlsx ~33%) and import accepts a base64 workbook or
+// pre-parsed rows. Body-parser only parses a request once, so these
+// must run BEFORE the global 1 MB parser — otherwise it rejects the
+// request with 413 first and the route-level parser never runs.
+//
+// Security ordering: a rate limit + authentication + role check run
+// BEFORE the 40 MB parser, so an anonymous or low-privilege caller
+// cannot make the server buffer and JSON-parse 40 MB bodies.
+mountLargeJsonBodyRoutes(app);
 
 // The global 1 MB default applies to every other route. Mounted
 // after the per-route override so the specific path matches first.
@@ -197,13 +209,6 @@ app.use(defaultJsonParser);
 export function jsonBodyParser(limit: string) {
   return express.json({ limit });
 }
-
-// Cookie parsing for JWT session tokens. Reads the HttpOnly
-// `bowin_session` cookie set on login. The auth middleware
-// accepts the cookie as the primary credential source; the
-// `Authorization: Bearer` header remains a fallback for tests
-// and other non-browser clients.
-app.use(cookieParser());
 
 // Compression MUST run before API routers. Express only invokes
 // later middleware for unmatched requests — mounting compression
