@@ -811,11 +811,13 @@ export default function CheckIn() {
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
-              <Scale className="h-4 w-4 inline mr-1" />
+            <label htmlFor="checkInWeight" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+              <Scale className="h-4 w-4 inline mr-1" aria-hidden="true" />
               Weigh-In Weight (lbs)
             </label>
             <Input
+              id="checkInWeight"
+              name="checkInWeight"
               type="number"
               value={checkInWeight}
               onChange={(e) => setCheckInWeight(e.target.value)}
