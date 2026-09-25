@@ -271,10 +271,12 @@ export default function CustomDomainSettings({ organizationId, canManage }: Cust
                     key={domain.id}
                     className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-mono text-sm font-semibold text-slate-950 dark:text-white">
+                    {/* Wraps on phones: a long hostname plus the action buttons
+                        used to overflow and widen the whole mobile viewport. */}
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1 basis-60">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="min-w-0 break-all font-mono text-sm font-semibold text-slate-950 dark:text-white">
                             {domain.hostname}
                           </h3>
                           <span className={`flex items-center gap-1 text-xs font-medium ${statusColors[domain.status]}`}>
