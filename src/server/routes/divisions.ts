@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
 import { autoCategorize, previewCategorization, type CategorizationConfig } from '../services/categorization-engine.js';
 import { getBracketPlacementsFromLoaded } from '../services/match-advancement.js';
 import { getSportProfile } from '../../shared/constants/sport-profiles.js';
@@ -63,6 +63,19 @@ const divisionUpdateSchema = z.object({
   displayOrder: z.number().int().optional(),
 });
 
+// Match slots are Registration rows. Scoring/results views only need the
+// competitor and bracket data, so never ship guardian contact details,
+// payment identifiers or the management-token hash to every viewer.
+const MATCH_SLOT_REGISTRATION_OMIT = {
+  parentName: true,
+  parentEmail: true,
+  parentPhone: true,
+  managementTokenHash: true,
+  managementTokenExpiresAt: true,
+  managementTokenRevokedAt: true,
+  paymentIntentId: true,
+} satisfies Prisma.RegistrationOmit;
+
 // Get divisions for a tournament (requires authentication + tournament access)
 router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
@@ -84,8 +97,8 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
         include: {
           matches: {
             include: {
-              competitor1: { include: { competitor: true } },
-              competitor2: { include: { competitor: true } },
+              competitor1: { omit: MATCH_SLOT_REGISTRATION_OMIT, include: { competitor: true } },
+              competitor2: { omit: MATCH_SLOT_REGISTRATION_OMIT, include: { competitor: true } },
             },
             orderBy: [{ roundNumber: 'asc' }, { matchNumber: 'asc' }],
           },
