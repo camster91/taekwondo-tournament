@@ -60,7 +60,7 @@ export async function cleanupTestData(
   const tablesToClean = tables.length > 0 ? tables : defaultTables;
 
   for (const table of tablesToClean) {
-    const model = prisma[table] as any;
+    const model = prisma[table] as unknown as { deleteMany?: (args: object) => Promise<unknown> } | undefined;
     if (model && typeof model.deleteMany === 'function') {
       await model.deleteMany({});
     }

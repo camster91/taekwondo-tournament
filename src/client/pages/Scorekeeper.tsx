@@ -57,6 +57,8 @@ interface Match extends ApiMatch {
 // Division shape matches the contract
 type Division = ApiDivision;
 
+type ScoreRequestError = Error & { status?: number; isConflict?: boolean };
+
 // Tournament shape — only needs id and sportProfileSlug
 interface Tournament {
   id: string;
@@ -366,7 +368,7 @@ export default function Scorekeeper() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Unknown error' }));
-        const error: any = new Error(body.error || 'Failed to record match result');
+        const error = new Error(body.error || 'Failed to record match result') as ScoreRequestError;
         error.status = res.status;
         error.isConflict = res.status === 409;
         throw error;
@@ -396,7 +398,7 @@ export default function Scorekeeper() {
       finishResultEntry(false);
       addToast('Result saved', 'success');
     },
-    onError: (error: any, data) => {
+    onError: (error: ScoreRequestError, data) => {
       if (error instanceof TypeError) {
         stageScoreResult(data, true);
         return;

@@ -11,7 +11,7 @@ describe('public scoreboard slug status landmarks', () => {
 
     expect(html).toMatch(/^<main\b/);
     expect(html).toContain('Scoreboard not found');
-    expect(html).toContain('text-gray-300');
+    expect(html).toContain('text-surface-300');
   });
 
   it('renders the loading state inside the main landmark', () => {

@@ -120,7 +120,7 @@ async function calculateDelayPropagation(
   if (!tournament) throw new Error('Tournament not found');
 
   const settings = parseSettings(tournament.settings);
-  const scheduleConfig = settings.schedule as any;
+  const scheduleConfig = settings.schedule as { endTime?: string } | undefined;
   const endMinutes = scheduleConfig?.endTime ? timeToMinutes(scheduleConfig.endTime) : 17 * 60; // Default 17:00
 
   // Build set of divisions with completed or in-progress matches (cannot be moved)

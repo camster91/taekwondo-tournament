@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import {
   generateManagementToken,
   getManagementTokenExpiry,
@@ -14,7 +15,9 @@ import {
   validateManagementTokenStatus,
 } from '../utils/registration-management-token.js';
 
-const prisma = new PrismaClient();
+// Prisma 7 requires a driver adapter; constructing a bare client throws at
+// import time and fails the whole file even though the suite is skipped.
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
 describe.skip('Registration Management Token Security (#118)', () => {
   let tournamentId: string;
