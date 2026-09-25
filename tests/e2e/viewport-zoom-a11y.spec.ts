@@ -49,7 +49,7 @@ test.describe('viewport 320px reflow tests', () => {
     await expect(page.getByLabel('6-digit code')).toBeVisible({ timeout: 10_000 });
   });
 
-  test('public registration at 320px: 3-step form works, no horizontal scroll', async ({ page }) => {
+  test('public registration at 320px: 2-step form works, no horizontal scroll', async ({ page }) => {
     await page.goto('/register');
 
     // Wait for tournament list
@@ -85,20 +85,17 @@ test.describe('viewport 320px reflow tests', () => {
     await page.getByLabel(/Parent\/Guardian Name/i).fill('Mobile Parent');
     await page.getByLabel(/^Email/i).fill('mobile-parent@example.com');
     await page.getByLabel(/^Phone/i).fill('555-1234');
+    await page.locator('input[name="privacyAccepted"]').check();
+    await page.locator('input[name="rulesAccepted"]').check();
     await page.locator('input[name="guardianAttested"]').check();
 
-    // "Review & Submit" button should be visible
-    const reviewButton = page.getByRole('button', { name: /Review & Submit/i });
-    await expect(reviewButton).toBeVisible();
-    await reviewButton.click();
-
-    // Step 3: Check for horizontal scroll
+    // The form is now two steps (Athlete, Parent & Consent); step 2 submits
+    // directly with "Complete Registration".
+    const submitButton = page.getByRole('button', { name: /Complete Registration/i });
+    await expect(submitButton).toBeVisible();
+    await expect(submitButton).toBeEnabled();
     const bodyWidth3 = await page.evaluate(() => document.body.scrollWidth);
     expect(bodyWidth3).toBeLessThanOrEqual(320);
-
-    // "Submit Registration" button should be visible
-    const submitButton = page.getByRole('button', { name: /Submit Registration/i });
-    await expect(submitButton).toBeVisible();
   });
 
   test('scorekeeper at 320px: division list + match scoring usable, no overlapping', async ({ page }) => {
@@ -178,7 +175,9 @@ test.describe('viewport 320px reflow tests', () => {
     await expect(searchInput).toBeEnabled();
 
     // "Check In" buttons should be visible and clickable
-    const checkInButton = page.getByRole('button', { name: /Check In|Checked In/i }).first();
+    // Each row offers "Check In", or "Undo" once the athlete is checked in
+    // (earlier specs check the seeded athletes in).
+    const checkInButton = page.getByRole('button', { name: /^(Check In|Undo)$/ }).first();
     await expect(checkInButton).toBeVisible();
   });
 
@@ -199,17 +198,18 @@ test.describe('viewport 320px reflow tests', () => {
     const bodyWidth = await page.evaluate(() => document.body.scrollWidth);
     expect(bodyWidth).toBeLessThanOrEqual(320);
 
-    // Settings tabs should be visible
-    const settingsTab = page.getByRole('tab', { name: /Settings/i });
+    // Settings sections are Setup / Categorization + Brackets / Branding tabs.
+    const settingsTab = page.getByRole('tab', { name: /^Setup/i });
     await expect(settingsTab).toBeVisible();
 
-    // Form fields should be visible and usable
-    const nameInput = page.getByLabel(/Tournament Name/i);
-    await expect(nameInput).toBeVisible();
-    await expect(nameInput).toBeEnabled();
+    // Form fields should be visible and usable (name/date live on the
+    // tournament page, not in settings)
+    const thresholdInput = page.getByLabel('Division split threshold');
+    await expect(thresholdInput).toBeVisible();
+    await expect(thresholdInput).toBeEnabled();
 
-    // Save button should be visible
-    const saveButton = page.getByRole('button', { name: /Save|Saving/i });
+    // Save button should be visible (icon-only but named on phones)
+    const saveButton = page.getByRole('button', { name: 'Save Settings' });
     await expect(saveButton).toBeVisible();
   });
 });
@@ -246,7 +246,7 @@ test.describe('200% zoom tests', () => {
     await expect(codeInput).toBeVisible({ timeout: 10_000 });
   });
 
-  test('public registration at 200% zoom: all 3 steps readable, CTAs clickable', async ({ page }) => {
+  test('public registration at 200% zoom: both steps readable, CTAs clickable', async ({ page }) => {
     await page.goto('/register');
 
     // Wait for tournament list
@@ -282,12 +282,15 @@ test.describe('200% zoom tests', () => {
     const parentEmailInput = page.getByLabel(/^Email/i);
     await expect(parentEmailInput).toBeVisible();
 
-    // Check that labels don't cover inputs (y-coordinates should be separate)
+    // The fields must not overlap. At 1280 CSS px they sit side by side in a
+    // two-column grid, so compare both axes rather than assuming a stack.
     const nameBox = await parentNameInput.boundingBox();
     const emailBox = await parentEmailInput.boundingBox();
     expect(nameBox).not.toBeNull();
     expect(emailBox).not.toBeNull();
-    expect(emailBox!.y).toBeGreaterThan(nameBox!.y + nameBox!.height - 5); // Allow 5px overlap for borders
+    const separatedVertically = emailBox!.y >= nameBox!.y + nameBox!.height - 5 || nameBox!.y >= emailBox!.y + emailBox!.height - 5;
+    const separatedHorizontally = emailBox!.x >= nameBox!.x + nameBox!.width - 5 || nameBox!.x >= emailBox!.x + emailBox!.width - 5;
+    expect(separatedVertically || separatedHorizontally).toBe(true);
   });
 
   test('scorekeeper at 200% zoom: competitor cards readable, score inputs usable', async ({ page }) => {
@@ -353,7 +356,9 @@ test.describe('200% zoom tests', () => {
     expect(searchBox!.width).toBeGreaterThan(100);
 
     // "Check In" buttons should be visible
-    const checkInButton = page.getByRole('button', { name: /Check In|Checked In/i }).first();
+    // Each row offers "Check In", or "Undo" once the athlete is checked in
+    // (earlier specs check the seeded athletes in).
+    const checkInButton = page.getByRole('button', { name: /^(Check In|Undo)$/ }).first();
     await expect(checkInButton).toBeVisible();
   });
 
@@ -370,16 +375,15 @@ test.describe('200% zoom tests', () => {
     await page.goto(`/tournaments/${tournamentId}/settings`);
     await page.waitForLoadState('networkidle');
 
-    // Settings tabs should be visible
-    const settingsTab = page.getByRole('tab', { name: /Settings/i });
+    // Settings sections are Setup / Categorization + Brackets / Branding tabs.
+    const settingsTab = page.getByRole('tab', { name: /^Setup/i });
     await expect(settingsTab).toBeVisible();
 
     // Form fields should be visible
-    const nameInput = page.getByLabel(/Tournament Name/i);
-    await expect(nameInput).toBeVisible();
+    await expect(page.getByLabel('Division split threshold')).toBeVisible();
 
     // Save button should be visible and clickable
-    const saveButton = page.getByRole('button', { name: /Save|Saving/i });
+    const saveButton = page.getByRole('button', { name: 'Save Settings' });
     await expect(saveButton).toBeVisible();
 
     const saveBox = await saveButton.boundingBox();
