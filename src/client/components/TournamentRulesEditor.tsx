@@ -233,12 +233,12 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
           />
         </div>
         {local.weights.strategy === 'standard' && (
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <label className="text-sm font-medium text-gray-700">Number of classes:</label>
             <select
               value={local.weights.classes ?? 3}
               onChange={(e) => update('weights', { ...local.weights, classes: parseInt(e.target.value) as 3 | 4 })}
-              className="px-2 py-1 border border-gray-300 rounded text-sm"
+              className="max-w-full min-w-0 px-2 py-1 border border-gray-300 rounded text-sm"
             >
               <option value="3">3 (Light / Middle / Heavy)</option>
               <option value="4">4 (Feather / Light / Middle / Heavy)</option>
@@ -501,7 +501,7 @@ function BeltGroupEditor({ group, onChange, onRemove }: { group: BeltGroup; onCh
           type="text"
           value={group.label}
           onChange={(e) => onChange({ ...group, label: e.target.value })}
-          className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+          className="flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded text-sm"
           placeholder="Display label"
         />
         <button type="button" onClick={onRemove} className="text-red-600 hover:text-red-800 text-sm">

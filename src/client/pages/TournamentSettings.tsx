@@ -536,7 +536,10 @@ export default function TournamentSettings() {
   }
 
   return (
-    <div>
+    // While the fixed save-status banner is shown, reserve room below the
+    // content so it never covers the last actions (e.g. "Save Rules") once the
+    // page is scrolled to the bottom -- it did on phones and WebKit desktop.
+    <div className={saveState !== 'clean' ? 'pb-28' : undefined}>
       {/* Page Header */}
       <PageHeader
         title={`Settings - ${tournament?.name}`}
