@@ -6,7 +6,7 @@
  * tournament history.
  */
 
-import { PrismaClient, Competitor } from '@prisma/client';
+import { Prisma, PrismaClient, Competitor } from '@prisma/client';
 
 /**
  * Calculate Levenshtein distance between two strings
@@ -127,33 +127,93 @@ export function calculateMatchScore(
 /**
  * Find potential duplicate competitors
  */
+/**
+ * Fields returned for each side of a duplicate pair. Deliberately
+ * excludes sensitive columns (specialNeeds, region, ...) that the
+ * duplicates UI doesn't render.
+ */
+export const DUPLICATE_COMPETITOR_SELECT = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  gender: true,
+  dateOfBirth: true,
+  belt: true,
+  beltStripe: true,
+  danRank: true,
+  heightInches: true,
+  weightLbs: true,
+  schoolDojang: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: { select: { registrations: true } },
+} satisfies Prisma.CompetitorSelect;
+
+export type DuplicateCompetitor = Prisma.CompetitorGetPayload<{ select: typeof DUPLICATE_COMPETITOR_SELECT }>;
+
 export interface PotentialDuplicate {
-  competitor1: Competitor;
-  competitor2: Competitor;
+  competitor1: DuplicateCompetitor;
+  competitor2: DuplicateCompetitor;
   matchScore: MatchScore;
+}
+
+/**
+ * Lowest accepted threshold. A pair without DOBs within one day
+ * scores at most 0.4 (name-only), so any threshold above 0.4 lets the
+ * scan compare only competitors whose DOBs are within a day of each
+ * other — sort + sliding window instead of an all-pairs O(n²) scan.
+ * Lower thresholds would only flood the UI with name-only noise.
+ */
+export const MIN_DUPLICATE_THRESHOLD = 0.5;
+/** Hard cap on how many competitors are loaded for one scan. */
+export const MAX_DUPLICATE_CANDIDATES = 2000;
+/** Hard cap on returned pairs. */
+export const MAX_DUPLICATE_RESULTS = 200;
+
+const DAY_MS = 1000 * 60 * 60 * 24;
+
+export function clampDuplicateThreshold(threshold: number): number {
+  if (!Number.isFinite(threshold)) return 0.75;
+  return Math.min(1, Math.max(MIN_DUPLICATE_THRESHOLD, threshold));
 }
 
 export async function findPotentialDuplicates(
   prisma: PrismaClient,
-  threshold = 0.75
+  threshold = 0.75,
+  options: {
+    /** Tenant scoping (competitor access filter). Omit only for admins. */
+    where?: Prisma.CompetitorWhereInput;
+    maxCandidates?: number;
+    maxResults?: number;
+  } = {}
 ): Promise<PotentialDuplicate[]> {
-  // Fetch all active competitors (not soft-deleted)
+  const effectiveThreshold = clampDuplicateThreshold(threshold);
+  const maxCandidates = Math.min(options.maxCandidates ?? MAX_DUPLICATE_CANDIDATES, MAX_DUPLICATE_CANDIDATES);
+  const maxResults = Math.min(options.maxResults ?? MAX_DUPLICATE_RESULTS, MAX_DUPLICATE_RESULTS);
+
+  // Active (not soft-deleted) competitors the caller may see, ordered
+  // by DOB so candidate pairs are adjacent.
   const competitors = await prisma.competitor.findMany({
-    where: { deletedAt: null },
-    orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    where: options.where ? { AND: [{ deletedAt: null }, options.where] } : { deletedAt: null },
+    select: DUPLICATE_COMPETITOR_SELECT,
+    orderBy: [{ dateOfBirth: 'asc' }, { lastName: 'asc' }, { firstName: 'asc' }],
+    take: maxCandidates,
   });
 
   const duplicates: PotentialDuplicate[] = [];
 
-  // Compare each pair of competitors
+  // Sliding window: only pairs whose DOBs are within one day can reach
+  // a threshold above 0.4 (see MIN_DUPLICATE_THRESHOLD).
   for (let i = 0; i < competitors.length; i++) {
+    const c1 = competitors[i];
+    const dob1 = new Date(c1.dateOfBirth).getTime();
     for (let j = i + 1; j < competitors.length; j++) {
-      const c1 = competitors[i];
       const c2 = competitors[j];
+      if (new Date(c2.dateOfBirth).getTime() - dob1 > DAY_MS) break;
 
       const matchScore = calculateMatchScore(c1, c2);
 
-      if (matchScore.overallScore >= threshold) {
+      if (matchScore.overallScore >= effectiveThreshold) {
         duplicates.push({
           competitor1: c1,
           competitor2: c2,
@@ -163,10 +223,10 @@ export async function findPotentialDuplicates(
     }
   }
 
-  // Sort by match score (highest first)
+  // Sort by match score (highest first), then cap.
   duplicates.sort((a, b) => b.matchScore.overallScore - a.matchScore.overallScore);
 
-  return duplicates;
+  return duplicates.slice(0, maxResults);
 }
 
 /**

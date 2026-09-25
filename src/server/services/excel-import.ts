@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { normalizeBelt } from '../../shared/constants/belts.js';
 
 /**
@@ -35,6 +35,19 @@ export interface ImportResult {
   errors: Array<{ row: number; message: string }>;
 }
 
+export interface ImportOptions {
+  /**
+   * Which existing competitors an imported row may match (and
+   * overwrite) by name + DOB:
+   *  - 'all': any competitor (admins only);
+   *  - a Prisma where-clause: only competitors inside that scope — pass
+   *    the caller's competitor WRITE filter so an import never
+   *    overwrites another tenant's record;
+   *  - 'none' (default, fail closed): never match; always create.
+   */
+  matchScope?: Prisma.CompetitorWhereInput | 'all' | 'none';
+}
+
 export async function importFromExcel(
   prisma: PrismaClient,
   rows: ExcelRow[],
@@ -43,8 +56,10 @@ export async function importFromExcel(
   // because not every upload carries a DOB column or a school column.
   // We narrow the required keys up front so the loop body doesn't
   // have to deal with `string | undefined` indexing.
-  mapping: Partial<ColumnMapping>
+  mapping: Partial<ColumnMapping>,
+  options: ImportOptions = {}
 ): Promise<ImportResult> {
+  const matchScope = options.matchScope ?? 'none';
   if (rows.length > 5000) {
     throw new Error('Import limited to 5000 rows');
   }
@@ -116,6 +131,10 @@ export async function importFromExcel(
 
         // Parse date of birth or calculate from age
         let dateOfBirth: Date | null = null;
+        // True when the DOB is synthesized (Jan 1) from an age-only
+        // column. Such a DOB is shared by every same-age namesake, so
+        // it must never be used as a match key.
+        let dobIsSynthetic = false;
 
         if (mapping.dateOfBirth && row[mapping.dateOfBirth]) {
           const dobRaw = row[mapping.dateOfBirth];
@@ -126,6 +145,7 @@ export async function importFromExcel(
           if (!isNaN(age)) {
             const today = new Date();
             dateOfBirth = new Date(today.getFullYear() - age, 0, 1);
+            dobIsSynthetic = true;
           }
         }
 
@@ -152,17 +172,27 @@ export async function importFromExcel(
         const schoolDojang = mapping.school ? String(row[mapping.school] || '').trim() || null : null;
         const specialNeeds = mapping.specialNeeds ? String(row[mapping.specialNeeds] || '').trim() || null : null;
 
-        // Check for existing competitor (by name + DOB).
+        // Check for existing competitor (by name + exact DOB).
         // Closes B7: case-insensitive match so a parent who
         // imported "Minho Kim" doesn't create a new row when
         // the next import contains "MINHO KIM".
-        const existing = await tx.competitor.findFirst({
-          where: {
-            firstName: { equals: firstName, mode: 'insensitive' },
-            lastName: { equals: lastName, mode: 'insensitive' },
-            dateOfBirth,
-          },
-        });
+        //
+        // Multi-tenant: only competitors inside `matchScope` (the
+        // importer's writable set) are candidates; anything else gets
+        // a new row instead of overwriting another tenant's record.
+        // Rows with a synthetic (age-derived) DOB never match.
+        const existing =
+          matchScope === 'none' || dobIsSynthetic
+            ? null
+            : await tx.competitor.findFirst({
+                where: {
+                  firstName: { equals: firstName, mode: 'insensitive' },
+                  lastName: { equals: lastName, mode: 'insensitive' },
+                  dateOfBirth,
+                  deletedAt: null,
+                  ...(matchScope === 'all' ? {} : { AND: [matchScope] }),
+                },
+              });
 
         if (existing) {
           // Update existing competitor

@@ -8,9 +8,16 @@ import { generateImportTemplate, getDefaultColumnMapping } from '../services/exc
 import { autoDetectMapping } from '../services/excel-auto-map.js';
 import { validateRequest } from '../middleware/validate.js';
 import { jsonBodyParser } from '../index.js';
-import { authenticate, requireRole, buildTournamentAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
+import {
+  authenticate,
+  requireRole,
+  resolveTournamentScope,
+  buildCompetitorAccessFilter,
+  buildCompetitorWriteFilter,
+  type AuthenticatedRequest,
+} from '../middleware/auth.js';
 import { parseBoundedInt, parseOptionalInt } from './query-parsing.js';
-import { findPotentialDuplicates, mergeCompetitors } from '../services/competitor-deduplication.js';
+import { findPotentialDuplicates, mergeCompetitors, MIN_DUPLICATE_THRESHOLD } from '../services/competitor-deduplication.js';
 
 const router = Router();
 
@@ -108,36 +115,27 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
   // ranges, trash, tournament-scope). No cast needed.
   const where: Prisma.CompetitorWhereInput = { deletedAt: trash === 'true' ? { not: null } : null };
 
-  // Closes B34: scope competitor list to the tournaments the user
-  // can access. Without this, a viewer in org A can list every
-  // competitor in the system (name, DOB, school, special needs).
-  const tournamentFilter = await buildTournamentAccessFilter(
+  // Closes B34: scope competitor list to the competitors the user
+  // can access (registered in an accessible tournament; unregistered
+  // competitors only for legacy single-tenant users). Without this, a
+  // viewer in org A can list every competitor in the system (name,
+  // DOB, school, special needs). Only admins get `null` (unscoped).
+  const competitorFilter = await buildCompetitorAccessFilter(
     req as AuthenticatedRequest,
     prisma
   );
-  if (tournamentFilter !== null) {
-    // Restrict to competitors that have a registration in a
-    // tournament the user can access. This still leaks an
-    // orphan competitor with no registrations, but those have no
-    // PII to leak in the first place.
-    //
-    // Note: `Registration` doesn't have a `deletedAt` column in the
-    // schema (only `Competitor` does), so a previous `deletedAt: null`
-    // in this filter was silently no-op'd by Prisma. Worth a follow-up
-    // PR to decide whether soft-deleted registrations should be
-    // excluded from this list.
-    where.registrations = {
-      some: { tournament: tournamentFilter },
-    };
-  }
+  const scopeFilters: Prisma.CompetitorWhereInput[] = competitorFilter ? [competitorFilter] : [];
 
   if (search) {
-    where.OR = [
-      { firstName: { contains: search, mode: 'insensitive' } },
-      { lastName:  { contains: search, mode: 'insensitive' } },
-      { schoolDojang: { contains: search, mode: 'insensitive' } },
-    ];
+    scopeFilters.push({
+      OR: [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName:  { contains: search, mode: 'insensitive' } },
+        { schoolDojang: { contains: search, mode: 'insensitive' } },
+      ],
+    });
   }
+  if (scopeFilters.length > 0) where.AND = scopeFilters;
 
   if (belt) {
     // Allow comma-separated for "Yellow,Green"
@@ -215,14 +213,13 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 // we don't load the full registry into Node memory.
 router.get('/meta/aggregates', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const tournamentFilter = await buildTournamentAccessFilter(
+  const competitorFilter = await buildCompetitorAccessFilter(
     req as AuthenticatedRequest,
     prisma,
   );
-  const where: Prisma.CompetitorWhereInput = { deletedAt: null };
-  if (tournamentFilter !== null) {
-    where.registrations = { some: { tournament: tournamentFilter } };
-  }
+  const where: Prisma.CompetitorWhereInput = competitorFilter
+    ? { deletedAt: null, AND: [competitorFilter] }
+    : { deletedAt: null };
 
   const [total, byBeltRows, byGenderRows, bySchoolRows, slim] = await Promise.all([
     prisma.competitor.count({ where }),
@@ -290,10 +287,15 @@ router.get('/meta/aggregates', authenticate, async (req: Request, res: Response)
 // NOTE: Must be defined BEFORE /:id route to avoid being matched as an ID
 router.get('/meta/schools', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  // Scoped like the list: school names can identify another tenant's
+  // clients, so only schools of accessible competitors are returned.
+  const competitorFilter = await buildCompetitorAccessFilter(req as AuthenticatedRequest, prisma);
   const schools = await prisma.competitor.findMany({
     select: { schoolDojang: true },
     distinct: ['schoolDojang'],
-    where: { schoolDojang: { not: null } },
+    where: competitorFilter
+      ? { schoolDojang: { not: null }, deletedAt: null, AND: [competitorFilter] }
+      : { schoolDojang: { not: null } },
     orderBy: { schoolDojang: 'asc' },
   });
 
@@ -314,14 +316,43 @@ router.get('/meta/belts', authenticate, async (req: Request, res: Response) => {
   res.json(belts.map((b) => b.belt));
 });
 
+// Find potential duplicate competitors.
+// NOTE: Must be defined BEFORE /:id so "duplicates" isn't captured as an id.
+//
+// Scoped to competitors the caller may modify (the only useful action on
+// a duplicate is merging it), threshold clamped to MIN_DUPLICATE_THRESHOLD
+// so the scan stays a DOB sliding window instead of an O(n²) all-pairs
+// scan, and the candidate set / result count are capped in the service.
+router.get('/duplicates', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { threshold } = req.query;
+
+  const thresholdValue = threshold ? parseFloat(threshold as string) : 0.75;
+  if (isNaN(thresholdValue) || thresholdValue < 0 || thresholdValue > 1) {
+    return res.status(400).json({ error: 'threshold must be a number between 0 and 1' });
+  }
+  const effectiveThreshold = Math.max(thresholdValue, MIN_DUPLICATE_THRESHOLD);
+
+  const writeFilter = await buildCompetitorWriteFilter(req as AuthenticatedRequest, prisma);
+  const duplicates = await findPotentialDuplicates(prisma, effectiveThreshold, {
+    where: writeFilter ?? undefined,
+  });
+  res.json({ duplicates, count: duplicates.length, threshold: effectiveThreshold });
+});
+
 // Get competitor history and statistics (requires authentication)
 // NOTE: Must be defined BEFORE /:id route to avoid being matched as an ID
 router.get('/:id/history', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const competitorId = getParam(req.params.id);
 
-  const competitor = await prisma.competitor.findUnique({
-    where: { id: competitorId },
+  // Same access scope as GET /:id — without it any authenticated user
+  // could read another tenant's competitor record + results by UUID.
+  const competitorFilter = await buildCompetitorAccessFilter(req as AuthenticatedRequest, prisma);
+  const competitor = await prisma.competitor.findFirst({
+    where: competitorFilter
+      ? { id: competitorId, deletedAt: null, AND: [competitorFilter] }
+      : { id: competitorId, deletedAt: null },
   });
 
   if (!competitor) {
@@ -405,12 +436,12 @@ router.get('/:id/history', authenticate, async (req: Request, res: Response) => 
 });
 
 // Get single competitor (requires authentication). Closes S17 + IDOR:
-// list is scoped via buildTournamentAccessFilter; get-by-id must use
+// list is scoped via buildCompetitorAccessFilter; get-by-id must use
 // the same scope so a viewer can't fetch arbitrary competitor PII
 // (DOB, specialNeeds, weight) by UUID.
 router.get('/:id', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const tournamentFilter = await buildTournamentAccessFilter(
+  const competitorFilter = await buildCompetitorAccessFilter(
     req as AuthenticatedRequest,
     prisma,
   );
@@ -419,10 +450,8 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
     id: getParam(req.params.id),
     deletedAt: null,
   };
-  if (tournamentFilter !== null) {
-    where.registrations = {
-      some: { tournament: tournamentFilter },
-    };
+  if (competitorFilter !== null) {
+    where.AND = [competitorFilter];
   }
 
   const competitor = await prisma.competitor.findFirst({ where });
@@ -435,21 +464,20 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
 });
 
 // Create competitor (requires authentication + admin/director role).
-// Multi-tenant: non-admins may only create when they have at least
-// one accessible tournament (legacy single-tenant still passes the
-// null filter). Orphan global creates by foreign directors are blocked
-// when the user has org memberships.
+// Multi-tenant: legacy single-tenant users (no org memberships) may
+// create unregistered competitors — they stay visible in the legacy
+// pool. Tenant (org) users may only create when they have at least one
+// accessible tournament.
 router.post('/', authenticate, requireRole('admin', 'director'), validateRequest(competitorCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const authReq = req as AuthenticatedRequest;
-  const tournamentFilter = await buildTournamentAccessFilter(authReq, prisma);
-  // Non-admin with an active access filter must belong to at least one
-  // tournament — creating floating competitors that no scoped list
-  // would show (and that later IDOR-scoped updates couldn't touch)
-  // is disallowed.
-  if (tournamentFilter !== null && authReq.user?.role !== 'admin') {
+  const scope = await resolveTournamentScope(authReq, prisma);
+  // Tenant users must belong to at least one tournament — creating
+  // floating competitors that no scoped list would show (and that
+  // later IDOR-scoped updates couldn't touch) is disallowed.
+  if (scope.filter !== null && !scope.legacyPool) {
     const accessible = await prisma.tournament.count({
-      where: { deletedAt: null, ...tournamentFilter },
+      where: { deletedAt: null, AND: [scope.filter] },
     });
     if (accessible === 0) {
       return res.status(403).json({ error: 'No accessible tournament to attach competitors to' });
@@ -488,19 +516,23 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
   res.status(201).json(competitor);
 });
 
+/**
+ * True when the caller may modify the competitor. Admins always may.
+ * Everyone else needs EVERY tournament the competitor is registered in
+ * to be accessible (see buildCompetitorWriteFilter) — a registration in
+ * the caller's own tournament must not unlock a competitor that is
+ * also registered in another tenant's tournaments.
+ */
 async function assertCompetitorWritable(
   req: AuthenticatedRequest,
   prisma: PrismaClient,
   competitorId: string,
 ): Promise<boolean> {
   if (req.user?.role === 'admin') return true;
-  const tournamentFilter = await buildTournamentAccessFilter(req, prisma);
-  if (tournamentFilter === null) return true; // legacy single-tenant
+  const writeFilter = await buildCompetitorWriteFilter(req, prisma);
+  if (writeFilter === null) return true;
   const found = await prisma.competitor.findFirst({
-    where: {
-      id: competitorId,
-      registrations: { some: { tournament: tournamentFilter } },
-    },
+    where: { id: competitorId, AND: [writeFilter] },
     select: { id: true },
   });
   return !!found;
@@ -634,6 +666,19 @@ router.delete('/:id/purge', authenticate, requireRole('admin'), async (req: Requ
 //           need to ship them in two places.
 //        c) The client can show a progress bar against the
 //           upload, not against a parse that already happened.
+/**
+ * Existing competitors an import may match + overwrite: everything for
+ * admins, otherwise only competitors the importer may write. Anything
+ * else is created fresh instead of overwritten.
+ */
+async function importMatchScope(
+  req: AuthenticatedRequest,
+  prisma: PrismaClient,
+): Promise<Prisma.CompetitorWhereInput | 'all'> {
+  const writeFilter = await buildCompetitorWriteFilter(req, prisma);
+  return writeFilter ?? 'all';
+}
+
 const importFileSchema = z.object({
   fileBase64: z.string().min(1),
   columnMapping: z.record(z.string(), z.string()),
@@ -673,7 +718,9 @@ router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin'
         return res.status(400).json({ error: 'Workbook has no sheets' });
       }
       const data = XLSX.utils.sheet_to_json<ExcelRow>(workbook.Sheets[sheetName], { defval: '' });
-      const result = await importFromExcel(prisma, data, parsed.data.columnMapping);
+      const result = await importFromExcel(prisma, data, parsed.data.columnMapping, {
+        matchScope: await importMatchScope(req as AuthenticatedRequest, prisma),
+      });
       return res.json({ ...result, parsedServerSide: true });
     } catch (err: unknown) {
       console.error('[competitors/import] failed:', err);
@@ -685,22 +732,10 @@ router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin'
   if (!body.data) {
     return res.status(400).json({ error: 'Missing data or fileBase64' });
   }
-  const result = await importFromExcel(prisma, body.data, body.columnMapping);
+  const result = await importFromExcel(prisma, body.data, body.columnMapping, {
+    matchScope: await importMatchScope(req as AuthenticatedRequest, prisma),
+  });
   res.json(result);
-});
-
-// Find potential duplicate competitors
-router.get('/duplicates', authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
-  const prisma: PrismaClient = req.app.locals.prisma;
-  const { threshold } = req.query;
-  
-  const thresholdValue = threshold ? parseFloat(threshold as string) : 0.75;
-  if (isNaN(thresholdValue) || thresholdValue < 0 || thresholdValue > 1) {
-    return res.status(400).json({ error: 'threshold must be a number between 0 and 1' });
-  }
-
-  const duplicates = await findPotentialDuplicates(prisma, thresholdValue);
-  res.json({ duplicates, count: duplicates.length });
 });
 
 // Merge two competitors
@@ -718,6 +753,22 @@ const mergeCompetitorsSchema = z.object({
 router.post('/merge', authenticate, requireRole('admin', 'director'), validateRequest(mergeCompetitorsSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { primaryId, secondaryId, mergeOptions } = req.body;
+
+  // Both sides must be writable by the caller: a merge rewrites the
+  // primary and soft-deletes the secondary (admins bypass).
+  const authReq = req as AuthenticatedRequest;
+  if (authReq.user?.role !== 'admin') {
+    const writeFilter = await buildCompetitorWriteFilter(authReq, prisma);
+    if (writeFilter !== null) {
+      const writable = await prisma.competitor.count({
+        where: { id: { in: [primaryId, secondaryId] }, AND: [writeFilter] },
+      });
+      const expected = primaryId === secondaryId ? 1 : 2;
+      if (writable !== expected) {
+        return res.status(404).json({ error: 'Competitor not found' });
+      }
+    }
+  }
 
   try {
     const result = await mergeCompetitors(prisma, primaryId, secondaryId, mergeOptions);

@@ -23,6 +23,16 @@ vi.mock('../middleware/auth.js', () => ({
   buildTournamentAccessFilter: vi.fn().mockResolvedValue({
     organizationId: { in: ['organization-1'] },
   }),
+  resolveTournamentScope: vi.fn().mockResolvedValue({
+    filter: { organizationId: { in: ['organization-1'] } },
+    legacyPool: false,
+  }),
+  buildCompetitorAccessFilter: vi.fn().mockResolvedValue({
+    registrations: { some: { tournament: { organizationId: { in: ['organization-1'] } } } },
+  }),
+  buildCompetitorWriteFilter: vi.fn().mockResolvedValue({
+    registrations: { every: { tournament: { organizationId: { in: ['organization-1'] } } } },
+  }),
 }));
 
 vi.mock('../middleware/validate.js', () => ({ validateRequest: vi.fn(() => vi.fn()) }));
