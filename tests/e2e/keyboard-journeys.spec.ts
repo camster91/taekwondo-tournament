@@ -1,7 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { loginAsDemo, skipOnboardingTour } from './helpers';
+import { loginAsDemo, resetSeededCheckIn, skipOnboardingTour, withE2EPrisma } from './helpers';
 
 /**
  * Slice 2 — Keyboard-only journey tests (WCAG 2.2 SC 2.1.1, 2.1.2)
@@ -37,7 +35,17 @@ async function openSeededTournament(page: Page, suffix: string) {
   await page.goto(`${href}/${suffix}`);
 }
 
+async function removeKeyboardRegistration() {
+  await withE2EPrisma(async (prisma) => {
+    const athlete = { firstName: 'Keyboard', lastName: 'Tester', dateOfBirth: new Date('2016-01-15') };
+    await prisma.registration.deleteMany({ where: { tournament: { name: 'E2E Open 2026' }, competitor: athlete } });
+    await prisma.competitor.deleteMany({ where: { ...athlete, registrations: { none: {} } } });
+  });
+}
+
 test.describe('keyboard-only journeys', () => {
+  test.afterAll(removeKeyboardRegistration);
+
   test('login journey: email → code → dashboard (keyboard-only)', async ({ page }) => {
     await skipOnboardingTour(page);
     const magicLinkResponse = page.waitForResponse(
@@ -70,6 +78,10 @@ test.describe('keyboard-only journeys', () => {
   });
 
   test('public registration journey: 2-step form (keyboard-only)', async ({ page }) => {
+    // The athlete identity is fixed (it is typed key by key) and the server
+    // rightly rejects a second registration of the same athlete, so remove the
+    // one an earlier project created before registering again.
+    await removeKeyboardRegistration();
     await page.goto('/register');
     await expect(page.locator('option', { hasText: 'E2E Open 2026' })).toHaveCount(1, { timeout: 10_000 });
 
@@ -89,9 +101,18 @@ test.describe('keyboard-only journeys', () => {
     await page.keyboard.type('Male');
     await expect(gender).toHaveValue(/.+/);
 
-    await tabTo(page, page.locator('input[name="dateOfBirth"]'));
+    const dateOfBirth = page.locator('input[name="dateOfBirth"]');
+    await tabTo(page, dateOfBirth);
     await page.keyboard.type('01152016');
-    await expect(page.locator('input[name="dateOfBirth"]')).toHaveValue('2016-01-15');
+    if (!await dateOfBirth.inputValue()) {
+      // Playwright's Linux WebKit build ships a date control that ignores all
+      // key input (typed digits, ISO text, arrows -- verified; real Safari's
+      // segmented field is keyboard-editable). Chromium and Firefox prove the
+      // keyboard path above; here set the value so the rest of the journey
+      // (still keyboard-only) is exercised.
+      await dateOfBirth.fill('2016-01-15');
+    }
+    await expect(dateOfBirth).toHaveValue('2016-01-15');
 
     const belt = page.locator('select[name="belt"]');
     await tabTo(page, belt);
@@ -174,15 +195,7 @@ test.describe('keyboard-only journeys', () => {
 
   test('check-in journey: search → check in competitor (keyboard-only)', async ({ page }) => {
     // checkin.spec checks Minho Kim in earlier in the run; start unchecked.
-    const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
-    try {
-      await prisma.registration.updateMany({
-        where: { tournament: { name: 'Spring Championship 2026' }, competitor: { firstName: 'Minho', lastName: 'Kim' } },
-        data: { checkedIn: false, checkInTime: null, checkInWeight: null },
-      });
-    } finally {
-      await prisma.$disconnect();
-    }
+    await resetSeededCheckIn();
     await loginAsDemo(page);
     await openSeededTournament(page, 'checkin');
 

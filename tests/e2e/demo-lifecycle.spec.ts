@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { resetShowcase } from './helpers';
 
 test.describe('guided fabricated showcase', () => {
+  // The check-in and result journeys consume unchecked athletes and ready
+  // matches; start every project from the pristine showcase.
+  test.beforeAll(resetShowcase);
+
   const journeys = [
     { name: 'Director command centre', url: /\/tournaments\/00000000-0000-4000-8000-000000000003\/director$/, heading: /Director Dashboard/i },
     { name: 'Scorekeeper station', url: /\/scorekeeper\/00000000-0000-4000-8000-000000000003$/, heading: /^Scorekeeper$/i },

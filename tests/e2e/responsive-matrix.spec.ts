@@ -23,8 +23,12 @@ for (const viewport of [
 test('mobile form controls meet the 44px touch-target minimum', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/login');
-  const inputBox = await page.getByLabel('Email address').boundingBox();
-  const buttonBox = await page.getByRole('button', { name: /Send sign-in link/i }).boundingBox();
-  expect(inputBox?.height).toBeGreaterThanOrEqual(44);
-  expect(buttonBox?.height).toBeGreaterThanOrEqual(44);
+  const input = page.getByLabel('Email address');
+  const button = page.getByRole('button', { name: /Send sign-in link/i });
+  // boundingBox() does not wait: measure only after the sign-in card renders
+  // and its entrance transition settles (mid-transition boxes read 43.99px).
+  await expect(input).toBeVisible();
+  await expect(button).toBeVisible();
+  await expect.poll(async () => (await input.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+  await expect.poll(async () => (await button.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
 });

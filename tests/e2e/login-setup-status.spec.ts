@@ -77,5 +77,7 @@ test('shows the demo action only when the server advertises it', async ({ page }
   await page.reload();
 
   await expect(page.getByRole('button', { name: 'Explore the live demo' })).toBeVisible();
-  await expect(page.getByText('Live demo data, fully featured')).toBeVisible();
+  // The marketing panel carrying this line is desktop-only (hidden on phones),
+  // so assert it is rendered, mirroring the toHaveCount(0) check above.
+  await expect(page.getByText('Live demo data, fully featured')).toHaveCount(1);
 });

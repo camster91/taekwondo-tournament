@@ -1002,7 +1002,9 @@ export default function Scorekeeper() {
                           readyCount > 0
                             ? 'bg-green-900 hover:bg-green-800 border-2 border-green-500'
                             : totalCount > 0 && completedCount === totalCount
-                            ? 'bg-surface-800 hover:bg-surface-700 opacity-50'
+                            // De-emphasised without opacity: opacity-50 dropped every
+                            // label in a finished division below 4.5:1 (axe color-contrast).
+                            ? 'bg-surface-900 hover:bg-surface-800 border border-dashed border-surface-600 text-surface-300'
                             : 'bg-surface-800 hover:bg-surface-700'
                         }`}
                       >

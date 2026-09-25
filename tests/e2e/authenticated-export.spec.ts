@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Route } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { loginAsEmail, skipOnboardingTour } from './helpers';
@@ -6,6 +6,18 @@ import { loginAsEmail, skipOnboardingTour } from './helpers';
 const email = 'authenticated-export-e2e@example.com';
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 let tournamentId = '';
+
+// The single-flight requests are delayed and then passed to the real server,
+// which only answers 200 for a valid session: that proves the export is
+// authenticated in every engine. (Asserting the Cookie header on the
+// intercepted request only works in Chromium -- WebKit never exposes it to
+// request interception, and Firefox omits it from request.headers().)
+async function delayThenServe(route: Route, ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  // continue(), not fetch(): the browser's own request (with whatever
+  // credentials the app attached) must reach the server.
+  await route.continue();
+}
 
 test.beforeAll(async () => {
   await prisma.user.upsert({
@@ -32,12 +44,13 @@ test('division bracket PDF locks rapid repeats and rejects an invalid file', asy
   const endpoint = `**/api/brackets/tournament/${tournamentId}/pdf`;
   await page.route(endpoint, async (route) => {
     requests += 1;
-    expect(route.request().headers().cookie).toContain('bowin_session=');
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    await route.fulfill({ status: 200, contentType: 'application/pdf', body: Buffer.from('%PDF-brackets') });
+    await delayThenServe(route, 300);
   });
   const exportButton = page.getByRole('button', { name: 'Export PDFs' });
   const downloadPromise = page.waitForEvent('download');
+  // A synthetic click on a still-disabled button is dropped; wait until the
+  // page's data has loaded and the export is actually available.
+  await expect(exportButton).toBeEnabled();
   await exportButton.evaluate((button) => {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -64,12 +77,13 @@ test('organization JSON export locks rapid repeats and validates the downloaded 
   let requests = 0;
   await page.route('**/api/organizations/*/export', async (route) => {
     requests += 1;
-    expect(route.request().headers().cookie).toContain('bowin_session=');
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organization: 'E2E' }) });
+    await delayThenServe(route, 300);
   });
   const exportButton = page.getByRole('button', { name: 'Export organization data' });
   const downloadPromise = page.waitForEvent('download');
+  // A synthetic click on a still-disabled button is dropped; wait until the
+  // page's data has loaded and the export is actually available.
+  await expect(exportButton).toBeEnabled();
   await exportButton.evaluate((button) => {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -93,15 +107,14 @@ test('results PDF is single-flight, authenticated, validated, and reports only a
   let requests = 0;
   await page.route(`**/api/brackets/tournament/${tournamentId}/results/pdf`, async (route) => {
     requests += 1;
-    expect(route.request().headers().cookie).toContain('bowin_session=');
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    await route.fulfill({ status: 200, contentType: 'application/pdf', body: Buffer.from('%PDF-test') });
+    await delayThenServe(route, 400);
   });
 
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   const pdfButton = page.getByRole('button', { name: 'Results PDF' });
   await expect(pdfButton).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
+  await expect(pdfButton).toBeEnabled();
   await pdfButton.evaluate((button) => {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }));

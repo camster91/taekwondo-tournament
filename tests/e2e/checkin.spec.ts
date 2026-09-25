@@ -1,25 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { loginAsDemo } from './helpers';
+import { loginAsDemo, resetSeededCheckIn } from './helpers';
 
 test.describe('check-in (weigh-in flow)', () => {
-  test.beforeEach(async () => {
-    const prisma = new PrismaClient({
-      adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
-    });
-    try {
-      await prisma.registration.updateMany({
-        where: {
-          competitor: { firstName: 'Minho', lastName: 'Kim' },
-          tournament: { name: 'Spring Championship 2026' },
-        },
-        data: { checkedIn: false, checkInTime: null, checkInWeight: null },
-      });
-    } finally {
-      await prisma.$disconnect();
-    }
-  });
+  test.beforeEach(resetSeededCheckIn);
 
   test('staff checks in a competitor with a weigh-in and the row updates', async ({ page }) => {
     await loginAsDemo(page);

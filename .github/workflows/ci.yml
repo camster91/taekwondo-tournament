@@ -21,12 +21,13 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    # 45m gives the three-engine e2e matrix comfortable headroom on
-    # the CI runner. If this gets too tight,
-    # the scorekeeper tests share login state and could be made
+    # The e2e step runs four Playwright projects (chromium, firefox,
+    # webkit, mobile-chrome) serially against one database, ~40 min on
+    # a healthy suite, so 45m left no headroom. If this gets tight
+    # again, the scorekeeper tests share login state and could be made
     # faster via test.beforeAll + shared context — see tests/e2e/
     # scorekeeper-a11y.spec.ts.
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout

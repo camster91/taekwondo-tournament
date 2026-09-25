@@ -514,7 +514,7 @@ export default function TournamentDetail() {
           <div data-tour="tournament-detail-actions" className="flex flex-wrap gap-2">
             <Button as={Link} to={`/tournaments/${id}/settings`} variant="secondary">
               <Settings className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Settings</span>
+              <span className="sr-only sm:not-sr-only">Settings</span>
             </Button>
             <Button
               variant="secondary"
@@ -527,11 +527,11 @@ export default function TournamentDetail() {
             </Button>
             <Button as={Link} to={`/tournaments/${id}/schedule`} variant="secondary">
               <Calendar className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Schedule</span>
+              <span className="sr-only sm:not-sr-only">Schedule</span>
             </Button>
             <Button as={Link} to={`/tournaments/${id}/fairness`} variant="secondary">
               <Shield className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Fairness Rules</span>
+              <span className="sr-only sm:not-sr-only">Fairness Rules</span>
             </Button>
             {/* Preview public display — opens the read-only scoreboard in a new
                 tab so the director can check what spectators will see without
@@ -545,7 +545,7 @@ export default function TournamentDetail() {
               variant="secondary"
             >
               <Monitor className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">View Public</span>
+              <span className="sr-only sm:not-sr-only">View Public</span>
               <ExternalLink className="h-3 w-3 ml-1 opacity-50" />
             </Button>
             <Button as={Link} to={`/tournaments/${id}/divisions`} variant="primary">
@@ -1001,7 +1001,12 @@ export default function TournamentDetail() {
                             actionLabel: reg.patterns ? 'Removing Patterns' : 'Adding Patterns',
                           })
                         }
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        // Same name and toggle state as the desktop table's IconButton;
+                        // the visible "Patterns"/"Sparring" alone did not say whose
+                        // entry it changes or whether it is currently enrolled.
+                        aria-pressed={reg.patterns}
+                        aria-label={`${reg.competitor.firstName} ${reg.competitor.lastName} — Patterns ${reg.patterns ? 'enrolled' : 'not enrolled'}`}
+                        className={`flex-1 min-h-11 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.patterns
                             ? 'bg-success/10 text-success dark:bg-success/20 dark:text-success'
                             : 'bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-400'
@@ -1020,7 +1025,12 @@ export default function TournamentDetail() {
                             actionLabel: reg.sparring ? 'Removing Sparring' : 'Adding Sparring',
                           })
                         }
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        // Same name and toggle state as the desktop table's IconButton;
+                        // the visible "Patterns"/"Sparring" alone did not say whose
+                        // entry it changes or whether it is currently enrolled.
+                        aria-pressed={reg.sparring}
+                        aria-label={`${reg.competitor.firstName} ${reg.competitor.lastName} — Sparring ${reg.sparring ? 'enrolled' : 'not enrolled'}`}
+                        className={`flex-1 min-h-11 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.sparring
                             ? 'bg-success/10 text-success dark:bg-success/20 dark:text-success'
                             : 'bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-400'

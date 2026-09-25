@@ -33,6 +33,12 @@ export async function fetchAuthenticatedBlob(
   return blob;
 }
 
+// Firefox and Safari resolve the object URL asynchronously after the anchor
+// click; revoking it in the same task cancels (Safari) or intermittently
+// fails (Firefox) the download. Chromium happens to tolerate an immediate
+// revoke. Keep the URL alive long enough for every engine to start reading it.
+export const OBJECT_URL_REVOKE_DELAY_MS = 30_000;
+
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   try {
@@ -43,6 +49,6 @@ export function downloadBlob(blob: Blob, filename: string): void {
     link.click();
     link.remove();
   } finally {
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), OBJECT_URL_REVOKE_DELAY_MS);
   }
 }
