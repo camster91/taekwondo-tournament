@@ -18,38 +18,10 @@
  * remain types-only and skip runtime validation.
  */
 
-export type MatchStatus = 'pending' | 'ready' | 'in_progress' | 'completed' | 'bye';
-
-/** A match competitor slot — populated by scorekeeper PATCH or null when TBD. */
-export interface MatchCompetitorSlot {
-  id: string;
-  competitor: {
-    firstName: string;
-    lastName: string;
-    schoolDojang?: string | null;
-  };
-}
-
-/** A bracket match as returned by /api/divisions/tournament/:id?withMatches=true. */
-export interface ApiMatch {
-  id: string;
-  matchNumber: number;
-  roundNumber: number;
-  bracketType: 'winners' | 'losers' | 'finals';
-  status: MatchStatus;
-  ringNumber?: number | null;
-  competitor1?: MatchCompetitorSlot | null;
-  competitor2?: MatchCompetitorSlot | null;
-  winner?: MatchCompetitorSlot | null;
-  score1?: string | null;
-  score2?: string | null;
-  startedAt?: string | null;
-  updatedAt?: string | null;
-  videoUrl?: string | null;
-  /** Internal helper used by DirectorDashboard after flatMap. Not server-side. */
-  _divisionId?: string;
-  _divisionName?: string;
-}
+// Match shapes are derived from the shared zod contract so this deprecated
+// module can't drift from what the server returns.
+export type { MatchStatus, MatchCompetitorSlot, ApiMatch } from '../../shared/contracts';
+import type { ApiMatch } from '../../shared/contracts';
 
 /** A bracket as embedded in the division response. */
 export interface ApiBracket {

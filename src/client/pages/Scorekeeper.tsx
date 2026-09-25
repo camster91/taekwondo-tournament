@@ -46,19 +46,7 @@ import {
 import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner';
 import PendingOperationsPanel from '../components/PendingOperationsPanel';
 
-import type { ApiMatch, ApiBracket, ApiDivision, ApiTournamentSummary } from '../../shared/contracts';
-
-// Scorekeeper uses the full match shape from the contract, plus winnerId
-// which is derived client-side (winnerId = winner?.id ?? null)
-interface Match extends ApiMatch {
-  winnerId: string | null;
-}
-
-// Division shape matches the contract, except its bracket carries the
-// enriched Match (with the derived winnerId) built in the query below.
-type Division = Omit<ApiDivision, 'bracket'> & {
-  bracket: (Omit<ApiBracket, 'matches'> & { matches: Match[] }) | null;
-};
+import type { ApiMatch, ApiDivision, ApiTournamentSummary } from '../../shared/contracts';
 
 type ScoreRequestError = Error & { status?: number; isConflict?: boolean };
 
@@ -90,7 +78,7 @@ interface ScoreSubmission {
 function validateResult(
   resultType: ResultType,
   selectedWinner: string | null,
-  match: Match | undefined,
+  match: ApiMatch | undefined,
   score1: string,
   score2: string,
 ): string | null {
@@ -224,7 +212,7 @@ export default function Scorekeeper() {
     return sportProfile.eventTypes[idx]?.name ?? eventType;
   };
 
-  const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions } = useQuery<Division[]>({
+  const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions } = useQuery<ApiDivision[]>({
     queryKey: ['scorekeeper-divisions', tournamentId],
     queryFn: async () => {
       if (!user || !tournamentId) throw new Error('Authenticated tournament context is required');
@@ -236,14 +224,16 @@ export default function Scorekeeper() {
       });
       setCachedSnapshotAt(result.source === 'snapshot' ? result.savedAt : null);
       
-      // Transform API data to add winnerId (client-side derived field)
-      return result.data.map((div): Division => ({
+      // The server returns the winnerId column; normalize it to null (falling
+      // back to the winner relation) so older cached snapshots that predate
+      // the field never compare `undefined === undefined` against an empty slot.
+      return result.data.map((div): ApiDivision => ({
         ...div,
         bracket: div.bracket ? {
           ...div.bracket,
-          matches: div.bracket.matches.map((m): Match => ({
+          matches: div.bracket.matches.map((m): ApiMatch => ({
             ...m,
-            winnerId: m.winner?.id ?? null,
+            winnerId: m.winnerId ?? m.winner?.id ?? null,
           })),
         } : null,
       }));
@@ -320,7 +310,7 @@ export default function Scorekeeper() {
       if (deliveryUncertain) {
         const division = divisions?.find((candidate) => candidate.id === selectedDivision);
         const match = currentMatch?.id === data.matchId ? currentMatch : undefined;
-        const name = (entry: Match['competitor1']) => entry ? `${entry.competitor.firstName} ${entry.competitor.lastName}` : 'TBD';
+        const name = (entry: ApiMatch['competitor1']) => entry ? `${entry.competitor.firstName} ${entry.competitor.lastName}` : 'TBD';
         const winner = match?.competitor1?.id === data.winnerId ? name(match.competitor1) : match?.competitor2?.id === data.winnerId ? name(match.competitor2) : `Registration #${data.winnerId.slice(0, 8)}`;
         const target = match ? `${division?.name || 'Division'}, match #${match.matchNumber} (${name(match.competitor1)} vs ${name(match.competitor2)})` : `Match #${data.matchId.slice(0, 8)}`;
         setUnpersistedDeliveryWarning(`${target} may already be saved on the server. Attempted winner: ${winner}, score ${data.score1 || '0'}–${data.score2 || '0'}, sent ${new Date().toLocaleTimeString()}. This device could not retain the safety record. Do not resubmit it. Review the refreshed match first.`);
@@ -572,12 +562,12 @@ export default function Scorekeeper() {
     else recordResult.mutate(submission);
   };
 
-  const getCompetitorName = (competitor: Match['competitor1']) => {
+  const getCompetitorName = (competitor: ApiMatch['competitor1']) => {
     if (!competitor) return 'BYE';
     return `${competitor.competitor.firstName} ${competitor.competitor.lastName}`;
   };
 
-  const getCompetitorSchool = (competitor: Match['competitor1']) => {
+  const getCompetitorSchool = (competitor: ApiMatch['competitor1']) => {
     if (!competitor) return '';
     return competitor.competitor.schoolDojang || 'No School';
   };
@@ -799,7 +789,7 @@ export default function Scorekeeper() {
         const retryable = operation.status === 'needs_review' && !retrying;
         const division = divisions?.find((candidate) => candidate.bracket?.matches.some((match) => match.id === operation.targetId));
         const match = division?.bracket?.matches.find((candidate) => candidate.id === operation.targetId);
-        const name = (entry: Match['competitor1']) => entry
+        const name = (entry: ApiMatch['competitor1']) => entry
           ? `${entry.competitor.firstName} ${entry.competitor.lastName}`
           : 'TBD';
         const label = match

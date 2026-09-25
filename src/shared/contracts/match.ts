@@ -57,6 +57,14 @@ export const apiMatchSchema = z.object({
   competitor1: matchCompetitorSlotSchema,
   competitor2: matchCompetitorSlotSchema,
   winner: matchCompetitorSlotSchema,
+  // Scalar FK columns on the Match row. Every match endpoint returns them
+  // (divisions ?withMatches=true and brackets/division/:id return the full
+  // row; the public scoreboard selects them explicitly). Optional so older
+  // cached venue snapshots and narrower fixtures still parse.
+  competitor1Id: z.string().uuid().nullable().optional(),
+  competitor2Id: z.string().uuid().nullable().optional(),
+  winnerId: z.string().uuid().nullable().optional(),
+  scheduledTime: z.string().datetime().nullable().optional(),
   score1: z.string().nullable().optional(),
   score2: z.string().nullable().optional(),
   startedAt: z.string().datetime().nullable().optional(),

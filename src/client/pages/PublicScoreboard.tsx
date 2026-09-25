@@ -18,19 +18,7 @@ import {
 import { fetchJson } from '../utils/api-status';
 
 // Use shared API contracts instead of local interfaces
-import type { ApiBracket, ApiDivision, ApiMatch } from '../../shared/contracts';
-
-// The public scoreboard select (src/server/routes/public-scoreboard-query.ts)
-// also returns scheduledTime and winnerId, which the shared ApiMatch
-// contract doesn't declare yet.
-type Match = ApiMatch & {
-  scheduledTime?: string | null;
-  winnerId: string | null;
-};
-
-type Division = Omit<ApiDivision, 'bracket'> & {
-  bracket: (Omit<ApiBracket, 'matches'> & { matches: Match[] }) | null;
-};
+import type { ApiDivision, ApiMatch } from '../../shared/contracts';
 
 interface Tournament {
   id: string;
@@ -90,13 +78,13 @@ export default function PublicScoreboard() {
   // director overrides (mode: 'all' | 'ring:N' | 'featured:<matchId>').
   // Closes M8 from the UI audit.
   const { data: scoreboardData, isLoading: divisionsLoading, error: scoreboardError, refetch: retryScoreboard } = useQuery<{
-    divisions: Division[];
+    divisions: ApiDivision[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
     queryKey: ['scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
       const data = await fetchJson<{
-        divisions: Division[];
+        divisions: ApiDivision[];
         displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
       }>(fetch, buildScoreboardApiUrl(tournamentId || '', publicKey));
       setLastFetchAt(new Date());
@@ -154,7 +142,7 @@ export default function PublicScoreboard() {
   // default ring — they go into a separate "unassigned" bucket so the LIVE
   // badge count reflects reality, not a || 1 fallback. Closes #30.
   const matchesByRing = useMemo(() => {
-    const out: Record<number, Match[]> = { 1: [], 2: [], 3: [], 4: [] };
+    const out: Record<number, ApiMatch[]> = { 1: [], 2: [], 3: [], 4: [] };
     for (const d of divisions || []) {
       for (const m of d.bracket?.matches || []) {
         if (m.ringNumber == null) continue; // unassigned — render separately
@@ -205,17 +193,17 @@ export default function PublicScoreboard() {
   };
 
   // Helpers used by both the TV hero and the right column.
-  const getCompetitorName = (competitor: Match['competitor1']) => {
+  const getCompetitorName = (competitor: ApiMatch['competitor1']) => {
     if (!competitor) return 'TBD';
     return `${competitor.competitor.firstName} ${competitor.competitor.lastName}`;
   };
 
-  const getCompetitorSchool = (competitor: Match['competitor1']) => {
+  const getCompetitorSchool = (competitor: ApiMatch['competitor1']) => {
     if (!competitor) return '';
     return competitor.competitor.schoolDojang || '';
   };
 
-  const getDivisionForMatch = (match: Match) => {
+  const getDivisionForMatch = (match: ApiMatch) => {
     return divisions?.find((d) => d.bracket?.matches.some((m) => m.id === match.id));
   };
 
