@@ -218,3 +218,66 @@ describe('generateSchedule: registration identity conflicts', () => {
     expect(update).not.toHaveBeenCalled();
   });
 });
+
+describe('generateSchedule: soft-deleted divisions and late days', () => {
+  const tournament = {
+    id: 'tournament-2',
+    name: 'Late Day',
+    date: new Date('2026-08-07T12:00:00.000Z'),
+    settings: null,
+  };
+
+  function bigDivision(id: string, count: number) {
+    return {
+      id,
+      name: id,
+      eventType: 'sparring',
+      beltLevel: 'CB',
+      gender: 'M',
+      ageMin: 10,
+      _count: { assignments: count },
+      assignments: [],
+    };
+  }
+
+  it('excludes soft-deleted divisions from the query', async () => {
+    const findMany = vi.fn(async () => []);
+    await generateSchedule(
+      { tournament: { findUnique: async () => tournament }, division: { findMany } } as never,
+      tournament.id
+    );
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { tournamentId: tournament.id, deletedAt: null } })
+    );
+  });
+
+  it('does not crash when the schedule runs past midnight (regression: 24:05 threw)', async () => {
+    // One ring, 22:00 start, two 16-person DE sparring divisions (31 matches x 5 min each).
+    const result = await generateSchedule(
+      {
+        tournament: { findUnique: async () => tournament },
+        division: { findMany: async () => [bigDivision('a', 16), bigDivision('b', 16)] },
+      } as never,
+      tournament.id,
+      { ringCount: 1, startTime: '22:00', endTime: '23:30' }
+    );
+    expect(result.schedule).toHaveLength(2);
+    for (const slot of result.schedule) {
+      expect(slot.startTime).toMatch(/^([01]\d|2[0-3]):[0-5]\d$/);
+      expect(slot.endTime).toMatch(/^([01]\d|2[0-3]):[0-5]\d$/);
+    }
+    expect(result.warnings.some((w) => w.includes('midnight'))).toBe(true);
+  });
+
+  it('sizes a division by its double-elimination match count (2N-1)', async () => {
+    const result = await generateSchedule(
+      {
+        tournament: { findUnique: async () => tournament },
+        division: { findMany: async () => [bigDivision('a', 16)] },
+      } as never,
+      tournament.id,
+      { ringCount: 1 }
+    );
+    expect(result.schedule[0].estimatedDurationMinutes).toBe(31 * 5);
+  });
+});
