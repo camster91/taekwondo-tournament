@@ -114,9 +114,10 @@ test.describe('tournament detail accessibility (WCAG 2.2 AA)', () => {
     await page.goto(href!);
     await page.waitForLoadState('networkidle');
 
-    // Tabs (Overview, Divisions, Schedule, etc.) should be keyboard-accessible
-    const overviewTab = page.getByRole('link', { name: /Overview/i });
-    const divisionsTab = page.getByRole('link', { name: /Divisions/i });
+    // Tournament navigation (Overview, Divisions, ...) lives in the sidebar;
+    // exact names avoid the page's "Manage Divisions" action link.
+    const overviewTab = page.getByRole('link', { name: 'Overview', exact: true });
+    const divisionsTab = page.getByRole('link', { name: 'Divisions', exact: true });
 
     await expect(overviewTab).toBeVisible();
     await expect(divisionsTab).toBeVisible();
@@ -126,6 +127,16 @@ test.describe('tournament detail accessibility (WCAG 2.2 AA)', () => {
     await expect(divisionsTab).toBeFocused();
   });
 });
+
+async function openSettings(page: import('@playwright/test').Page) {
+  await loginAsDemo(page);
+  await page.goto('/tournaments');
+  const link = page.locator('a', { hasText: 'Spring Championship 2026' }).first();
+  await expect(link).toBeVisible({ timeout: 10_000 });
+  const href = await link.getAttribute('href');
+  await page.goto(`${href}/settings`);
+  await expect(page.getByRole('tablist', { name: 'Settings sections' })).toBeVisible();
+}
 
 test.describe('tournament settings accessibility (WCAG 2.2 AA)', () => {
   test('passes axe WCAG 2.2 AA audit', async ({ page }) => {
@@ -146,65 +157,51 @@ test.describe('tournament settings accessibility (WCAG 2.2 AA)', () => {
     expect(results.violations).toEqual([]);
   });
 
-  test('tab navigation works (Settings, Weight Classes, Rules tabs)', async ({ page }) => {
-    await loginAsDemo(page);
+  // The settings page was reorganized into Setup / Categorization + Brackets /
+  // Branding tabs; tournament name/date/location are edited elsewhere.
+  test('tab navigation works (Setup, Categorization + Brackets, Branding tabs)', async ({ page }) => {
+    await openSettings(page);
 
-    await page.goto('/tournaments');
-    const link = page.locator('a', { hasText: 'Spring Championship 2026' }).first();
-    await expect(link).toBeVisible({ timeout: 10_000 });
-    const href = await link.getAttribute('href');
-    const tournamentId = href!.replace('/tournaments/', '');
+    const setupTab = page.getByRole('tab', { name: /^Setup/i });
+    const rulesTab = page.getByRole('tab', { name: /Categorization \+ Brackets/i });
+    const brandingTab = page.getByRole('tab', { name: /^Branding/i });
 
-    await page.goto(`/tournaments/${tournamentId}/settings`);
-    await page.waitForLoadState('networkidle');
-
-    // Tabs should be visible and keyboard-accessible
-    const settingsTab = page.getByRole('tab', { name: /^Settings$/i });
-    const weightClassesTab = page.getByRole('tab', { name: /Weight Classes/i });
-    const rulesTab = page.getByRole('tab', { name: /Rules/i });
-
-    await expect(settingsTab).toBeVisible();
-    await expect(weightClassesTab).toBeVisible();
+    await expect(setupTab).toBeVisible();
     await expect(rulesTab).toBeVisible();
+    await expect(brandingTab).toBeVisible();
+    await expect(setupTab).toHaveAttribute('aria-selected', 'true');
 
-    // Should be focusable
-    await weightClassesTab.focus();
-    await expect(weightClassesTab).toBeFocused();
-
-    // Arrow keys should navigate between tabs (if implemented)
-    // For now, just verify Tab key moves focus
-    await page.keyboard.press('Tab');
+    // WAI-ARIA tabs: the selected tab is focusable, arrows move and select.
+    await setupTab.focus();
+    await expect(setupTab).toBeFocused();
+    await page.keyboard.press('ArrowRight');
     await expect(rulesTab).toBeFocused();
+    await expect(rulesTab).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('End');
+    await expect(brandingTab).toBeFocused();
+    await page.keyboard.press('Home');
+    await expect(setupTab).toBeFocused();
+    await expect(setupTab).toHaveAttribute('aria-selected', 'true');
   });
 
   test('all form inputs are labeled', async ({ page }) => {
-    await loginAsDemo(page);
+    await openSettings(page);
 
-    await page.goto('/tournaments');
-    const link = page.locator('a', { hasText: 'Spring Championship 2026' }).first();
-    await expect(link).toBeVisible({ timeout: 10_000 });
-    const href = await link.getAttribute('href');
-    const tournamentId = href!.replace('/tournaments/', '');
+    await expect(page.getByLabel('Division split threshold')).toBeVisible();
+    await expect(page.getByLabel('Maximum Capacity')).toBeVisible();
+    // Every age-group row control has its own accessible name.
+    await expect(page.getByLabel('Age group 1 label')).toBeVisible();
+    await expect(page.getByLabel('Age group 1 minimum age')).toBeVisible();
+    await expect(page.getByLabel('Age group 1 maximum age')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Remove age group / }).first()).toBeVisible();
 
-    await page.goto(`/tournaments/${tournamentId}/settings`);
-    await page.waitForLoadState('networkidle');
-
-    // Tournament name input should be labeled
-    const nameInput = page.getByLabel(/Tournament Name/i);
-    await expect(nameInput).toBeVisible();
-    await expect(nameInput).toHaveAttribute('name', 'name');
-
-    // Date input should be labeled
-    const dateInput = page.getByLabel(/Date|Start Date/i);
-    if ((await dateInput.count()) > 0) {
-      await expect(dateInput.first()).toBeVisible();
-    }
-
-    // Location input should be labeled
-    const locationInput = page.getByLabel(/Location|Venue/i);
-    if ((await locationInput.count()) > 0) {
-      await expect(locationInput.first()).toBeVisible();
-    }
+    const unlabeled = await page.getByRole('tabpanel').locator('input:not([type="hidden"]), select, textarea').evaluateAll(
+      (elements) => elements.filter((element) => {
+        const control = element as HTMLInputElement;
+        return !control.labels?.length && !control.getAttribute('aria-label') && !control.getAttribute('aria-labelledby');
+      }).map((element) => element.outerHTML.slice(0, 120)),
+    );
+    expect(unlabeled).toEqual([]);
   });
 
   test('save button has clear state (enabled/disabled/saving)', async ({ page }) => {
@@ -241,8 +238,8 @@ test.describe('tournament settings accessibility (WCAG 2.2 AA)', () => {
     const href = await link.getAttribute('href');
     const tournamentId = href!.replace('/tournaments/', '');
 
-    // Simulate a network error by intercepting API requests
-    await page.route('**/api/tournaments/*', async (route) => {
+    // Simulate a network error on the settings save (PUT /api/tournaments/:id/settings)
+    await page.route('**/api/tournaments/**', async (route) => {
       if (route.request().method() === 'PUT') {
         await route.abort('failed');
       } else {
@@ -254,15 +251,14 @@ test.describe('tournament settings accessibility (WCAG 2.2 AA)', () => {
     await page.waitForLoadState('networkidle');
 
     // Make a change to trigger save
-    const nameInput = page.getByLabel(/Tournament Name/i);
-    await nameInput.fill('Updated Tournament Name');
+    await page.getByLabel('Division split threshold').fill('9');
 
     // Click save
-    const saveButton = page.getByRole('button', { name: /Save|Saving/i });
+    const saveButton = page.getByRole('button', { name: 'Save Settings' });
     await saveButton.click();
 
     // Wait for error alert
-    const errorAlert = page.locator('[role="alert"]');
+    const errorAlert = page.getByRole('alert').filter({ hasText: /\S{5,}/ }).first();
     await expect(errorAlert).toBeVisible({ timeout: 10_000 });
 
     // Error message should be descriptive
@@ -285,11 +281,10 @@ test.describe('tournament settings accessibility (WCAG 2.2 AA)', () => {
     await page.waitForLoadState('networkidle');
 
     // Form fields should be visible and usable on mobile
-    const nameInput = page.getByLabel(/Tournament Name/i);
-    await expect(nameInput).toBeVisible();
+    await expect(page.getByLabel('Division split threshold')).toBeVisible();
 
-    // Save button should be tappable (44×44px minimum)
-    const saveButton = page.getByRole('button', { name: /Save|Saving/i });
+    // Save button (icon-only on phones, still named) should be tappable (44×44px minimum)
+    const saveButton = page.getByRole('button', { name: 'Save Settings' });
     await expect(saveButton).toBeVisible();
 
     const buttonBox = await saveButton.boundingBox();
@@ -311,7 +306,7 @@ test.describe('tournament settings accessibility (WCAG 2.2 AA)', () => {
     await page.waitForLoadState('networkidle');
 
     // Page should load without motion-heavy animations
-    const settingsTab = page.getByRole('tab', { name: /^Settings$/i });
+    const settingsTab = page.getByRole('tab', { name: /^Setup/i });
     await expect(settingsTab).toBeVisible();
   });
 });

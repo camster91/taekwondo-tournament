@@ -206,11 +206,12 @@ export default function TournamentDetail() {
         body: JSON.stringify(data),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
+        // Read the body once; the server's message is what the operator needs.
+        const body = await res.json().catch(() => ({})) as { code?: unknown; error?: unknown };
         if (res.status === 402 && body.code === 'COMPETITOR_LIMIT_REACHED') {
-          throw Object.assign(new Error(body.error), { isLimitError: true });
+          throw Object.assign(new Error(String(body.error)), { isLimitError: true });
         }
-        throw new Error(await readAdminOperationError(res, 'Failed to register competitors'));
+        throw new Error(typeof body.error === 'string' && body.error.trim() ? body.error : 'Failed to register competitors');
       }
       return res.json();
     },
