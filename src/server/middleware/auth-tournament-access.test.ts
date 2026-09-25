@@ -396,7 +396,8 @@ describe('checkTournamentAccess - org membership role is respected', () => {
     expect(orgMembershipRoleLevel('director')).toBe(3);
     expect(orgMembershipRoleLevel('scorekeeper')).toBe(2);
     expect(orgMembershipRoleLevel('viewer')).toBe(1);
-    expect(orgMembershipRoleLevel('member')).toBe(1);
+    // 'member' is the schema default and defers to the global role.
+    expect(orgMembershipRoleLevel('member')).toBe(3);
     expect(orgMembershipRoleLevel(undefined)).toBe(0);
   });
 });

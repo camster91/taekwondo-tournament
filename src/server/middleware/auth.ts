@@ -427,11 +427,12 @@ export type TournamentRole = keyof typeof ROLE_HIERARCHY;
 
 /**
  * Map an `OrganizationMember.role` onto the tournament role
- * hierarchy. Org owners/admins manage the org's events (director
- * level). Invitation-created memberships carry the invited
- * director/scorekeeper/viewer role verbatim. The schema default
- * `member` is treated as read-only. Anything unknown grants nothing
- * (fail closed).
+ * hierarchy; the effective role is min(global role, this).
+ * `owner`/`admin`/`member` are the schema's standard membership roles
+ * and don't narrow the user's global role. Invitation-created
+ * memberships carry the invited director/scorekeeper/viewer role
+ * verbatim and cap access at that level. Anything unknown grants
+ * nothing (fail closed).
  */
 const ORG_MEMBERSHIP_ROLE_LEVEL: Record<string, number> = {
   owner: ROLE_HIERARCHY.director,
@@ -439,7 +440,7 @@ const ORG_MEMBERSHIP_ROLE_LEVEL: Record<string, number> = {
   director: ROLE_HIERARCHY.director,
   scorekeeper: ROLE_HIERARCHY.scorekeeper,
   viewer: ROLE_HIERARCHY.viewer,
-  member: ROLE_HIERARCHY.viewer,
+  member: ROLE_HIERARCHY.director,
 };
 
 export function orgMembershipRoleLevel(role: string | null | undefined): number {
