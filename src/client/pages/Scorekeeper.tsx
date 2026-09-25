@@ -48,14 +48,7 @@ import PendingOperationsPanel from '../components/PendingOperationsPanel';
 
 import type { ApiMatch, ApiDivision, ApiTournamentSummary } from '../../shared/contracts';
 
-// Scorekeeper uses the full match shape from the contract, plus winnerId
-// which is derived client-side (winnerId = winner?.id ?? null)
-interface Match extends ApiMatch {
-  winnerId: string | null;
-}
-
-// Division shape matches the contract
-type Division = ApiDivision;
+type ScoreRequestError = Error & { status?: number; isConflict?: boolean };
 
 // Tournament shape — only needs id and sportProfileSlug
 interface Tournament {
@@ -85,7 +78,7 @@ interface ScoreSubmission {
 function validateResult(
   resultType: ResultType,
   selectedWinner: string | null,
-  match: Match | undefined,
+  match: ApiMatch | undefined,
   score1: string,
   score2: string,
 ): string | null {
@@ -174,6 +167,11 @@ export default function Scorekeeper() {
   // can follow the scorekeeper through a division without losing their place.
   const matchHeadingRef = useRef<HTMLDivElement>(null);
   const userNavigatedRef = useRef<'keyboard' | 'auto' | null>(null);
+  // The result this station most recently recorded; Ctrl+Z undoes it first.
+  const lastRecordedMatchIdRef = useRef<string | null>(null);
+  // Set while confirming an undo: a cached venue snapshot predates the undo,
+  // so only a fresh server response may acknowledge it.
+  const requireFreshDivisionsRef = useRef(false);
   const [announce, setAnnounce] = useState('');
   const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [incidentType, setIncidentType] = useState<string>('injury');
@@ -219,7 +217,7 @@ export default function Scorekeeper() {
     return sportProfile.eventTypes[idx]?.name ?? eventType;
   };
 
-  const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions } = useQuery<Division[]>({
+  const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions } = useQuery<ApiDivision[]>({
     queryKey: ['scorekeeper-divisions', tournamentId],
     queryFn: async () => {
       if (!user || !tournamentId) throw new Error('Authenticated tournament context is required');
@@ -229,16 +227,21 @@ export default function Scorekeeper() {
         validate: (value): value is ApiDivision[] => isScorekeeperDivisionData(value),
         request: () => fetch(`/api/divisions/tournament/${tournamentId}?withMatches=true`, { headers: getAuthHeaders() }),
       });
+      if (result.source === 'snapshot' && requireFreshDivisionsRef.current) {
+        throw new Error('Current scorekeeper data is unavailable');
+      }
       setCachedSnapshotAt(result.source === 'snapshot' ? result.savedAt : null);
       
-      // Transform API data to add winnerId (client-side derived field)
-      return result.data.map((div): Division => ({
+      // The server returns the winnerId column; normalize it to null (falling
+      // back to the winner relation) so older cached snapshots that predate
+      // the field never compare `undefined === undefined` against an empty slot.
+      return result.data.map((div): ApiDivision => ({
         ...div,
         bracket: div.bracket ? {
           ...div.bracket,
-          matches: div.bracket.matches.map((m): Match => ({
+          matches: div.bracket.matches.map((m): ApiMatch => ({
             ...m,
-            winnerId: m.winner?.id ?? null,
+            winnerId: m.winnerId ?? m.winner?.id ?? null,
           })),
         } : null,
       }));
@@ -315,7 +318,7 @@ export default function Scorekeeper() {
       if (deliveryUncertain) {
         const division = divisions?.find((candidate) => candidate.id === selectedDivision);
         const match = currentMatch?.id === data.matchId ? currentMatch : undefined;
-        const name = (entry: Match['competitor1']) => entry ? `${entry.competitor.firstName} ${entry.competitor.lastName}` : 'TBD';
+        const name = (entry: ApiMatch['competitor1']) => entry ? `${entry.competitor.firstName} ${entry.competitor.lastName}` : 'TBD';
         const winner = match?.competitor1?.id === data.winnerId ? name(match.competitor1) : match?.competitor2?.id === data.winnerId ? name(match.competitor2) : `Registration #${data.winnerId.slice(0, 8)}`;
         const target = match ? `${division?.name || 'Division'}, match #${match.matchNumber} (${name(match.competitor1)} vs ${name(match.competitor2)})` : `Match #${data.matchId.slice(0, 8)}`;
         setUnpersistedDeliveryWarning(`${target} may already be saved on the server. Attempted winner: ${winner}, score ${data.score1 || '0'}–${data.score2 || '0'}, sent ${new Date().toLocaleTimeString()}. This device could not retain the safety record. Do not resubmit it. Review the refreshed match first.`);
@@ -366,7 +369,7 @@ export default function Scorekeeper() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Unknown error' }));
-        const error: any = new Error(body.error || 'Failed to record match result');
+        const error = new Error(body.error || 'Failed to record match result') as ScoreRequestError;
         error.status = res.status;
         error.isConflict = res.status === 409;
         throw error;
@@ -374,6 +377,7 @@ export default function Scorekeeper() {
       return res.json();
     },
     onSuccess: async (_result, data) => {
+      lastRecordedMatchIdRef.current = data.matchId;
       // P2-9: Save video URL if provided (separate endpoint)
       if (videoUrl.trim()) {
         try {
@@ -396,7 +400,7 @@ export default function Scorekeeper() {
       finishResultEntry(false);
       addToast('Result saved', 'success');
     },
-    onError: (error: any, data) => {
+    onError: (error: ScoreRequestError, data) => {
       if (error instanceof TypeError) {
         stageScoreResult(data, true);
         return;
@@ -412,6 +416,15 @@ export default function Scorekeeper() {
       setAnnounce(`Error recording result: ${error.message || 'Operation failed'}`);
     },
   });
+
+  const refetchFreshDivisions = useCallback(async () => {
+    requireFreshDivisionsRef.current = true;
+    try {
+      await queryClient.refetchQueries({ queryKey: ['scorekeeper-divisions'] }, { throwOnError: true });
+    } finally {
+      requireFreshDivisionsRef.current = false;
+    }
+  }, [queryClient]);
 
   const undoMatchResult = useMutation({
     mutationFn: async (matchId: string) => {
@@ -429,7 +442,7 @@ export default function Scorekeeper() {
     },
     onSuccess: async () => {
       try {
-        await queryClient.refetchQueries({ queryKey: ['scorekeeper-divisions'] }, { throwOnError: true });
+        await refetchFreshDivisions();
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ['director-dashboard'] }),
           queryClient.invalidateQueries({ queryKey: ['divisions'] }),
@@ -460,7 +473,7 @@ export default function Scorekeeper() {
     setUndoChecking(true);
     setUndoError('');
     try {
-      await queryClient.refetchQueries({ queryKey: ['scorekeeper-divisions'] }, { throwOnError: true });
+      await refetchFreshDivisions();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['director-dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['divisions'] }),
@@ -474,7 +487,7 @@ export default function Scorekeeper() {
     } finally {
       setUndoChecking(false);
     }
-  }, [addToast, queryClient]);
+  }, [addToast, queryClient, refetchFreshDivisions]);
 
   // Report incident mutation
   const reportIncident = useMutation({
@@ -567,12 +580,12 @@ export default function Scorekeeper() {
     else recordResult.mutate(submission);
   };
 
-  const getCompetitorName = (competitor: Match['competitor1']) => {
+  const getCompetitorName = (competitor: ApiMatch['competitor1']) => {
     if (!competitor) return 'BYE';
     return `${competitor.competitor.firstName} ${competitor.competitor.lastName}`;
   };
 
-  const getCompetitorSchool = (competitor: Match['competitor1']) => {
+  const getCompetitorSchool = (competitor: ApiMatch['competitor1']) => {
     if (!competitor) return '';
     return competitor.competitor.schoolDojang || 'No School';
   };
@@ -582,6 +595,15 @@ export default function Scorekeeper() {
 
     if (showIncidentModal || showKeyboardHelp || pendingUndoId) return;
 
+    // Enter on a focused button or link keeps its native activation
+    // (WCAG 2.1.1). The one exception is the already-selected winner button,
+    // where Enter continues to the confirmation (the documented shortcut).
+    if (e.key === 'Enter' && e.target instanceof Element) {
+      const control = e.target.closest('button, a[href], [role="button"]');
+      const isSelectedWinner = control?.hasAttribute('data-winner-select') && control.getAttribute('aria-pressed') === 'true';
+      if (control && !isSelectedWinner) return;
+    }
+
     if (showConfirm) {
       if (e.key === 'Enter') { e.preventDefault(); handleSubmit(); }
       else if (e.key === 'Escape') { e.preventDefault(); setShowConfirm(false); }
@@ -590,7 +612,7 @@ export default function Scorekeeper() {
 
     if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && selectedDivision) {
       e.preventDefault();
-      const lastCompletedId = latestCompletedMatchId(selectedDivisionMatches);
+      const lastCompletedId = latestCompletedMatchId(selectedDivisionMatches, lastRecordedMatchIdRef.current);
       if (lastCompletedId && !undoMatchResult.isPending) {
         setUndoError('');
         setPendingUndoId(lastCompletedId);
@@ -794,7 +816,7 @@ export default function Scorekeeper() {
         const retryable = operation.status === 'needs_review' && !retrying;
         const division = divisions?.find((candidate) => candidate.bracket?.matches.some((match) => match.id === operation.targetId));
         const match = division?.bracket?.matches.find((candidate) => candidate.id === operation.targetId);
-        const name = (entry: Match['competitor1']) => entry
+        const name = (entry: ApiMatch['competitor1']) => entry
           ? `${entry.competitor.firstName} ${entry.competitor.lastName}`
           : 'TBD';
         const label = match
@@ -843,7 +865,7 @@ export default function Scorekeeper() {
       title="Discard unsynced result?"
       message={<>
         <span className="block">This permanently removes the local score change. The server match will remain unchanged.</span>
-        {discardOfflineError && <span role="alert" className="mt-2 block text-danger">{discardOfflineError}</span>}
+        {discardOfflineError && <span role="alert" className="mt-2 block text-red-300">{discardOfflineError}</span>}
       </>}
       confirmText="Discard local change"
       variant="danger"
@@ -875,7 +897,7 @@ export default function Scorekeeper() {
         {cachedDataStatus}
         {offlineStatus}
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
             <div className="flex items-center">
               <Trophy className="h-8 w-8 text-yellow-500 mr-3" />
               <h1 className="text-2xl font-bold">Scorekeeper</h1>
@@ -888,9 +910,10 @@ export default function Scorekeeper() {
                 title="Open public display in new tab"
               >
                 <Monitor className="h-4 w-4 mr-1" aria-hidden="true" />
-                <span className="hidden sm:inline">Public Display</span>
+                {/* sr-only on phones keeps the icon-only link named */}
+                <span className="sr-only sm:not-sr-only">Public Display</span>
               </Link>
-              <Link to={`/tournaments/${tournamentId}`} className="text-surface-600 hover:text-white">
+              <Link to={`/tournaments/${tournamentId}`} className="text-surface-400 hover:text-white">
                 Exit
               </Link>
             </div>
@@ -986,19 +1009,19 @@ export default function Scorekeeper() {
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="font-semibold text-lg">{division.name}</div>
-                            <div className="text-sm text-surface-600 mt-1">{getEventLabel(division.eventType)}</div>
+                            <div className="text-sm text-surface-300 mt-1">{getEventLabel(division.eventType)}</div>
                           </div>
                           <div className="text-right">
                             {readyCount > 0 ? (
-                              <span className="text-green-400 font-bold">{readyCount} ready</span>
+                              <span className="text-green-300 font-bold">{readyCount} ready</span>
                             ) : totalCount > 0 && completedCount === totalCount ? (
-                              <span className="text-surface-600">Complete</span>
+                              <span className="text-surface-300">Complete</span>
                             ) : totalCount === 0 ? (
                               <span className="text-yellow-500">No bracket</span>
                             ) : (
-                              <span className="text-info">No ready</span>
+                              <span className="text-blue-300">No ready</span>
                             )}
-                            <div className="text-xs text-surface-600 mt-1">
+                            <div className="text-xs text-surface-300 mt-1">
                               {completedCount}/{totalCount} done
                             </div>
                           </div>
@@ -1038,7 +1061,7 @@ export default function Scorekeeper() {
       {/* Header */}
       <div className="bg-surface-800 p-4">
         <div className="flex items-center justify-between">
-          <button onClick={() => setSelectedDivision(null)} className="flex items-center text-surface-600 hover:text-white">
+          <button onClick={() => setSelectedDivision(null)} className="flex items-center text-surface-400 hover:text-white">
             <ChevronLeft className="h-5 w-5 mr-1" /> Back
           </button>
           <div className="text-center">
@@ -1050,7 +1073,7 @@ export default function Scorekeeper() {
             >
               {division?.name}
             </div>
-            <div className="text-sm text-surface-600" aria-live="polite">
+            <div className="text-sm text-surface-400" aria-live="polite">
               Match {currentMatchIndex + 1} of {readyMatches.length}
             </div>
           </div>
@@ -1066,7 +1089,7 @@ export default function Scorekeeper() {
             </button>
             <button
               onClick={() => setShowKeyboardHelp(true)}
-              className="flex items-center gap-1 text-surface-600 hover:text-white text-sm"
+              className="flex items-center gap-1 text-surface-400 hover:text-white text-sm"
               title="Keyboard shortcuts (?)"
               aria-label="Show keyboard shortcuts"
             >
@@ -1119,7 +1142,7 @@ export default function Scorekeeper() {
             <>
               <Check className="h-16 w-16 text-green-500 mx-auto mb-4" />
               <h2 className="text-xl font-semibold mb-2">All Matches Complete!</h2>
-              <p className="text-surface-600 mb-6">
+              <p className="text-surface-400 mb-6">
                 {divisionMatchCounts.completed} of {divisionMatchCounts.total} matches done.
               </p>
               <Button variant="primary" className="px-8 py-3" onClick={() => setSelectedDivision(null)}>
@@ -1130,7 +1153,7 @@ export default function Scorekeeper() {
             <>
               <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
               <h2 className="text-xl font-semibold mb-2">No bracket generated</h2>
-              <p className="text-surface-600 mb-6">
+              <p className="text-surface-400 mb-6">
                 This division doesn't have a bracket yet. Generate brackets from the Divisions page.
               </p>
               <Button variant="primary" className="px-8 py-3" onClick={() => setSelectedDivision(null)}>
@@ -1139,9 +1162,9 @@ export default function Scorekeeper() {
             </>
           ) : (
             <>
-              <Clock className="h-16 w-16 text-info mx-auto mb-4" />
+              <Clock className="h-16 w-16 text-blue-300 mx-auto mb-4" />
               <h2 className="text-xl font-semibold mb-2">No ready matches</h2>
-              <p className="text-surface-600 mb-6">
+              <p className="text-surface-400 mb-6">
                 {divisionMatchCounts.completed} of {divisionMatchCounts.total} done — matches are pending or being seeded from prior rounds. Check back shortly.
               </p>
               <Button variant="primary" className="px-8 py-3" onClick={() => setSelectedDivision(null)}>
@@ -1162,7 +1185,7 @@ export default function Scorekeeper() {
             >
               <ChevronLeft className="h-6 w-6" aria-hidden="true" />
             </button>
-            <div className="text-sm text-surface-600" aria-hidden="true">
+            <div className="text-sm text-surface-400" aria-hidden="true">
               Match #{currentMatch.matchNumber} - Round {currentMatch.roundNumber} ({currentMatch.bracketType})
             </div>
             <button
@@ -1183,17 +1206,18 @@ export default function Scorekeeper() {
                 onClick={() => { if (currentMatch.competitor1) setSelectedWinner(currentMatch.competitor1.id); }}
                 disabled={!currentMatch.competitor1}
                 aria-pressed={selectedWinner === currentMatch.competitor1?.id}
+                data-winner-select
                 aria-label={`${getCompetitorName(currentMatch.competitor1)} — select as winner (press 1)`}
                 className={`flex-1 p-6 rounded-xl text-left transition-all ${
                   selectedWinner === currentMatch.competitor1?.id
-                    ? 'bg-green-600 ring-4 ring-green-400'
+                    ? 'bg-green-800 ring-4 ring-green-400'
                     : 'bg-surface-800 hover:bg-surface-700'
                 } ${!currentMatch.competitor1 ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="text-2xl font-bold">{getCompetitorName(currentMatch.competitor1)}</div>
-                    <div className="text-surface-600 mt-1">{getCompetitorSchool(currentMatch.competitor1)}</div>
+                    <div className="text-surface-300 mt-1">{getCompetitorSchool(currentMatch.competitor1)}</div>
                     {currentMatch.competitor1 && (
                       <div className="mt-2">
                         <SpecialNeedsBadge
@@ -1205,7 +1229,7 @@ export default function Scorekeeper() {
                       </div>
                     )}
                     {penalties1 > 0 && (
-                      <div className="text-danger text-sm mt-1">
+                      <div className="text-red-300 text-sm mt-1">
                         {penalties1} {sportProfile.scoringConfig.penaltyName} ({penalties1} pts to opponent)
                       </div>
                     )}
@@ -1234,13 +1258,13 @@ export default function Scorekeeper() {
                 >
                   -{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
-                <div className={`text-center text-xl font-bold ${penalties1 > 0 ? 'text-danger' : 'text-surface-500'}`} aria-live="polite" aria-atomic="true">
+                <div className={`text-center text-xl font-bold ${penalties1 > 0 ? 'text-red-300' : 'text-surface-400'}`} aria-live="polite" aria-atomic="true">
                   {penalties1}
                 </div>
               </div>
             </div>
 
-            <div className="text-center text-surface-600 font-bold">VS</div>
+            <div className="text-center text-surface-400 font-bold">VS</div>
 
             {/* Competitor 2 */}
             <div className="flex gap-3">
@@ -1248,17 +1272,18 @@ export default function Scorekeeper() {
                 onClick={() => { if (currentMatch.competitor2) setSelectedWinner(currentMatch.competitor2.id); }}
                 disabled={!currentMatch.competitor2}
                 aria-pressed={selectedWinner === currentMatch.competitor2?.id}
+                data-winner-select
                 aria-label={`${getCompetitorName(currentMatch.competitor2)} — select as winner (press 2)`}
                 className={`flex-1 p-6 rounded-xl text-left transition-all ${
                   selectedWinner === currentMatch.competitor2?.id
-                    ? 'bg-green-600 ring-4 ring-green-400'
+                    ? 'bg-green-800 ring-4 ring-green-400'
                     : 'bg-surface-800 hover:bg-surface-700'
                 } ${!currentMatch.competitor2 ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="text-2xl font-bold">{getCompetitorName(currentMatch.competitor2)}</div>
-                    <div className="text-surface-600 mt-1">{getCompetitorSchool(currentMatch.competitor2)}</div>
+                    <div className="text-surface-300 mt-1">{getCompetitorSchool(currentMatch.competitor2)}</div>
                     {currentMatch.competitor2 && (
                       <div className="mt-2">
                         <SpecialNeedsBadge
@@ -1270,7 +1295,7 @@ export default function Scorekeeper() {
                       </div>
                     )}
                     {penalties2 > 0 && (
-                      <div className="text-danger text-sm mt-1">
+                      <div className="text-red-300 text-sm mt-1">
                         {penalties2} {sportProfile.scoringConfig.penaltyName} ({penalties2} pts to opponent)
                       </div>
                     )}
@@ -1299,7 +1324,7 @@ export default function Scorekeeper() {
                 >
                   -{sportProfile.scoringConfig.penaltyName.slice(0, 3).toUpperCase()}
                 </button>
-                <div className={`text-center text-xl font-bold ${penalties2 > 0 ? 'text-danger' : 'text-surface-500'}`} aria-live="polite" aria-atomic="true">
+                <div className={`text-center text-xl font-bold ${penalties2 > 0 ? 'text-red-300' : 'text-surface-400'}`} aria-live="polite" aria-atomic="true">
                   {penalties2}
                 </div>
               </div>
@@ -1310,7 +1335,7 @@ export default function Scorekeeper() {
           <div className="p-4 bg-surface-800/50">
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label htmlFor="scorekeeper-score1" className="block text-sm text-surface-600 mb-1">
+                <label htmlFor="scorekeeper-score1" className="block text-sm text-surface-400 mb-1">
                   {getCompetitorName(currentMatch.competitor1)} Score
                 </label>
                 <input
@@ -1327,7 +1352,7 @@ export default function Scorekeeper() {
                 />
               </div>
               <div>
-                <label htmlFor="scorekeeper-score2" className="block text-sm text-surface-600 mb-1">
+                <label htmlFor="scorekeeper-score2" className="block text-sm text-surface-400 mb-1">
                   {getCompetitorName(currentMatch.competitor2)} Score
                 </label>
                 <input
@@ -1351,9 +1376,9 @@ export default function Scorekeeper() {
             <fieldset className="border-0 p-0 m-0 mb-4">
               <legend className="sr-only">Result type</legend>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-surface-600 uppercase tracking-wider">Result</span>
+                <span className="text-xs text-surface-400 uppercase tracking-wider">Result</span>
                 {selectedWinner && resultType !== 'win' && (
-                  <span className="text-xs text-gray-600">
+                  <span className="text-xs text-surface-400">
                     {getCompetitorName(
                       currentMatch.competitor1?.id === selectedWinner
                         ? currentMatch.competitor1
@@ -1374,7 +1399,7 @@ export default function Scorekeeper() {
                     className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
                       resultType === type
                         ? type === 'win'
-                          ? 'bg-green-600'
+                          ? 'bg-green-700'
                           : 'bg-red-600'
                         : 'bg-gray-700 hover:bg-gray-600'
                     }`}
@@ -1427,7 +1452,7 @@ export default function Scorekeeper() {
               onClick={() => setShowConfirm(true)}
               disabled={!selectedWinner || Boolean(resultValidationError)}
               aria-describedby={resultValidationError ? 'scorekeeper-result-validation' : undefined}
-              className="w-full py-4 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-xl text-xl font-bold transition-colors"
+              className="w-full py-4 bg-green-700 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-xl text-xl font-bold transition-colors"
             >
               Record Result
             </button>
@@ -1441,7 +1466,7 @@ export default function Scorekeeper() {
             <button
               ref={incidentOpenerRef}
               onClick={() => setShowIncidentModal(true)}
-              className="w-full mt-2 py-3 bg-orange-600 hover:bg-orange-500 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+              className="w-full mt-2 py-3 bg-orange-700 hover:bg-orange-600 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
             >
               <AlertTriangle className="h-4 w-4" />
               Report Incident
@@ -1471,11 +1496,11 @@ export default function Scorekeeper() {
                       </span>
                       <div className="text-sm">
                         <span className="font-medium">{getCompetitorName(match.competitor1)}</span>
-                        <span className="text-gray-500 mx-1">vs</span>
+                        <span className="text-gray-400 mx-1">vs</span>
                         <span className="font-medium">{getCompetitorName(match.competitor2)}</span>
                       </div>
                     </div>
-                    <span className="text-xs text-gray-500">Match #{match.matchNumber}</span>
+                    <span className="text-xs text-gray-400">Match #{match.matchNumber}</span>
                   </div>
                 ))}
               </div>
@@ -1496,7 +1521,7 @@ export default function Scorekeeper() {
 
         return (
           <div className="p-4 border-t border-gray-700">
-            <h3 className="text-sm font-semibold text-gray-600 mb-3">Recent Results</h3>
+            <h3 className="text-sm font-semibold text-surface-400 mb-3">Recent Results</h3>
             <div className="space-y-2">
               {completedMatches.map((match) => {
                 const winnerName =
@@ -1511,12 +1536,12 @@ export default function Scorekeeper() {
                 return (
                   <div key={match.id} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2">
                     <div className="text-sm">
-                      <span className="text-gray-600 mr-2">#{match.matchNumber}</span>
+                      <span className="text-surface-400 mr-2">#{match.matchNumber}</span>
                       <span className="text-green-400 font-medium">{winnerName}</span>
-                      <span className="text-gray-600 mx-1">def.</span>
-                      <span className="text-gray-600">{loserName}</span>
+                      <span className="text-surface-400 mx-1">def.</span>
+                      <span className="text-surface-400">{loserName}</span>
                       {match.score1 && match.score2 && (
-                        <span className="text-gray-600 ml-2">({match.score1}-{match.score2})</span>
+                        <span className="text-surface-400 ml-2">({match.score1}-{match.score2})</span>
                       )}
                     </div>
                     <button
@@ -1553,14 +1578,14 @@ export default function Scorekeeper() {
                   ? getCompetitorName(currentMatch.competitor1)
                   : getCompetitorName(currentMatch.competitor2)}
               </div>
-              <div className="text-gray-600 mt-2">Score: {score1 || '0'} - {score2 || '0'}</div>
+              <div className="text-surface-400 mt-2">Score: {score1 || '0'} - {score2 || '0'}</div>
               {resultType !== 'win' && (
                 <div className="text-red-400 mt-1">Result: {resultType.toUpperCase()}</div>
               )}
             </div>
             <div className="flex gap-3">
               <Button variant="secondary" className="flex-1" onClick={() => setShowConfirm(false)}>
-                Cancel <span className="text-xs text-gray-600" aria-hidden="true">(Esc)</span>
+                Cancel <span className="text-xs text-surface-400" aria-hidden="true">(Esc)</span>
               </Button>
               <Button variant="primary" className="flex-1" loading={recordResult.isPending} disabled={Boolean(resultValidationError)} onClick={handleSubmit}>
                 Confirm <span className="text-xs text-green-200" aria-hidden="true">(Enter)</span>
@@ -1669,7 +1694,7 @@ export default function Scorekeeper() {
                 <button
                   onClick={handleIncidentSubmit}
                   disabled={!incidentDescription.trim() || reportIncident.isPending}
-                  className="flex-1 py-3 bg-orange-600 hover:bg-orange-500 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-semibold"
+                  className="flex-1 py-3 bg-orange-700 hover:bg-orange-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-semibold"
                 >
                   {reportIncident.isPending ? 'Saving...' : 'Save Incident'}
                 </button>
@@ -1714,12 +1739,12 @@ export default function Scorekeeper() {
               <CloseButton
                 onClose={() => setShowKeyboardHelp(false)}
                 label="Close keyboard shortcuts"
-                className="!text-gray-600 hover:!text-white"
+                className="!text-surface-400 hover:!text-white"
               />
             </div>
             <div className="space-y-4">
               <div>
-                <div className="text-sm text-gray-600 mb-2">Select Winner</div>
+                <div className="text-sm text-surface-400 mb-2">Select Winner</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
                     <span>Competitor 1</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">1</kbd>
@@ -1730,7 +1755,7 @@ export default function Scorekeeper() {
                 </div>
               </div>
               <div>
-                <div className="text-sm text-gray-600 mb-2">Navigation</div>
+                <div className="text-sm text-surface-400 mb-2">Navigation</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between">
                     <span>Previous match</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">← / K</kbd>
@@ -1741,7 +1766,7 @@ export default function Scorekeeper() {
                 </div>
               </div>
               <div>
-                <div className="text-sm text-gray-600 mb-2">Result Type</div>
+                <div className="text-sm text-surface-400 mb-2">Result Type</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between"><span>Win</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">W</kbd></div>
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between"><span>DQ</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">D</kbd></div>
@@ -1750,14 +1775,14 @@ export default function Scorekeeper() {
                 </div>
               </div>
               <div>
-                <div className="text-sm text-gray-600 mb-2">Timer (sparring only)</div>
+                <div className="text-sm text-surface-400 mb-2">Timer (sparring only)</div>
                 <div className="grid grid-cols-1 gap-2">
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between"><span>Start / pause timer</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">Space</kbd></div>
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between"><span>Show / hide timer panel</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">T</kbd></div>
                 </div>
               </div>
               <div>
-                <div className="text-sm text-gray-600 mb-2">Actions</div>
+                <div className="text-sm text-surface-400 mb-2">Actions</div>
                 <div className="grid grid-cols-1 gap-2">
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between"><span>Submit / Confirm</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">Enter</kbd></div>
                   <div className="bg-gray-700 p-2 rounded flex items-center justify-between"><span>Cancel / Back</span><kbd className="bg-gray-600 px-2 py-1 rounded text-xs">Esc</kbd></div>

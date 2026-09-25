@@ -1,6 +1,7 @@
-// Match advancement logic for double elimination brackets
-import { PrismaClient, Match } from '@prisma/client';
+// Match advancement logic for elimination brackets (double + single)
+import type { PrismaClient, Prisma, Match } from '@prisma/client';
 import { BracketStructure, MatchData } from './bracket-generator.js';
+import { AppError, ErrorCode } from '../utils/errors.js';
 
 export interface AdvancementResult {
   advanced: boolean;
@@ -9,258 +10,370 @@ export interface AdvancementResult {
   message: string;
 }
 
+/** Either the root client or an interactive-transaction client. */
+type PrismaLike = PrismaClient | Prisma.TransactionClient;
+
 /**
- * Advances the winner (and loser in double elimination) to the next appropriate match
+ * Raised when a result (or a correction / undo of one) would have to
+ * rewrite a downstream match that has already started or finished.
+ * Surfaces as HTTP 409 through the global error handler.
  */
-export async function advanceWinner(
-  prisma: PrismaClient,
-  match: Match & { bracketId: string }
-): Promise<AdvancementResult> {
-  if (!match.winnerId) {
-    return { advanced: false, message: 'No winner set for this match' };
+export class BracketAdvancementConflictError extends AppError {
+  constructor(message: string) {
+    super(message, ErrorCode.INVALID_MATCH_UPDATE, 409, {
+      recoverable: true,
+      suggestion: 'Undo or reopen the downstream match first, then retry this change.',
+    });
+    this.name = 'BracketAdvancementConflictError';
   }
+}
 
-  // Get bracket structure
-  const bracket = await prisma.bracket.findUnique({
-    where: { id: match.bracketId },
-    include: {
-      matches: true,
-    },
-  });
+// ─── Pure advancement engine ─────────────────────────────────────────
+//
+// The bracket is treated as a dataflow graph: every non-first-round
+// match has "feeders" (the winner or loser of an upstream match) and
+// each feeder owns one fixed slot. `computeBracketSync` reconciles the
+// stored match rows with what the graph says they should contain:
+//
+//   * A slot whose feeder is decided holds that feeder's outcome
+//     (possibly "nobody" when the feeder was a bye).
+//   * A slot whose feeder is undecided is empty.
+//   * A match whose feeders are all decided and which ends up with one
+//     competitor is auto-completed as a BYE for that competitor; with
+//     zero competitors it is auto-completed with no winner, and the
+//     "nobody" propagates downstream.
+//   * `pending` / `bye` matches with both competitors become `ready`.
+//     `in_progress` is never touched.
+//
+// Because the target state is a pure function of the upstream results,
+// re-submitting a result is idempotent, correcting a result replaces
+// the old competitor downstream, and undoing a result clears it. When
+// a change would rewrite a match that has already started (or was
+// really played) the engine refuses with a conflict instead of
+// silently corrupting the bracket. Slots are compared as a set, so
+// brackets advanced by the old fill-first-empty code (slot order may
+// differ) are accepted as-is.
 
-  if (!bracket) {
-    return { advanced: false, message: 'Bracket not found' };
-  }
+type Outcome = 'winner' | 'loser';
+interface Feeder { source: number; outcome: Outcome }
 
-  const structure: BracketStructure = JSON.parse(bracket.structure);
+/** Minimal match row the engine needs. Compatible with Prisma `Match`. */
+export interface EngineMatch {
+  id: string;
+  matchNumber: number;
+  bracketType: string;
+  status: string;
+  winnerId: string | null;
+  competitor1Id: string | null;
+  competitor2Id: string | null;
+  notes?: string | null;
+}
 
-  // Find the match data in the structure
-  const allMatches = [
-    ...structure.winners.map(m => ({ ...m, bracketType: 'winners' as const })),
-    ...structure.losers.map(m => ({ ...m, bracketType: 'losers' as const })),
-    ...structure.finals.map(m => ({ ...m, bracketType: 'finals' as const })),
-  ];
-
-  const matchData = allMatches.find(
-    m => m.matchNumber === match.matchNumber && m.bracketType === match.bracketType
-  );
-
-  if (!matchData) {
-    return { advanced: false, message: 'Match structure not found' };
-  }
-
-  const results: string[] = [];
-
-  // Advance winner to next match
-  if (matchData.nextWinnerMatch) {
-    const nextWinnerDb = bracket.matches.find(
-      m => m.matchNumber === matchData.nextWinnerMatch
-    );
-
-    if (nextWinnerDb) {
-      await advanceToMatch(prisma, nextWinnerDb.id, match.winnerId, match.matchNumber);
-      results.push(`Winner advanced to match ${matchData.nextWinnerMatch}`);
-    }
-  }
-
-  // Advance loser to losers bracket (only in winners bracket and early losers rounds)
-  if (matchData.nextLoserMatch && match.bracketType === 'winners') {
-    const loserId = match.competitor1Id === match.winnerId
-      ? match.competitor2Id
-      : match.competitor1Id;
-
-    if (loserId) {
-      const nextLoserDb = bracket.matches.find(
-        m => m.matchNumber === matchData.nextLoserMatch
-      );
-
-      if (nextLoserDb) {
-        await advanceToMatch(prisma, nextLoserDb.id, loserId, match.matchNumber);
-        results.push(`Loser advanced to losers bracket match ${matchData.nextLoserMatch}`);
-      }
-    }
-  }
-
-  // Check if grand finals reset is needed. Prefer the named positions
-  // from the bracket structure; for legacy brackets generated before
-  // `positions` existed, fall back to the historical 8-person defaults
-  // (14 = GF, 15 = reset). Without the fallback, a LB-champion win
-  // on a legacy bracket would silently skip reset activation, and
-  // the bracket would end with no clear 1st-place finish.
-  const positions = structure.positions ?? {
-    winnersFinal: 7,
-    losersFinal: 13,
-    grandFinals: 14,
-    reset: 15,
+export interface EngineUpdate {
+  id: string;
+  matchNumber: number;
+  bracketType: string;
+  data: {
+    competitor1Id?: string | null;
+    competitor2Id?: string | null;
+    winnerId?: string | null;
+    status?: string;
+    notes?: string | null;
   };
-  const grandFinalsNumber = positions.grandFinals ?? null;
-  const resetNumber = positions.reset ?? null;
-  if (
-    match.bracketType === 'finals' &&
-    grandFinalsNumber !== null &&
-    match.matchNumber === grandFinalsNumber
-  ) {
-    // Grand finals - check if losers bracket champion won
-    // The winner from losers bracket is competitor2 in grand finals
-    const needsReset = match.winnerId === match.competitor2Id;
+}
 
-    if (needsReset && resetNumber !== null) {
-      // Activate reset match
-      const resetMatch = bracket.matches.find(m => m.matchNumber === resetNumber);
-      if (resetMatch) {
-        await prisma.match.update({
-          where: { id: resetMatch.id },
-          data: {
-            competitor1Id: match.competitor1Id, // Original winners bracket champion
-            competitor2Id: match.competitor2Id, // Losers bracket champion (who just won)
-            status: 'ready',
-          },
-        });
-        results.push('Reset match activated - losers bracket champion won grand finals');
-      }
-    }
+const BYE_NOTE = 'BYE';
+
+/**
+ * For every match number, the ordered list of feeders. Index 0 feeds
+ * `competitor1`, index 1 feeds `competitor2`. Winner feeds come
+ * before loser feeds, then by source match number — so the grand
+ * final gets the winners-bracket champion in slot 1 and the losers-
+ * bracket champion in slot 2, and a losers drop-down match gets the
+ * losers-bracket survivor in slot 1 and the dropping loser in slot 2.
+ */
+export function buildFeederMap(structure: BracketStructure): Map<number, Feeder[]> {
+  const map = new Map<number, Feeder[]>();
+  const add = (target: number, feeder: Feeder) => {
+    const list = map.get(target) ?? [];
+    list.push(feeder);
+    map.set(target, list);
+  };
+  for (const m of structure.winners ?? []) {
+    if (m.nextWinnerMatch != null) add(m.nextWinnerMatch, { source: m.matchNumber, outcome: 'winner' });
+    if (m.nextLoserMatch != null) add(m.nextLoserMatch, { source: m.matchNumber, outcome: 'loser' });
   }
+  for (const m of [...(structure.losers ?? []), ...(structure.finals ?? [])]) {
+    if (m.nextWinnerMatch != null) add(m.nextWinnerMatch, { source: m.matchNumber, outcome: 'winner' });
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => {
+      if (a.outcome !== b.outcome) return a.outcome === 'winner' ? -1 : 1;
+      return a.source - b.source;
+    });
+  }
+  return map;
+}
 
-  // Update ready status for affected matches
-  await updateMatchReadyStatus(prisma, bracket.id);
-
+/** Grand-final / reset match numbers, tolerating legacy structures without `positions`. */
+function finalsPositions(structure: BracketStructure): { grandFinals: number | null; reset: number | null } {
+  const finals = structure.finals ?? [];
+  if (structure.positions) {
+    return { grandFinals: structure.positions.grandFinals, reset: structure.positions.reset };
+  }
   return {
-    advanced: true,
-    message: results.length > 0 ? results.join('; ') : 'Match completed',
+    grandFinals: finals[0]?.matchNumber ?? null,
+    reset: finals[1]?.matchNumber ?? null,
   };
 }
 
-/**
- * Advances a competitor to a specific match
- */
-async function advanceToMatch(
-  prisma: PrismaClient,
-  matchId: string,
-  competitorId: string,
-  fromMatchNumber: number
-): Promise<void> {
-  const match = await prisma.match.findUnique({
-    where: { id: matchId },
-  });
+/** A match that was auto-resolved as a BYE (never actually contested). */
+function isAutoBye(m: EngineMatch): boolean {
+  return m.status === 'completed' && m.notes === BYE_NOTE && !(m.competitor1Id && m.competitor2Id);
+}
 
-  if (!match) return;
+/** Has this match been contested (so its competitors must not be rewritten)? */
+function isStarted(m: EngineMatch): boolean {
+  return m.status === 'in_progress' || (m.status === 'completed' && !isAutoBye(m));
+}
 
-  // Determine which slot to fill based on the match structure
-  // Generally, lower match numbers go to competitor1, higher to competitor2
-  const updateData: { competitor1Id?: string; competitor2Id?: string } = {};
+function outcomeOf(m: EngineMatch | undefined, outcome: Outcome): { resolved: boolean; id: string | null } {
+  if (!m || m.status !== 'completed') return { resolved: false, id: null };
+  if (outcome === 'winner') return { resolved: true, id: m.winnerId };
+  if (!m.winnerId) return { resolved: true, id: null };
+  return {
+    resolved: true,
+    id: m.winnerId === m.competitor1Id ? m.competitor2Id : m.competitor1Id,
+  };
+}
 
-  if (!match.competitor1Id) {
-    updateData.competitor1Id = competitorId;
-  } else if (!match.competitor2Id) {
-    updateData.competitor2Id = competitorId;
-  } else {
-    // Both slots filled - this can happen on legitimate re-runs of
-    // the bracket generator, so we log at debug rather than warn to
-    // avoid spamming logs in normal operation. Operators investigating
-    // an actual bug can enable DEBUG to see it.
-    if (process.env.DEBUG) {
-      console.log(`[match-advancement] Match ${matchId} already has both competitors`);
-    }
-    return;
-  }
+function sameSlots(a: (string | null)[], b: (string | null)[]): boolean {
+  const norm = (x: (string | null)[]) => x.map((v) => v ?? '').sort().join('\u0000');
+  return norm(a) === norm(b);
+}
 
-  await prisma.match.update({
-    where: { id: matchId },
-    data: updateData,
-  });
+function label(m: EngineMatch): string {
+  return `${m.bracketType} match ${m.matchNumber}`;
+}
+
+function startedVerb(m: EngineMatch): string {
+  return m.status === 'in_progress' ? 'started' : 'been completed';
 }
 
 /**
- * Updates the status of matches based on competitor availability
+ * Pure reconciliation. Returns the row updates needed to bring the
+ * bracket in line with its results. Throws
+ * `BracketAdvancementConflictError` if a started match would change.
  */
-async function updateMatchReadyStatus(
-  prisma: PrismaClient,
-  bracketId: string
-): Promise<void> {
-  const matches = await prisma.match.findMany({
-    where: { bracketId },
-  });
+export function computeBracketSync(
+  structure: BracketStructure | null | undefined,
+  matches: EngineMatch[]
+): EngineUpdate[] {
+  const state = new Map<number, EngineMatch>();
+  for (const m of matches) state.set(m.matchNumber, { ...m });
+  const updates = new Map<string, EngineUpdate>();
+  const apply = (m: EngineMatch, data: EngineUpdate['data']) => {
+    Object.assign(m, data);
+    const existing = updates.get(m.id);
+    if (existing) Object.assign(existing.data, data);
+    else updates.set(m.id, { id: m.id, matchNumber: m.matchNumber, bracketType: m.bracketType, data: { ...data } });
+  };
 
-  for (const match of matches) {
-    if (match.status === 'completed') continue;
+  const ordered = [...state.values()].sort((a, b) => a.matchNumber - b.matchNumber);
+  const isElimination = !!structure && (structure.finals?.length ?? 0) > 0;
 
-    const hasBothCompetitors = match.competitor1Id && match.competitor2Id;
-    const hasBye = (match.competitor1Id && !match.competitor2Id) ||
-                   (!match.competitor1Id && match.competitor2Id);
-
-    let newStatus = match.status;
-
-    if (hasBothCompetitors) {
-      newStatus = 'ready';
-    } else if (hasBye && match.roundNumber === 1) {
-      // First round BYE - auto-advance
-      newStatus = 'bye';
-    } else if (!match.competitor1Id && !match.competitor2Id) {
-      newStatus = 'pending';
+  if (!structure || !isElimination) {
+    // Round robin / pool play: no advancement graph. Only promote
+    // pending matches that have both competitors.
+    for (const m of ordered) {
+      if ((m.status === 'pending' || m.status === 'bye') && m.competitor1Id && m.competitor2Id) {
+        apply(m, { status: 'ready' });
+      }
     }
+    return [...updates.values()];
+  }
 
-    if (newStatus !== match.status) {
-      await prisma.match.update({
-        where: { id: match.id },
-        data: { status: newStatus },
-      });
+  const feeders = buildFeederMap(structure);
+  const { grandFinals, reset } = finalsPositions(structure);
+  const resetNumber = reset !== null && reset !== grandFinals ? reset : null;
+
+  // Iterate to a fixed point. Each pass settles at least one more
+  // level of the graph, so the bound is generous.
+  for (let pass = 0; pass < ordered.length + 2; pass++) {
+    let changed = false;
+    for (const m of ordered) {
+      if (m.matchNumber === resetNumber) continue;
+      const fs = feeders.get(m.matchNumber) ?? [];
+      let allResolved = true;
+
+      if (fs.length > 0) {
+        const desired: (string | null)[] = [null, null];
+        fs.forEach((f, i) => {
+          const o = outcomeOf(state.get(f.source), f.outcome);
+          if (!o.resolved) allResolved = false;
+          else if (i < 2) desired[i] = o.id;
+        });
+        if (!sameSlots(desired, [m.competitor1Id, m.competitor2Id])) {
+          if (isStarted(m)) {
+            throw new BracketAdvancementConflictError(
+              `Cannot change the competitors of ${label(m)}: it has already ${startedVerb(m)}.`
+            );
+          }
+          const data: EngineUpdate['data'] = { competitor1Id: desired[0], competitor2Id: desired[1] };
+          if (m.status === 'completed') {
+            // Auto-BYE whose entrant changed: reopen so it re-resolves.
+            data.status = 'pending';
+            data.winnerId = null;
+            data.notes = null;
+          } else if (m.status === 'ready' && !(desired[0] && desired[1])) {
+            data.status = 'pending';
+          }
+          apply(m, data);
+          changed = true;
+        }
+      }
+
+      if (m.status !== 'completed' && m.status !== 'in_progress') {
+        const present = [m.competitor1Id, m.competitor2Id].filter((c): c is string => !!c);
+        if (present.length === 2) {
+          if (m.status !== 'ready') {
+            apply(m, { status: 'ready' });
+            changed = true;
+          }
+        } else if (allResolved) {
+          apply(m, { status: 'completed', winnerId: present[0] ?? null, notes: BYE_NOTE });
+          changed = true;
+        } else if (m.status === 'ready') {
+          apply(m, { status: 'pending' });
+          changed = true;
+        }
+      }
     }
+    if (!changed) break;
+  }
+
+  // Bracket reset: only live when the losers-bracket champion won the
+  // grand final. Correcting or undoing the grand final deactivates it.
+  if (resetNumber !== null && grandFinals !== null) {
+    const resetMatch = state.get(resetNumber);
+    const gf = state.get(grandFinals);
+    if (resetMatch && gf) {
+      let desired: (string | null)[] = [null, null];
+      if (gf.status === 'completed' && gf.winnerId && gf.competitor1Id && gf.competitor2Id) {
+        const lbFeeder = (feeders.get(grandFinals) ?? [])[1];
+        const lbChampion = (lbFeeder ? outcomeOf(state.get(lbFeeder.source), lbFeeder.outcome).id : null)
+          ?? gf.competitor2Id;
+        if (gf.winnerId === lbChampion) {
+          const wbChampion = gf.competitor1Id === lbChampion ? gf.competitor2Id : gf.competitor1Id;
+          desired = [wbChampion, lbChampion];
+        }
+      }
+      if (!sameSlots(desired, [resetMatch.competitor1Id, resetMatch.competitor2Id])) {
+        if (isStarted(resetMatch)) {
+          throw new BracketAdvancementConflictError(
+            `Cannot change the bracket reset (${label(resetMatch)}): it has already ${startedVerb(resetMatch)}.`
+          );
+        }
+        apply(resetMatch, {
+          competitor1Id: desired[0],
+          competitor2Id: desired[1],
+          winnerId: null,
+          status: desired[0] && desired[1] ? 'ready' : 'pending',
+        });
+      } else if (desired[0] && desired[1] && (resetMatch.status === 'pending' || resetMatch.status === 'bye')) {
+        apply(resetMatch, { status: 'ready' });
+      }
+    }
+  }
+
+  return [...updates.values()];
+}
+
+/**
+ * Serialize all advancement for one bracket. Takes a row lock on the
+ * Bracket row for the rest of the surrounding transaction, so two
+ * scorekeepers finishing sibling matches can't read-then-write the
+ * same downstream match concurrently (READ COMMITTED lost update).
+ * Call it FIRST in the transaction, before touching any match row.
+ * No-op on clients without raw-query support (unit-test mocks).
+ */
+export async function lockBracket(prisma: PrismaLike, bracketId: string): Promise<void> {
+  const client = prisma as unknown as { $queryRaw?: unknown };
+  if (typeof client.$queryRaw !== 'function') return;
+  await (prisma as PrismaClient).$queryRaw`SELECT "id" FROM "Bracket" WHERE "id" = ${bracketId} FOR UPDATE`;
+}
+
+function parseStructure(json: string | null | undefined): BracketStructure | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as BracketStructure;
+  } catch {
+    return null;
   }
 }
 
 /**
- * Handles BYE matches by automatically advancing the competitor
+ * Load the bracket, reconcile it (see `computeBracketSync`) and write
+ * the resulting updates. Call inside a transaction; the bracket row is
+ * locked first so concurrent calls serialize.
  */
-export async function handleByeMatches(
-  prisma: PrismaClient,
+export async function syncBracketAdvancement(
+  prisma: PrismaLike,
   bracketId: string
-): Promise<number> {
+): Promise<EngineUpdate[]> {
+  await lockBracket(prisma, bracketId);
   const bracket = await prisma.bracket.findUnique({
     where: { id: bracketId },
     include: { matches: true },
   });
+  if (!bracket) return [];
 
-  if (!bracket) return 0;
-
-  const structure: BracketStructure = JSON.parse(bracket.structure);
-  let byesHandled = 0;
-
-  // Find first round matches with BYEs
-  const firstRoundMatches = bracket.matches.filter(
-    m => m.roundNumber === 1 && m.bracketType === 'winners'
-  );
-
-  for (const match of firstRoundMatches) {
-    const hasOnlyOne = (match.competitor1Id && !match.competitor2Id) ||
-                       (!match.competitor1Id && match.competitor2Id);
-
-    if (hasOnlyOne && match.status !== 'completed') {
-      const winnerId = match.competitor1Id || match.competitor2Id;
-
-      if (winnerId) {
-        // Mark as completed with BYE winner
-        await prisma.match.update({
-          where: { id: match.id },
-          data: {
-            winnerId,
-            status: 'completed',
-            notes: 'BYE',
-          },
-        });
-
-        // Advance the winner
-        await advanceWinner(prisma, {
-          ...match,
-          winnerId,
-          status: 'completed',
-        } as Match & { bracketId: string });
-
-        byesHandled++;
-      }
-    }
+  const updates = computeBracketSync(parseStructure(bracket.structure), bracket.matches);
+  for (const u of updates) {
+    await prisma.match.update({ where: { id: u.id }, data: u.data });
   }
+  return updates;
+}
 
-  return byesHandled;
+/** Human-readable summary of engine updates (logs + audit reasons). */
+export function summarizeBracketUpdates(updates: EngineUpdate[]): string {
+  if (updates.length === 0) return 'No downstream changes';
+  return updates
+    .map((u) => {
+      const parts = Object.entries(u.data).map(([k, v]) => `${k}=${v ?? 'null'}`);
+      return `${u.bracketType} match ${u.matchNumber}: ${parts.join(', ')}`;
+    })
+    .join('; ');
+}
+
+/**
+ * Propagate a match result through the bracket. Kept for existing
+ * callers — it reconciles the whole bracket, so it also handles
+ * corrections (winner changed) and reopened matches.
+ */
+export async function advanceWinner(
+  prisma: PrismaLike,
+  match: Pick<Match, 'bracketId'>
+): Promise<AdvancementResult> {
+  const updates = await syncBracketAdvancement(prisma, match.bracketId);
+  return { advanced: true, message: summarizeBracketUpdates(updates) };
+}
+
+/**
+ * Resolve every BYE in the bracket — first-round byes and the empty
+ * slots they create further down (losers bracket included). Returns
+ * the number of matches auto-completed. Runs in its own transaction
+ * when given the root client.
+ */
+export async function handleByeMatches(
+  prisma: PrismaLike,
+  bracketId: string
+): Promise<number> {
+  const root = prisma as unknown as { $transaction?: unknown };
+  const updates = typeof root.$transaction === 'function'
+    ? await (prisma as PrismaClient).$transaction((tx) => syncBracketAdvancement(tx, bracketId))
+    : await syncBracketAdvancement(prisma, bracketId);
+  return updates.filter((u) => u.data.status === 'completed' && u.data.notes === BYE_NOTE).length;
 }
 
 /**
@@ -302,10 +415,18 @@ interface PlacementMatch {
  * appear in double elimination (the loser of the winners final who
  * lost again in the losers bracket, and the loser of the losers
  * final) — both are valid `place: 3` rows.
+ *
+ * Single elimination (detected from `structure`: no losers bracket,
+ * one final) awards a tied 3rd place to both semifinal losers.
+ *
+ * 1st/2nd are only reported once they are actually decided: while an
+ * activated bracket-reset match is still unplayed, the grand final
+ * result is provisional and no 1st/2nd is returned.
  */
 export function resolvePlacements(
   matches: PlacementMatch[],
-  positions: BracketPositions | null | undefined
+  positions: BracketPositions | null | undefined,
+  structure?: Pick<BracketStructure, 'winners' | 'losers' | 'finals'> | null
 ): { place: number; competitorId: string }[] {
   // No positions = we can't reliably map roles to match numbers.
   // Each bracket size has different positions; without the named
@@ -334,18 +455,46 @@ export function resolvePlacements(
 
   // Reset match takes precedence — when it was played, it decides
   // both 1st and 2nd (because by definition the LB champion had to
-  // beat the WB champion to force a reset).
-  if (reset?.status === 'completed' && reset.winnerId) {
+  // beat the WB champion to force a reset). While an activated reset
+  // is still unplayed, nobody has won yet: report no 1st/2nd.
+  const resetActive = !!reset && reset !== gf && reset.status !== 'completed' && (
+    reset.status === 'ready' ||
+    reset.status === 'in_progress' ||
+    !!reset.competitor1Id ||
+    !!reset.competitor2Id
+  );
+  if (reset && reset !== gf && reset.status === 'completed' && reset.winnerId) {
     pushPlacement(1, reset.winnerId);
     pushPlacement(2, opponentOf(reset, reset.winnerId));
-  } else if (gf?.status === 'completed' && gf.winnerId) {
+  } else if (gf?.status === 'completed' && gf.winnerId && !resetActive) {
     pushPlacement(1, gf.winnerId);
     pushPlacement(2, opponentOf(gf, gf.winnerId));
   }
 
-  // 3rd place: loser of the losers final (if there is one)
+  const inGrandFinal = (id: string | null) =>
+    !!id && !!gf && (gf.competitor1Id === id || gf.competitor2Id === id);
+
+  // 3rd place: loser of the losers final (if there is one). Guard
+  // against tiny brackets where the "losers final" loser still plays
+  // the grand final (N=2 feeds both match-1 players into the GF).
   if (lf?.status === 'completed' && lf.winnerId) {
-    pushPlacement(3, opponentOf(lf, lf.winnerId));
+    const lfLoser = opponentOf(lf, lf.winnerId);
+    if (!inGrandFinal(lfLoser)) pushPlacement(3, lfLoser);
+  }
+
+  // Single elimination: both semifinal losers share 3rd place.
+  const isSingleElim = !!structure &&
+    (structure.losers?.length ?? 0) === 0 &&
+    (structure.finals?.length ?? 0) === 1 &&
+    positions.reset === null;
+  if (isSingleElim && positions.grandFinals !== null) {
+    const semis = structure.winners.filter((m) => m.nextWinnerMatch === positions.grandFinals);
+    for (const semi of semis) {
+      const row = byNum.get(semi.matchNumber);
+      if (row?.status === 'completed' && row.winnerId && row.competitor1Id && row.competitor2Id) {
+        pushPlacement(3, opponentOf(row, row.winnerId));
+      }
+    }
   }
 
   // In DE there can be a second 3rd-place finisher — the loser of
@@ -360,7 +509,7 @@ export function resolvePlacements(
   const wf = positions.winnersFinal !== null ? byNum.get(positions.winnersFinal) : undefined;
   if (wf?.status === 'completed' && wf.winnerId) {
     const wfLoser = opponentOf(wf, wf.winnerId);
-    if (wfLoser && !placed.has(wfLoser)) {
+    if (wfLoser && !placed.has(wfLoser) && !inGrandFinal(wfLoser)) {
       const competedInLosers = matches.some(
         (m) =>
           m.bracketType === 'losers' &&
@@ -415,7 +564,8 @@ export async function getBracketPlacements(
       competitor1Id: m.competitor1Id,
       competitor2Id: m.competitor2Id,
     })),
-    positions
+    positions,
+    structure
   );
 }
 
@@ -438,7 +588,7 @@ export function getBracketPlacementsFromLoaded(
     positions = { winnersFinal: 7, losersFinal: 13, grandFinals: 14, reset: 15 };
   }
 
-  return resolvePlacements(matches, positions);
+  return resolvePlacements(matches, positions, structure);
 }
 
 /**
@@ -517,9 +667,9 @@ export function isBracketCompletePure(
   if (!gf) return false;
 
   if (gf.status === 'completed') {
-    // If the reset was activated (status === 'ready') but not yet
-    // played, the bracket is mid-reset — not complete.
-    if (reset && reset.status === 'ready') return false;
+    // If the reset was activated (ready / being played) but not yet
+    // completed, the bracket is mid-reset — not complete.
+    if (reset && reset !== gf && (reset.status === 'ready' || reset.status === 'in_progress')) return false;
     return true;
   }
 

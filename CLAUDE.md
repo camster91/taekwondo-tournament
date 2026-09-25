@@ -287,33 +287,42 @@ multi-tenant gate (see that section).
 
 ## Multi-tenant (`requireTournamentAccess`)
 
-The middleware lives in `src/server/middleware/auth.ts`. It is
-**defined but not yet wired into route handlers** because the
-current live install is single-tenant (no orgs). When a real
-multi-tenant install is set up, the wire-up is mechanical:
-add `requireTournamentAccess('director')` after `requireRole(...)`
-on every tournament-scoped mutation in `tournaments.ts`,
-`divisions.ts`, `brackets.ts`.
+The middleware lives in `src/server/middleware/auth.ts` and is wired
+into the tournament-scoped routes (`requireTournamentAccess(minRole)`
+as middleware, or `checkTournamentAccess(...)` inline after resolving
+a parent tournamentId). List endpoints scope through
+`buildTournamentAccessFilter`; competitor endpoints through
+`buildCompetitorAccessFilter` (read) and `buildCompetitorWriteFilter`
+(write: every tournament the competitor is registered in must be
+accessible).
 
 Authorization precedence (first match wins):
 
-1. **Admin** — global access, can mutate any tournament.
-2. **Global role check** — the user's `role` must be at least
-   the `minRole` threshold globally. (Defense-in-depth: even
-   if an explicit access row grants a higher per-tournament
-   role, the user must have the privilege at all.)
-3. **`UserTournamentAccess` row** exists for `(user, tournament)`
-   with a role at the required level.
-4. **Tournament has no `organizationId`** (legacy single-tenant
-   data) — fall back to the global-role check from step 2.
-5. **Tournament belongs to an org, and the user is a member of
-   that org** — implicit director access. THIS is the
-   multi-tenant boundary. A non-member can't read or mutate a
-   tournament they don't belong to.
-6. Otherwise — 403.
+1. **Admin** — global access, including soft-deleted tournaments.
+2. **Global role check** — the user's `role` must meet `minRole`
+   (a per-tournament grant never exceeds the global role).
+3. **Tournament must exist and not be soft-deleted** (404) unless
+   the route passes `{ allowDeleted: true }` (trash/restore only).
+4. **`UserTournamentAccess` row** for `(user, tournament)` at the
+   required level.
+5. **Org tournament + user is a member of that org** — effective
+   role = min(global role, membership role); `owner`/`admin`
+   memberships count as director, `member` as viewer, unknown
+   roles grant nothing.
+6. **Orphan tournament (`organizationId` null)** — the legacy
+   single-tenant pool, reachable ONLY by users with no org
+   memberships. Tenant users never see orphan data (except via
+   step 4), and no-org users never see org data.
+7. Otherwise — 403.
 
-12 regression tests in `src/server/middleware/auth-tournament-access.test.ts`
-pin all 6 paths.
+`Tournament.createdById` records the creator. When a director creates
+their first organization, the org-less tournaments they created move
+into it (so they don't disappear behind rule 6).
+
+Regression tests: `src/server/middleware/auth-tournament-access.test.ts`
+and the opt-in Postgres suite
+`src/server/middleware/tenant-isolation.integration.test.ts`
+(`TENANT_ISOLATION_DATABASE_URL`).
 
 ---
 
@@ -407,7 +416,7 @@ trailing slash) — in code the source file usually has it as
 | PUT | `/api/auth/users/:userId/role` | admin | zod `roleUpdateSchema`. |
 | PUT | `/api/auth/users/:userId/status` | admin | zod `statusUpdateSchema`. |
 | POST | `/api/auth/tournaments/:tournamentId/access` | admin | zod `tournamentAccessSchema`. Grant per-tournament role. |
-| DELETE | `/api/auth/tournaments/:tournamentId/access/:userId` | auth | Revoke per-tournament access. |
+| DELETE | `/api/auth/tournaments/:tournamentId/access/:userId` | admin | Revoke per-tournament access. |
 
 ### `/api/tournaments` (`src/server/routes/tournaments.ts`)
 
@@ -598,6 +607,22 @@ works.
 The 24-case regression test in `src/server/services/bracket-positions.test.ts`
 pins every size.
 
+Advancement (`match-advancement.ts`) is driven by a pure
+`computeBracketSync`: every downstream slot is derived from one fixed
+upstream result, byes resolve through the whole bracket (including
+empty losers-bracket matches), re-submitting a result is a no-op, a
+corrected result replaces the old one downstream, and a change that
+would alter an already-started downstream match is rejected (409).
+Each advancement locks the bracket row (`SELECT ... FOR UPDATE`).
+Single elimination awards a tied 3rd place to both semifinal losers;
+no 1st/2nd is reported while an activated DE reset match is unplayed.
+
+**Schema drift check.** `schema.prisma` must match the migration
+history. After editing either, apply migrations to a scratch
+Postgres and confirm
+`npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code`
+exits 0.
+
 ---
 
 ## Categorization engine
@@ -613,12 +638,10 @@ triggers split), `eventTypeLabels`, `customWeightClasses`,
 `enableSmartSplitting/Merging`. Sport-specific labels come from
 `getSportProfile(tournament.sportProfileSlug)`.
 
-**Bug to know about:** `categorization-engine.ts:554` treats
-`weight == null` as 0 lbs, which falls into the lowest weight
-class. A 200-lb adult who hasn't been weighed ends up in a
-youth Feather division. Public registration requires weight
-for sparring, but auto-categorize doesn't re-check. Fixed in
-the followup; the weight boundary is `weight < weightMaxLbs`.
+**Fixed:** sparring registrations with no weight are excluded from
+auto-categorization with a warning (they used to be treated as 0 lbs
+and land in the lightest class). The weight boundary is
+`weight < weightMaxLbs`.
 
 **Fixed (Phase 8 follow-up):** `canMerge` previously required
 *exact* contiguity (`a.ageMax + 1 === b.ageMin`) for two divisions
@@ -679,8 +702,6 @@ boundaries.
 Things still to fix:
 - JWT in localStorage is XSS-leakable. httpOnly Secure cookie
   would be safer.
-- No `tokenVersion` claim, so a flipped `isActive` user is still
-  authed until their 7-day JWT expires.
 - No `jti` denylist, so `logout()` doesn't invalidate server-side.
 
 ---
@@ -749,7 +770,9 @@ Production runs in a Docker container on the Ashbi VPS
 **Migration requirement:** Next production deploy must apply:
 - `20260910_add_tournament_templates` (org-level templates, PR #255)
 - `20260910_add_custom_domains` (custom domains, PR #256)
-- `20260910_add_capacity_waitlist` (capacity + waitlist, latest)
+- `20260910_add_capacity_waitlist` (capacity + waitlist)
+- `20260924_registration_waitlist_fields` (Registration waitlist columns that were in the schema without a migration)
+- `20260925_tournament_created_by` (Tournament.createdById, backfilled from `tournament_created` audit entries)
 
 The deploy script runs `prisma migrate deploy` automatically
 during cutover. Do NOT use `npm run db:push` on production —
@@ -759,10 +782,14 @@ it bypasses migration history and is only for disposable local dev.
 
 ## Testing
 
-- `npm test` — vitest unit tests. 148 tests across 10 files.
-  Covers: bracket generator + positions, age groups, weight
-  classes, belts, fair-mount-matchup distance, CSV export,
-  Excel auto-map, tournament-access middleware.
+- `npm test` — vitest (~1,450 tests, ~155 files). Includes full
+  bracket playthrough simulations (`bracket-simulation.test.ts`, DE
+  and SE for N=1..17 plus larger sizes). DB-backed suites
+  (`src/server/contracts/*`, `*.integration.test.ts`) skip unless a
+  database is reachable / their opt-in env var is set.
+- CI (`.github/workflows/ci.yml`) runs `npm run typecheck` (server
+  then client — the client check only runs if the server one
+  passes), `npm test`, `npm run lint`. Keep all three green.
 - `npm run test:e2e` — Playwright. 7 spec files in `tests/e2e/`.
   Global teardown wipes test records from the live DB.
   `npm run test:e2e:install` once to download the Chromium

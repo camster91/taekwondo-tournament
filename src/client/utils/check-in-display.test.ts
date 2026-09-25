@@ -13,6 +13,7 @@ describe('check-in weight display', () => {
   it('provides distinct accessible names for navigation and every filter', () => {
     expect(CHECK_IN_ACCESSIBLE_LABELS).toEqual({
       back: 'Back to tournament',
+      search: 'Search competitors by name or school',
       status: 'Filter by check-in status',
       event: 'Filter by event',
       school: 'Filter by school',

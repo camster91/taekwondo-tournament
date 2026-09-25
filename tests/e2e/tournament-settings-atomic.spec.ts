@@ -52,7 +52,8 @@ test.describe('atomic tournament settings', () => {
 
     await page.getByRole('tab', { name: /Setup/i }).click();
     await expect(setupThreshold).toHaveValue('9');
-    await expect(page.getByText('You have unsaved changes')).toBeVisible();
+    // Save-state copy from #260.
+    await expect(page.getByRole('status', { name: 'Save status: Unsaved changes' })).toBeVisible();
 
     await page.getByRole('tab', { name: /Categorization \+ Brackets/i }).click();
     await minimumCompetitors.fill('4');

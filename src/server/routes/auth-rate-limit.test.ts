@@ -59,6 +59,8 @@ async function startAuthServer(demoMax?: string) {
     },
     magicLink: {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findMany: vi.fn().mockResolvedValue([]),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       create: vi.fn().mockResolvedValue({}),
     },
   };

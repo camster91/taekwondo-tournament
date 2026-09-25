@@ -31,6 +31,45 @@ const CHECKOUT_EVENTS = new Set([
   'checkout.session.completed',
 ]);
 
+export type EntryFeeWebhookOutcome =
+  | { action: 'mark_paid' }
+  | { action: 'noop' }
+  | { action: 'ignore'; reason: 'unknown_registration' | 'amount_mismatch' | 'currency_mismatch' };
+
+/**
+ * Decide what a checkout.session.completed entry-fee event may do to a
+ * registration.
+ *
+ * The event is signature-verified and its metadata (registrationId,
+ * type=entry_fee) is only ever set by this server when it creates a
+ * Checkout session, so any completed + paid session carrying that
+ * metadata is a genuine payment for the registration. It does NOT have
+ * to be the most recent session we stored in paymentIntentId: a parent
+ * can open /checkout twice and pay in the older tab, and that charge
+ * must still mark the registration paid. What must match is the amount
+ * (and currency) we recorded as due for the registration.
+ */
+export function evaluateEntryFeeSession(
+  registration: { paymentStatus: string | null; paymentAmountCents: number | null } | null,
+  session: { id: string; payment_status?: string; amount_total?: number | null; currency?: string | null },
+): EntryFeeWebhookOutcome {
+  if (!registration) return { action: 'ignore', reason: 'unknown_registration' };
+  if (registration.paymentStatus !== 'pending' || session.payment_status !== 'paid') {
+    return { action: 'noop' };
+  }
+  if (
+    registration.paymentAmountCents == null
+    || session.amount_total == null
+    || session.amount_total !== registration.paymentAmountCents
+  ) {
+    return { action: 'ignore', reason: 'amount_mismatch' };
+  }
+  if (session.currency && session.currency.toLowerCase() !== 'usd') {
+    return { action: 'ignore', reason: 'currency_mismatch' };
+  }
+  return { action: 'mark_paid' };
+}
+
 export async function stripeWebhookHandler(req: Request, res: Response): Promise<Response> {
   let config: ReturnType<typeof stripeRuntimeConfigFromEnv>;
   try {
@@ -61,7 +100,8 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
       id: string;
       metadata?: { registrationId?: string; type?: string };
       payment_status?: string;
-      amount_total?: number;
+      amount_total?: number | null;
+      currency?: string | null;
     };
 
     if (session.metadata?.type === 'entry_fee' && session.metadata.registrationId) {
@@ -74,35 +114,36 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
       });
       if (existingEvent) return res.json({ processed: false, duplicate: true });
 
+      let outcome: EntryFeeWebhookOutcome;
       try {
-        await prisma.$transaction(async (tx) => {
+        outcome = await prisma.$transaction(async (tx) => {
+          // Record the event first so Stripe retries of an event we
+          // deliberately ignored (unknown registration, mismatch) are
+          // acknowledged as duplicates rather than reprocessed.
           await tx.billingWebhookEvent.create({
             data: { providerEventId: event.id, type: event.type, payloadHash },
           });
 
           const registration = await tx.registration.findUnique({
             where: { id: registrationId },
-            select: { id: true, paymentStatus: true, paymentIntentId: true },
+            select: { id: true, paymentStatus: true, paymentAmountCents: true },
           });
 
-          if (!registration) {
-            throw new Error(`Webhook references unknown registration: ${registrationId}`);
-          }
-
-          // Update payment status to 'paid' only if it was pending
-          if (
-            registration.paymentStatus === 'pending' &&
-            session.payment_status === 'paid'
-          ) {
+          const decision = evaluateEntryFeeSession(registration, session);
+          if (decision.action === 'mark_paid') {
             await tx.registration.update({
               where: { id: registrationId },
               data: {
                 paymentStatus: 'paid',
                 paymentReceivedAt: new Date(),
                 paymentAmountCents: session.amount_total ?? null,
+                // Point at the session that was actually paid (may be an
+                // older one than the last session we created).
+                paymentIntentId: session.id,
               },
             });
           }
+          return decision;
         });
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -111,7 +152,17 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
         throw error;
       }
 
-      return res.json({ processed: true, type: 'entry_fee' });
+      if (outcome.action === 'ignore') {
+        // Acknowledge (2xx) so Stripe stops retrying; a retry can never
+        // succeed for these cases. Log for operator follow-up (ids only).
+        console.warn(
+          `[billing/webhook] entry_fee event ${event.id} ignored: ${outcome.reason}`
+          + ` (registration ${registrationId.slice(0, 8)}, session ${session.id})`,
+        );
+        return res.json({ processed: false, ignored: true, reason: outcome.reason });
+      }
+
+      return res.json({ processed: true, type: 'entry_fee', paid: outcome.action === 'mark_paid' });
     }
 
     // Not an entry-fee checkout; ignore

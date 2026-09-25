@@ -49,6 +49,57 @@ const chatLimiter = rateLimit({
   message: { error: 'Too many support requests, please slow down.' },
 });
 
+// Anonymous (marketing-site) chat is unauthenticated, so it gets a much
+// tighter per-IP budget. Anonymous callers never reach the LLM provider
+// (see handleSupportChat), but they can still create tickets and trigger
+// support-team emails.
+const anonymousChatLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many support requests, please try again later.' },
+});
+
+// Ticket creation (DB row + notification email) is limited separately:
+// per IP for anonymous callers, per user when authenticated.
+const ticketLimitMessage = { error: 'Too many support tickets created. Please wait before opening another.' };
+const anonymousTicketLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: ticketLimitMessage,
+});
+const userTicketLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `user:${(req as unknown as AuthenticatedRequest).user?.id ?? 'unknown'}`,
+  message: ticketLimitMessage,
+});
+
+/** Max message length for unauthenticated chat (schema max is 2000). */
+export const ANONYMOUS_SUPPORT_MESSAGE_MAX = 1000;
+
+function wouldCreateTicket(req: AuthenticatedRequest): boolean {
+  const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+  const explicit = req.body?.createTicket === true;
+  return req.user ? shouldEscalate(message, explicit) : explicit;
+}
+
+function anonymousChatLimit(req: AuthenticatedRequest, res: Response, next: () => void) {
+  if (req.user) return next();
+  return anonymousChatLimiter(req as never, res as never, next);
+}
+
+function ticketCreationLimit(req: AuthenticatedRequest, res: Response, next: () => void) {
+  if (!wouldCreateTicket(req)) return next();
+  const limiter = req.user ? userTicketLimiter : anonymousTicketLimiter;
+  return limiter(req as never, res as never, next);
+}
+
 const SUPPORT_SETTINGS_KEY = 'supportIntegration';
 const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const DEFAULT_OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
@@ -459,6 +510,11 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
   const prisma: PrismaClient = req.app.locals.prisma;
   const body = req.body;
   const normalizedMessage = body.message.trim();
+  if (!req.user && normalizedMessage.length > ANONYMOUS_SUPPORT_MESSAGE_MAX) {
+    return res.status(400).json({
+      error: `Message is too long (max ${ANONYMOUS_SUPPORT_MESSAGE_MAX} characters). Sign in to send a longer message.`,
+    });
+  }
   const requestedTournamentId = body.tournamentId?.trim() || undefined;
   const requestAssist = body.requestAssist === true;
   let supportOrganizationId: string | null = null;
@@ -501,7 +557,12 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
   if (!req.user && body.createTicket === true && !anonymousContactComplete) {
     return res.status(400).json({ error: 'Name and email are required to create a support ticket.' });
   }
-  const assistantMessage = await generateAssistantReply(normalizedMessage, config, body.page);
+  // The LLM provider (platform or tenant API key) is only used for
+  // authenticated users. Anonymous callers get the built-in canned
+  // guidance so the public endpoint cannot be used to burn the key.
+  const assistantMessage = req.user
+    ? await generateAssistantReply(normalizedMessage, config, body.page)
+    : buildFallbackReply(normalizedMessage);
   const conversationId = body.conversationId?.trim() || null;
   const escalate = req.user
     ? shouldEscalate(normalizedMessage, body.createTicket === true)
@@ -566,7 +627,9 @@ async function handleSupportChat(req: AuthenticatedRequest, res: Response) {
 const supportChatHandler = [
   optionalAuthenticate,
   chatLimiter,
+  anonymousChatLimit,
   validateRequest(supportChatSchema),
+  ticketCreationLimit,
   handleSupportChat,
 ] as const;
 

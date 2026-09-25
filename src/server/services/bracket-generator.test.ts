@@ -50,15 +50,17 @@ describe('Single-Elimination Generator', () => {
 
   it('pads to next power of 2 with byes for non-power-of-2 counts', () => {
     const result = generateSingleElimination(seeded(5));
-    // 5 competitors padded to 8 = 4 round-1 matches (2 with byes — the
-    // 3 null slots pair up into one (null, null) match and one (real, null)
-    // match) + 2 semis + 1 final.
+    // 5 competitors padded to 8 = 4 round-1 matches + 2 semis + 1 final.
+    // Standard seeding gives the 3 byes to seeds 1-3, so 3 round-1
+    // matches have a bye and none is null-v-null (regression: the old
+    // adjacent-slot pairing produced an unplayable (null, null) match).
     expect(result.winners).toHaveLength(6);
     expect(result.finals).toHaveLength(1);
     const round1 = result.winners.filter(m => m.round === 1);
     expect(round1).toHaveLength(4);
     const byes = round1.filter(m => m.competitor1Id === null || m.competitor2Id === null);
-    expect(byes.length).toBe(2);
+    expect(byes.length).toBe(3);
+    expect(round1.some(m => m.competitor1Id === null && m.competitor2Id === null)).toBe(false);
   });
 
   it('round numbers progress correctly', () => {

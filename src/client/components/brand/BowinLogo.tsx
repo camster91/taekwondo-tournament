@@ -19,6 +19,9 @@ export function BowinLogo({
   return (
     <span
       className={classNames('inline-flex items-center gap-2.5', className)}
+      // The compact mark has no visible wordmark, so expose it as a named
+      // image; aria-label on a role-less span is prohibited (axe).
+      role={compact ? 'img' : undefined}
       aria-label={compact ? 'Bowin' : undefined}
     >
       <span

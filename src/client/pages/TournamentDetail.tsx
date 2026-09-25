@@ -206,11 +206,12 @@ export default function TournamentDetail() {
         body: JSON.stringify(data),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
+        // Read the body once; the server's message is what the operator needs.
+        const body = await res.json().catch(() => ({})) as { code?: unknown; error?: unknown };
         if (res.status === 402 && body.code === 'COMPETITOR_LIMIT_REACHED') {
-          throw Object.assign(new Error(body.error), { isLimitError: true });
+          throw Object.assign(new Error(String(body.error)), { isLimitError: true });
         }
-        throw new Error(await readAdminOperationError(res, 'Failed to register competitors'));
+        throw new Error(typeof body.error === 'string' && body.error.trim() ? body.error : 'Failed to register competitors');
       }
       return res.json();
     },
@@ -1726,8 +1727,10 @@ function DayOfPanel({ tournamentId }: { tournamentId: string }) {
                   <div className="text-surface-600 truncate">{m.school || '—'}</div>
                 </div>
                 <div className="text-right tabular-nums ml-2">
-                  <div className="text-[11px] text-surface-600">
-                    <span className="line-through opacity-60">{m.weightAtRegistration}</span>
+                  <div className="text-[11px] text-surface-600 dark:text-surface-400">
+                    {/* Strikethrough alone marks the superseded weight; dimming it
+                        further dropped it below 4.5:1. */}
+                    <span className="line-through">{m.weightAtRegistration}</span>
                     {' → '}
                     <span className="text-surface-900 dark:text-white">{m.checkInWeight}</span>
                   </div>

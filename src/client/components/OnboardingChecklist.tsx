@@ -1,5 +1,5 @@
 // P2-18: Onboarding checklist component — contextual, recoverable, keyboard-safe
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type MouseEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { X, CheckCircle, Circle, Building2, Upload, Trophy, Eye, UserPlus, ArrowRight } from 'lucide-react';
@@ -223,7 +223,7 @@ export default function OnboardingChecklist() {
           {steps.map((step, index) => {
             const isComplete = checklist[step.key];
             const Icon = step.icon;
-            const showAction = !isComplete && step.action;
+            const action = !isComplete ? step.action : undefined;
 
             return (
               <div
@@ -254,22 +254,22 @@ export default function OnboardingChecklist() {
                         {step.description}
                       </p>
                     </div>
-                    {showAction && (
+                    {action && (
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={(e) => {
+                        onClick={(e: MouseEvent<HTMLElement>) => {
                           e.stopPropagation();
-                          if (step.action!.onClick) {
-                            step.action!.onClick();
+                          if (action.onClick) {
+                            action.onClick();
                           } else {
-                            navigate(step.action!.path);
+                            navigate(action.path);
                           }
                         }}
                         className="flex-shrink-0 text-xs px-2 py-1 h-auto"
-                        aria-label={`${step.action.label} (Step ${index + 1})`}
+                        aria-label={`${action.label} (Step ${index + 1})`}
                       >
-                        {step.action.label}
+                        {action.label}
                         <ArrowRight className="h-3 w-3 ml-1" />
                       </Button>
                     )}

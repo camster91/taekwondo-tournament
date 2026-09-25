@@ -89,3 +89,45 @@ describe('organization response boundaries', () => {
     expect(JSON.stringify(res.body)).not.toContain(secret);
   });
 });
+
+describe('organization creation adopts the creator\'s org-less tournaments', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const setup = async (role: string) => {
+    const { normalizeOrganizationCreateInput } = await import('./organizations-validation.js');
+    vi.mocked(normalizeOrganizationCreateInput).mockReturnValue({
+      ok: true,
+      data: { name: 'Synthetic Dojang', slug: 'synthetic-dojang' },
+    } as never);
+    const tx: any = {
+      organization: { create: vi.fn().mockResolvedValue({ id: 'org-new', name: 'Synthetic Dojang', plan: 'free', settings: null }) },
+      organizationMember: { create: vi.fn().mockResolvedValue({ id: 'mem-1' }) },
+      tournament: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+    };
+    const prisma: any = {
+      organizationMember: { findFirst: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn((fn: (t: unknown) => unknown) => fn(tx)),
+    };
+    const req: any = { user: { id: 'director-a', role }, body: {}, app: { locals: { prisma } } };
+    const res = response();
+    await handler('post', '/')(req, res);
+    return { tx, res };
+  };
+
+  it('moves only tournaments the director created that have no organization', async () => {
+    const { tx, res } = await setup('director');
+    expect(res.statusCode).toBe(201);
+    expect(tx.tournament.updateMany).toHaveBeenCalledWith({
+      where: { createdById: 'director-a', organizationId: null },
+      data: { organizationId: 'org-new' },
+    });
+    expect(res.body.adoptedTournamentCount).toBe(2);
+  });
+
+  it('does not move anything when an admin creates an organization', async () => {
+    const { tx, res } = await setup('admin');
+    expect(res.statusCode).toBe(201);
+    expect(tx.tournament.updateMany).not.toHaveBeenCalled();
+    expect(res.body.adoptedTournamentCount).toBe(0);
+  });
+});

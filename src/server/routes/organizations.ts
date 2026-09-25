@@ -88,7 +88,17 @@ router.post(
             role: 'owner',
           },
         });
-        return { organization, membership };
+        // A director's first organization adopts the org-less tournaments
+        // they created. Org members can't see org-less tournaments, so
+        // without this their earlier events would vanish on org creation.
+        // Admins create orgs on behalf of others, so nothing moves for them.
+        const adopted = req.user!.role === 'admin'
+          ? { count: 0 }
+          : await tx.tournament.updateMany({
+            where: { createdById: req.user!.id, organizationId: null },
+            data: { organizationId: organization.id },
+          });
+        return { organization, membership, adoptedTournamentCount: adopted.count };
       });
       res.status(201).json({
         ...result,

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { generateSchedule, validateScheduleConfig, DEFAULT_CONFIG, type ScheduleConfig } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
-import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
+import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, buildCompetitorAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
 import { generatePublicSlug, applySlugWithRetry, sanitizeBroadcastSubject } from './tournament-helpers.js';
 // requireRole stays in use for POST / (create new tournament) — there's
 // no parent tournament to scope-access yet. All other tournament-scoped
@@ -29,6 +29,7 @@ import {
 } from '../services/entitlements.js';
 import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from '../services/tournament-settings.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
+import { generateManagementToken, getManagementTokenExpiry, hashManagementToken } from '../utils/registration-management-token.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
 import { generateQRPoster } from '../services/qr-poster.js';
@@ -152,9 +153,10 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
     trash === 'all' ? {} :
     { deletedAt: null };
 
-  // Per-tournament access scoping — applies in multi-tenant installs.
-  // Admin and single-tenant users (no orgs, no explicit access rows)
-  // fall through to `null` which we spread as no-op.
+  // Per-tournament access scoping. Only admins get `null` (spread as a
+  // no-op); legacy single-tenant users are scoped to orphan tournaments
+  // + grants, org users to their orgs + grants. The filter doesn't
+  // exclude soft-deleted rows, so the trash view keeps working.
   const accessFilter = await buildTournamentAccessFilter(req, prisma);
 
   // Hard server-side cap on the page size so a single request can't
@@ -275,6 +277,7 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
       status: 'draft',
       sportProfileSlug: sportProfileSlug || 'taekwondo',
       organizationId: resolvedOrgId,
+      createdById: authReq.user?.id ?? null,
     },
   });
 
@@ -368,6 +371,7 @@ router.post('/from-template/:templateId', authenticate, requireRole('admin', 'di
       status: 'draft',
       sportProfileSlug: template.sportProfileSlug,
       organizationId: membership.organizationId,
+      createdById: authReq.user.id,
       brandName: template.brandName,
       brandPrimaryColor: template.brandPrimaryColor,
       brandLogoUrl: template.brandLogoUrl,
@@ -722,6 +726,7 @@ router.post('/:id/clone', authenticate, requireTournamentAccess('director'), asy
       sportProfileSlug: original.sportProfileSlug,
       sportProfileId: original.sportProfileId,
       organizationId: original.organizationId,
+      createdById: (req as AuthenticatedRequest).user?.id ?? null,
     },
   });
 
@@ -1013,7 +1018,11 @@ router.post('/:id/rules/reset', authenticate, requireTournamentAccess('director'
 // Registration (cascade-delete) — losing the entire bracket history.
 // The default is therefore a soft-delete that preserves audit trail;
 // a separate ?hard=true flag is required to actually drop the row.
-router.delete('/:id', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+//
+// `allowDeleted` so the Trash page can permanently delete (?hard=true)
+// a soft-deleted tournament; a plain soft-delete of an already
+// soft-deleted tournament is still a 404.
+router.delete('/:id', authenticate, requireTournamentAccess('director', { allowDeleted: true }), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const hard = req.query.hard === 'true';
   const authReq = req as AuthenticatedRequest;
@@ -1022,8 +1031,11 @@ router.delete('/:id', authenticate, requireTournamentAccess('director'), async (
   // Fetch tournament name for audit log before deletion
   const tournament = await prisma.tournament.findUnique({
     where: { id: tournamentId },
-    select: { name: true, organizationId: true },
+    select: { name: true, organizationId: true, deletedAt: true },
   });
+  if (!tournament || (tournament.deletedAt && !hard)) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
 
   if (hard) {
     await prisma.tournament.delete({
@@ -1071,7 +1083,12 @@ router.delete('/:id', authenticate, requireTournamentAccess('director'), async (
 });
 
 // Restore a soft-deleted tournament
-router.post('/:id/restore', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+//
+// `allowDeleted` lets directors with access (org members with a
+// director-level membership, explicit grants, or legacy-pool users)
+// reach their own soft-deleted tournament here. Every other route
+// keeps treating a soft-deleted tournament as 404.
+router.post('/:id/restore', authenticate, requireTournamentAccess('director', { allowDeleted: true }), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const authReq = req as AuthenticatedRequest;
   const tournamentId = getParam(req.params.id);
@@ -1402,9 +1419,14 @@ router.post('/:id/registrations', authenticate, requireTournamentAccess('directo
     });
   }
 
-  // Get competitor for age calculation
-  const competitor = await prisma.competitor.findUnique({
-    where: { id: competitorId },
+  // Get competitor for age calculation. Scoped to competitors the
+  // caller can already see: registering a foreign tenant's competitor
+  // would otherwise make it visible (and editable) to the caller.
+  const competitorFilter = await buildCompetitorAccessFilter(req as AuthenticatedRequest, prisma);
+  const competitor = await prisma.competitor.findFirst({
+    where: competitorFilter
+      ? { id: competitorId, deletedAt: null, AND: [competitorFilter] }
+      : { id: competitorId },
   });
 
   if (!competitor) {
@@ -1461,9 +1483,21 @@ router.post('/:id/registrations/bulk', authenticate, requireTournamentAccess('di
     });
   }
 
+  // Only competitors the caller can already see may be registered
+  // (admins unscoped). Any inaccessible id rejects the whole batch
+  // rather than silently registering a subset.
+  const competitorFilter = await buildCompetitorAccessFilter(req as AuthenticatedRequest, prisma);
   const competitors = await prisma.competitor.findMany({
-    where: { id: { in: competitorIds } },
+    where: competitorFilter
+      ? { id: { in: competitorIds }, deletedAt: null, AND: [competitorFilter] }
+      : { id: { in: competitorIds } },
   });
+  if (competitorFilter !== null) {
+    const requested = new Set<string>(competitorIds);
+    if (competitors.length !== requested.size) {
+      return res.status(404).json({ error: 'One or more competitors not found' });
+    }
+  }
 
   // Closes B28: wrap the upserts in a $transaction so a mid-loop
   // failure (e.g. DB connection drop, constraint violation) rolls
@@ -1607,7 +1641,6 @@ router.post('/:id/registrations/:regId/revoke-token', authenticate, requireTourn
 
   // If reissue=true, generate a new token and return it (works for both rotation and first-time issuance)
   if (reissue) {
-    const { generateManagementToken, getManagementTokenExpiry, hashManagementToken } = await import('../utils/registration-management-token.js');
     const newToken = generateManagementToken();
     const newExpiry = getManagementTokenExpiry();
 

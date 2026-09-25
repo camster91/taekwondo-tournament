@@ -3,7 +3,14 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { generateBracket, generateSingleElimination, type BracketStructure } from '../services/bracket-generator.js';
 import { generateRoundRobin, generatePoolPlay } from '../services/bracket-formats.js';
-import { advanceWinner, handleByeMatches, getBracketPlacements, resolveNextMatchSlots, pickSlotsToNull, validateMatchStatusTransition } from '../services/match-advancement.js';
+import {
+  handleByeMatches,
+  getBracketPlacements,
+  validateMatchStatusTransition,
+  lockBracket,
+  syncBracketAdvancement,
+  summarizeBracketUpdates,
+} from '../services/match-advancement.js';
 import {
   generateBracketPDF,
   generateBatchBracketsPDF,
@@ -438,6 +445,11 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
   // Advancement stays in this transaction so a downstream failure
   // rolls back the match result and audit record together.
   const match = await prisma.$transaction(async (tx) => {
+    // Serialize every write to this bracket (sibling results would
+    // otherwise race on the shared downstream match). Taken before the
+    // match row is touched so lock order is always bracket → match.
+    await lockBracket(tx, currentMatch.bracketId);
+
     const write = await tx.match.updateMany({
       where: {
         id: getParam(req.params.matchId),
@@ -492,12 +504,29 @@ router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), 
       },
     });
 
-    if (winnerId && status === 'completed') {
-      const advanceResult = await advanceWinner(tx as unknown as PrismaClient, updated);
-      console.info('[bracket] advance:', advanceResult.message);
+    // Reconcile the bracket with this result. This advances a new
+    // result, replaces the old winner/loser downstream when a
+    // completed result is corrected, clears downstream slots when a
+    // match is reopened, and is a no-op on a plain re-submit. If a
+    // downstream match that would change has already started it
+    // throws a 409 and the whole transaction (incl. this update)
+    // rolls back.
+    const changes = await syncBracketAdvancement(tx, updated.bracketId);
+    if (changes.length > 0) {
+      console.info('[bracket] advance:', summarizeBracketUpdates(changes));
     }
 
-    return updated;
+    // Re-read so the response reflects any auto-resolution of this match.
+    const refreshed = await tx.match.findUnique({
+      where: { id: updated.id },
+      include: {
+        competitor1: { include: { competitor: true } },
+        competitor2: { include: { competitor: true } },
+        winner: { include: { competitor: true } },
+        bracket: true,
+      },
+    });
+    return refreshed ?? updated;
   });
 
   // Broadcast real-time update to all connected clients subscribed to this division
@@ -631,16 +660,48 @@ router.post('/match/:matchId/swap', authenticate, async (req: AuthenticatedReque
     return res.status(404).json({ error: 'Match not found' });
   }
 
-  const updated = await prisma.match.update({
-    where: { id: getParam(req.params.matchId) },
-    data: {
-      competitor1Id: match.competitor2Id,
-      competitor2Id: match.competitor1Id,
-    },
-    include: {
-      competitor1: { include: { competitor: true } },
-      competitor2: { include: { competitor: true } },
-    },
+  // Swapping sides of a match that is being / has been scored would
+  // silently re-attribute the scores and the downstream slots, so only
+  // allow it before the match starts. Scores move with their competitor
+  // and the whole swap is a compare-and-swap on updatedAt.
+  const updated = await prisma.$transaction(async (tx) => {
+    await lockBracket(tx, match.bracketId);
+    const current = await tx.match.findUnique({ where: { id: matchId } });
+    if (!current) {
+      throw new AppError('Match not found', ErrorCode.NOT_FOUND, 404, { recoverable: false });
+    }
+    if (current.status === 'completed' || current.status === 'in_progress') {
+      throw new AppError(
+        `Cannot swap competitors in a match that is ${current.status === 'completed' ? 'completed' : 'in progress'}.`,
+        ErrorCode.INVALID_MATCH_UPDATE,
+        409,
+        { recoverable: true, suggestion: 'Undo or reopen the match before swapping sides.' }
+      );
+    }
+    const write = await tx.match.updateMany({
+      where: { id: matchId, updatedAt: current.updatedAt },
+      data: {
+        competitor1Id: current.competitor2Id,
+        competitor2Id: current.competitor1Id,
+        score1: current.score2,
+        score2: current.score1,
+      },
+    });
+    if (write.count !== 1) {
+      throw new AppError(
+        'This match was updated by another user. Refresh before swapping again.',
+        ErrorCode.INVALID_MATCH_UPDATE,
+        409,
+        { recoverable: true, suggestion: 'Refresh the match and retry.' }
+      );
+    }
+    return tx.match.findUnique({
+      where: { id: matchId },
+      include: {
+        competitor1: { include: { competitor: true } },
+        competitor2: { include: { competitor: true } },
+      },
+    });
   });
 
   res.json(updated);
@@ -697,162 +758,123 @@ router.post('/match/:matchId/undo', authenticate, async (req: AuthenticatedReque
 
   const user = req.user;
 
-  // Get the most recent audit log entry
-  const lastLog = await prisma.matchAuditLog.findFirst({
-    where: { matchId },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  if (!lastLog) {
-    return res.status(404).json({ error: 'No changes to undo' });
-  }
-
   // P1-10: Enforce 5-minute undo window for safety
   const UNDO_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
-  const timeSinceChange = Date.now() - lastLog.createdAt.getTime();
-  if (timeSinceChange > UNDO_WINDOW_MS) {
-    return res.status(400).json({
-      error: 'Undo window expired. Changes older than 5 minutes cannot be undone.',
-      code: 'UNDO_WINDOW_EXPIRED',
+
+  // The whole undo is one transaction under the bracket lock:
+  //   1. re-read the latest audit entry and the match under the lock
+  //      (two concurrent undos / an undo racing a new result can no
+  //      longer both act on the same stale entry);
+  //   2. restore the previous result;
+  //   3. reconcile the bracket — this clears the downstream slots the
+  //      undone result filled (and an activated reset when the grand
+  //      final is undone), or re-advances when undoing an undo. If a
+  //      downstream match that received the competitor has already
+  //      started or finished it throws 409 and nothing is changed.
+  const outcome = await prisma.$transaction(async (tx) => {
+    const current = await tx.match.findUnique({ where: { id: matchId } });
+    if (!current) {
+      throw new AppError('Match not found', ErrorCode.NOT_FOUND, 404, { recoverable: false });
+    }
+    await lockBracket(tx, current.bracketId);
+
+    const lastLog = await tx.matchAuditLog.findFirst({
+      where: { matchId },
+      orderBy: { createdAt: 'desc' },
     });
-  }
-
-  const previousState = JSON.parse(lastLog.previousState);
-
-  // Restore previous state. Pull the bracket structure too — we
-  // need its `nextWinnerMatch` / `nextLoserMatch` links to find
-  // which downstream slots this result populated.
-  const match = await prisma.match.update({
-    where: { id: getParam(req.params.matchId) },
-    data: {
-      winnerId: previousState.winnerId,
-      score1: previousState.score1,
-      score2: previousState.score2,
-      status: previousState.status,
-      notes: previousState.notes,
-    },
-    include: {
-      competitor1: { include: { competitor: true } },
-      competitor2: { include: { competitor: true } },
-      winner: { include: { competitor: true } },
-      bracket: {
-        select: {
-          // Need `structure` to walk next-match links. The Match
-          // model itself doesn't carry them — they're part of the
-          // JSON blob written at generation time.
-          structure: true,
-          matches: {
-            select: { matchNumber: true, roundNumber: true, bracketType: true },
+    if (!lastLog) {
+      return { error: { status: 404, body: { error: 'No changes to undo' } } } as const;
+    }
+    const timeSinceChange = Date.now() - lastLog.createdAt.getTime();
+    if (timeSinceChange > UNDO_WINDOW_MS) {
+      return {
+        error: {
+          status: 400,
+          body: {
+            error: 'Undo window expired. Changes older than 5 minutes cannot be undone.',
+            code: 'UNDO_WINDOW_EXPIRED',
           },
         },
+      } as const;
+    }
+
+    const previousState = JSON.parse(lastLog.previousState);
+    const restoredWinner: string | null = previousState.winnerId ?? null;
+    if (
+      restoredWinner &&
+      restoredWinner !== current.competitor1Id &&
+      restoredWinner !== current.competitor2Id
+    ) {
+      throw new AppError(
+        'Cannot undo: the competitors in this match have changed since that result was recorded.',
+        ErrorCode.INVALID_MATCH_UPDATE,
+        409,
+        { recoverable: true, suggestion: 'Refresh the bracket and correct the result manually.' }
+      );
+    }
+
+    const write = await tx.match.updateMany({
+      where: { id: matchId, updatedAt: current.updatedAt },
+      data: {
+        winnerId: restoredWinner,
+        score1: previousState.score1 ?? null,
+        score2: previousState.score2 ?? null,
+        status: previousState.status,
+        notes: previousState.notes ?? null,
       },
-    },
+    });
+    if (write.count !== 1) {
+      throw new AppError(
+        'This match was updated by another scorekeeper. Refresh before undoing.',
+        ErrorCode.INVALID_MATCH_UPDATE,
+        409,
+        { recoverable: true, suggestion: 'Refresh the match and confirm the latest result.' }
+      );
+    }
+
+    const changes = await syncBracketAdvancement(tx, current.bracketId);
+    const clearedSlots = changes.flatMap((c) =>
+      (['competitor1Id', 'competitor2Id'] as const)
+        .filter((field) => field in c.data && c.data[field] === null)
+        .map((field) => ({ matchNumber: c.matchNumber, bracketType: c.bracketType, field }))
+    );
+
+    await tx.matchAuditLog.create({
+      data: {
+        matchId,
+        action: 'undo',
+        previousState: lastLog.newState,
+        newState: JSON.stringify({
+          ...previousState,
+          // Record the downstream effects alongside the state snapshot.
+          clearedSlots,
+        }),
+        userId: user?.id,
+        userEmail: user?.email,
+        reason: `Undo of ${lastLog.action} from ${lastLog.createdAt.toISOString()}; ${changes.length === 0 ? 'no downstream changes' : summarizeBracketUpdates(changes)}`,
+      },
+    });
+
+    const match = await tx.match.findUnique({
+      where: { id: matchId },
+      include: {
+        competitor1: { include: { competitor: true } },
+        competitor2: { include: { competitor: true } },
+        winner: { include: { competitor: true } },
+        bracket: { select: { divisionId: true } },
+      },
+    });
+    return { match } as const;
   });
 
-  // Closes B16: if the undo reverted a "completed" match back to a
-  // non-completed state, null the competitor slots in any downstream
-  // match that THIS match populated. The previous implementation
-  // used a heuristic (`roundNumber + 1, matchNumber: 1`) that only
-  // worked for the 8-person DE — it found the W final (M7) when
-  // undoing R1 M1 and nulled the wrong slots. Worse, it nulled
-  // both `competitor1` and `competitor2` unconditionally, even when
-  // only one slot was filled by this match.
-  //
-  // The new path:
-  //   1. Parse the bracket structure to find the actual
-  //      nextWinnerMatch / nextLoserMatch targets for this match.
-  //   2. Load the DB state of those targets.
-  //   3. Use `pickSlotsToNull` to null only the slot whose current
-  //      value matches one of this match's competitor IDs. A slot
-  //      that was filled by a different upstream match stays put.
-  //
-  // Skip the slot-clearing step entirely if the undone match wasn't
-  // previously completed (e.g. an undo of a score edit on a
-  // still-pending match leaves no downstream effect).
-  let clearedSlots: { matchNumber: number; bracketType: string; field: string }[] = [];
-  if (match.status !== 'completed' && lastLog.action !== 'undo') {
-    const structure = (() => {
-      try {
-        return JSON.parse(match.bracket.structure) as BracketStructure;
-      } catch {
-        return null;
-      }
-    })();
-    const targets = resolveNextMatchSlots(
-      { matchNumber: match.matchNumber, bracketType: match.bracketType as 'winners' | 'losers' | 'finals' },
-      structure
-    );
-    if (targets.length > 0) {
-      // Load the actual downstream match rows.
-      const downstream = await prisma.match.findMany({
-        where: {
-          bracketId: match.bracketId,
-          OR: targets.map((t) => ({
-            matchNumber: t.matchNumber,
-            bracketType: t.bracketType,
-          })),
-        },
-        select: {
-          id: true,
-          matchNumber: true,
-          bracketType: true,
-          competitor1Id: true,
-          competitor2Id: true,
-        },
-      });
-      // Prisma returns `bracketType` as a plain string; narrow to the
-      // union that `pickSlotsToNull` expects. The DB enum is
-      // constrained to `winners | losers | finals | pool`, so this
-      // cast is safe — anything else would have failed the `findMany`
-      // above.
-      const downstreamCasted = downstream.map((d) => ({
-        matchNumber: d.matchNumber,
-        bracketType: d.bracketType as 'winners' | 'losers' | 'finals',
-        competitor1Id: d.competitor1Id,
-        competitor2Id: d.competitor2Id,
-      }));
-      const undoneCompetitorIds = [match.competitor1Id, match.competitor2Id, match.winnerId].filter(
-        (id): id is string => typeof id === 'string'
-      );
-      const toNull = pickSlotsToNull(undoneCompetitorIds, downstreamCasted, targets);
-      // Apply each null individually so we can record what was
-      // cleared in the audit log without a second DB round-trip.
-      for (const n of toNull) {
-        const row = downstream.find(
-          (d) => d.matchNumber === n.matchNumber && d.bracketType === n.bracketType
-        );
-        if (!row) continue;
-        await prisma.match.update({
-          where: { id: row.id },
-          data: { [n.field]: null },
-        });
-        clearedSlots.push({
-          matchNumber: n.matchNumber,
-          bracketType: n.bracketType,
-          field: n.field,
-        });
-      }
-    }
+  if ('error' in outcome && outcome.error) {
+    return res.status(outcome.error.status).json(outcome.error.body);
   }
 
-  // Log the undo action, including which downstream slots we reset.
-  await prisma.matchAuditLog.create({
-    data: {
-      matchId: match.id,
-      action: 'undo',
-      previousState: lastLog.newState,
-      newState: JSON.stringify({
-        ...JSON.parse(lastLog.previousState),
-        // Record the slot clears alongside the state snapshot so
-        // a future 'redo' could restore them.
-        clearedSlots,
-      }),
-      userId: user?.id,
-      userEmail: user?.email,
-      reason: `Undo of ${lastLog.action} from ${lastLog.createdAt.toISOString()}; cleared ${clearedSlots.length} downstream slot(s)`,
-    },
-  });
-
+  const { match } = outcome;
+  if (match?.bracket.divisionId) {
+    broadcastMatchUpdate(match.bracket.divisionId, match.id, match);
+  }
   res.json(match);
 });
 
@@ -896,7 +918,8 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, requireTourn
   } = req.body;
 
   const divisions = await prisma.division.findMany({
-    where: { tournamentId: getParam(req.params.tournamentId) },
+    // Soft-deleted divisions must not get brackets (or block generation).
+    where: { tournamentId: getParam(req.params.tournamentId), deletedAt: null },
     include: {
       bracket: { select: { id: true } },
       assignments: {

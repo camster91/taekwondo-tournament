@@ -6,7 +6,7 @@ import {
   undoScheduleDelay,
   type ScheduleDelayInput,
 } from './schedule-delay-propagation.js';
-import { mergeCanonicalScheduleSettings, type CanonicalScheduleSnapshot } from './canonical-schedule.js';
+import { canonicalScheduleVersion, mergeCanonicalScheduleSettings, type CanonicalScheduleSnapshot } from './canonical-schedule.js';
 
 // Mock Prisma client
 const createMockPrisma = () => {
@@ -19,6 +19,9 @@ const createMockPrisma = () => {
       findUnique: vi.fn(),
       create: vi.fn(),
       updateMany: vi.fn(),
+    },
+    recommendation: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     $transaction: vi.fn(),
   } as unknown as PrismaClient;
@@ -129,7 +132,7 @@ describe('schedule-delay-propagation', () => {
       const schedule = createBasicSchedule();
       const settings = mergeCanonicalScheduleSettings(null, schedule);
 
-      (mockPrisma.tournament.findUnique as any).mockResolvedValueOnce({
+      (mockPrisma.tournament.findUnique as any).mockResolvedValue({
         id: 'tournament-1',
         settings,
         updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -184,7 +187,7 @@ describe('schedule-delay-propagation', () => {
         schedule: { endTime: '17:00' },
       });
 
-      (mockPrisma.tournament.findUnique as any).mockResolvedValueOnce({
+      (mockPrisma.tournament.findUnique as any).mockResolvedValue({
         id: 'tournament-1',
         settings,
         updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -220,7 +223,7 @@ describe('schedule-delay-propagation', () => {
       const schedule = createBasicSchedule();
       const settings = mergeCanonicalScheduleSettings(null, schedule);
 
-      (mockPrisma.tournament.findUnique as any).mockResolvedValueOnce({
+      (mockPrisma.tournament.findUnique as any).mockResolvedValue({
         id: 'tournament-1',
         settings,
         updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -275,7 +278,7 @@ describe('schedule-delay-propagation', () => {
       };
       const settings = mergeCanonicalScheduleSettings(null, schedule);
 
-      (mockPrisma.tournament.findUnique as any).mockResolvedValueOnce({
+      (mockPrisma.tournament.findUnique as any).mockResolvedValue({
         id: 'tournament-1',
         settings,
         updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -316,7 +319,7 @@ describe('schedule-delay-propagation', () => {
       const schedule = createBasicSchedule();
       const settings = mergeCanonicalScheduleSettings(null, schedule);
 
-      (mockPrisma.tournament.findUnique as any).mockResolvedValueOnce({
+      (mockPrisma.tournament.findUnique as any).mockResolvedValue({
         id: 'tournament-1',
         settings,
         updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -394,7 +397,7 @@ describe('schedule-delay-propagation', () => {
         tournamentId: 'tournament-1',
         delayInput,
         expectedUpdatedAt: updatedAt.toISOString(),
-        expectedInputVersion: 'test-version',
+        expectedInputVersion: canonicalScheduleVersion(schedule),
         operationKey: 'op-123',
         approvedBy: 'user-1',
       });

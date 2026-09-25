@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trophy, Clock, Users, ChevronRight, Award, Zap, Radio, MapPin, Loader2, AlertCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Card, CardBody } from '../components/ui';
+import { CardBody } from '../components/ui';
 import { StatTile } from '../components/ui';
 import { Button } from '../components/ui';
 import { buildScoreboardApiUrl } from '../utils/public-scoreboard-url';
@@ -18,9 +18,7 @@ import {
 import { fetchJson } from '../utils/api-status';
 
 // Use shared API contracts instead of local interfaces
-import type { ApiDivision } from '../../shared/contracts';
-
-type Division = ApiDivision;
+import type { ApiDivision, ApiMatch } from '../../shared/contracts';
 
 interface Tournament {
   id: string;
@@ -80,13 +78,13 @@ export default function PublicScoreboard() {
   // director overrides (mode: 'all' | 'ring:N' | 'featured:<matchId>').
   // Closes M8 from the UI audit.
   const { data: scoreboardData, isLoading: divisionsLoading, error: scoreboardError, refetch: retryScoreboard } = useQuery<{
-    divisions: Division[];
+    divisions: ApiDivision[];
     displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
   }>({
     queryKey: ['scoreboard-data', tournamentId, publicKey],
     queryFn: async () => {
       const data = await fetchJson<{
-        divisions: Division[];
+        divisions: ApiDivision[];
         displaySettings: { mode?: string; ringNumber?: number; featuredMatchId?: string };
       }>(fetch, buildScoreboardApiUrl(tournamentId || '', publicKey));
       setLastFetchAt(new Date());
@@ -97,7 +95,9 @@ export default function PublicScoreboard() {
       return tournamentData?.publicScoreboardRefreshMs ?? SCOREBOARD_POLL_INTERVAL_MS;
     },
     refetchIntervalInBackground: false,
-    enabled: !tournamentError, // Don't keep retrying the scoreboard if the tournament is bad
+    // Don't keep retrying the scoreboard if the tournament is bad; a
+    // transient metadata failure with cached metadata keeps polling.
+    enabled: !tournamentError || !!tournament,
     retry: false,
   });
   const divisions = scoreboardData?.divisions;
@@ -106,10 +106,12 @@ export default function PublicScoreboard() {
   // Stale-data warning. If STALE_AFTER_SECONDS+ have passed since the last
   // successful fetch, the venue Wi-Fi may be flaky or the backend is down.
   const staleSeconds = lastFetchAt ? Math.floor((currentTime.getTime() - lastFetchAt.getTime()) / 1000) : null;
+  const isStale = staleSeconds != null && staleSeconds > STALE_AFTER_SECONDS;
 
   // Single source of truth for which UI mode the scoreboard is in.
   const scoreboardState = getScoreboardState({
     tournamentError,
+    hasTournament: !!tournament,
     tournamentLoading,
     hasData: !!divisions,
     divisionsLoading,
@@ -119,7 +121,7 @@ export default function PublicScoreboard() {
   });
 
   // Pre-compute the stale banner copy.
-  const staleBanner = getStaleBannerMessage(!!scoreboardError, staleSeconds);
+  const staleBanner = getStaleBannerMessage(!!scoreboardError || !!tournamentError, staleSeconds);
 
   useEffect(() => {
     // A heartbeat means this display has just received current scoreboard data.
@@ -143,7 +145,7 @@ export default function PublicScoreboard() {
   // default ring — they go into a separate "unassigned" bucket so the LIVE
   // badge count reflects reality, not a || 1 fallback. Closes #30.
   const matchesByRing = useMemo(() => {
-    const out: Record<number, Match[]> = { 1: [], 2: [], 3: [], 4: [] };
+    const out: Record<number, ApiMatch[]> = { 1: [], 2: [], 3: [], 4: [] };
     for (const d of divisions || []) {
       for (const m of d.bracket?.matches || []) {
         if (m.ringNumber == null) continue; // unassigned — render separately
@@ -194,22 +196,27 @@ export default function PublicScoreboard() {
   };
 
   // Helpers used by both the TV hero and the right column.
-  const getCompetitorName = (competitor: Match['competitor1']) => {
+  const getCompetitorName = (competitor: ApiMatch['competitor1']) => {
     if (!competitor) return 'TBD';
     return `${competitor.competitor.firstName} ${competitor.competitor.lastName}`;
   };
 
-  const getCompetitorSchool = (competitor: Match['competitor1']) => {
+  const getCompetitorSchool = (competitor: ApiMatch['competitor1']) => {
     if (!competitor) return '';
     return competitor.competitor.schoolDojang || '';
   };
 
-  const getDivisionForMatch = (match: Match) => {
+  const getDivisionForMatch = (match: ApiMatch) => {
     return divisions?.find((d) => d.bracket?.matches.some((m) => m.id === match.id));
   };
 
   return (
     <div className="min-h-screen bg-[#0a0e1a] text-white overflow-hidden antialiased">
+      {/* Announces state transitions (loading, live, stale, unavailable) —
+          not every poll — to screen-reader users. */}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {scoreboardState.announcement}
+      </div>
       {/* Error / not-found state. Replaces the old behavior of rendering an
           empty scoreboard template (NOW COMPETING / UP NEXT headings with
           no body) when the tournament ID is invalid. Closes #35.
@@ -304,6 +311,7 @@ export default function PublicScoreboard() {
                   value={typeof window !== 'undefined' ? window.location.href : `/display/${tournament?.id ?? ''}`}
                   size={64}
                   level="M"
+                  title="QR code linking to this scoreboard"
                 />
               </div>
               <div className="text-[10px] text-surface-400 uppercase tracking-wider font-medium">
@@ -402,7 +410,7 @@ export default function PublicScoreboard() {
               {inProgressMatches.map((match) => {
                 const division = getDivisionForMatch(match);
                 return (
-                  <Card key={match.id} className="overflow-hidden rounded-2xl bg-gradient-to-br from-warning/15 via-surface-900 to-surface-900 border-2 border-warning/40 shadow-2xl">
+                  <div key={match.id} className="overflow-hidden rounded-2xl bg-gradient-to-br from-warning/15 via-surface-900 to-surface-900 border-2 border-warning/40 shadow-2xl">
                     <CardBody className="p-6 md:p-7 lg:p-8">
                       <div className="relative">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-warning/500/10 rounded-full blur-3xl" />
@@ -437,7 +445,7 @@ export default function PublicScoreboard() {
                         </div>
                       </div>
                     </CardBody>
-                  </Card>
+                  </div>
                 );
               })}
             </div>
@@ -508,7 +516,7 @@ export default function PublicScoreboard() {
                     : match.competitor1;
 
                 return (
-                  <Card key={match.id} className="bg-surface-900/60 border border-surface-700/50">
+                  <div key={match.id} className="rounded-lg bg-surface-900/60 border border-surface-700/50 shadow-sm">
                     <CardBody className="p-4 md:p-5 lg:p-6">
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">
@@ -529,7 +537,7 @@ export default function PublicScoreboard() {
                         )}
                       </div>
                     </CardBody>
-                  </Card>
+                  </div>
                 );
               })}
             </div>

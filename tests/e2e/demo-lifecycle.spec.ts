@@ -13,7 +13,8 @@ test.describe('guided fabricated showcase', () => {
     test(`reaches ${journey.name} in exactly two choices`, async ({ page }) => {
       await page.goto('/login');
       await page.getByRole('button', { name: 'Explore the live demo' }).click();
-      await expect(page).toHaveURL('/');
+      // The signed-in landing page is /dashboard; / is the marketing site.
+      await expect(page).toHaveURL('/dashboard');
       await expect(page.getByRole('status', { name: 'Fabricated demo data notice' })).toBeVisible();
 
       const guide = page.getByRole('dialog', { name: 'Choose your tournament-day view' });
@@ -74,7 +75,8 @@ test.describe('guided fabricated showcase', () => {
     await guide.getByRole('button', { name: /Athlete check-in/i }).click();
     await page.getByRole('button', { name: /^Check In$/i }).first().click();
     const competitorName = await page.getByRole('dialog').locator('h2, h3').first().textContent();
-    await page.getByRole('spinbutton', { name: 'Enter weight' }).fill('150');
+    // The weigh-in field is now labeled by its visible "Weigh-In Weight (lbs)" label.
+    await page.getByRole('spinbutton', { name: 'Weigh-In Weight (lbs)' }).fill('150');
     const responsePromise = page.waitForResponse((response) =>
       response.request().method() === 'PUT' && /\/api\/tournaments\/[^/]+\/registrations\/[^/]+$/.test(new URL(response.url()).pathname)
     );

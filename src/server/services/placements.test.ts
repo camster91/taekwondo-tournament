@@ -32,6 +32,7 @@ import {
   minutesToTime,
   validateScheduleConfig,
   estimateDivisionDuration,
+  estimateMatchCount,
   slotsOverlap,
   DEFAULT_CONFIG,
   type ScheduleConfig,
@@ -161,6 +162,18 @@ describe('resolvePlacements — N=8 DE with reset', () => {
     ]);
   });
 
+  it('regression: reports no 1st/2nd while an activated reset is unplayed', () => {
+    for (const status of ['ready', 'in_progress']) {
+      const matches = [
+        completed(14, 'WB', 'LB', 'LB', 'finals'),
+        { matchNumber: 15, bracketType: 'finals' as const, status, winnerId: null, competitor1Id: 'WB', competitor2Id: 'LB' },
+      ];
+      const p = resolvePlacements(matches, positions);
+      expect(p.find((x) => x.place === 1)).toBeUndefined();
+      expect(p.find((x) => x.place === 2)).toBeUndefined();
+    }
+  });
+
   it('reports 1st + 2nd from the grand final when no reset was needed', () => {
     const matches = [
       completed(14, 'WB', 'LB', 'WB', 'finals'),
@@ -215,6 +228,51 @@ describe('resolvePlacements — N=3 (no losers bracket)', () => {
       { place: 2, competitorId: 'B' },
     ]);
     expect(p.find((x) => x.place === 3)).toBeUndefined();
+  });
+});
+
+describe('resolvePlacements — single elimination 3rd place', () => {
+  const structure = {
+    winners: [
+      { matchNumber: 1, round: 1, competitor1Id: 'A', competitor2Id: 'D', nextWinnerMatch: 3 },
+      { matchNumber: 2, round: 1, competitor1Id: 'B', competitor2Id: 'C', nextWinnerMatch: 3 },
+    ],
+    losers: [],
+    finals: [{ matchNumber: 3, round: 2, competitor1Id: null, competitor2Id: null }],
+  };
+  const positions: BracketPositions = { winnersFinal: 3, losersFinal: null, grandFinals: 3, reset: null };
+
+  it('awards a tied 3rd place to both semifinal losers', () => {
+    const matches = [
+      completed(1, 'A', 'D', 'A'),
+      completed(2, 'B', 'C', 'B'),
+      completed(3, 'A', 'B', 'A', 'finals'),
+    ];
+    const p = resolvePlacements(matches, positions, structure);
+    expect(p.filter((x) => x.place === 1)).toEqual([{ place: 1, competitorId: 'A' }]);
+    expect(p.filter((x) => x.place === 2)).toEqual([{ place: 2, competitorId: 'B' }]);
+    expect(p.filter((x) => x.place === 3).map((x) => x.competitorId).sort()).toEqual(['C', 'D']);
+  });
+
+  it('does not award 3rd for a semifinal that was a bye', () => {
+    const matches = [
+      completed(1, 'A', null, 'A'),
+      completed(2, 'B', 'C', 'B'),
+      completed(3, 'A', 'B', 'A', 'finals'),
+    ];
+    const p = resolvePlacements(matches, positions, structure);
+    expect(p.filter((x) => x.place === 3)).toEqual([{ place: 3, competitorId: 'C' }]);
+  });
+});
+
+describe('resolvePlacements — N=2 double elimination', () => {
+  const positions: BracketPositions = { winnersFinal: 1, losersFinal: 1, grandFinals: 2, reset: 3 };
+  it('does not list the match-1 loser as 3rd while they are still in the grand final', () => {
+    const matches = [
+      completed(1, 'A', 'B', 'A'),
+      { matchNumber: 2, bracketType: 'finals' as const, status: 'ready', winnerId: null, competitor1Id: 'A', competitor2Id: 'B' },
+    ];
+    expect(resolvePlacements(matches, positions)).toEqual([]);
   });
 });
 
@@ -425,29 +483,28 @@ describe('estimateDivisionDuration', () => {
     matchDurationMinutes: { patterns: 3, sparring: 5 },
   };
 
-  it('returns within [10, 90] for empty/small/large competitor counts', () => {
+  it('never returns less than the 10-minute minimum', () => {
     for (const n of [0, 1, 2, 4, 8, 16, 32, 100]) {
       const d = estimateDivisionDuration(n, 'sparring', config);
       expect(d).toBeGreaterThanOrEqual(10);
-      expect(d).toBeLessThanOrEqual(90);
     }
   });
 
   it('uses patterns duration for patterns events', () => {
     const d = estimateDivisionDuration(8, 'patterns', config);
-    // 8*1.5 = 12 matches * 3 min = 36 min
-    expect(d).toBe(36);
+    // Double elimination: 2N-1 = 15 matches (incl. possible reset) * 3 min
+    expect(d).toBe(45);
   });
 
   it('uses sparring duration for sparring events', () => {
     const d = estimateDivisionDuration(8, 'sparring', config);
-    // 8*1.5 = 12 matches * 5 min = 60 min
-    expect(d).toBe(60);
+    // 15 matches * 5 min
+    expect(d).toBe(75);
   });
 
   it('falls through to sparring for unknown event types (regression: was the original behavior)', () => {
     const d = estimateDivisionDuration(8, 'weird-event-type', config);
-    expect(d).toBe(60); // sparring
+    expect(d).toBe(75); // sparring
   });
 
   it('applies 10-minute minimum', () => {
@@ -455,10 +512,16 @@ describe('estimateDivisionDuration', () => {
     expect(estimateDivisionDuration(1, 'sparring', config)).toBe(10);
   });
 
-  it('applies 90-minute ceiling (regression: known — see PR description)', () => {
-    // 100 competitors → 150 estimated matches → 750 min → capped at 90.
-    const d = estimateDivisionDuration(100, 'sparring', config);
-    expect(d).toBe(90);
+  it('regression: no 90-minute ceiling - a 16-person DE needs 31 matches', () => {
+    expect(estimateDivisionDuration(16, 'sparring', config)).toBe(31 * 5);
+  });
+
+  it('sizes other formats by their real match counts', () => {
+    expect(estimateMatchCount(8, 'single_elim')).toBe(7);
+    expect(estimateMatchCount(5, 'round_robin')).toBe(10);
+    expect(estimateMatchCount(8, 'double_elim')).toBe(15);
+    expect(estimateMatchCount(1)).toBe(0);
+    expect(estimateDivisionDuration(8, 'sparring', config, 'single_elim')).toBe(35);
   });
 });
 

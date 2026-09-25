@@ -45,6 +45,14 @@ describe('getScoreboardState', () => {
     expect(s.announcement).toBe('Tournament not found');
   });
 
+  it('keeps the cached board with a stale banner when a metadata poll fails transiently', () => {
+    const s = getScoreboardState({ ...base, hasTournament: true, hasData: true, tournamentError: new Error('HTTP 500') });
+    expect(s.status).toBe('stale');
+    expect(s.showMainBoard).toBe(true);
+    expect(s.showStaleBanner).toBe(true);
+    expect(s.showFullScreenError).toBe(false);
+  });
+
   it('returns loading when no data is present and the scoreboard query is in flight', () => {
     const s = getScoreboardState({ ...base, tournamentLoading: true });
     expect(s.status).toBe('loading');

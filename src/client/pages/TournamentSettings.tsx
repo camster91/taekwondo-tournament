@@ -544,8 +544,9 @@ export default function TournamentSettings() {
         actions={
           <div className="flex gap-2 sm:gap-3">
             <Button variant="secondary" onClick={() => setShowResetConfirm(true)}>
-              <RotateCcw className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Reset</span>
+              <RotateCcw className="h-4 w-4 sm:mr-2" aria-hidden="true" />
+              {/* sr-only below sm keeps an accessible name on icon-only phones */}
+              <span className="sr-only sm:not-sr-only">Reset</span>
             </Button>
             <Button
               variant="primary"
@@ -553,8 +554,8 @@ export default function TournamentSettings() {
               disabled={saveState !== 'dirty' || saveMutation.isPending}
               loading={saveMutation.isPending}
             >
-              <Save className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Save Settings</span>
+              <Save className="h-4 w-4 sm:mr-2" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">Save Settings</span>
             </Button>
           </div>
         }
@@ -569,7 +570,7 @@ export default function TournamentSettings() {
       </PageHeader>
 
       {/* Success Message */}
-      {showSaveSuccess && (
+      {saveState === 'saved' && (
         <div className="mb-6 p-4 bg-success/10 dark:bg-success/20 border border-success/30 dark:border-success rounded-lg text-success dark:text-success/30">
           Settings saved successfully!
         </div>
@@ -580,7 +581,21 @@ export default function TournamentSettings() {
         <nav
           role="tablist"
           aria-label="Settings sections"
-          className="flex gap-6"
+          className="flex flex-wrap gap-x-4 gap-y-1 sm:gap-x-6"
+          onKeyDown={(event) => {
+            // WAI-ARIA tabs: arrows/Home/End move and select; Tab leaves the list.
+            const order: SettingsTab[] = ['setup', 'rules', 'branding'];
+            const current = order.indexOf(tab);
+            const next = event.key === 'ArrowRight' ? order[(current + 1) % order.length]
+              : event.key === 'ArrowLeft' ? order[(current - 1 + order.length) % order.length]
+                : event.key === 'Home' ? order[0]
+                  : event.key === 'End' ? order[order.length - 1]
+                    : null;
+            if (!next) return;
+            event.preventDefault();
+            setTab(next);
+            document.getElementById(`settings-tab-${next}`)?.focus();
+          }}
         >
           <button
             type="button"
@@ -588,6 +603,7 @@ export default function TournamentSettings() {
             id="settings-tab-setup"
             aria-selected={tab === 'setup'}
             aria-controls="settings-panel-setup"
+            tabIndex={tab === 'setup' ? 0 : -1}
             onClick={() => setTab('setup')}
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
               tab === 'setup'
@@ -605,6 +621,7 @@ export default function TournamentSettings() {
             id="settings-tab-rules"
             aria-selected={tab === 'rules'}
             aria-controls="settings-panel-rules"
+            tabIndex={tab === 'rules' ? 0 : -1}
             onClick={() => setTab('rules')}
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
               tab === 'rules'
@@ -622,6 +639,7 @@ export default function TournamentSettings() {
             id="settings-tab-branding"
             aria-selected={tab === 'branding'}
             aria-controls="settings-panel-branding"
+            tabIndex={tab === 'branding' ? 0 : -1}
             onClick={() => setTab('branding')}
             className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
               tab === 'branding'
@@ -1094,6 +1112,7 @@ export default function TournamentSettings() {
                     <td>
                       <Input
                         type="text"
+                        aria-label={`Age group ${index + 1} label`}
                         value={group.label}
                         onChange={(e) =>
                           updateAgeGroup(index, { label: e.target.value })
@@ -1106,6 +1125,7 @@ export default function TournamentSettings() {
                         type="number"
                         min="0"
                         max="99"
+                        aria-label={`Age group ${index + 1} minimum age`}
                         value={group.min}
                         onChange={(e) =>
                           updateAgeGroup(index, { min: parseInt(e.target.value) || 0 })
@@ -1118,6 +1138,7 @@ export default function TournamentSettings() {
                         type="number"
                         min="0"
                         max="99"
+                        aria-label={`Age group ${index + 1} maximum age`}
                         value={group.max}
                         onChange={(e) =>
                           updateAgeGroup(index, { max: parseInt(e.target.value) || 99 })
@@ -1127,10 +1148,12 @@ export default function TournamentSettings() {
                     </td>
                     <td>
                       <button
+                        type="button"
                         onClick={() => removeAgeGroup(index)}
+                        aria-label={`Remove age group ${group.label || index + 1}`}
                         className="text-surface-600 hover:text-danger dark:hover:text-danger touch-target"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </td>
                   </tr>
@@ -1448,7 +1471,7 @@ export default function TournamentSettings() {
           <div className="flex-1">
             <span className="text-sm font-medium">{getSaveStateLabel(saveState)}</span>
             {saveState === 'error' && saveError && (
-              <p className="text-xs mt-0.5">{saveError}</p>
+              <p role="alert" className="text-xs mt-0.5">{saveError}</p>
             )}
           </div>
           {saveState === 'dirty' && (

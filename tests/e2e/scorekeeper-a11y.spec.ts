@@ -151,7 +151,8 @@ test.describe('scorekeeper (a11y)', () => {
 
     const record = page.getByRole('button', { name: /^Record Result$/i });
     await expect(record).toBeDisabled();
-    await expect(page.getByRole('alert')).toContainText(/Enter a whole-number score/i);
+    // Copy pinned by Scorekeeper.validation.test.ts.
+    await expect(page.getByRole('alert')).toContainText(/Enter scores for both competitors/i);
 
     await page.locator('#scorekeeper-score1').fill('5');
     await page.locator('#scorekeeper-score2').fill('5');
@@ -161,7 +162,7 @@ test.describe('scorekeeper (a11y)', () => {
     await page.locator('#scorekeeper-score1').fill('2');
     await page.locator('#scorekeeper-score2').fill('5');
     await expect(record).toBeDisabled();
-    await expect(page.getByRole('alert')).toContainText(/selected winner must have the higher score/i);
+    await expect(page.getByRole('alert')).toContainText(/winner must have the higher score/i);
 
     await page.locator('#scorekeeper-score1').fill('6');
     await expect(record).toBeEnabled();
@@ -390,7 +391,8 @@ test.describe('scorekeeper (a11y)', () => {
     });
     expect(division?.bracket).toBeTruthy();
     const matchSnapshots = division!.bracket!.matches;
-    const target = matchSnapshots.filter((match) => match.status === 'completed')
+    // Ctrl+Z targets scored results only; bye advancements have nothing to undo.
+    const target = matchSnapshots.filter((match) => match.status === 'completed' && match.competitor1Id && match.competitor2Id)
       .sort((a, b) => b.matchNumber - a.matchNumber)[0];
     expect(target).toBeTruthy();
     const originalAuditIds = (await prisma.matchAuditLog.findMany({ where: { matchId: target.id }, select: { id: true } }))
@@ -429,6 +431,9 @@ test.describe('scorekeeper (a11y)', () => {
       await route.continue();
       });
 
+      // The page also has demo-notice and cached-data status regions; target
+      // the scorekeeper announcer.
+      const liveStatus = page.getByRole('status').filter({ hasNotText: /Fabricated demo data|Cached scorekeeper data/ });
       await page.goto(`/scorekeeper/${tournamentId}`);
       const divisionWithResults = page.getByRole('button', { name: new RegExp(division!.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
     await expect(divisionWithResults).toBeVisible();
@@ -440,10 +445,10 @@ test.describe('scorekeeper (a11y)', () => {
     const dialog = page.getByRole('dialog', { name: 'Undo this result?' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Undo result' }).click();
-    await expect(page.getByRole('status')).toContainText('Undoing match result');
+    await expect(liveStatus).toContainText('Undoing match result');
     await page.keyboard.press('Escape');
     await expect(dialog).toBeVisible();
-    await expect(page.getByRole('status')).not.toContainText('Last result undone');
+    await expect(liveStatus).not.toContainText('Last result undone');
     await expect.poll(() => undoAttempts).toBe(1);
     releaseUndo();
 
@@ -454,7 +459,7 @@ test.describe('scorekeeper (a11y)', () => {
     refetchMode = 'fail';
     await dialog.getByRole('button', { name: 'Undo result' }).click();
     await expect(dialog).toBeVisible();
-    await expect(page.getByRole('status')).toContainText('Undoing match result');
+    await expect(liveStatus).toContainText('Undoing match result');
     await expect(dialog.getByRole('alert')).toContainText('may have succeeded');
     await expect(dialog.getByRole('button', { name: 'Check status' })).toBeVisible();
     expect(undoAttempts).toBe(2);
@@ -465,9 +470,12 @@ test.describe('scorekeeper (a11y)', () => {
     await expect.poll(() => typeof releaseRefetch).toBe('function');
     releaseRefetch();
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByRole('status')).toContainText('Last result undone');
+    await expect(liveStatus).toContainText('Last result undone');
     expect(undoAttempts).toBe(2);
-      await expect(page.getByText(new RegExp(`Match 1 of ${readyBefore + 1}`, 'i'))).toBeVisible();
+      // The undone match rejoins the ready queue. Bracket reconciliation can
+      // also activate other seeded matches, so assert at least one more.
+      await expect.poll(async () => Number((await page.getByText(/Match 1 of \d+/i).first().textContent())?.match(/of (\d+)/i)?.[1] ?? 0))
+        .toBeGreaterThanOrEqual(readyBefore + 1);
       await expect.poll(async () => (await prisma.match.findUnique({ where: { id: target.id }, select: { status: true } }))?.status).toBe('ready');
     } finally {
       await prisma.$transaction([

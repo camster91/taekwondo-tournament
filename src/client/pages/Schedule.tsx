@@ -93,8 +93,8 @@ interface ScheduleConditions {
 interface TournamentIncident { id: string; type: string; severity: string; actionTaken: string | null; deletedAt: string | null }
 
 interface ScheduleDelayPreview {
-  before: any;
-  after: any;
+  before: unknown;
+  after: unknown;
   impact: {
     affectedDivisionIds: string[];
     affectedDivisionNames: string[];

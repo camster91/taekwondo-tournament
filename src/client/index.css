@@ -61,11 +61,14 @@
   --color-surface-900: #111827;
   --color-surface-950: #0a0e1a;
 
-  /* Semantic State Colors */
-  --color-success:  #10b981;
-  --color-warning:  #f59e0b;
-  --color-danger:   #ef4444;
-  --color-info:     #3b82f6;
+  /* Semantic State Colors
+     Light-theme values are dark enough to meet WCAG 2.2 AA (4.5:1) as text
+     on white and on their own /10 tints, and for white text on solid fills.
+     The brighter originals are restored for dark mode below. */
+  --color-success:  #047857;
+  --color-warning:  #92400e;
+  --color-danger:   #b91c1c;
+  --color-info:     #1d4ed8;
 
   /* Type scale — SF Pro inspired, tighter tracking than default */
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
@@ -96,6 +99,15 @@
   --shadow-lg: 0 12px 24px -6px rgba(15, 23, 42, 0.10), 0 4px 8px -4px rgba(15, 23, 42, 0.06);
   --shadow-xl: 0 24px 48px -12px rgba(15, 23, 42, 0.14), 0 8px 16px -8px rgba(15, 23, 42, 0.08);
   --shadow-glow: 0 0 0 4px rgba(225, 29, 72, 0.14);
+}
+
+/* Dark mode keeps the brighter semantic colors, which contrast with dark
+   surfaces. */
+.dark {
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger:  #ef4444;
+  --color-info:    #3b82f6;
 }
 
 /* Base */

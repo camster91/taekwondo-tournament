@@ -217,7 +217,7 @@ export default function MatchTimer({
         <button
           onClick={toggleTimer}
           className={`p-3 rounded-full ${
-            isRunning ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-green-600 hover:bg-green-700'
+            isRunning ? 'bg-yellow-700 hover:bg-yellow-800' : 'bg-green-700 hover:bg-green-800'
           } transition-colors`}
           title={isRunning ? 'Pause (Space)' : 'Start (Space)'}
         >
@@ -309,8 +309,8 @@ export default function MatchTimer({
       )}
 
       {/* Keyboard shortcut hint */}
-      <div className="text-center text-xs text-gray-500 mt-2">
-        Press <kbd className="px-1 bg-gray-700 rounded">Space</kbd> to start/pause
+      <div className="text-center text-xs text-gray-400 mt-2">
+        Press <kbd className="px-1 bg-gray-700 text-gray-100 rounded">Space</kbd> to start/pause
       </div>
     </div>
   );

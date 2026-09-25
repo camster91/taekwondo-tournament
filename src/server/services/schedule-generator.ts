@@ -26,12 +26,30 @@ export interface ScheduledDivision {
   locked?: boolean;
 }
 
+/**
+ * A division the generator could not place because it cannot start and
+ * finish before midnight on any ring. It is deliberately given no ring or
+ * times: clamping to 23:59 used to produce identical, overlapping slots.
+ */
+export interface UnscheduledDivision {
+  divisionId: string;
+  divisionName: string;
+  eventType: string;
+  beltLevel: string;
+  gender: string;
+  competitorCount: number;
+  estimatedDurationMinutes: number;
+  reason: 'past_midnight';
+}
+
 export interface TournamentSchedule {
   tournamentId: string;
   tournamentName: string;
   date: string;
   config: ScheduleConfig;
   schedule: ScheduledDivision[];
+  /** Divisions that did not fit before midnight (see warnings). */
+  unscheduled: UnscheduledDivision[];
   warnings: string[];
 }
 
@@ -117,27 +135,47 @@ export function validateScheduleConfig(config: ScheduleConfig): void {
   }
 }
 
+/**
+ * Number of matches a bracket format needs for `n` competitors.
+ *
+ *   double_elim: 2n-2 matches, +1 when the losers-bracket champion
+ *                forces the bracket reset -> schedule the worst case 2n-1.
+ *   single_elim: n-1.
+ *   round_robin: n(n-1)/2.
+ *
+ * Byes are not matches, so these are exact regardless of padding.
+ */
+export function estimateMatchCount(
+  competitorCount: number,
+  format: 'double_elim' | 'single_elim' | 'round_robin' = 'double_elim'
+): number {
+  const n = Math.max(0, Math.floor(competitorCount));
+  if (n < 2) return 0;
+  if (format === 'single_elim') return n - 1;
+  if (format === 'round_robin') return (n * (n - 1)) / 2;
+  return 2 * n - 1;
+}
+
 // Estimate duration for a division based on bracket structure
 export function estimateDivisionDuration(
   competitorCount: number,
   eventType: string,
-  config: ScheduleConfig
+  config: ScheduleConfig,
+  format: 'double_elim' | 'single_elim' | 'round_robin' = 'double_elim'
 ): number {
-  // For double elimination, total matches ≈ 2 * (n - 1) where n is competitors
-  // But many are BYEs in first round, so we use: ceil(log2(n)) rounds
-  // Simplified: assume ~n matches for small brackets
   const matchDuration =
     eventType === 'patterns'
       ? config.matchDurationMinutes.patterns
       : config.matchDurationMinutes.sparring;
 
-  // For 8 competitors: roughly 14 matches in double elimination
-  // But with BYEs, closer to 10-12 actual matches
-  const estimatedMatches = Math.min(competitorCount * 1.5, competitorCount * 2 - 1);
-  const totalTime = Math.ceil(estimatedMatches * matchDuration);
+  // Previously `min(1.5n, 2n-1)` (12 matches for 8 competitors) and
+  // capped at 90 minutes - a 16-person double-elim sparring division
+  // (31 matches) was scheduled as if it took 90 minutes instead of 155,
+  // so every following division on that ring was booked too early.
+  const totalTime = Math.ceil(estimateMatchCount(competitorCount, format) * matchDuration);
 
-  // Minimum 10 minutes, maximum 90 minutes per division
-  return Math.max(10, Math.min(90, totalTime));
+  // Minimum 10 minutes per division (setup / call-up time).
+  return Math.max(10, totalTime);
 }
 
 /**
@@ -181,11 +219,13 @@ export async function generateSchedule(
   // and apply all share this deterministic calculation; persistence and
   // audit history live in the schedule-correction service.
   const divisions = await prisma.division.findMany({
-    where: { tournamentId },
+    // Soft-deleted divisions are not run, so they must not take ring time.
+    where: { tournamentId, deletedAt: null },
     include: {
       _count: {
         select: { assignments: true },
       },
+      bracket: { select: { format: true } },
       assignments: {
         select: {
           registration: {
@@ -214,6 +254,7 @@ export async function generateSchedule(
       date: tournament.date.toISOString(),
       config,
       schedule: [],
+      unscheduled: [],
       warnings: ['No divisions found. Generate divisions first.'],
     };
   }
@@ -243,13 +284,26 @@ export async function generateSchedule(
 
   // Schedule patterns first (typically shorter)
   const scheduled: ScheduledDivision[] = [];
+  // Exact start/end minutes per scheduled division. Times are tracked
+  // as minutes internally and only formatted for display, so a day that
+  // runs past midnight can't crash the generator by round-tripping a
+  // "24:05" string through timeToMinutes.
+  const minutesByDivision = new Map<string, { start: number; end: number }>();
+  // Emitted slots must start and end within the same day (end <= 23:59).
+  // Divisions that cannot are reported in `unscheduled` instead of being
+  // clamped to 23:59, which made distinct divisions look identical and
+  // overlap on the same ring.
+  const LAST_MINUTE_OF_DAY = 24 * 60 - 1;
+  const unscheduled: UnscheduledDivision[] = [];
 
   // Function to schedule a division on the least busy ring
   const scheduleDivision = (div: typeof divisions[0]) => {
+    const bracketFormat = div.bracket?.format;
     const duration = estimateDivisionDuration(
       div._count.assignments,
       div.eventType,
-      config
+      config,
+      bracketFormat === 'single_elim' || bracketFormat === 'round_robin' ? bracketFormat : 'double_elim'
     );
 
     // Find ring with earliest available time
@@ -257,12 +311,29 @@ export async function generateSchedule(
     const startTimeMinutes = ringSchedules[ringIndex];
     const endTimeDivision = startTimeMinutes + duration;
 
+    if (endTimeDivision > LAST_MINUTE_OF_DAY) {
+      // Leave the ring's clock untouched so a later, shorter division can
+      // still use the remaining time before midnight.
+      unscheduled.push({
+        divisionId: div.id,
+        divisionName: div.name,
+        eventType: div.eventType,
+        beltLevel: div.beltLevel,
+        gender: div.gender,
+        competitorCount: div._count.assignments,
+        estimatedDurationMinutes: duration,
+        reason: 'past_midnight',
+      });
+      return;
+    }
+
     if (endTimeDivision > endTimeMinutes) {
       warnings.push(
         `Division "${div.name}" may run past end time (scheduled to end at ${minutesToTime(endTimeDivision)})`
       );
     }
 
+    minutesByDivision.set(div.id, { start: startTimeMinutes, end: endTimeDivision });
     scheduled.push({
       divisionId: div.id,
       divisionName: div.name,
@@ -300,9 +371,9 @@ export async function generateSchedule(
   sparringDiv.forEach(scheduleDivision);
 
   // Sort schedule by start time then ring
+  const minutesOf = (slot: ScheduledDivision) => minutesByDivision.get(slot.divisionId)!;
   scheduled.sort((a, b) => {
-    const timeCompare =
-      timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
+    const timeCompare = minutesOf(a).start - minutesOf(b).start;
     if (timeCompare !== 0) return timeCompare;
     return a.ring - b.ring;
   });
@@ -324,8 +395,7 @@ export async function generateSchedule(
     slots: { divId: string; start: number; end: number; ring: number }[];
   }>();
   for (const slot of scheduled) {
-    const startMin = timeToMinutes(slot.startTime);
-    const endMin = timeToMinutes(slot.endTime);
+    const { start: startMin, end: endMin } = minutesOf(slot);
     for (const competitor of competitorsByDivision.get(slot.divisionId) ?? []) {
       if (!competitorSlots.has(competitor.registrationId)) {
         competitorSlots.set(competitor.registrationId, {
@@ -367,12 +437,17 @@ export async function generateSchedule(
   }
 
   // Check for late end time
-  const latestEnd = Math.max(
-    ...scheduled.map((s) => timeToMinutes(s.endTime))
-  );
+  const latestEnd = scheduled.length > 0 ? Math.max(...scheduled.map((slot) => minutesOf(slot).end)) : 0;
   if (latestEnd > endTimeMinutes) {
+    warnings.push(`Schedule extends past end time. Latest event ends at ${minutesToTime(latestEnd)}`);
+  }
+
+  if (unscheduled.length > 0) {
     warnings.push(
-      `Schedule extends past end time. Latest event ends at ${minutesToTime(latestEnd)}`
+      `${unscheduled.length} division${unscheduled.length === 1 ? '' : 's'} could not be scheduled because `
+      + `${unscheduled.length === 1 ? 'it' : 'they'} cannot finish before midnight: `
+      + `${unscheduled.map((d) => `"${d.divisionName}" (${d.estimatedDurationMinutes} min)`).join(', ')}. `
+      + 'Add rings, start earlier, or split the day.'
     );
   }
 
@@ -382,6 +457,7 @@ export async function generateSchedule(
     date: tournament.date.toISOString(),
     config,
     schedule: scheduled,
+    unscheduled,
     warnings,
   };
 }

@@ -425,29 +425,64 @@ const ROLE_HIERARCHY = { director: 3, scorekeeper: 2, viewer: 1 } as const;
 
 export type TournamentRole = keyof typeof ROLE_HIERARCHY;
 
+/**
+ * Map an `OrganizationMember.role` onto the tournament role
+ * hierarchy; the effective role is min(global role, this).
+ * `owner`/`admin`/`member` are the schema's standard membership roles
+ * and don't narrow the user's global role. Invitation-created
+ * memberships carry the invited director/scorekeeper/viewer role
+ * verbatim and cap access at that level. Anything unknown grants
+ * nothing (fail closed).
+ */
+const ORG_MEMBERSHIP_ROLE_LEVEL: Record<string, number> = {
+  owner: ROLE_HIERARCHY.director,
+  admin: ROLE_HIERARCHY.director,
+  director: ROLE_HIERARCHY.director,
+  scorekeeper: ROLE_HIERARCHY.scorekeeper,
+  viewer: ROLE_HIERARCHY.viewer,
+  member: ROLE_HIERARCHY.director,
+};
+
+export function orgMembershipRoleLevel(role: string | null | undefined): number {
+  if (!role) return 0;
+  return ORG_MEMBERSHIP_ROLE_LEVEL[role] ?? 0;
+}
+
 export interface TournamentAccessResult {
   ok: boolean;
   status?: number;
   error?: string;
 }
 
+export interface TournamentAccessOptions {
+  /**
+   * Allow access to a soft-deleted tournament. Only the trash /
+   * restore paths should set this — every other route treats a
+   * soft-deleted tournament as nonexistent (404).
+   */
+  allowDeleted?: boolean;
+}
+
 /**
  * Check tournament access for a known tournamentId.
  *
  * Authorization precedence (first match wins):
- * 1. Admin - global access, can mutate any tournament.
- * 2. UserTournamentAccess row exists for (user, tournament) - the
- *    user is explicitly granted a per-tournament role. Check the
- *    role hierarchy (director=3 > scorekeeper=2 > viewer=1).
- * 3. Tournament has no organizationId (legacy single-tenant data) -
- *    any non-admin user with the global role required by minRole
- *    is allowed. This preserves the pre-multi-tenant behavior for
- *    existing installations.
- * 4. Tournament belongs to an org, and the user is a member of
- *    that org - implicit director access. This is the multi-tenant
- *    boundary: a non-member can't even read a tournament they don't
- *    belong to.
- * 5. Otherwise - 403.
+ * 1. Admin - global access, can mutate any tournament (including
+ *    soft-deleted ones).
+ * 2. Global role must meet `minRole` (defense in depth: a per-
+ *    tournament grant never exceeds the user's global role).
+ * 3. Tournament must exist and, unless `allowDeleted`, must not be
+ *    soft-deleted (404 otherwise, same shape as "not found").
+ * 4. UserTournamentAccess row for (user, tournament) - explicit
+ *    per-tournament role, checked against the role hierarchy.
+ * 5. Tournament belongs to an org and the user is a member of that
+ *    org - effective role = min(global role, membership role).
+ * 6. Orphan tournament (organizationId null) - the legacy
+ *    single-tenant pool. Accessible ONLY to users with no org
+ *    memberships at all. A user who belongs to any org is a tenant
+ *    user and never reaches the legacy pool except through an
+ *    explicit grant (step 4).
+ * 7. Otherwise - 403.
  *
  * Designed to be called both as middleware (with `requireTournamentAccess`)
  * and inline from a handler that has resolved a parent tournamentId
@@ -457,7 +492,8 @@ export async function checkTournamentAccess(
   req: AuthenticatedRequest,
   prisma: PrismaClient,
   tournamentId: string | null | undefined,
-  minRole: TournamentRole
+  minRole: TournamentRole,
+  options: TournamentAccessOptions = {}
 ): Promise<TournamentAccessResult> {
   if (!req.user) {
     return { ok: false, status: 401, error: 'Authentication required' };
@@ -480,6 +516,23 @@ export async function checkTournamentAccess(
   }
 
   try {
+    // Resolve the tournament first so a soft-deleted tournament is
+    // invisible even to users holding an explicit per-tournament
+    // grant. Returning 404 with the same shape as "doesn't exist"
+    // prevents data leaks via stale bookmarks or shared URLs.
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { organizationId: true, deletedAt: true },
+    });
+
+    if (!tournament) {
+      return { ok: false, status: 404, error: 'Tournament not found' };
+    }
+
+    if (tournament.deletedAt && !options.allowDeleted) {
+      return { ok: false, status: 404, error: 'Tournament not found' };
+    }
+
     // Explicit per-tournament access row (always wins when present)
     const access = await prisma.userTournamentAccess.findUnique({
       where: {
@@ -498,42 +551,36 @@ export async function checkTournamentAccess(
       return { ok: false, status: 403, error: 'Insufficient tournament permissions' };
     }
 
-    // No explicit row. Check the tournament's org membership.
-    // Also: a soft-deleted tournament is invisible to anyone except
-    // admins (who bypass this middleware). Returning 404 with the same
-    // shape as "tournament doesn't exist" prevents data leaks via stale
-    // bookmarks or shared URLs.
-    const tournament = await prisma.tournament.findUnique({
-      where: { id: tournamentId },
-      select: { organizationId: true, deletedAt: true },
-    });
-
-    if (tournament?.deletedAt) {
-      return { ok: false, status: 404, error: 'Tournament not found' };
-    }
-
-    if (!tournament) {
-      return { ok: false, status: 404, error: 'Tournament not found' };
-    }
-
-    // Orphan tournament (no org) — fall back to the global-role
-    // check we already passed. Preserves single-tenant behavior
-    // for legacy data.
-    if (!tournament.organizationId) {
-      return { ok: true };
-    }
-
-    // Org-scoped tournament: require the user to be a member of
-    // the same org. This is the multi-tenant boundary.
-    const membership = await prisma.organizationMember.findUnique({
-      where: {
-        organizationId_userId: {
-          organizationId: tournament.organizationId,
-          userId: req.user.id,
+    if (tournament.organizationId) {
+      // Org-scoped tournament: require membership of the same org and
+      // respect the membership's role. This is the multi-tenant
+      // boundary.
+      const membership = await prisma.organizationMember.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId: tournament.organizationId,
+            userId: req.user.id,
+          },
         },
-      },
+        select: { role: true },
+      });
+      if (!membership) {
+        return { ok: false, status: 403, error: 'No access to this tournament' };
+      }
+      const effectiveLevel = Math.min(userGlobalLevel, orgMembershipRoleLevel(membership.role));
+      if (effectiveLevel >= requiredLevel) {
+        return { ok: true };
+      }
+      return { ok: false, status: 403, error: 'Insufficient organization permissions' };
+    }
+
+    // Orphan tournament (no org): the legacy single-tenant pool. Only
+    // users without any org membership may use it; tenant users must
+    // not reach legacy data by default.
+    const membershipCount = await prisma.organizationMember.count({
+      where: { userId: req.user.id },
     });
-    if (membership) {
+    if (membershipCount === 0) {
       return { ok: true };
     }
 
@@ -548,12 +595,13 @@ export async function checkTournamentAccess(
  * `tournamentId` or `id`. For routes where the URL is keyed by a
  * non-tournament id (e.g. `/api/rules/:ruleId`), call
  * `checkTournamentAccess` inline after resolving the parent
- * tournamentId.
+ * tournamentId. Pass `{ allowDeleted: true }` only on trash/restore
+ * paths.
  */
-export function requireTournamentAccess(minRole: TournamentRole) {
+export function requireTournamentAccess(minRole: TournamentRole, options: TournamentAccessOptions = {}) {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     const tournamentId = req.params.tournamentId || req.params.id;
-    const result = await checkTournamentAccess(req, req.app.locals.prisma, tournamentId, minRole);
+    const result = await checkTournamentAccess(req, req.app.locals.prisma, tournamentId, minRole, options);
     if (result.ok) {
       return next();
     }
@@ -561,40 +609,27 @@ export function requireTournamentAccess(minRole: TournamentRole) {
   };
 }
 
-/**
- * Build a Prisma `where` predicate that scopes the `Tournament.findMany`
- * call to the tournaments the current user can see. Returns `null` if
- * no scoping is needed (admin user OR legacy single-tenant user with no
- * org membership and no explicit access rows — sees everything).
- *
- * Use on list endpoints where the URL has no `:tournamentId` to feed
- * `requireTournamentAccess`. Combine with whatever other filters the
- * caller needs (trash view, status, etc.) via `Prisma.And` or simple
- * object merge:
- *
- *   const accessFilter = await buildTournamentAccessFilter(req, prisma);
- *   const where = {
- *     deletedAt: null,
- *     ...(accessFilter ?? {}),
- *   };
- *
- * Mirrors the precedence in checkTournamentAccess: admins see all,
- * users with no org and no explicit access see all (legacy fallback),
- * otherwise restricted to the union of (explicit UserTournamentAccess
- * rows with role ≥ viewer) + (tournaments in user's orgs) + (org-less
- * tournaments so legacy single-tenant data stays visible).
- */
-export async function buildTournamentAccessFilter(
+export interface TournamentScope {
+  /** null = admin (unscoped). */
+  filter: Prisma.TournamentWhereInput | null;
+  /** True when the user has no org memberships (legacy single-tenant pool). */
+  legacyPool: boolean;
+  /** Organizations the user belongs to (viewer level or above). */
+  orgIds: string[];
+}
+
+export async function resolveTournamentScope(
   req: AuthenticatedRequest,
   prisma: PrismaClient
-): Promise<Prisma.TournamentWhereInput | null> {
-  if (!req.user) return null;
-  if (req.user.role === 'admin') return null;
+): Promise<TournamentScope> {
+  // Unauthenticated callers match nothing (fail closed).
+  if (!req.user) return { filter: { id: { in: [] } }, legacyPool: false, orgIds: [] };
+  if (req.user.role === 'admin') return { filter: null, legacyPool: false, orgIds: [] };
 
   const [orgMemberships, explicitAccess] = await Promise.all([
     prisma.organizationMember.findMany({
       where: { userId: req.user.id },
-      select: { organizationId: true },
+      select: { organizationId: true, role: true },
     }),
     prisma.userTournamentAccess.findMany({
       where: { userId: req.user.id },
@@ -602,23 +637,138 @@ export async function buildTournamentAccessFilter(
     }),
   ]);
 
-  const orgIds = orgMemberships.map((m) => m.organizationId);
   const explicitTournamentIds = explicitAccess
-    .filter((a) => ROLE_HIERARCHY[a.role as TournamentRole] >= ROLE_HIERARCHY.viewer)
+    .filter((a) => (ROLE_HIERARCHY[a.role as TournamentRole] || 0) >= ROLE_HIERARCHY.viewer)
     .map((a) => a.tournamentId);
 
-  // Legacy single-tenant fallback: a user with no orgs and no explicit
-  // access rows sees every tournament. Same fallback used in
-  // checkTournamentAccess so list + per-tournament stay consistent.
-  if (orgIds.length === 0 && explicitTournamentIds.length === 0) {
-    return null;
+  if (orgMemberships.length === 0) {
+    // Legacy single-tenant pool: orphan tournaments + explicit grants.
+    // Never org-owned tournaments.
+    return {
+      filter: {
+        OR: [
+          { id: { in: explicitTournamentIds } },
+          { organizationId: null },
+        ],
+      },
+      legacyPool: true,
+      orgIds: [],
+    };
   }
 
+  const orgIds = orgMemberships
+    .filter((m) => orgMembershipRoleLevel(m.role) >= ROLE_HIERARCHY.viewer)
+    .map((m) => m.organizationId);
+
+  // Tenant user: own orgs + explicit grants. Never orphan tournaments.
+  return {
+    filter: {
+      OR: [
+        { id: { in: explicitTournamentIds } },
+        { organizationId: { in: orgIds } },
+      ],
+    },
+    legacyPool: false,
+    orgIds,
+  };
+}
+
+/**
+ * Build a Prisma `where` predicate that scopes a `Tournament` query to
+ * the tournaments the current user can see. Returns `null` ONLY for
+ * admins (no scoping needed). Every other user always gets a filter —
+ * there is no fail-open fallback.
+ *
+ * Use on list endpoints where the URL has no `:tournamentId` to feed
+ * `requireTournamentAccess`. Combine with whatever other filters the
+ * caller needs (trash view, status, etc.):
+ *
+ *   const accessFilter = await buildTournamentAccessFilter(req, prisma);
+ *   const where = {
+ *     deletedAt: null,
+ *     ...(accessFilter ?? {}),
+ *   };
+ *
+ * Mirrors checkTournamentAccess at viewer level:
+ *  - user WITH org memberships: tournaments in those orgs + explicit
+ *    UserTournamentAccess grants. Never orphan (org-less) tournaments.
+ *  - user with NO org memberships: orphan tournaments (the legacy
+ *    single-tenant pool) + explicit grants. Never org-owned
+ *    tournaments without a grant.
+ *
+ * Soft-deleted tournaments are NOT excluded here; callers add
+ * `deletedAt: null` unless they serve the trash view.
+ */
+export async function buildTournamentAccessFilter(
+  req: AuthenticatedRequest,
+  prisma: PrismaClient
+): Promise<Prisma.TournamentWhereInput | null> {
+  return (await resolveTournamentScope(req, prisma)).filter;
+}
+
+/**
+ * Build a Prisma `where` predicate for `Competitor` rows the current
+ * user can READ. Returns `null` only for admins.
+ *
+ * Visibility derives from registrations, with the owning
+ * organization covering competitors that aren't registered yet:
+ *  - registered in at least one accessible tournament: visible;
+ *  - no registrations: visible to members of the owning org, or, for
+ *    legacy single-tenant users (no org memberships), when the
+ *    competitor has no owning org.
+ */
+export async function buildCompetitorAccessFilter(
+  req: AuthenticatedRequest,
+  prisma: PrismaClient
+): Promise<Prisma.CompetitorWhereInput | null> {
+  const { filter, legacyPool, orgIds } = await resolveTournamentScope(req, prisma);
+  if (filter === null) return null;
+  const registeredInAccessible: Prisma.CompetitorWhereInput = {
+    registrations: { some: { tournament: filter } },
+  };
   return {
     OR: [
-      { id: { in: explicitTournamentIds } },
-      { organizationId: { in: orgIds } },
-      { organizationId: null },
+      registeredInAccessible,
+      { registrations: { none: {} }, ...unregisteredOwnerFilter(legacyPool, orgIds) },
+    ],
+  };
+}
+
+/** Owner predicate for competitors with no registrations yet. */
+function unregisteredOwnerFilter(legacyPool: boolean, orgIds: string[]): Prisma.CompetitorWhereInput {
+  return legacyPool ? { organizationId: null } : { organizationId: { in: orgIds } };
+}
+
+/**
+ * Build a Prisma `where` predicate for `Competitor` rows the current
+ * user may MODIFY (update, delete, restore, merge, import-overwrite).
+ * Returns `null` only for admins.
+ *
+ * Stricter than the read filter: EVERY tournament the competitor is
+ * registered in must be accessible. Otherwise registering a shared
+ * competitor into one of your own tournaments would let you overwrite
+ * a record another tenant also relies on.
+ */
+export async function buildCompetitorWriteFilter(
+  req: AuthenticatedRequest,
+  prisma: PrismaClient
+): Promise<Prisma.CompetitorWhereInput | null> {
+  const { filter, legacyPool, orgIds } = await resolveTournamentScope(req, prisma);
+  if (filter === null) return null;
+  const allRegistrationsAccessible: Prisma.CompetitorWhereInput = {
+    registrations: { every: { tournament: filter } },
+  };
+  // `every` is vacuously true for unregistered competitors, so they
+  // additionally need to belong to the caller's org (or the legacy pool).
+  return {
+    AND: [
+      allRegistrationsAccessible,
+      {
+        OR: [
+          { registrations: { some: { tournament: filter } } },
+          { registrations: { none: {} }, ...unregisteredOwnerFilter(legacyPool, orgIds) },
+        ],
+      },
     ],
   };
 }

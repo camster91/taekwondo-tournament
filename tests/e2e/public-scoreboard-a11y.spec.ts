@@ -1,7 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { loginAsDemo } from './helpers';
 import { checkA11y } from './axe-helper';
 
 /**
@@ -10,23 +7,10 @@ import { checkA11y } from './axe-helper';
  * accessible without authentication.
  */
 
-async function getPublicSlug(page: import('@playwright/test').Page): Promise<string | null> {
-  // Login as admin to generate a public slug
-  await loginAsDemo(page);
-  await page.goto('/tournaments');
-  
-  // Find Spring Championship 2026
-  const link = page.locator('a', { hasText: 'Spring Championship 2026' }).first();
-  await expect(link).toBeVisible({ timeout: 10_000 });
-  const href = await link.getAttribute('href');
-  const tournamentId = href!.replace('/tournaments/', '');
-
-  // Generate public slug via API
-  const response = await page.request.post(`/api/tournaments/${tournamentId}/public-slug`);
-  if (!response.ok()) return null;
-  
-  const data = await response.json();
-  return data.publicSlug;
+// Demo sessions may not mint public slugs (DEMO_CAPABILITY_DENIED), so use
+// the fabricated showcase's published slug that global-setup installs.
+async function getPublicSlug(_page: import('@playwright/test').Page): Promise<string | null> {
+  return 'bowin-demo-live-championship';
 }
 
 test.describe('public scoreboard (a11y)', () => {
@@ -35,7 +19,7 @@ test.describe('public scoreboard (a11y)', () => {
     expect(publicSlug).toBeTruthy();
 
     // Navigate to public scoreboard (no auth required)
-    await page.goto(`/display/${publicSlug}`);
+    await page.goto(`/scoreboard/${publicSlug}`); // slug links live at /scoreboard/:publicSlug
     
     // Wait for content to load
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
@@ -48,7 +32,7 @@ test.describe('public scoreboard (a11y)', () => {
     const publicSlug = await getPublicSlug(page);
     expect(publicSlug).toBeTruthy();
 
-    await page.goto(`/display/${publicSlug}`);
+    await page.goto(`/scoreboard/${publicSlug}`); // slug links live at /scoreboard/:publicSlug
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Tab through interactive elements (if any division/filter buttons exist)
@@ -79,7 +63,7 @@ test.describe('public scoreboard (a11y)', () => {
     const publicSlug = await getPublicSlug(page);
     expect(publicSlug).toBeTruthy();
 
-    await page.goto(`/display/${publicSlug}`);
+    await page.goto(`/scoreboard/${publicSlug}`); // slug links live at /scoreboard/:publicSlug
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Check for live region (aria-live) for dynamic bracket updates

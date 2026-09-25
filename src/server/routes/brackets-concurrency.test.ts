@@ -8,7 +8,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock('express', () => {
   const router: any = {};
-  for (const method of ['get', 'post', 'put', 'delete']) {
+  for (const method of ['get', 'post', 'put', 'patch', 'delete']) {
     router[method] = (path: string, ...handlers: any[]) => {
       state.handlers.push({ method, path, handler: handlers.at(-1) });
       return router;

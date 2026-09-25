@@ -75,11 +75,21 @@ test.describe('organization onboarding', () => {
     });
     expect(opened.ok()).toBeTruthy();
 
+    // Schedule changes are now preview-then-apply: the apply body carries the
+    // preview's concurrency tokens. Preview within the plan, then try to
+    // apply a ring count above it.
+    const config = {
+      startTime: '09:00', endTime: '17:00', ringCount: 1,
+      matchDurationMinutes: { patterns: 3, sparring: 5 }, breakBetweenDivisions: 5,
+    };
+    const preview = await request.post(`/api/tournaments/${tournament.id}/schedule/preview`, { headers, data: { config } });
+    expect(preview.ok(), await preview.text()).toBeTruthy();
+    const { expectedUpdatedAt, expectedInputVersion, operationKey } = await preview.json();
     const excessiveRings = await request.post(`/api/tournaments/${tournament.id}/schedule`, {
       headers,
-      data: { config: { ringCount: 7 } },
+      data: { config: { ...config, ringCount: 7 }, expectedUpdatedAt, expectedInputVersion, operationKey },
     });
-    expect(excessiveRings.status()).toBe(402);
+    expect(excessiveRings.status(), await excessiveRings.text()).toBe(402);
     await expect(excessiveRings.json()).resolves.toMatchObject({ code: 'RING_LIMIT_REACHED' });
   });
 });

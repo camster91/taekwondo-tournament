@@ -25,7 +25,8 @@ test.describe('public registration — accessibility (WCAG 2.1 AA)', () => {
 
     const main = page.getByRole('main');
     await expect(main.getByRole('heading', { level: 1, name: 'No Open Tournaments' })).toBeVisible();
-    await expect(main.getByRole('link', { name: 'Return to Bowin home' })).toHaveAttribute('href', '/');
+    // Tenant branding (61254e3) dropped the platform name from this link.
+    await expect(main.getByRole('link', { name: 'Return to home' })).toHaveAttribute('href', '/');
   });
 
   test('every Label in step 1 is associated with its control via htmlFor', async ({ page }) => {
