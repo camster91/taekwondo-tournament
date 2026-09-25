@@ -117,27 +117,47 @@ export function validateScheduleConfig(config: ScheduleConfig): void {
   }
 }
 
+/**
+ * Number of matches a bracket format needs for `n` competitors.
+ *
+ *   double_elim: 2n-2 matches, +1 when the losers-bracket champion
+ *                forces the bracket reset -> schedule the worst case 2n-1.
+ *   single_elim: n-1.
+ *   round_robin: n(n-1)/2.
+ *
+ * Byes are not matches, so these are exact regardless of padding.
+ */
+export function estimateMatchCount(
+  competitorCount: number,
+  format: 'double_elim' | 'single_elim' | 'round_robin' = 'double_elim'
+): number {
+  const n = Math.max(0, Math.floor(competitorCount));
+  if (n < 2) return 0;
+  if (format === 'single_elim') return n - 1;
+  if (format === 'round_robin') return (n * (n - 1)) / 2;
+  return 2 * n - 1;
+}
+
 // Estimate duration for a division based on bracket structure
 export function estimateDivisionDuration(
   competitorCount: number,
   eventType: string,
-  config: ScheduleConfig
+  config: ScheduleConfig,
+  format: 'double_elim' | 'single_elim' | 'round_robin' = 'double_elim'
 ): number {
-  // For double elimination, total matches ≈ 2 * (n - 1) where n is competitors
-  // But many are BYEs in first round, so we use: ceil(log2(n)) rounds
-  // Simplified: assume ~n matches for small brackets
   const matchDuration =
     eventType === 'patterns'
       ? config.matchDurationMinutes.patterns
       : config.matchDurationMinutes.sparring;
 
-  // For 8 competitors: roughly 14 matches in double elimination
-  // But with BYEs, closer to 10-12 actual matches
-  const estimatedMatches = Math.min(competitorCount * 1.5, competitorCount * 2 - 1);
-  const totalTime = Math.ceil(estimatedMatches * matchDuration);
+  // Previously `min(1.5n, 2n-1)` (12 matches for 8 competitors) and
+  // capped at 90 minutes - a 16-person double-elim sparring division
+  // (31 matches) was scheduled as if it took 90 minutes instead of 155,
+  // so every following division on that ring was booked too early.
+  const totalTime = Math.ceil(estimateMatchCount(competitorCount, format) * matchDuration);
 
-  // Minimum 10 minutes, maximum 90 minutes per division
-  return Math.max(10, Math.min(90, totalTime));
+  // Minimum 10 minutes per division (setup / call-up time).
+  return Math.max(10, totalTime);
 }
 
 /**
@@ -181,11 +201,13 @@ export async function generateSchedule(
   // and apply all share this deterministic calculation; persistence and
   // audit history live in the schedule-correction service.
   const divisions = await prisma.division.findMany({
-    where: { tournamentId },
+    // Soft-deleted divisions are not run, so they must not take ring time.
+    where: { tournamentId, deletedAt: null },
     include: {
       _count: {
         select: { assignments: true },
       },
+      bracket: { select: { format: true } },
       assignments: {
         select: {
           registration: {
@@ -243,13 +265,22 @@ export async function generateSchedule(
 
   // Schedule patterns first (typically shorter)
   const scheduled: ScheduledDivision[] = [];
+  // Exact start/end minutes per scheduled division. Times are tracked
+  // as minutes internally and only formatted for display, so a day that
+  // runs past midnight can't crash the generator by round-tripping a
+  // "24:05" string through timeToMinutes.
+  const minutesByDivision = new Map<string, { start: number; end: number }>();
+  const LAST_MINUTE_OF_DAY = 24 * 60 - 1;
+  const displayTime = (minutes: number) => minutesToTime(Math.min(minutes, LAST_MINUTE_OF_DAY));
 
   // Function to schedule a division on the least busy ring
   const scheduleDivision = (div: typeof divisions[0]) => {
+    const bracketFormat = div.bracket?.format;
     const duration = estimateDivisionDuration(
       div._count.assignments,
       div.eventType,
-      config
+      config,
+      bracketFormat === 'single_elim' || bracketFormat === 'round_robin' ? bracketFormat : 'double_elim'
     );
 
     // Find ring with earliest available time
@@ -259,10 +290,13 @@ export async function generateSchedule(
 
     if (endTimeDivision > endTimeMinutes) {
       warnings.push(
-        `Division "${div.name}" may run past end time (scheduled to end at ${minutesToTime(endTimeDivision)})`
+        endTimeDivision > LAST_MINUTE_OF_DAY
+          ? `Division "${div.name}" cannot finish before midnight (needs ${duration} min from ${displayTime(startTimeMinutes)}); add rings or split the day`
+          : `Division "${div.name}" may run past end time (scheduled to end at ${minutesToTime(endTimeDivision)})`
       );
     }
 
+    minutesByDivision.set(div.id, { start: startTimeMinutes, end: endTimeDivision });
     scheduled.push({
       divisionId: div.id,
       divisionName: div.name,
@@ -278,8 +312,8 @@ export async function generateSchedule(
         .filter((n) => n.length > 0)
         .sort((a, b) => a.localeCompare(b)),
       ring: ringIndex + 1, // 1-indexed
-      startTime: minutesToTime(startTimeMinutes),
-      endTime: minutesToTime(endTimeDivision),
+      startTime: displayTime(startTimeMinutes),
+      endTime: displayTime(endTimeDivision),
       estimatedDurationMinutes: duration,
     });
 
@@ -300,9 +334,9 @@ export async function generateSchedule(
   sparringDiv.forEach(scheduleDivision);
 
   // Sort schedule by start time then ring
+  const minutesOf = (slot: ScheduledDivision) => minutesByDivision.get(slot.divisionId)!;
   scheduled.sort((a, b) => {
-    const timeCompare =
-      timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
+    const timeCompare = minutesOf(a).start - minutesOf(b).start;
     if (timeCompare !== 0) return timeCompare;
     return a.ring - b.ring;
   });
@@ -324,8 +358,7 @@ export async function generateSchedule(
     slots: { divId: string; start: number; end: number; ring: number }[];
   }>();
   for (const slot of scheduled) {
-    const startMin = timeToMinutes(slot.startTime);
-    const endMin = timeToMinutes(slot.endTime);
+    const { start: startMin, end: endMin } = minutesOf(slot);
     for (const competitor of competitorsByDivision.get(slot.divisionId) ?? []) {
       if (!competitorSlots.has(competitor.registrationId)) {
         competitorSlots.set(competitor.registrationId, {
@@ -360,19 +393,19 @@ export async function generateSchedule(
         if (seenWarnings.has(warnKey)) continue;
         seenWarnings.add(warnKey);
         warnings.push(
-          `Competitor "${name}" is double-booked across two divisions (${minutesToTime(first.start)} on ring ${first.ring} and ${minutesToTime(second.start)} on ring ${second.ring}). Re-assign one division or change the competitor's registration.`,
+          `Competitor "${name}" is double-booked across two divisions (${displayTime(first.start)} on ring ${first.ring} and ${displayTime(second.start)} on ring ${second.ring}). Re-assign one division or change the competitor's registration.`,
         );
       }
     }
   }
 
   // Check for late end time
-  const latestEnd = Math.max(
-    ...scheduled.map((s) => timeToMinutes(s.endTime))
-  );
+  const latestEnd = Math.max(...scheduled.map((slot) => minutesOf(slot).end));
   if (latestEnd > endTimeMinutes) {
     warnings.push(
-      `Schedule extends past end time. Latest event ends at ${minutesToTime(latestEnd)}`
+      latestEnd > LAST_MINUTE_OF_DAY
+        ? `Schedule extends past midnight (${latestEnd - endTimeMinutes} min past end time)`
+        : `Schedule extends past end time. Latest event ends at ${minutesToTime(latestEnd)}`
     );
   }
 
