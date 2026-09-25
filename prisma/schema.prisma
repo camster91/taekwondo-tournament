@@ -36,6 +36,12 @@ model Competitor {
   // ?trash=true shows them; POST /:id/restore un-sets deletedAt.
   deletedAt DateTime?
 
+  // Owning organization (null = legacy single-tenant pool). Keeps a
+  // competitor visible to the org that created it before it has any
+  // registration; once registered, visibility follows the tournaments.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
   registrations     Registration[]
   competitorHistory CompetitorHistory[]
   ratings           CompetitorRating[]
@@ -47,6 +53,7 @@ model Competitor {
   // this index the planner may skip the (lastName, firstName)
   // index and scan. Same pattern as Incident.deletedAt.
   @@index([deletedAt])
+  @@index([organizationId])
 }
 
 // Tournament instances
@@ -625,6 +632,7 @@ model Organization {
   usageRecords        OrganizationUsageRecord[]
   tournamentTemplates TournamentTemplate[]
   customDomains       CustomDomain[]
+  competitors         Competitor[]
 
   @@index([slug])
 }

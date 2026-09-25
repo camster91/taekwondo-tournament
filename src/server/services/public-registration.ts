@@ -155,7 +155,7 @@ export async function createPublicRegistration(
       if (existingRegistration) throw new AlreadyRegisteredError();
     } else {
       competitor = await tx.competitor.create({
-        data: c,
+        data: { ...c, organizationId: input.organizationId },
         select: { id: true, firstName: true, lastName: true },
       });
     }

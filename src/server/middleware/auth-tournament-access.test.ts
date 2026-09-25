@@ -517,37 +517,53 @@ describe('buildCompetitorAccessFilter / buildCompetitorWriteFilter', () => {
     expect(await buildCompetitorWriteFilter(req, scopePrisma([]) as any)).toBeNull();
   });
 
-  it('org user reads only competitors registered in accessible tournaments', async () => {
+  it('org user reads competitors registered in accessible tournaments, or unregistered ones their org owns', async () => {
     const req = mockReq({ user: { id: 'u', role: 'director' } });
     expect(await buildCompetitorAccessFilter(req, scopePrisma([{ organizationId: 'org-1', role: 'director' }]) as any)).toEqual({
-      registrations: { some: { tournament: orgTournamentFilter } },
+      OR: [
+        { registrations: { some: { tournament: orgTournamentFilter } } },
+        { registrations: { none: {} }, organizationId: { in: ['org-1'] } },
+      ],
     });
   });
 
-  it('legacy user also reads unregistered competitors', async () => {
+  it('legacy user also reads unregistered competitors with no owning org', async () => {
     const req = mockReq({ user: { id: 'u', role: 'director' } });
     expect(await buildCompetitorAccessFilter(req, scopePrisma([]) as any)).toEqual({
       OR: [
         { registrations: { some: { tournament: legacyTournamentFilter } } },
-        { registrations: { none: {} } },
+        { registrations: { none: {} }, organizationId: null },
       ],
     });
   });
 
-  it('org user may write only when EVERY registration is in an accessible tournament', async () => {
+  it('org user may write only when EVERY registration is accessible (or it is an unregistered competitor their org owns)', async () => {
     const req = mockReq({ user: { id: 'u', role: 'director' } });
     expect(await buildCompetitorWriteFilter(req, scopePrisma([{ organizationId: 'org-1', role: 'director' }]) as any)).toEqual({
       AND: [
-        { registrations: { some: { tournament: orgTournamentFilter } } },
         { registrations: { every: { tournament: orgTournamentFilter } } },
+        {
+          OR: [
+            { registrations: { some: { tournament: orgTournamentFilter } } },
+            { registrations: { none: {} }, organizationId: { in: ['org-1'] } },
+          ],
+        },
       ],
     });
   });
 
-  it('legacy user may write when every registration is in the legacy pool (incl. unregistered)', async () => {
+  it('legacy user may write when every registration is in the legacy pool (incl. unowned unregistered)', async () => {
     const req = mockReq({ user: { id: 'u', role: 'director' } });
     expect(await buildCompetitorWriteFilter(req, scopePrisma([]) as any)).toEqual({
-      registrations: { every: { tournament: legacyTournamentFilter } },
+      AND: [
+        { registrations: { every: { tournament: legacyTournamentFilter } } },
+        {
+          OR: [
+            { registrations: { some: { tournament: legacyTournamentFilter } } },
+            { registrations: { none: {} }, organizationId: null },
+          ],
+        },
+      ],
     });
   });
 });

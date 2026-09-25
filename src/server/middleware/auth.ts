@@ -614,6 +614,8 @@ export interface TournamentScope {
   filter: Prisma.TournamentWhereInput | null;
   /** True when the user has no org memberships (legacy single-tenant pool). */
   legacyPool: boolean;
+  /** Organizations the user belongs to (viewer level or above). */
+  orgIds: string[];
 }
 
 export async function resolveTournamentScope(
@@ -621,8 +623,8 @@ export async function resolveTournamentScope(
   prisma: PrismaClient
 ): Promise<TournamentScope> {
   // Unauthenticated callers match nothing (fail closed).
-  if (!req.user) return { filter: { id: { in: [] } }, legacyPool: false };
-  if (req.user.role === 'admin') return { filter: null, legacyPool: false };
+  if (!req.user) return { filter: { id: { in: [] } }, legacyPool: false, orgIds: [] };
+  if (req.user.role === 'admin') return { filter: null, legacyPool: false, orgIds: [] };
 
   const [orgMemberships, explicitAccess] = await Promise.all([
     prisma.organizationMember.findMany({
@@ -650,6 +652,7 @@ export async function resolveTournamentScope(
         ],
       },
       legacyPool: true,
+      orgIds: [],
     };
   }
 
@@ -666,6 +669,7 @@ export async function resolveTournamentScope(
       ],
     },
     legacyPool: false,
+    orgIds,
   };
 }
 
@@ -706,24 +710,33 @@ export async function buildTournamentAccessFilter(
  * Build a Prisma `where` predicate for `Competitor` rows the current
  * user can READ. Returns `null` only for admins.
  *
- * Competitors are a global registry with no owner column, so
- * visibility derives from registrations:
+ * Visibility derives from registrations, with the owning
+ * organization covering competitors that aren't registered yet:
  *  - registered in at least one accessible tournament: visible;
- *  - no registrations at all: visible only to legacy single-tenant
- *    users (no org memberships), preserving the single-tenant
- *    registry where competitors exist before they are registered.
+ *  - no registrations: visible to members of the owning org, or, for
+ *    legacy single-tenant users (no org memberships), when the
+ *    competitor has no owning org.
  */
 export async function buildCompetitorAccessFilter(
   req: AuthenticatedRequest,
   prisma: PrismaClient
 ): Promise<Prisma.CompetitorWhereInput | null> {
-  const { filter, legacyPool } = await resolveTournamentScope(req, prisma);
+  const { filter, legacyPool, orgIds } = await resolveTournamentScope(req, prisma);
   if (filter === null) return null;
   const registeredInAccessible: Prisma.CompetitorWhereInput = {
     registrations: { some: { tournament: filter } },
   };
-  if (!legacyPool) return registeredInAccessible;
-  return { OR: [registeredInAccessible, { registrations: { none: {} } }] };
+  return {
+    OR: [
+      registeredInAccessible,
+      { registrations: { none: {} }, ...unregisteredOwnerFilter(legacyPool, orgIds) },
+    ],
+  };
+}
+
+/** Owner predicate for competitors with no registrations yet. */
+function unregisteredOwnerFilter(legacyPool: boolean, orgIds: string[]): Prisma.CompetitorWhereInput {
+  return legacyPool ? { organizationId: null } : { organizationId: { in: orgIds } };
 }
 
 /**
@@ -740,20 +753,22 @@ export async function buildCompetitorWriteFilter(
   req: AuthenticatedRequest,
   prisma: PrismaClient
 ): Promise<Prisma.CompetitorWhereInput | null> {
-  const { filter, legacyPool } = await resolveTournamentScope(req, prisma);
+  const { filter, legacyPool, orgIds } = await resolveTournamentScope(req, prisma);
   if (filter === null) return null;
   const allRegistrationsAccessible: Prisma.CompetitorWhereInput = {
     registrations: { every: { tournament: filter } },
   };
-  if (legacyPool) {
-    // `every` is vacuously true for unregistered competitors, which is
-    // exactly the legacy pool rule.
-    return allRegistrationsAccessible;
-  }
+  // `every` is vacuously true for unregistered competitors, so they
+  // additionally need to belong to the caller's org (or the legacy pool).
   return {
     AND: [
-      { registrations: { some: { tournament: filter } } },
       allRegistrationsAccessible,
+      {
+        OR: [
+          { registrations: { some: { tournament: filter } } },
+          { registrations: { none: {} }, ...unregisteredOwnerFilter(legacyPool, orgIds) },
+        ],
+      },
     ],
   };
 }

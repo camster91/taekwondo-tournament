@@ -244,6 +244,27 @@ integration('tenant isolation (Postgres)', () => {
       expect(await prisma.registration.count({ where: { tournamentId: ids.TA, competitorId: ids.cB } })).toBe(0);
     });
 
+    it('org director can create a competitor, see it, and register it (owning org)', async () => {
+      const created = await call('POST', '/api/competitors', 'dirA', {
+        firstName: 'Owned', lastName: `Owner${run}`, gender: 'F', dateOfBirth: '2012-05-05', belt: 'Green',
+      });
+      expect(created.status).toBe(201);
+      expect(created.body.organizationId).toBe(ids.orgA);
+      const listA = await call('GET', `/api/competitors?search=Owner${run}&limit=10`, 'dirA');
+      expect(listA.body.competitors.map((c: any) => c.id)).toEqual([created.body.id]);
+      // Invisible to the other tenant and to the legacy pool.
+      expect((await call('GET', `/api/competitors/${created.body.id}`, 'legacy')).status).toBe(404);
+      const reg = await call('POST', `/api/tournaments/${ids.TA}/registrations`, 'dirA', { competitorId: created.body.id, patterns: true });
+      expect(reg.status).toBe(201);
+    });
+
+    it('org director cannot assign a new competitor to an org they are not in', async () => {
+      const res = await call('POST', '/api/competitors', 'dirA', {
+        firstName: 'Foreign', lastName: `Owner${run}`, gender: 'M', dateOfBirth: '2012-05-05', belt: 'Green', organizationId: ids.orgB,
+      });
+      expect(res.status).toBe(403);
+    });
+
     it('legacy user can still register an unregistered legacy-pool competitor', async () => {
       const res = await call('POST', `/api/tournaments/${ids.T0}/registrations`, 'legacy', { competitorId: ids.cUnreg, patterns: true });
       expect(res.status).toBe(201);

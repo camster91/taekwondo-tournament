@@ -34,9 +34,12 @@ const competitorCreateSchema = z.object({
   weightLbs: z.number().positive().optional().nullable(),
   schoolDojang: z.string().max(200).optional().nullable(),
   specialNeeds: z.string().max(500).optional().nullable(),
+  // Owning organization; tenant users default to their first org and
+  // may only name an org they belong to.
+  organizationId: z.string().uuid().optional().nullable(),
 });
 
-const competitorUpdateSchema = competitorCreateSchema.partial();
+const competitorUpdateSchema = competitorCreateSchema.omit({ organizationId: true }).partial();
 
 // Helper to safely get string param
 const getParam = (param: string | string[] | undefined): string => {
@@ -463,6 +466,28 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
   res.json(competitor);
 });
 
+/**
+ * Owning organization for a competitor created by this caller.
+ * Admins: whatever they request (or none). Legacy single-tenant users:
+ * always none. Tenant users: the requested org if they belong to it,
+ * else their first org. Returns `undefined` when a tenant user names an
+ * org they don't belong to.
+ */
+function resolveOwnerOrganizationId(
+  scope: Awaited<ReturnType<typeof resolveTournamentScope>>,
+  requested: string | null | undefined,
+): string | null | undefined {
+  if (scope.filter === null) return requested ?? null;
+  if (scope.legacyPool) return null;
+  if (requested) return scope.orgIds.includes(requested) ? requested : undefined;
+  return scope.orgIds[0] ?? null;
+}
+
+async function importOwnerOrganizationId(req: AuthenticatedRequest, prisma: PrismaClient): Promise<string | null> {
+  const scope = await resolveTournamentScope(req, prisma);
+  return resolveOwnerOrganizationId(scope, undefined) ?? null;
+}
+
 // Create competitor (requires authentication + admin/director role).
 // Multi-tenant: legacy single-tenant users (no org memberships) may
 // create unregistered competitors — they stay visible in the legacy
@@ -495,7 +520,15 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
     weightLbs,
     schoolDojang,
     specialNeeds,
+    organizationId: requestedOrganizationId,
   } = req.body;
+
+  // Owning org keeps the competitor visible to its creator before the
+  // first registration (see buildCompetitorAccessFilter).
+  const ownerOrganizationId = resolveOwnerOrganizationId(scope, requestedOrganizationId);
+  if (ownerOrganizationId === undefined) {
+    return res.status(403).json({ error: 'Not a member of that organization' });
+  }
 
   const competitor = await prisma.competitor.create({
     data: {
@@ -510,6 +543,7 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
       weightLbs,
       schoolDojang,
       specialNeeds,
+      organizationId: ownerOrganizationId,
     },
   });
 
@@ -720,6 +754,7 @@ router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin'
       const data = XLSX.utils.sheet_to_json<ExcelRow>(workbook.Sheets[sheetName], { defval: '' });
       const result = await importFromExcel(prisma, data, parsed.data.columnMapping, {
         matchScope: await importMatchScope(req as AuthenticatedRequest, prisma),
+        ownerOrganizationId: await importOwnerOrganizationId(req as AuthenticatedRequest, prisma),
       });
       return res.json({ ...result, parsedServerSide: true });
     } catch (err: unknown) {
@@ -734,6 +769,7 @@ router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin'
   }
   const result = await importFromExcel(prisma, body.data, body.columnMapping, {
     matchScope: await importMatchScope(req as AuthenticatedRequest, prisma),
+    ownerOrganizationId: await importOwnerOrganizationId(req as AuthenticatedRequest, prisma),
   });
   res.json(result);
 });

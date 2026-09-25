@@ -46,6 +46,8 @@ export interface ImportOptions {
    *  - 'none' (default, fail closed): never match; always create.
    */
   matchScope?: Prisma.CompetitorWhereInput | 'all' | 'none';
+  /** Owning organization for newly created competitors (null = legacy pool). */
+  ownerOrganizationId?: string | null;
 }
 
 export async function importFromExcel(
@@ -223,6 +225,7 @@ export async function importFromExcel(
               weightLbs,
               schoolDojang,
               specialNeeds,
+              organizationId: options.ownerOrganizationId ?? null,
             },
           });
           result.imported++;
