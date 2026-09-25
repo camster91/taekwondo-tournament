@@ -1001,7 +1001,12 @@ export default function TournamentDetail() {
                             actionLabel: reg.patterns ? 'Removing Patterns' : 'Adding Patterns',
                           })
                         }
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        // Same name and toggle state as the desktop table's IconButton;
+                        // the visible "Patterns"/"Sparring" alone did not say whose
+                        // entry it changes or whether it is currently enrolled.
+                        aria-pressed={reg.patterns}
+                        aria-label={`${reg.competitor.firstName} ${reg.competitor.lastName} — Patterns ${reg.patterns ? 'enrolled' : 'not enrolled'}`}
+                        className={`flex-1 min-h-11 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.patterns
                             ? 'bg-success/10 text-success dark:bg-success/20 dark:text-success'
                             : 'bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-400'
@@ -1020,7 +1025,12 @@ export default function TournamentDetail() {
                             actionLabel: reg.sparring ? 'Removing Sparring' : 'Adding Sparring',
                           })
                         }
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        // Same name and toggle state as the desktop table's IconButton;
+                        // the visible "Patterns"/"Sparring" alone did not say whose
+                        // entry it changes or whether it is currently enrolled.
+                        aria-pressed={reg.sparring}
+                        aria-label={`${reg.competitor.firstName} ${reg.competitor.lastName} — Sparring ${reg.sparring ? 'enrolled' : 'not enrolled'}`}
+                        className={`flex-1 min-h-11 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.sparring
                             ? 'bg-success/10 text-success dark:bg-success/20 dark:text-success'
                             : 'bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-400'
