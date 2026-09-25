@@ -36,8 +36,10 @@ test('account settings expose an accessible permanent-deletion flow', async ({ p
   await page.getByRole('button', { name: 'Delete account' }).click();
   const dialog = page.getByRole('dialog', { name: 'Delete account' });
   await expect(dialog).toBeVisible();
-  await page.getByLabel('Account email confirmation').fill(email);
+  // #232 moved the settings dialog to the GDPR typed-phrase confirmation.
+  await dialog.getByLabel('Confirmation phrase').fill('DELETE MY ACCOUNT');
   await dialog.getByRole('button', { name: 'Permanently delete account' }).click();
   await page.waitForURL(/\/login$/);
-  await expect(page.locator('h1').filter({ hasText: /^Sign in$/ })).toBeVisible();
+  // The login page's h1 is now "Organizer Sign In"; the card heading is "Sign in".
+  await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
 });
