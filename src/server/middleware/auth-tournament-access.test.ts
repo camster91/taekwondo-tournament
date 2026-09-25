@@ -2,19 +2,29 @@
 //
 // We mock the Prisma client so the tests don't need a database. The
 // middleware is the multi-tenant enforcement boundary; these tests
-// pin the 5-step authorization precedence:
+// pin the authorization precedence:
 //
 // 1. Admin - always allowed
-// 2. Explicit UserTournamentAccess row - check role hierarchy
-// 3. Orphan tournament (no org) - fall back to global role
-// 4. Org-scoped tournament + user is org member - allow
-// 5. Otherwise - 403
+// 2. Global role must meet minRole
+// 3. Missing / soft-deleted tournament - 404 (unless allowDeleted)
+// 4. Explicit UserTournamentAccess row - check role hierarchy
+// 5. Org-scoped tournament + org member - min(global, membership role)
+// 6. Orphan tournament (no org) - only for users with NO org
+//    memberships (legacy single-tenant pool)
+// 7. Otherwise - 403
 //
 // Each test calls the middleware directly with a fake req/res and
 // a mocked prisma client.
 
 import { describe, it, expect, vi } from 'vitest';
-import { requireTournamentAccess } from './auth.js';
+import {
+  requireTournamentAccess,
+  checkTournamentAccess,
+  buildTournamentAccessFilter,
+  buildCompetitorAccessFilter,
+  buildCompetitorWriteFilter,
+  orgMembershipRoleLevel,
+} from './auth.js';
 
 const mockReq = (overrides: any = {}): any => ({
   user: undefined,
@@ -36,10 +46,13 @@ const buildPrismaMock = (overrides: any = {}) => {
       findUnique: vi.fn().mockResolvedValue(overrides.access ?? null),
     },
     tournament: {
-      findUnique: vi.fn().mockResolvedValue(overrides.tournament ?? { organizationId: null }),
+      findUnique: vi.fn().mockResolvedValue(
+        overrides.tournament === undefined ? { organizationId: null, deletedAt: null } : overrides.tournament,
+      ),
     },
     organizationMember: {
       findUnique: vi.fn().mockResolvedValue(overrides.membership ?? null),
+      count: vi.fn().mockResolvedValue(overrides.membershipCount ?? 0),
     },
   };
 };
@@ -165,7 +178,7 @@ describe('requireTournamentAccess - org-scoped multi-tenant boundary', () => {
         locals: {
           prisma: buildPrismaMock({
             tournament: { organizationId: 'org-1' },
-            membership: { id: 'm-1', userId: 'u-1', organizationId: 'org-1' },
+            membership: { id: 'm-1', userId: 'u-1', organizationId: 'org-1', role: 'director' },
           }),
         },
       },
@@ -270,5 +283,270 @@ describe('requireTournamentAccess - parameter handling', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('checkTournamentAccess - orphan tournaments are the legacy pool only', () => {
+  it('director WITH org memberships is rejected on an orphan tournament', async () => {
+    const prisma = buildPrismaMock({ tournament: { organizationId: null, deletedAt: null }, membershipCount: 1 });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    const result = await checkTournamentAccess(req, prisma as any, 't-orphan', 'viewer');
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(403);
+  });
+
+  it('director with NO org memberships is allowed on an orphan tournament', async () => {
+    const prisma = buildPrismaMock({ tournament: { organizationId: null, deletedAt: null }, membershipCount: 0 });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    const result = await checkTournamentAccess(req, prisma as any, 't-orphan', 'director');
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('director with NO org memberships is rejected on an org-owned tournament', async () => {
+    const prisma = buildPrismaMock({ tournament: { organizationId: 'org-1', deletedAt: null }, membership: null });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    const result = await checkTournamentAccess(req, prisma as any, 't-1', 'viewer');
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(403);
+  });
+
+  it('explicit grant still opens an orphan tournament for a tenant user', async () => {
+    const prisma = buildPrismaMock({
+      access: { role: 'scorekeeper' },
+      tournament: { organizationId: null, deletedAt: null },
+      membershipCount: 2,
+    });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    const result = await checkTournamentAccess(req, prisma as any, 't-orphan', 'scorekeeper');
+
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe('checkTournamentAccess - org membership role is respected', () => {
+  const orgTournament = { organizationId: 'org-1', deletedAt: null };
+
+  it('viewer membership cannot mutate (director minRole) even with a global director role', async () => {
+    const prisma = buildPrismaMock({ tournament: orgTournament, membership: { role: 'viewer' } });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    const result = await checkTournamentAccess(req, prisma as any, 't-1', 'director');
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(403);
+    expect(result.error).toMatch(/Insufficient organization permissions/);
+  });
+
+  it('viewer membership can still read', async () => {
+    const prisma = buildPrismaMock({ tournament: orgTournament, membership: { role: 'viewer' } });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    const result = await checkTournamentAccess(req, prisma as any, 't-1', 'viewer');
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('owner membership counts as director', async () => {
+    const prisma = buildPrismaMock({ tournament: orgTournament, membership: { role: 'owner' } });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    expect((await checkTournamentAccess(req, prisma as any, 't-1', 'director')).ok).toBe(true);
+  });
+
+  it('org-admin membership counts as director', async () => {
+    const prisma = buildPrismaMock({ tournament: orgTournament, membership: { role: 'admin' } });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    expect((await checkTournamentAccess(req, prisma as any, 't-1', 'director')).ok).toBe(true);
+  });
+
+  it('effective role is min(global, membership): owner membership does not lift a global scorekeeper to director', async () => {
+    const prisma = buildPrismaMock({ tournament: orgTournament, membership: { role: 'owner' } });
+    const req = mockReq({ user: { id: 'u-1', role: 'scorekeeper' } });
+
+    expect((await checkTournamentAccess(req, prisma as any, 't-1', 'scorekeeper')).ok).toBe(true);
+    expect((await checkTournamentAccess(req, prisma as any, 't-1', 'director')).ok).toBe(false);
+  });
+
+  it('scorekeeper membership passes scorekeeper minRole but not director', async () => {
+    const prisma = buildPrismaMock({ tournament: orgTournament, membership: { role: 'scorekeeper' } });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    expect((await checkTournamentAccess(req, prisma as any, 't-1', 'scorekeeper')).ok).toBe(true);
+    expect((await checkTournamentAccess(req, prisma as any, 't-1', 'director')).ok).toBe(false);
+  });
+
+  it('unknown membership role grants nothing', async () => {
+    const prisma = buildPrismaMock({ tournament: orgTournament, membership: { role: 'godmode' } });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    expect((await checkTournamentAccess(req, prisma as any, 't-1', 'viewer')).ok).toBe(false);
+  });
+
+  it('maps membership roles onto the hierarchy', () => {
+    expect(orgMembershipRoleLevel('owner')).toBe(3);
+    expect(orgMembershipRoleLevel('admin')).toBe(3);
+    expect(orgMembershipRoleLevel('director')).toBe(3);
+    expect(orgMembershipRoleLevel('scorekeeper')).toBe(2);
+    expect(orgMembershipRoleLevel('viewer')).toBe(1);
+    expect(orgMembershipRoleLevel('member')).toBe(1);
+    expect(orgMembershipRoleLevel(undefined)).toBe(0);
+  });
+});
+
+describe('checkTournamentAccess - soft-deleted tournaments', () => {
+  const deleted = { organizationId: 'org-1', deletedAt: new Date('2026-01-01') };
+
+  it('explicit grant does NOT reach a soft-deleted tournament', async () => {
+    const prisma = buildPrismaMock({ access: { role: 'director' }, tournament: deleted });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    const result = await checkTournamentAccess(req, prisma as any, 't-1', 'viewer');
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(404);
+  });
+
+  it('org director can reach their own soft-deleted tournament with allowDeleted (restore / trash)', async () => {
+    const prisma = buildPrismaMock({ tournament: deleted, membership: { role: 'director' } });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    const result = await checkTournamentAccess(req, prisma as any, 't-1', 'director', { allowDeleted: true });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('allowDeleted does not bypass the tenant boundary', async () => {
+    const prisma = buildPrismaMock({ tournament: deleted, membership: null });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    const result = await checkTournamentAccess(req, prisma as any, 't-1', 'director', { allowDeleted: true });
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(403);
+  });
+
+  it('missing tournament is 404 even with an explicit grant row', async () => {
+    const prisma = buildPrismaMock({ access: { role: 'director' }, tournament: null });
+    const req = mockReq({ user: { id: 'u-1', role: 'director' } });
+
+    const result = await checkTournamentAccess(req, prisma as any, 't-missing', 'viewer');
+
+    expect(result.status).toBe(404);
+  });
+
+  it('requireTournamentAccess forwards allowDeleted', async () => {
+    const req = mockReq({
+      user: { id: 'u-1', role: 'director' },
+      params: { id: 't-1' },
+      app: { locals: { prisma: buildPrismaMock({ tournament: deleted, membership: { role: 'owner' } }) } },
+    });
+    const res = mockRes();
+    const next = vi.fn();
+
+    await requireTournamentAccess('director', { allowDeleted: true })(req, res, next);
+
+    expect(next).toHaveBeenCalledOnce();
+  });
+});
+
+describe('buildTournamentAccessFilter - no fail-open fallback', () => {
+  const scopePrisma = (memberships: any[], grants: any[]) => ({
+    organizationMember: { findMany: vi.fn().mockResolvedValue(memberships) },
+    userTournamentAccess: { findMany: vi.fn().mockResolvedValue(grants) },
+  });
+
+  it('admin is unscoped (null)', async () => {
+    const req = mockReq({ user: { id: 'a', role: 'admin' } });
+    expect(await buildTournamentAccessFilter(req, scopePrisma([], []) as any)).toBeNull();
+  });
+
+  it('user with no orgs and no grants is scoped to orphan tournaments (NOT null)', async () => {
+    const req = mockReq({ user: { id: 'u', role: 'director' } });
+    const filter = await buildTournamentAccessFilter(req, scopePrisma([], []) as any);
+    expect(filter).toEqual({ OR: [{ id: { in: [] } }, { organizationId: null }] });
+  });
+
+  it('user with no orgs sees orphan tournaments + explicit grants', async () => {
+    const req = mockReq({ user: { id: 'u', role: 'director' } });
+    const filter = await buildTournamentAccessFilter(
+      req,
+      scopePrisma([], [{ tournamentId: 't-granted', role: 'viewer' }]) as any,
+    );
+    expect(filter).toEqual({ OR: [{ id: { in: ['t-granted'] } }, { organizationId: null }] });
+  });
+
+  it('org user sees own orgs + grants and never orphan tournaments', async () => {
+    const req = mockReq({ user: { id: 'u', role: 'director' } });
+    const filter = await buildTournamentAccessFilter(
+      req,
+      scopePrisma(
+        [{ organizationId: 'org-1', role: 'owner' }, { organizationId: 'org-x', role: 'bogus' }],
+        [{ tournamentId: 't-granted', role: 'director' }, { tournamentId: 't-bad', role: 'godmode' }],
+      ) as any,
+    );
+    expect(filter).toEqual({ OR: [{ id: { in: ['t-granted'] } }, { organizationId: { in: ['org-1'] } }] });
+    expect(JSON.stringify(filter)).not.toContain('"organizationId":null');
+  });
+
+  it('unauthenticated request matches nothing', async () => {
+    const req = mockReq({ user: undefined });
+    expect(await buildTournamentAccessFilter(req, scopePrisma([], []) as any)).toEqual({ id: { in: [] } });
+  });
+});
+
+describe('buildCompetitorAccessFilter / buildCompetitorWriteFilter', () => {
+  const scopePrisma = (memberships: any[]) => ({
+    organizationMember: { findMany: vi.fn().mockResolvedValue(memberships) },
+    userTournamentAccess: { findMany: vi.fn().mockResolvedValue([]) },
+  });
+  const orgTournamentFilter = { OR: [{ id: { in: [] } }, { organizationId: { in: ['org-1'] } }] };
+  const legacyTournamentFilter = { OR: [{ id: { in: [] } }, { organizationId: null }] };
+
+  it('admin is unscoped for read and write', async () => {
+    const req = mockReq({ user: { id: 'a', role: 'admin' } });
+    expect(await buildCompetitorAccessFilter(req, scopePrisma([]) as any)).toBeNull();
+    expect(await buildCompetitorWriteFilter(req, scopePrisma([]) as any)).toBeNull();
+  });
+
+  it('org user reads only competitors registered in accessible tournaments', async () => {
+    const req = mockReq({ user: { id: 'u', role: 'director' } });
+    expect(await buildCompetitorAccessFilter(req, scopePrisma([{ organizationId: 'org-1', role: 'director' }]) as any)).toEqual({
+      registrations: { some: { tournament: orgTournamentFilter } },
+    });
+  });
+
+  it('legacy user also reads unregistered competitors', async () => {
+    const req = mockReq({ user: { id: 'u', role: 'director' } });
+    expect(await buildCompetitorAccessFilter(req, scopePrisma([]) as any)).toEqual({
+      OR: [
+        { registrations: { some: { tournament: legacyTournamentFilter } } },
+        { registrations: { none: {} } },
+      ],
+    });
+  });
+
+  it('org user may write only when EVERY registration is in an accessible tournament', async () => {
+    const req = mockReq({ user: { id: 'u', role: 'director' } });
+    expect(await buildCompetitorWriteFilter(req, scopePrisma([{ organizationId: 'org-1', role: 'director' }]) as any)).toEqual({
+      AND: [
+        { registrations: { some: { tournament: orgTournamentFilter } } },
+        { registrations: { every: { tournament: orgTournamentFilter } } },
+      ],
+    });
+  });
+
+  it('legacy user may write when every registration is in the legacy pool (incl. unregistered)', async () => {
+    const req = mockReq({ user: { id: 'u', role: 'director' } });
+    expect(await buildCompetitorWriteFilter(req, scopePrisma([]) as any)).toEqual({
+      registrations: { every: { tournament: legacyTournamentFilter } },
+    });
   });
 });
