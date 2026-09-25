@@ -759,7 +759,7 @@ export default function PublicRegister() {
 
   // Compute effective branding from selected tournament (already defined via useMemo above)
   const brandColor = selectedTournament?.brandPrimaryColor || '#DC2626';
-  const brandName = selectedTournament?.brandName || selectedTournament?.name || 'Tournament';
+  const brandName = selectedTournament?.brandName || selectedTournament?.name || 'Tournament Registration';
   const brandLogoUrl = selectedTournament?.brandLogoUrl;
 
   return (

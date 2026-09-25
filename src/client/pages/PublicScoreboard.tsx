@@ -95,7 +95,9 @@ export default function PublicScoreboard() {
       return tournamentData?.publicScoreboardRefreshMs ?? SCOREBOARD_POLL_INTERVAL_MS;
     },
     refetchIntervalInBackground: false,
-    enabled: !tournamentError, // Don't keep retrying the scoreboard if the tournament is bad
+    // Don't keep retrying the scoreboard if the tournament is bad; a
+    // transient metadata failure with cached metadata keeps polling.
+    enabled: !tournamentError || !!tournament,
     retry: false,
   });
   const divisions = scoreboardData?.divisions;
@@ -109,6 +111,7 @@ export default function PublicScoreboard() {
   // Single source of truth for which UI mode the scoreboard is in.
   const scoreboardState = getScoreboardState({
     tournamentError,
+    hasTournament: !!tournament,
     tournamentLoading,
     hasData: !!divisions,
     divisionsLoading,
@@ -118,7 +121,7 @@ export default function PublicScoreboard() {
   });
 
   // Pre-compute the stale banner copy.
-  const staleBanner = getStaleBannerMessage(!!scoreboardError, staleSeconds);
+  const staleBanner = getStaleBannerMessage(!!scoreboardError || !!tournamentError, staleSeconds);
 
   useEffect(() => {
     // A heartbeat means this display has just received current scoreboard data.

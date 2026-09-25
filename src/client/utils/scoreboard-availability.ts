@@ -50,6 +50,12 @@ export interface ScoreboardState {
 
 export interface ScoreboardStateInput {
   tournamentError: unknown;
+  /**
+   * True when tournament metadata from an earlier successful poll is
+   * cached. A transient metadata poll failure then degrades to the
+   * stale banner instead of blanking the venue board.
+   */
+  hasTournament?: boolean;
   tournamentLoading: boolean;
   /** True when divisions data is present (last successful fetch). */
   hasData: boolean;
@@ -62,8 +68,20 @@ export interface ScoreboardStateInput {
   staleAfterSeconds: number;
 }
 
+function accessWasWithdrawn(error: unknown): boolean {
+  const kind = getApiFailure(error)?.kind;
+  return kind === 'not_found' || kind === 'forbidden' || kind === 'unauthenticated';
+}
+
 export function getScoreboardState(input: ScoreboardStateInput): ScoreboardState {
-  if (input.tournamentError) {
+  // A metadata poll that fails transiently after the board has rendered
+  // keeps the cached board visible with the stale banner. Revoked or
+  // missing access still fails closed below.
+  const transientMetadataFailure = !!input.tournamentError
+    && !!input.hasTournament
+    && input.hasData
+    && !accessWasWithdrawn(input.tournamentError);
+  if (input.tournamentError && !transientMetadataFailure) {
     return {
       status: 'unavailable',
       announcement: 'Tournament not found',
@@ -94,7 +112,7 @@ export function getScoreboardState(input: ScoreboardStateInput): ScoreboardState
   }
   // We have data. The board is either live, stale-by-time, or
   // stale-by-error (in priority order).
-  if (input.hasError) {
+  if (input.hasError || transientMetadataFailure) {
     return {
       status: 'stale',
       announcement: 'Showing last known scoreboard data',

@@ -74,8 +74,9 @@ test.describe('truthful anonymous status', () => {
   });
 
   for (const view of [
-    { name: 'venue', path: (id: string) => `/display/${id}?key=fabricated` },
-    { name: 'parent', path: (id: string) => `/scoreboard/parent/${id}?key=fabricated` },
+    // #276 gave the venue display its own stale-banner copy.
+    { name: 'venue', path: (id: string) => `/display/${id}?key=fabricated`, stale: 'showing last known data' },
+    { name: 'parent', path: (id: string) => `/scoreboard/parent/${id}?key=fabricated`, stale: 'Showing the last confirmed scoreboard' },
   ]) {
     test(`${view.name} scoreboard keeps confirmed matches visible during a transient poll failure`, async ({ page }) => {
       const id = `00000000-0000-4000-8000-0000000000${view.name === 'venue' ? '71' : '72'}`;
@@ -112,7 +113,7 @@ test.describe('truthful anonymous status', () => {
 
       await page.goto(view.path(id));
       await expect(page.getByText('Amina Fabricated')).toBeVisible();
-      await expect(page.getByRole('alert')).toContainText('Showing the last confirmed scoreboard', { timeout: 12_000 });
+      await expect(page.getByRole('alert')).toContainText(view.stale, { timeout: 12_000 });
       await expect(page.getByText('Amina Fabricated')).toBeVisible();
       await page.getByRole('button', { name: 'Try again' }).click();
       await expect(page.getByRole('alert')).toHaveCount(0);
@@ -169,7 +170,8 @@ test.describe('truthful anonymous status', () => {
 
     await page.goto(`/display/${id}?key=fabricated`);
     await expect(page.getByText('Venue Confirmed')).toBeVisible();
-    await expect(page.getByRole('alert')).toContainText('Showing the last confirmed scoreboard', { timeout: 15_000 });
+    // Venue display copy per #276.
+    await expect(page.getByRole('alert')).toContainText('showing last known data', { timeout: 15_000 });
     await expect(page.getByText('Venue Confirmed')).toBeVisible();
     await expect(page.getByText(/Check the URL with the tournament director/i)).toHaveCount(0);
   });
