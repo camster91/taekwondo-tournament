@@ -173,7 +173,7 @@ test.describe('viewport 320px reflow tests', () => {
     expect(bodyWidth).toBeLessThanOrEqual(320);
 
     // Search input should be visible and usable
-    const searchInput = page.getByPlaceholder(/Search by name, school, belt/i);
+    const searchInput = page.getByLabel('Search competitors by name or school'); // check-in search matches name/school only
     await expect(searchInput).toBeVisible();
     await expect(searchInput).toBeEnabled();
 
@@ -345,7 +345,7 @@ test.describe('200% zoom tests', () => {
     await page.waitForLoadState('networkidle');
 
     // Search input should be visible and usable
-    const searchInput = page.getByPlaceholder(/Search by name, school, belt/i);
+    const searchInput = page.getByLabel('Search competitors by name or school'); // check-in search matches name/school only
     await expect(searchInput).toBeVisible();
 
     const searchBox = await searchInput.boundingBox();

@@ -558,6 +558,7 @@ export default function CheckIn() {
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          aria-label={CHECK_IN_ACCESSIBLE_LABELS.search}
           placeholder='Search by name or school... (press "/" to focus)'
           inputClassName="pl-10 pr-4 py-3 text-lg"
           leftIcon={<Search className="h-5 w-5" />}

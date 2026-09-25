@@ -44,7 +44,7 @@ test.describe('check-in accessibility (WCAG 2.2 AA)', () => {
     await page.waitForLoadState('networkidle');
 
     // Search input should have an accessible label (via placeholder or aria-label)
-    const searchInput = page.getByPlaceholder(/Search by name, school, belt/i);
+    const searchInput = page.getByLabel('Search competitors by name or school'); // check-in search matches name/school only
     await expect(searchInput).toBeVisible();
 
     // Should be focusable
@@ -184,7 +184,7 @@ test.describe('check-in accessibility (WCAG 2.2 AA)', () => {
     await page.waitForLoadState('networkidle');
 
     // Search input should be visible and usable on mobile
-    const searchInput = page.getByPlaceholder(/Search by name, school, belt/i);
+    const searchInput = page.getByLabel('Search competitors by name or school'); // check-in search matches name/school only
     await expect(searchInput).toBeVisible();
 
     // "Check In" buttons should be tappable (44×44px minimum)

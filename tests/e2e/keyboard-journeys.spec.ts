@@ -290,7 +290,7 @@ test.describe('keyboard-only journeys', () => {
     // Tab to search input
     await page.keyboard.press('Tab'); // Skip header/nav
     await page.keyboard.press('Tab'); // Should land on search input
-    const searchInput = page.getByPlaceholder(/Search by name, school, belt/i);
+    const searchInput = page.getByLabel('Search competitors by name or school'); // check-in search matches name/school only
     await expect(searchInput).toBeFocused();
 
     // Type search query
