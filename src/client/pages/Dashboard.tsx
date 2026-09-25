@@ -441,8 +441,10 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* P2-18: Onboarding checklist */}
-      <OnboardingChecklist />
+      {/* P2-18: Onboarding checklist. Demo sessions get the demo guide
+          instead; the fixed setup panel covered the guide's controls and
+          its org-setup steps don't apply to the fabricated showcase. */}
+      {!demoUser && <OnboardingChecklist />}
     </div>
   );
 }

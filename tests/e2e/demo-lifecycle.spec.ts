@@ -13,7 +13,8 @@ test.describe('guided fabricated showcase', () => {
     test(`reaches ${journey.name} in exactly two choices`, async ({ page }) => {
       await page.goto('/login');
       await page.getByRole('button', { name: 'Explore the live demo' }).click();
-      await expect(page).toHaveURL('/');
+      // The signed-in landing page is /dashboard; / is the marketing site.
+      await expect(page).toHaveURL('/dashboard');
       await expect(page.getByRole('status', { name: 'Fabricated demo data notice' })).toBeVisible();
 
       const guide = page.getByRole('dialog', { name: 'Choose your tournament-day view' });
