@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsDemo } from './helpers';
+import { loginAsDemo, resetSeededCheckIn } from './helpers';
 import { checkA11y } from './axe-helper';
 
 /**
@@ -13,6 +13,10 @@ import { checkA11y } from './axe-helper';
  */
 
 test.describe('check-in accessibility (WCAG 2.2 AA)', () => {
+  // The seeded tournament is almost fully checked in; the "Check In" button
+  // assertions need Minho Kim unchecked, whatever earlier specs or projects did.
+  test.beforeEach(resetSeededCheckIn);
+
   test('passes axe WCAG 2.2 AA audit', async ({ page }) => {
     await loginAsDemo(page);
 

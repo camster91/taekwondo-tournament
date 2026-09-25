@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { loginAsDemo } from './helpers';
+import { loginAsDemo, snapshotTournamentMatches } from './helpers';
 import { checkA11y } from './axe-helper';
 
 /**
@@ -47,6 +47,13 @@ async function getTournamentId(page: import('@playwright/test').Page): Promise<s
 }
 
 test.describe('scorekeeper (a11y)', () => {
+  // Several tests commit real results to the seeded tournament. Restore its
+  // matches afterwards so later specs and the next browser project find the
+  // same ready matches this project did.
+  let restoreMatches: (() => Promise<void>) | undefined;
+  test.beforeAll(async () => { restoreMatches = await snapshotTournamentMatches('Spring Championship 2026'); });
+  test.afterAll(async () => { await restoreMatches?.(); });
+
   // Helper that logs in and returns the cached tournament id.
   // login() takes ~5s on Mac, ~30s on the CI runner. The other
   // ~70s of CI time per test is the page navigation + Playwright
