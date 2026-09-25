@@ -581,7 +581,7 @@ export default function TournamentSettings() {
         <nav
           role="tablist"
           aria-label="Settings sections"
-          className="flex gap-6"
+          className="flex flex-wrap gap-x-4 gap-y-1 sm:gap-x-6"
           onKeyDown={(event) => {
             // WAI-ARIA tabs: arrows/Home/End move and select; Tab leaves the list.
             const order: SettingsTab[] = ['setup', 'rules', 'branding'];

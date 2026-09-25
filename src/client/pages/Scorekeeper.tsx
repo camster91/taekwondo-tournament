@@ -897,7 +897,7 @@ export default function Scorekeeper() {
         {cachedDataStatus}
         {offlineStatus}
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
             <div className="flex items-center">
               <Trophy className="h-8 w-8 text-yellow-500 mr-3" />
               <h1 className="text-2xl font-bold">Scorekeeper</h1>
@@ -910,7 +910,8 @@ export default function Scorekeeper() {
                 title="Open public display in new tab"
               >
                 <Monitor className="h-4 w-4 mr-1" aria-hidden="true" />
-                <span className="hidden sm:inline">Public Display</span>
+                {/* sr-only on phones keeps the icon-only link named */}
+                <span className="sr-only sm:not-sr-only">Public Display</span>
               </Link>
               <Link to={`/tournaments/${tournamentId}`} className="text-surface-400 hover:text-white">
                 Exit
