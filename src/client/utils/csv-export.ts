@@ -189,9 +189,12 @@ export function buildCompetitorsCSV(filteredDivisions: DivisionLike[]): string[]
 export function downloadCSV(data: string[][], filename: string): void {
   const csvContent = data.map((row) => row.map(escapeCSVCell).join(',')).join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
+  link.href = url;
   link.download = filename;
   link.click();
-  URL.revokeObjectURL(link.href);
+  // Deferred for the same reason as downloadBlob: Firefox/Safari read the
+  // object URL after the click task, so an immediate revoke can cancel it.
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }

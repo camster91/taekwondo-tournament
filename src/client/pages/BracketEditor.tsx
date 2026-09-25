@@ -38,6 +38,7 @@ interface Registration {
 }
 
 import type { ApiMatch } from '../../shared/contracts';
+import { downloadBlob } from '../utils/authenticated-export';
 
 // BracketEditor extends ApiMatch with legacy competitor*Id fields
 interface Match extends Omit<ApiMatch, 'competitor1' | 'competitor2' | 'winner'> {
@@ -418,14 +419,7 @@ export default function BracketEditor() {
       const res = await fetch(`/api/brackets/division/${divisionId}/pdf`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to generate PDF');
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${division.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `${division.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
     } catch {
       addToast('Error exporting PDF. Please try again.', 'error');
     }

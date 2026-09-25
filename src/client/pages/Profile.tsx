@@ -18,6 +18,7 @@ import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
+import { downloadBlob } from '../utils/authenticated-export';
 
 export default function Profile() {
   const { user, refreshUser, logout } = useAuth();
@@ -218,14 +219,7 @@ export default function Profile() {
                   });
                   if (!response.ok) throw new Error('Export failed');
                   const blob = await response.blob();
-                  const url = window.URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `bowin-data-export-${user.email}.json`;
-                  document.body.appendChild(a);
-                  a.click();
-                  window.URL.revokeObjectURL(url);
-                  document.body.removeChild(a);
+                  downloadBlob(blob, `bowin-data-export-${user.email}.json`);
                   toast.success('Data exported successfully');
                 } catch (err) {
                   toast.error('Failed to export data');
