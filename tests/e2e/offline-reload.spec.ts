@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
 
+// This journey is the service worker's contract; the suite blocks it elsewhere.
+test.use({ serviceWorkers: 'allow' });
+
 async function loginDemo(page: import('@playwright/test').Page) {
   const response = await page.request.post('/api/auth/demo');
   expect(response.ok()).toBeTruthy();

@@ -1,9 +1,15 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = Number(process.env.E2E_PORT || 5173);
 const BASE_URL = `http://localhost:${PORT}`;
 const E2E_STRIPE_WEBHOOK_SECRET = ['whsec', 'e2e', 'bowin', 'webhook', 'secret'].join('_');
 const E2E_METRICS_TOKEN = ['metrics', 'e2e', 'bowin', 'private', 'monitoring', 'token'].join('-');
+// Throwaway Ed25519 pair so the dev server issues offline venue capabilities
+// (offline-reload.spec) exactly as staging/production do with their own keys.
+const e2eOfflineKeys = generateKeyPairSync('ed25519');
+const E2E_OFFLINE_PRIVATE_KEY = e2eOfflineKeys.privateKey.export({ format: 'der', type: 'pkcs8' }).toString('base64');
+const E2E_OFFLINE_PUBLIC_KEY = e2eOfflineKeys.publicKey.export({ format: 'der', type: 'spki' }).toString('base64');
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -20,6 +26,9 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     headless: true,
+    // Keep page.route() authoritative for API mocks. offline-reload.spec
+    // opts back in to exercise the production service worker.
+    serviceWorkers: 'block',
   },
   projects: [
     {
@@ -61,7 +70,13 @@ export default defineConfig({
     // MUST be a string, not an array. The array form is broken in
     // Playwright 1.55-1.62 (Received an instance of Array from
     // the loader's resolve hook when the command is a tuple).
-    command: `concurrently "npm run dev:server" "vite --port ${PORT}"`,
+    //
+    // The client is a production build served by `vite preview` (which reuses
+    // the /api dev proxy): the offline shell, service worker, and build
+    // manifest only exist in production builds, and offline-reload.spec
+    // exercises exactly that path. Prebuilt assets also load faster than
+    // on-demand dev transforms.
+    command: `vite build --logLevel warn && concurrently "npm run dev:server" "vite preview --port ${PORT} --strictPort"`,
     // ENABLE_E2E_AUTH_BYPASS lets the dev-mode magic-link endpoint
     // return `code` + `magicUrl` in the response so the e2e suite
     // can sign in without a real email round-trip. NEVER set in
@@ -84,11 +99,14 @@ export default defineConfig({
       STRIPE_STARTER_PRICE_ID: process.env.STRIPE_STARTER_PRICE_ID || 'price_e2e_starter',
       STRIPE_PRO_PRICE_ID: process.env.STRIPE_PRO_PRICE_ID || 'price_e2e_pro',
       METRICS_TOKEN: process.env.METRICS_TOKEN || E2E_METRICS_TOKEN,
+      OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64: process.env.OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64 || E2E_OFFLINE_PRIVATE_KEY,
+      VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64: process.env.VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64 || E2E_OFFLINE_PUBLIC_KEY,
       ...process.env,
     },
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    // Includes the ~15s client build.
+    timeout: 240_000,
     stdout: 'pipe',
     stderr: 'pipe',
   },
