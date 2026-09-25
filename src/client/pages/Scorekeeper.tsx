@@ -46,7 +46,7 @@ import {
 import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner';
 import PendingOperationsPanel from '../components/PendingOperationsPanel';
 
-import type { ApiMatch, ApiDivision, ApiTournamentSummary } from '../../shared/contracts';
+import type { ApiMatch, ApiBracket, ApiDivision, ApiTournamentSummary } from '../../shared/contracts';
 
 // Scorekeeper uses the full match shape from the contract, plus winnerId
 // which is derived client-side (winnerId = winner?.id ?? null)
@@ -54,8 +54,11 @@ interface Match extends ApiMatch {
   winnerId: string | null;
 }
 
-// Division shape matches the contract
-type Division = ApiDivision;
+// Division shape matches the contract, except its bracket carries the
+// enriched Match (with the derived winnerId) built in the query below.
+type Division = Omit<ApiDivision, 'bracket'> & {
+  bracket: (Omit<ApiBracket, 'matches'> & { matches: Match[] }) | null;
+};
 
 type ScoreRequestError = Error & { status?: number; isConflict?: boolean };
 

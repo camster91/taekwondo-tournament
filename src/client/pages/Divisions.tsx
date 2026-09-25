@@ -155,8 +155,10 @@ interface DivisionRecommendationRecord {
  */
 interface AssignmentRow {
   id: string;
+  divisionId: string;
   registrationId: string;
   registration: {
+    id: string;
     competitor: {
       firstName: string;
       lastName: string;

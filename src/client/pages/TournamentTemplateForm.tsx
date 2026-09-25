@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Save } from 'lucide-react';
 import { getAuthHeaders } from '../context/AuthContext';
@@ -49,7 +49,11 @@ export default function TournamentTemplateForm() {
     ],
   });
   const [rules, setRules] = useState<TournamentRules>(DEFAULT_TOURNAMENT_RULES);
-  const [weightClasses, setWeightClasses] = useState<WeightClass[]>(DEFAULT_WEIGHT_CLASSES);
+  // WeightClassConfig uses `gender: null` for "both genders"; the template
+  // API schema expects the field omitted in that case.
+  const [weightClasses, setWeightClasses] = useState<WeightClass[]>(() =>
+    DEFAULT_WEIGHT_CLASSES.map(({ gender, ...wc }) => (gender ? { ...wc, gender } : wc)),
+  );
 
   const { data: template, isLoading } = useQuery({
     queryKey: ['tournament-template', id],
@@ -133,14 +137,11 @@ export default function TournamentTemplateForm() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournament-templates'] });
-      toast.show(
-        isEdit ? 'Template updated successfully' : 'Template created successfully',
-        'success'
-      );
+      toast.success(isEdit ? 'Template updated successfully' : 'Template created successfully');
       navigate('/tournament-templates');
     },
     onError: (error: Error) => {
-      toast.show(error.message || 'Failed to save template', 'error');
+      toast.error(error.message || 'Failed to save template');
     },
   });
 
@@ -148,7 +149,7 @@ export default function TournamentTemplateForm() {
     e.preventDefault();
     
     if (!name.trim()) {
-      toast.show('Template name is required', 'error');
+      toast.error('Template name is required');
       return;
     }
     
@@ -172,10 +173,16 @@ export default function TournamentTemplateForm() {
 
   return (
     <div className="mx-auto max-w-5xl">
+      <Link
+        to="/tournament-templates"
+        className="mb-2 flex items-center text-sm text-surface-600 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-300"
+      >
+        <ArrowLeft className="mr-1 h-4 w-4" />
+        Back to Templates
+      </Link>
       <PageHeader
         title={isEdit ? 'Edit Template' : 'New Template'}
-        subtitle="Define default settings for faster tournament creation"
-        backTo="/tournament-templates"
+        description="Define default settings for faster tournament creation"
       />
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -251,7 +258,11 @@ export default function TournamentTemplateForm() {
           <h3 className="mb-4 text-lg font-semibold text-surface-800 dark:text-surface-100">
             Tournament Rules
           </h3>
-          <TournamentRulesEditor rules={rules} onChange={setRules} />
+          <TournamentRulesEditor
+            rules={rules}
+            onChange={setRules}
+            onReset={() => setRules(DEFAULT_TOURNAMENT_RULES)}
+          />
         </Card>
 
         <Card>

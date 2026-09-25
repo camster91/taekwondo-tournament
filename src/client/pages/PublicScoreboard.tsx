@@ -18,9 +18,19 @@ import {
 import { fetchJson } from '../utils/api-status';
 
 // Use shared API contracts instead of local interfaces
-import type { ApiDivision } from '../../shared/contracts';
+import type { ApiBracket, ApiDivision, ApiMatch } from '../../shared/contracts';
 
-type Division = ApiDivision;
+// The public scoreboard select (src/server/routes/public-scoreboard-query.ts)
+// also returns scheduledTime and winnerId, which the shared ApiMatch
+// contract doesn't declare yet.
+type Match = ApiMatch & {
+  scheduledTime?: string | null;
+  winnerId: string | null;
+};
+
+type Division = Omit<ApiDivision, 'bracket'> & {
+  bracket: (Omit<ApiBracket, 'matches'> & { matches: Match[] }) | null;
+};
 
 interface Tournament {
   id: string;
@@ -106,6 +116,7 @@ export default function PublicScoreboard() {
   // Stale-data warning. If STALE_AFTER_SECONDS+ have passed since the last
   // successful fetch, the venue Wi-Fi may be flaky or the backend is down.
   const staleSeconds = lastFetchAt ? Math.floor((currentTime.getTime() - lastFetchAt.getTime()) / 1000) : null;
+  const isStale = staleSeconds != null && staleSeconds > STALE_AFTER_SECONDS;
 
   // Single source of truth for which UI mode the scoreboard is in.
   const scoreboardState = getScoreboardState({
