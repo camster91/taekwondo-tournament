@@ -6,8 +6,11 @@ test.describe('marketing conversion flow', () => {
   test('presents one clear product story and working conversion paths', async ({ page }) => {
     await expect(page.getByRole('heading', { level: 1, name: /run the tournament/i })).toBeVisible();
     await expect(page.getByText('Illustrative interface, not live event data.')).toBeVisible();
-    await expect(page.getByRole('link', { name: /open bowin/i }).first()).toHaveAttribute('href', '/login');
-    await expect(page.getByRole('link', { name: /view public registration/i })).toHaveAttribute('href', '/register');
+    // The launch redesign (14197b4) made organizer setup the primary CTA and
+    // moved sign-in to the header and public registration to the footer.
+    await expect(page.getByRole('link', { name: /plan organizer setup/i }).first()).toHaveAttribute('href', /^mailto:/);
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
+    await expect(page.getByRole('navigation', { name: 'Footer navigation' }).getByRole('link', { name: 'Public registration' })).toHaveAttribute('href', '/register');
     await expect(page.locator('main #product')).toHaveCount(1);
     await expect(page.getByRole('navigation', { name: 'Footer navigation' }).getByRole('link', { name: 'Privacy Notice' })).toHaveAttribute('href', '/legal/privacy');
     await expect(page.getByRole('navigation', { name: 'Footer navigation' }).getByRole('link', { name: 'Tournament Terms' })).toHaveAttribute('href', '/legal/terms');

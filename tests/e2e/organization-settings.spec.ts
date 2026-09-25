@@ -13,6 +13,8 @@ test.describe('organization settings', () => {
     try {
       await prisma.user.upsert({ where: { email }, update: { role: 'admin', isActive: true }, create: { email, firstName: 'Organization', lastName: 'Settings', role: 'admin', isActive: true } });
       await prisma.organization.deleteMany({ where: { name: { startsWith: 'E2E' } } });
+      // Every test signs in as this user; keep reruns under the per-email link cap.
+      await prisma.magicLink.deleteMany({ where: { email } });
     } finally {
       await prisma.$disconnect();
     }
@@ -92,7 +94,8 @@ test.describe('organization settings', () => {
     // Try to attach a Bowin-owned domain (should fail)
     await page.getByLabel('Domain hostname').fill('test.bowin.app');
     await page.getByRole('button', { name: 'Attach domain' }).click();
-    await expect(page.getByText(/cannot attach Bowin-owned/i)).toBeVisible({ timeout: 5000 });
+    // Server copy: "Cannot use Bowin-owned domains as custom domains".
+    await expect(page.getByText(/cannot use Bowin-owned/i)).toBeVisible({ timeout: 5000 });
 
     // Close error toast and modal
     await page.getByRole('button', { name: 'Cancel' }).click();
@@ -130,8 +133,9 @@ test.describe('organization settings', () => {
     await expect(page.getByText('TXT record for verification')).toBeVisible();
     await expect(page.getByText('_bowin-verify.')).toBeVisible();
 
-    // Close DNS instructions
-    await page.getByRole('button', { name: 'Close' }).click();
+    // Close DNS instructions (the dialog has both a header X and a footer
+    // "Close" action; use the footer one)
+    await page.getByRole('dialog', { name: 'DNS verification instructions' }).getByRole('button', { name: 'Close' }).last().click();
 
     // Domain should appear in list with pending status
     await expect(page.getByText(testDomain)).toBeVisible();
