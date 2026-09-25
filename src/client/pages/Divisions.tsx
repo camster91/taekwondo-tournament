@@ -838,7 +838,7 @@ export default function Divisions() {
               disabled={previewLoading || autoGenerateMutation.isPending}
             >
               {previewLoading ? <Spinner size="sm" className="mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
-              <span className="hidden sm:inline">{previewLoading ? 'Loading...' : 'Preview'}</span>
+              <span className="sr-only sm:not-sr-only">{previewLoading ? 'Loading...' : 'Preview'}</span>
             </Button>
             <Button
               variant="secondary"
@@ -852,7 +852,7 @@ export default function Divisions() {
               disabled={autoGenerateMutation.isPending}
             >
               {autoGenerateMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <Wand2 className="h-4 w-4 mr-2" />}
-              <span className="hidden sm:inline">{autoGenerateMutation.isPending ? 'Generating...' : 'Auto-Generate'}</span>
+              <span className="sr-only sm:not-sr-only">{autoGenerateMutation.isPending ? 'Generating...' : 'Auto-Generate'}</span>
             </Button>
             <Button
               data-tour="nav-scorekeeper"
@@ -861,7 +861,7 @@ export default function Divisions() {
               disabled={generateAllBracketsMutation.isPending || !divisions?.length}
             >
               {generateAllBracketsMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <PlayCircle className="h-4 w-4 mr-2" />}
-              <span className="hidden sm:inline">{generateAllBracketsMutation.isPending ? 'Generating...' : 'Brackets'}</span>
+              <span className="sr-only sm:not-sr-only">{generateAllBracketsMutation.isPending ? 'Generating...' : 'Brackets'}</span>
             </Button>
             <Button
               variant="primary"
@@ -869,7 +869,7 @@ export default function Divisions() {
               disabled={exportingAll || !divisions?.some((d) => d.bracket)}
             >
               {exportingAll ? <Spinner size="sm" className="mr-2" /> : <Download className="h-4 w-4 mr-2" />}
-              <span className="hidden sm:inline">{exportingAll ? 'Exporting...' : 'Export PDFs'}</span>
+              <span className="sr-only sm:not-sr-only">{exportingAll ? 'Exporting...' : 'Export PDFs'}</span>
             </Button>
           </div>
         }

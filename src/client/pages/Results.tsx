@@ -244,7 +244,7 @@ export default function Results() {
             <div className="relative">
               <Button variant="secondary" disabled={exporting} onClick={() => setShowExportMenu(!showExportMenu)}>
                 <Download className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Export</span>
+                <span className="sr-only sm:not-sr-only">Export</span>
                 <ChevronDown className="h-4 w-4 ml-1" />
               </Button>
 
@@ -493,7 +493,7 @@ export default function Results() {
                       className="flex items-center"
                     >
                       <Download className="h-4 w-4 mr-2" />
-                      <span className="hidden sm:inline">Download Report</span>
+                      <span className="sr-only sm:not-sr-only">Download Report</span>
                     </Button>
                   </div>
                   <div className="space-y-2">

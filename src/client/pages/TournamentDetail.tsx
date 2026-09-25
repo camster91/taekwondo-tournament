@@ -514,7 +514,7 @@ export default function TournamentDetail() {
           <div data-tour="tournament-detail-actions" className="flex flex-wrap gap-2">
             <Button as={Link} to={`/tournaments/${id}/settings`} variant="secondary">
               <Settings className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Settings</span>
+              <span className="sr-only sm:not-sr-only">Settings</span>
             </Button>
             <Button
               variant="secondary"
@@ -527,11 +527,11 @@ export default function TournamentDetail() {
             </Button>
             <Button as={Link} to={`/tournaments/${id}/schedule`} variant="secondary">
               <Calendar className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Schedule</span>
+              <span className="sr-only sm:not-sr-only">Schedule</span>
             </Button>
             <Button as={Link} to={`/tournaments/${id}/fairness`} variant="secondary">
               <Shield className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Fairness Rules</span>
+              <span className="sr-only sm:not-sr-only">Fairness Rules</span>
             </Button>
             {/* Preview public display — opens the read-only scoreboard in a new
                 tab so the director can check what spectators will see without
@@ -545,7 +545,7 @@ export default function TournamentDetail() {
               variant="secondary"
             >
               <Monitor className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">View Public</span>
+              <span className="sr-only sm:not-sr-only">View Public</span>
               <ExternalLink className="h-3 w-3 ml-1 opacity-50" />
             </Button>
             <Button as={Link} to={`/tournaments/${id}/divisions`} variant="primary">

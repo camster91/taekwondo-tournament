@@ -280,7 +280,7 @@ export default function UserManagement() {
         actions={
           <Button variant="primary" onClick={() => setShowInviteModal(true)}>
             <Send className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Invite User</span>
+            <span className="sr-only sm:not-sr-only">Invite User</span>
           </Button>
         }
       >
