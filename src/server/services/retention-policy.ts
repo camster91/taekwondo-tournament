@@ -5,12 +5,34 @@ type SoftDeleteDelegate = {
   deleteMany(args: { where: { deletedAt: { lte: Date } } }): Promise<DeleteResult>;
 };
 
-export type RetentionDatabase = {
+export type RetentionDelegates = {
   incident: SoftDeleteDelegate;
   division: SoftDeleteDelegate;
   tournament: SoftDeleteDelegate;
   competitor: SoftDeleteDelegate;
 };
+
+/**
+ * The purge runs four dependent deletes. They must commit or roll back
+ * together: a failure part-way through used to leave, e.g., tournaments
+ * purged while their soft-deleted divisions/competitors lingered. The
+ * database therefore has to expose an interactive transaction (Prisma's
+ * `$transaction(fn, options)` satisfies this shape structurally).
+ */
+export type RetentionDeleteResults = Record<keyof RetentionDelegates, DeleteResult>;
+
+export type RetentionDatabase = RetentionDelegates & {
+  $transaction(
+    fn: (tx: RetentionDelegates) => Promise<RetentionDeleteResults>,
+    options?: { maxWait?: number; timeout?: number },
+  ): Promise<RetentionDeleteResults>;
+};
+
+/**
+ * A large backlog (first run after enabling retention) can take longer
+ * than Prisma's 5 s default interactive-transaction timeout.
+ */
+export const RETENTION_TRANSACTION_TIMEOUT_MS = 120_000;
 
 export type RetentionPurgeResult = {
   incidents: number;
@@ -45,10 +67,15 @@ export async function purgeExpiredSoftDeletes(
   cutoff: Date,
 ): Promise<RetentionPurgeResult> {
   const where = { deletedAt: { lte: cutoff } };
-  const incidents = await database.incident.deleteMany({ where });
-  const divisions = await database.division.deleteMany({ where });
-  const tournaments = await database.tournament.deleteMany({ where });
-  const competitors = await database.competitor.deleteMany({ where });
+  const { incident: incidents, division: divisions, tournament: tournaments, competitor: competitors } = await database.$transaction(
+    async (tx) => ({
+      incident: await tx.incident.deleteMany({ where }),
+      division: await tx.division.deleteMany({ where }),
+      tournament: await tx.tournament.deleteMany({ where }),
+      competitor: await tx.competitor.deleteMany({ where }),
+    }),
+    { timeout: RETENTION_TRANSACTION_TIMEOUT_MS },
+  );
   return {
     incidents: incidents.count,
     divisions: divisions.count,
