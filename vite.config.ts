@@ -29,6 +29,12 @@ export default defineConfig(({ mode }) => ({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      // Live bracket updates. Same-origin so the session cookie rides
+      // along on the upgrade request.
+      '/ws': {
+        target: 'ws://localhost:3001',
+        ws: true,
+      },
     },
   },
   build: {

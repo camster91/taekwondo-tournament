@@ -14,6 +14,7 @@
 
 import * as Sentry from '@sentry/react';
 import React, { type ReactNode } from 'react';
+import { redactBreadcrumb, redactSentryEvent } from '../../shared/utils/sentry-redaction';
 
 const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN;
 const SENTRY_ENVIRONMENT = import.meta.env.VITE_SENTRY_ENVIRONMENT || import.meta.env.MODE || 'development';
@@ -45,13 +46,17 @@ export function initSentry(): void {
     // Session replay — sample 10% of sessions, 100% of error sessions
     replaysSessionSampleRate: SENTRY_ENVIRONMENT === 'production' ? 0.1 : 1.0,
     replaysOnErrorSampleRate: 1.0,
-    // Don't send PII in breadcrumbs by default
-    beforeBreadcrumb(breadcrumb, hint) {
-      // Strip localStorage/sessionStorage values
-      if (breadcrumb.category === 'console' && breadcrumb.message) {
-        breadcrumb.message = breadcrumb.message.replace(/bowin_auth_token=[^&\s]+/g, 'bowin_auth_token=***');
-      }
-      return breadcrumb;
+    // Never ship PII (guardian emails/phones, DOBs, form bodies) or
+    // credentials (tokens in URLs, cookies, auth headers).
+    sendDefaultPii: false,
+    beforeBreadcrumb(breadcrumb) {
+      return redactBreadcrumb(breadcrumb);
+    },
+    beforeSend(event) {
+      return redactSentryEvent(event);
+    },
+    beforeSendTransaction(event) {
+      return redactSentryEvent(event);
     },
   });
 
@@ -94,10 +99,11 @@ export function addBreadcrumb(message: string, category: string, data?: Record<s
  * Set user context. Call this after successful login.
  * No-op when VITE_SENTRY_DSN is unset.
  */
-export function setUser(user: { id: string; email: string; role?: string }): void {
+export function setUser(user: { id: string; email?: string; role?: string }): void {
   if (!SENTRY_DSN) return;
 
-  Sentry.setUser(user);
+  // Only the opaque id is attached; email/role are not sent.
+  Sentry.setUser({ id: user.id });
 }
 
 /**

@@ -489,7 +489,9 @@ export interface TournamentAccessOptions {
  * (e.g. a Rule or Incident fetched by id).
  */
 export async function checkTournamentAccess(
-  req: AuthenticatedRequest,
+  // Only `req.user` is read, so non-HTTP callers (the WebSocket
+  // subscribe handler) can pass `{ user }`.
+  req: Pick<AuthenticatedRequest, 'user'>,
   prisma: PrismaClient,
   tournamentId: string | null | undefined,
   minRole: TournamentRole,

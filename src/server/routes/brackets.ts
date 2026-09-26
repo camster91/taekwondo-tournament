@@ -41,8 +41,14 @@ import {
   type BracketCorrectionConfig,
 } from '../services/bracket-correction.js';
 import { broadcastMatchUpdate, broadcastBracketRegenerated } from '../services/websocket.js';
+import { createBracketWriteLimiter, createBracketRebuildLimiter } from '../middleware/bracket-rate-limit.js';
 
 const router = Router();
+
+// Per-user caps on the bracket write path; mounted after `authenticate`
+// on each write route so they key on the user, not the venue IP.
+const bracketWriteLimiter = createBracketWriteLimiter();
+const bracketRebuildLimiter = createBracketRebuildLimiter();
 
 // Helper to safely get string param
 const getParam = (param: string | string[] | undefined): string => {
@@ -93,7 +99,7 @@ async function resolveDirectorTournament(req: AuthenticatedRequest, prisma: Pris
   return { tournamentId: division.tournamentId } as const;
 }
 
-router.post('/division/:divisionId/correction/preview', authenticate, validateRequest(z.object({ config: bracketCorrectionConfigSchema })), async (req: AuthenticatedRequest, res: Response) => {
+router.post('/division/:divisionId/correction/preview', authenticate, bracketWriteLimiter, validateRequest(z.object({ config: bracketCorrectionConfigSchema })), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.divisionId);
   const access = await resolveDirectorTournament(req, prisma, divisionId);
@@ -107,7 +113,7 @@ router.post('/division/:divisionId/correction/preview', authenticate, validateRe
   }
 });
 
-router.post('/division/:divisionId/correction/apply', authenticate, validateRequest(bracketCorrectionApplySchema), async (req: AuthenticatedRequest, res: Response) => {
+router.post('/division/:divisionId/correction/apply', authenticate, bracketRebuildLimiter, validateRequest(bracketCorrectionApplySchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.divisionId);
   const access = await resolveDirectorTournament(req, prisma, divisionId);
@@ -139,7 +145,7 @@ router.get('/division/:divisionId/correction/status/:operationKey', authenticate
   res.json(status);
 });
 
-router.post('/division/:divisionId/correction/undo/:auditId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/division/:divisionId/correction/undo/:auditId', authenticate, bracketRebuildLimiter, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.divisionId);
   const access = await resolveDirectorTournament(req, prisma, divisionId);
@@ -153,7 +159,7 @@ router.post('/division/:divisionId/correction/undo/:auditId', authenticate, asyn
 });
 
 // Generate bracket for division (requires authentication + admin/director role)
-router.post('/division/:divisionId/generate', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/division/:divisionId/generate', authenticate, bracketRebuildLimiter, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.divisionId);
 
@@ -344,7 +350,7 @@ router.get('/division/:divisionId', authenticate, async (req: Request, res: Resp
 });
 
 // Update match result (requires authentication + admin/director/scorekeeper role)
-router.put('/match/:matchId', authenticate, validateRequest(matchResultSchema), async (req: AuthenticatedRequest, res: Response) => {
+router.put('/match/:matchId', authenticate, bracketWriteLimiter, validateRequest(matchResultSchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const matchId = getParam(req.params.matchId);
 
@@ -599,7 +605,7 @@ router.get('/division/:divisionId/placements', authenticate, async (req: Request
 });
 
 // P2-9: Update match video URL (requires authentication + admin/director/scorekeeper role)
-router.patch('/match/:matchId/video', authenticate, validateRequest(videoUrlSchema), async (req: AuthenticatedRequest, res: Response) => {
+router.patch('/match/:matchId/video', authenticate, bracketWriteLimiter, validateRequest(videoUrlSchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const matchId = getParam(req.params.matchId);
   const { videoUrl } = req.body as { videoUrl: string | null };
@@ -636,7 +642,7 @@ router.patch('/match/:matchId/video', authenticate, validateRequest(videoUrlSche
 // SWAP, UNDO, and RESET mutations were previously only `authenticate` —
 // any logged-in user (including a `viewer`) could swap competitors,
 // undo a match, or reset a bracket. Now require scorekeeper-or-better.
-router.post('/match/:matchId/swap', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/match/:matchId/swap', authenticate, bracketWriteLimiter, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const matchId = getParam(req.params.matchId);
 
@@ -740,7 +746,7 @@ router.get('/match/:matchId/audit', authenticate, async (req: Request, res: Resp
 });
 
 // Undo last match change
-router.post('/match/:matchId/undo', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/match/:matchId/undo', authenticate, bracketWriteLimiter, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const matchId = getParam(req.params.matchId);
 
@@ -879,7 +885,7 @@ router.post('/match/:matchId/undo', authenticate, async (req: AuthenticatedReque
 });
 
 // Reset bracket (requires authentication)
-router.post('/division/:divisionId/reset', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/division/:divisionId/reset', authenticate, bracketRebuildLimiter, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.divisionId);
 
@@ -906,7 +912,7 @@ router.post('/division/:divisionId/reset', authenticate, async (req: Authenticat
 });
 
 // Generate brackets for all divisions in tournament (requires authentication + admin/director role)
-router.post('/tournament/:tournamentId/generate-all', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+router.post('/tournament/:tournamentId/generate-all', authenticate, bracketRebuildLimiter, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   // format defaults to double_elim (matches the historical behavior of this route).
   // Per-division format can also come from req.body.formats[divisionId] for callers

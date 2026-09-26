@@ -15,6 +15,7 @@
 import * as Sentry from '@sentry/node';
 import type express from 'express';
 import type { Request, Response, NextFunction } from 'express-serve-static-core';
+import { redactBreadcrumb, redactSentryEvent } from '../../shared/utils/sentry-redaction.js';
 
 type ExpressApp = ReturnType<typeof express>;
 
@@ -42,14 +43,14 @@ export function initSentry(app: ExpressApp): void {
     ],
     // Performance monitoring — sample 10% of transactions in production, 100% in dev
     tracesSampleRate: SENTRY_ENVIRONMENT === 'production' ? 0.1 : 1.0,
-    // Don't send PII (emails, names, etc.) in breadcrumbs or transactions
-    beforeBreadcrumb(breadcrumb, hint) {
-      // Strip sensitive headers
-      if (breadcrumb.category === 'http' && breadcrumb.data?.headers) {
-        delete breadcrumb.data.headers.authorization;
-        delete breadcrumb.data.headers.cookie;
-      }
-      return breadcrumb;
+    // Never ship PII (guardian emails/phones, DOBs, request bodies) or
+    // credentials (cookies, auth headers, JWTs, magic-link tokens).
+    sendDefaultPii: false,
+    beforeBreadcrumb(breadcrumb) {
+      return redactBreadcrumb(breadcrumb);
+    },
+    beforeSend(event) {
+      return redactSentryEvent(event);
     },
     beforeSendTransaction(event) {
       // Scrub URLs that may contain PII or capability tokens
@@ -101,7 +102,7 @@ export function initSentry(app: ExpressApp): void {
           );
         }
       }
-      return event;
+      return redactSentryEvent(event);
     },
   });
 
@@ -122,11 +123,8 @@ export function mountSentryRequestHandler(app: ExpressApp): void {
   // This is the only manual middleware needed in v10 - everything else is automatic
   app.use((req: Request & { user?: { id: string; email: string; role: string } }, _res: Response, next: NextFunction) => {
     if (req.user) {
-      Sentry.setUser({
-        id: req.user.id,
-        email: req.user.email,
-        role: req.user.role,
-      });
+      // Opaque id only — the email is PII and is scrubbed anyway.
+      Sentry.setUser({ id: req.user.id });
     }
     next();
   });
@@ -181,10 +179,11 @@ export function addBreadcrumb(message: string, category: string, data?: Record<s
  * Set user context. Useful when user info is available outside of a request.
  * No-op when SENTRY_DSN is unset.
  */
-export function setUser(user: { id: string; email: string; role?: string }): void {
+export function setUser(user: { id: string; email?: string; role?: string }): void {
   if (!SENTRY_DSN) return;
 
-  Sentry.setUser(user);
+  // Only the opaque id is attached; email/role are not sent.
+  Sentry.setUser({ id: user.id });
 }
 
 /**

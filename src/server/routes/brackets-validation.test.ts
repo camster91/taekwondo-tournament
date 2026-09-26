@@ -49,7 +49,7 @@ describe.skip('match result validation', () => {
       (candidate) => candidate.method === 'put' && candidate.path === '/match/:matchId'
     );
     if (!route) throw new Error('match route not registered');
-    const validator = route.middleware[1];
+    const validator = route.middleware[2];
     const req: any = { body: { winnerId: null, status: 'pending' } };
     const res: any = { status: vi.fn(() => res), json: vi.fn(() => res) };
     const next = vi.fn();
