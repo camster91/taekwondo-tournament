@@ -38,6 +38,7 @@ import { browserVenueDataSnapshotStore, loadVenueData } from '../utils/venue-dat
 import { isScorekeeperDivisionData } from '../utils/venue-data-contracts';
 import { shouldQueueOfflineMutation } from '../utils/offline-delivery';
 import { useBracketWebSocket } from '../hooks/useBracketWebSocket';
+import LiveUpdatesNotice from '../components/LiveUpdatesNotice';
 import {
   parseScorekeeperFilters,
   serializeScorekeeperFilters,
@@ -342,7 +343,7 @@ export default function Scorekeeper() {
   };
 
   // Real-time WebSocket updates for bracket collaboration (P2-7)
-  const { isConnected: wsConnected } = useBracketWebSocket({
+  const { connectionError: liveUpdatesError, reconnect: reconnectLiveUpdates } = useBracketWebSocket({
     tournamentId: tournamentId || '',
     divisionId: selectedDivision || '',
     enabled: Boolean(tournamentId && selectedDivision),
@@ -1060,6 +1061,7 @@ export default function Scorekeeper() {
       </div>
       {cachedDataStatus}
       {offlineStatus}
+      <LiveUpdatesNotice error={liveUpdatesError} onRetry={reconnectLiveUpdates} className="mx-auto mb-4 max-w-4xl" />
       {/* Header */}
       <div className="bg-surface-800 p-4">
         <div className="flex items-center justify-between">

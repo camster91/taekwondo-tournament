@@ -24,6 +24,7 @@ import { Button } from '../components/ui';
 import Modal from '../components/ui/Modal';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { useBracketWebSocket } from '../hooks/useBracketWebSocket';
+import LiveUpdatesNotice from '../components/LiveUpdatesNotice';
 
 interface Competitor {
   id: string;
@@ -107,7 +108,7 @@ export default function BracketEditor() {
   const { addToast } = useToast();
 
   // Real-time WebSocket updates for bracket collaboration (P2-7)
-  const { isConnected: wsConnected } = useBracketWebSocket({
+  const { connectionError: liveUpdatesError, reconnect: reconnectLiveUpdates } = useBracketWebSocket({
     tournamentId: tournamentId || '',
     divisionId: divisionId || '',
     enabled: Boolean(tournamentId && divisionId),
@@ -606,6 +607,7 @@ export default function BracketEditor() {
 
   return (
     <div className="space-y-6">
+      <LiveUpdatesNotice error={liveUpdatesError} onRetry={reconnectLiveUpdates} />
       {correctionNotice && (
         <OperationStatus
           state={correctionNotice.state}
