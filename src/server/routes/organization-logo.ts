@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
-import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import { authenticate, orgMembershipRoleLevel, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
 import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
@@ -68,9 +68,15 @@ router.post('/:orgId/logo', authenticate, requireRole('admin', 'director'), asyn
     if (req.user!.role !== 'admin') {
       const member = await prisma.organizationMember.findUnique({
         where: { organizationId_userId: { organizationId: orgId, userId: req.user!.id } },
+        select: { role: true },
       });
       if (!member) {
         return res.status(403).json({ error: 'You do not have access to this organization' });
+      }
+      // Branding is a director-level change: scorekeeper/viewer
+      // memberships may not replace or remove the organization's logo.
+      if (orgMembershipRoleLevel(member.role) < orgMembershipRoleLevel('director')) {
+        return res.status(403).json({ error: 'Insufficient organization permissions' });
       }
     }
 
@@ -130,9 +136,15 @@ router.post('/:orgId/logo-base64', authenticate, requireRole('admin', 'director'
     if (req.user!.role !== 'admin') {
       const member = await prisma.organizationMember.findUnique({
         where: { organizationId_userId: { organizationId: orgId, userId: req.user!.id } },
+        select: { role: true },
       });
       if (!member) {
         return res.status(403).json({ error: 'You do not have access to this organization' });
+      }
+      // Branding is a director-level change: scorekeeper/viewer
+      // memberships may not replace or remove the organization's logo.
+      if (orgMembershipRoleLevel(member.role) < orgMembershipRoleLevel('director')) {
+        return res.status(403).json({ error: 'Insufficient organization permissions' });
       }
     }
 
@@ -219,9 +231,15 @@ router.delete('/:orgId/logo', authenticate, requireRole('admin', 'director'), as
     if (req.user!.role !== 'admin') {
       const member = await prisma.organizationMember.findUnique({
         where: { organizationId_userId: { organizationId: orgId, userId: req.user!.id } },
+        select: { role: true },
       });
       if (!member) {
         return res.status(403).json({ error: 'You do not have access to this organization' });
+      }
+      // Branding is a director-level change: scorekeeper/viewer
+      // memberships may not replace or remove the organization's logo.
+      if (orgMembershipRoleLevel(member.role) < orgMembershipRoleLevel('director')) {
+        return res.status(403).json({ error: 'Insufficient organization permissions' });
       }
     }
 

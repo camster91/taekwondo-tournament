@@ -12,7 +12,8 @@ const fsMock = vi.hoisted(() => ({
 vi.mock('fs/promises', () => ({ default: fsMock, ...fsMock }));
 vi.mock('fs', () => ({ existsSync: () => true, default: { existsSync: () => true } }));
 
-vi.mock('../middleware/auth.js', () => ({
+vi.mock('../middleware/auth.js', async (importOriginal) => ({
+  orgMembershipRoleLevel: (await importOriginal<typeof import('../middleware/auth.js')>()).orgMembershipRoleLevel,
   authenticate: (req: Request & { user?: unknown }, _res: Response, next: NextFunction) => {
     req.user = { id: 'director-1', email: 'd@example.test', role: 'director', firstName: 'D', lastName: 'R', isDemo: false };
     next();
@@ -100,6 +101,23 @@ describe('POST /api/organizations/:orgId/logo-base64', () => {
     const res = await upload({ data: '<svg onload=alert(1)>', mimeType: 'image/png' });
     expect(res.status).toBe(400);
     expect(fsMock.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('refuses scorekeeper/viewer org memberships (branding is director-level)', async () => {
+    for (const role of ['viewer', 'scorekeeper']) {
+      prisma.organizationMember.findUnique.mockResolvedValueOnce({ role });
+      const res = await upload({ data: PNG.toString('base64'), mimeType: 'image/png' });
+      expect(res.status).toBe(403);
+    }
+    expect(fsMock.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('allows ordinary (member) and director-level memberships', async () => {
+    for (const role of ['member', 'director', 'admin', 'owner']) {
+      prisma.organizationMember.findUnique.mockResolvedValueOnce({ role });
+      const res = await upload({ data: PNG.toString('base64'), mimeType: 'image/png' });
+      expect(res.status).toBe(200);
+    }
   });
 
   it('rejects a non-string mimeType', async () => {
