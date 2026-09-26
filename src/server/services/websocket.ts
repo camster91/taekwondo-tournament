@@ -111,9 +111,9 @@ export type SubscriptionDecision =
  * division's real tournament (so a client cannot pair a division from
  * another tenant with a tournament it can see), and the user must have
  * at least viewer access to that tournament under the standard tenant
- * model (`checkTournamentAccess`). Fails closed on any error.
+ * model (`checkTournamentAccess`). Throws on database errors.
  */
-export async function authorizeSubscription(
+async function decideSubscription(
   user: WsUser,
   prisma: PrismaClient,
   tournamentId: unknown,
@@ -126,25 +126,64 @@ export async function authorizeSubscription(
   ) {
     return { ok: false, reason: 'invalid_request' };
   }
+  const division = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { tournamentId: true, deletedAt: true },
+  });
+  // Same response for "missing", "deleted" and "belongs to another
+  // tournament" so the socket cannot be used to probe ids.
+  if (!division || division.deletedAt || division.tournamentId !== tournamentId) {
+    return { ok: false, reason: 'not_found' };
+  }
+  const access = await checkTournamentAccess({ user }, prisma, division.tournamentId, 'viewer');
+  if (!access.ok) {
+    return { ok: false, reason: access.status === 404 ? 'not_found' : 'forbidden' };
+  }
+  return { ok: true, tournamentId: division.tournamentId, divisionId };
+}
+
+/** Subscribe-time authorization. Fails closed on any error. */
+export async function authorizeSubscription(
+  user: WsUser,
+  prisma: PrismaClient,
+  tournamentId: unknown,
+  divisionId: unknown,
+): Promise<SubscriptionDecision> {
   try {
-    const division = await prisma.division.findUnique({
-      where: { id: divisionId },
-      select: { tournamentId: true, deletedAt: true },
-    });
-    // Same response for "missing", "deleted" and "belongs to another
-    // tournament" so the socket cannot be used to probe ids.
-    if (!division || division.deletedAt || division.tournamentId !== tournamentId) {
-      return { ok: false, reason: 'not_found' };
-    }
-    const access = await checkTournamentAccess({ user }, prisma, division.tournamentId, 'viewer');
-    if (!access.ok) {
-      return { ok: false, reason: access.status === 404 ? 'not_found' : 'forbidden' };
-    }
-    return { ok: true, tournamentId: division.tournamentId, divisionId };
+    return await decideSubscription(user, prisma, tournamentId, divisionId);
   } catch {
     return { ok: false, reason: 'forbidden' };
   }
 }
+
+export type RevalidationResult = 'ok' | 'unauthenticated' | 'forbidden' | 'unknown';
+
+/**
+ * Re-check a live connection: the session must still authenticate
+ * (not logged out, deactivated, expired, or role-changed) and, if the
+ * socket holds a subscription, the user must still be allowed to see it
+ * (membership removed, grant revoked, tournament or division deleted).
+ * A database error returns 'unknown' so a transient outage does not
+ * permanently disconnect every scorekeeper; the next tick retries.
+ */
+export async function revalidateConnection(
+  req: Pick<IncomingMessage, 'headers'>,
+  prisma: PrismaClient,
+  subscription: { tournamentId: string; divisionId: string } | null,
+): Promise<RevalidationResult> {
+  try {
+    const user = await authenticateUpgrade(req, prisma);
+    if (!user) return 'unauthenticated';
+    if (!subscription) return 'ok';
+    const decision = await decideSubscription(user, prisma, subscription.tournamentId, subscription.divisionId);
+    return decision.ok ? 'ok' : 'forbidden';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** How often live sockets re-check their session and subscription. */
+export const DEFAULT_REVALIDATE_INTERVAL_MS = 60_000;
 
 function removeClient(client: BracketClient | null): void {
   if (!client) return;
@@ -166,9 +205,14 @@ export function isOriginAllowed(origin: string | undefined, env: NodeJS.ProcessE
 export interface InitializeWebSocketOptions {
   /** Prisma client for authentication and per-subscribe authorization. */
   prisma: PrismaClient;
+  /** Re-check interval for open sockets (tests shorten it). */
+  revalidateIntervalMs?: number;
 }
 
-export function initializeWebSocket(server: HTTPServer, { prisma }: InitializeWebSocketOptions): WebSocketServer {
+export function initializeWebSocket(
+  server: HTTPServer,
+  { prisma, revalidateIntervalMs = DEFAULT_REVALIDATE_INTERVAL_MS }: InitializeWebSocketOptions,
+): WebSocketServer {
   const wss = new WebSocketServer({
     server,
     path: '/ws/brackets',
@@ -194,6 +238,42 @@ export function initializeWebSocket(server: HTTPServer, { prisma }: InitializeWe
     void authPromise.then((user) => {
       if (!user && !closed) ws.close(WS_CLOSE_AUTH_FAILED, 'Authentication required');
     });
+
+    // Access checked at subscribe time can be revoked later (logout,
+    // deactivation, membership or grant removed, tournament deleted).
+    // Re-check periodically and close the socket once it no longer
+    // holds, instead of streaming updates until the client reconnects.
+    let revalidating = false;
+    const revalidateTimer = setInterval(() => {
+      if (closed || revalidating) return;
+      revalidating = true;
+      const checked = client;
+      const checkedGeneration = generation;
+      void revalidateConnection(req, prisma, checked)
+        .then((result) => {
+          if (closed) return;
+          if (result === 'unauthenticated') {
+            removeClient(client);
+            client = null;
+            ws.close(WS_CLOSE_AUTH_FAILED, 'Session no longer valid');
+            return;
+          }
+          // Only act on a subscription that is still the current one.
+          if (result === 'forbidden' && checked && client === checked && generation === checkedGeneration) {
+            removeClient(client);
+            client = null;
+            ws.send(JSON.stringify({ type: 'subscription_denied', divisionId: checked.divisionId, reason: 'revoked' }));
+            ws.close(WS_CLOSE_FORBIDDEN, 'Subscription revoked');
+          }
+        })
+        .catch((error: unknown) => {
+          console.error('[websocket] revalidation error:', error);
+        })
+        .finally(() => {
+          revalidating = false;
+        });
+    }, revalidateIntervalMs);
+    revalidateTimer.unref?.();
 
     ws.on('message', (message: Buffer) => {
       let msg: BracketMessage;
@@ -257,6 +337,7 @@ export function initializeWebSocket(server: HTTPServer, { prisma }: InitializeWe
 
     ws.on('close', () => {
       closed = true;
+      clearInterval(revalidateTimer);
       removeClient(client);
       client = null;
     });

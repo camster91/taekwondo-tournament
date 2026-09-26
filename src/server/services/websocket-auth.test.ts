@@ -12,6 +12,7 @@ import {
   getSubscriptionStats,
   initializeWebSocket,
   isOriginAllowed,
+  revalidateConnection,
   WS_CLOSE_AUTH_FAILED,
   WS_CLOSE_FORBIDDEN,
 } from './websocket.js';
@@ -53,8 +54,14 @@ const memberships = [
 const grants = [{ userId: 'carol', tournamentId: 't-b', role: 'viewer' }];
 
 let throwOnDivision = false;
+let throwOnUser = false;
 const fakePrisma = {
-  user: { findUnique: async ({ where }: { where: { id: string } }) => users[where.id] ?? null },
+  user: {
+    findUnique: async ({ where }: { where: { id: string } }) => {
+      if (throwOnUser) throw new Error('db down');
+      return users[where.id] ?? null;
+    },
+  },
   division: {
     findUnique: async ({ where }: { where: { id: string } }) => {
       if (throwOnDivision) throw new Error('db down');
@@ -148,6 +155,37 @@ describe('authorizeSubscription', () => {
   });
 });
 
+describe('revalidateConnection', () => {
+  const aliceReq = () => ({ headers: { cookie: `${SESSION_COOKIE}=${tokenFor(users.alice)}` } });
+
+  it('passes a live session with no subscription and one that still has access', async () => {
+    expect(await revalidateConnection(aliceReq(), prisma, null)).toBe('ok');
+    expect(await revalidateConnection(aliceReq(), prisma, { tournamentId: 't-a', divisionId: 'd-a' })).toBe('ok');
+  });
+
+  it('reports a revoked session and a subscription that lost access', async () => {
+    const stale = { headers: { cookie: `${SESSION_COOKIE}=${tokenFor(users.alice, 2)}` } };
+    expect(await revalidateConnection(stale, prisma, null)).toBe('unauthenticated');
+    expect(await revalidateConnection(aliceReq(), prisma, { tournamentId: 't-a', divisionId: 'd-deleted' })).toBe('forbidden');
+    expect(await revalidateConnection(aliceReq(), prisma, { tournamentId: 't-b', divisionId: 'd-b' })).toBe('forbidden');
+  });
+
+  it('returns unknown on database errors instead of disconnecting', async () => {
+    throwOnUser = true;
+    try {
+      expect(await revalidateConnection(aliceReq(), prisma, null)).toBe('unknown');
+    } finally {
+      throwOnUser = false;
+    }
+    throwOnDivision = true;
+    try {
+      expect(await revalidateConnection(aliceReq(), prisma, { tournamentId: 't-a', divisionId: 'd-a' })).toBe('unknown');
+    } finally {
+      throwOnDivision = false;
+    }
+  });
+});
+
 describe('isOriginAllowed', () => {
   it('requires an allow-listed origin in production', () => {
     const env = { NODE_ENV: 'production', ALLOWED_ORIGINS: 'https://app.example.test, https://other.example.test' } as NodeJS.ProcessEnv;
@@ -165,7 +203,7 @@ describe('/ws/brackets end to end', () => {
 
   beforeAll(async () => {
     server = http.createServer();
-    wss = initializeWebSocket(server, { prisma });
+    wss = initializeWebSocket(server, { prisma, revalidateIntervalMs: 25 });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     base = `ws://127.0.0.1:${(server.address() as AddressInfo).port}/ws/brackets`;
   });
@@ -232,6 +270,59 @@ describe('/ws/brackets end to end', () => {
     conn.ws.send(JSON.stringify({ type: 'subscribe', tournamentId: 't-b', divisionId: 'd-b' }));
     await until(() => conn.messages.filter((m) => m.type === 'subscribed').length === 2);
     expect(getSubscriptionStats()).toEqual({ 'd-b': 1 });
+    conn.ws.close();
+    await conn.closed;
+  });
+  it('closes a subscribed socket with 4403 once the user loses access to the tournament', async () => {
+    const membership = memberships.find((m) => m.userId === 'alice' && m.organizationId === 'org-a')!;
+    const conn = open(base, { cookie: `${SESSION_COOKIE}=${tokenFor(users.alice)}` });
+    await opened(conn.ws);
+    conn.ws.send(JSON.stringify({ type: 'subscribe', tournamentId: 't-a', divisionId: 'd-a' }));
+    await until(() => conn.messages.some((m) => m.type === 'subscribed'));
+    // Survives several revalidation ticks while access holds.
+    await new Promise((r) => setTimeout(r, 100));
+    expect(conn.ws.readyState).toBe(WebSocket.OPEN);
+
+    membership.organizationId = 'org-removed';
+    try {
+      expect(await conn.closed).toBe(WS_CLOSE_FORBIDDEN);
+      expect(conn.messages.at(-1)).toEqual({ type: 'subscription_denied', divisionId: 'd-a', reason: 'revoked' });
+      expect(getSubscriptionStats()['d-a']).toBeUndefined();
+      broadcastMatchUpdate('d-a', 'm-2', {});
+      expect(conn.messages.some((m) => m.matchId === 'm-2')).toBe(false);
+    } finally {
+      membership.organizationId = 'org-a';
+    }
+  });
+
+  it('closes with 1008 once the session is revoked (logout / deactivation)', async () => {
+    const conn = open(base, { cookie: `${SESSION_COOKIE}=${tokenFor(users.bob)}` });
+    await opened(conn.ws);
+    conn.ws.send(JSON.stringify({ type: 'subscribe', tournamentId: 't-b', divisionId: 'd-b' }));
+    await until(() => conn.messages.some((m) => m.type === 'subscribed'));
+    users.bob.tokenVersion += 1;
+    try {
+      expect(await conn.closed).toBe(WS_CLOSE_AUTH_FAILED);
+      expect(getSubscriptionStats()['d-b']).toBeUndefined();
+    } finally {
+      users.bob.tokenVersion -= 1;
+    }
+  });
+
+  it('keeps sockets open through a transient database outage', async () => {
+    const conn = open(base, { cookie: `${SESSION_COOKIE}=${tokenFor(users.alice)}` });
+    await opened(conn.ws);
+    conn.ws.send(JSON.stringify({ type: 'subscribe', tournamentId: 't-a', divisionId: 'd-a' }));
+    await until(() => conn.messages.some((m) => m.type === 'subscribed'));
+    throwOnUser = true;
+    try {
+      await new Promise((r) => setTimeout(r, 120));
+    } finally {
+      throwOnUser = false;
+    }
+    expect(conn.ws.readyState).toBe(WebSocket.OPEN);
+    broadcastMatchUpdate('d-a', 'm-3', {});
+    await until(() => conn.messages.some((m) => m.matchId === 'm-3'));
     conn.ws.close();
     await conn.closed;
   });
