@@ -26,7 +26,7 @@ import rulesRouter from './routes/rules.js';
 import incidentsRouter from './routes/incidents.js';
 import recommendationsRouter from './routes/recommendations.js';
 import organizationsRouter from './routes/organizations.js';
-import organizationLogoRouter from './routes/organization-logo.js';
+import organizationLogoRouter, { setLogoResponseHeaders } from './routes/organization-logo.js';
 import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import supportRouter from './routes/support.js';
 import sosAlertsRouter from './routes/sos-alerts.js';
@@ -264,10 +264,14 @@ app.use('/api/billing', billingRouter);
 app.use('/api/sos-alerts', sosAlertsRouter);
 
 // Serve uploaded organization logos (P1-11)
+// Logos are inert raster images: serve them with a locked-down, sandboxed
+// CSP so a legacy SVG uploaded before SVG was rejected cannot run script
+// or navigate on the app origin when opened directly.
 app.use('/logos', express.static('/opt/cursor/logos', {
   maxAge: '1d',
   etag: true,
   lastModified: true,
+  setHeaders: setLogoResponseHeaders,
 }));
 
 // Health check (liveness — the process is up and the HTTP server

@@ -6,13 +6,35 @@ import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
 import { existsSync } from 'fs';
+import { decodeStrictBase64, sniffRasterImageType, SAFE_RASTER_EXTENSIONS } from '../utils/image-sniff.js';
 
 const router = Router();
 
 // Logo storage configuration
 const LOGO_STORAGE_PATH = '/opt/cursor/logos';
-const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
+// Raster formats only. SVG is refused: it is an active document that can
+// run script / navigate when opened directly from /logos on the app
+// origin. The stored type is always the one sniffed from the bytes.
+const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+const UNSUPPORTED_IMAGE_ERROR = 'Unsupported image type. Upload a PNG, JPEG, GIF, or WebP logo (SVG is not accepted).';
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+
+/**
+ * Headers for files served from /logos. Logos are inert raster images:
+ * a locked-down, sandboxed CSP means a legacy SVG uploaded before SVG
+ * was rejected cannot run script or navigate on the app origin when
+ * opened directly.
+ */
+export const LOGO_RESPONSE_HEADERS: Readonly<Record<string, string>> = {
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox",
+};
+
+export function setLogoResponseHeaders(res: { setHeader(name: string, value: string): unknown }): void {
+  for (const [name, value] of Object.entries(LOGO_RESPONSE_HEADERS)) {
+    res.setHeader(name, value);
+  }
+}
 
 // Ensure logo directory exists
 async function ensureLogoDirectory() {
@@ -74,7 +96,9 @@ router.post('/:orgId/logo', authenticate, requireRole('admin', 'director'), asyn
  * POST /api/organizations/:orgId/logo-base64 - Upload organization logo (P1-11, simplified)
  * 
  * Accepts JSON body with base64-encoded image data.
- * Body: { data: string, mimeType: string }
+ * Body: { data: string, mimeType?: string }
+ * The stored format is determined from the decoded bytes (PNG, JPEG,
+ * GIF, WebP only); SVG and anything without a raster signature is 415.
  */
 router.post('/:orgId/logo-base64', authenticate, requireRole('admin', 'director'), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
@@ -86,10 +110,10 @@ router.post('/:orgId/logo-base64', authenticate, requireRole('admin', 'director'
     if (!data || typeof data !== 'string') {
       return res.status(400).json({ error: 'Missing or invalid base64 data field' });
     }
-    if (!mimeType || !ALLOWED_MIME_TYPES.includes(mimeType)) {
-      return res.status(400).json({
-        error: `Invalid MIME type. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`,
-      });
+    // The declared type is advisory only; an explicitly unsupported one
+    // (e.g. image/svg+xml) is refused up front.
+    if (mimeType !== undefined && (typeof mimeType !== 'string' || !ALLOWED_MIME_TYPES.includes(mimeType.toLowerCase()))) {
+      return res.status(415).json({ error: UNSUPPORTED_IMAGE_ERROR });
     }
 
     // Verify organization exists and user has access
@@ -112,10 +136,13 @@ router.post('/:orgId/logo-base64', authenticate, requireRole('admin', 'director'
       }
     }
 
-    // Decode base64 data
-    const matches = data.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-    const base64Data = matches ? matches[2] : data;
-    const buffer = Buffer.from(base64Data, 'base64');
+    // Decode base64 data (optionally wrapped in a data: URL, whose
+    // declared type is ignored like the mimeType field).
+    const matches = data.match(/^data:([A-Za-z0-9.+/-]+);base64,(.+)$/s);
+    const buffer = decodeStrictBase64(matches ? matches[2] : data);
+    if (!buffer) {
+      return res.status(400).json({ error: 'Logo data must be valid base64' });
+    }
 
     // Check file size
     if (buffer.length > MAX_FILE_SIZE) {
@@ -124,9 +151,17 @@ router.post('/:orgId/logo-base64', authenticate, requireRole('admin', 'director'
       });
     }
 
-    // Generate unique filename
+    // Identify the real format from the magic bytes. SVG/HTML/XML and
+    // any mislabelled payload have no raster signature and are refused.
+    const sniffedType = sniffRasterImageType(buffer);
+    if (!sniffedType) {
+      return res.status(415).json({ error: UNSUPPORTED_IMAGE_ERROR });
+    }
+
+    // Generate unique filename; the extension comes from the sniffed type
+    // so express.static serves it with a matching raster Content-Type.
     const hash = crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16);
-    const ext = mimeType.split('/')[1].replace('svg+xml', 'svg');
+    const ext = SAFE_RASTER_EXTENSIONS[sniffedType];
     const filename = `${organization.slug}-${hash}.${ext}`;
 
     // Ensure directory exists
