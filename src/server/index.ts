@@ -399,7 +399,7 @@ const server = app.listen(Number(PORT), '0.0.0.0', async () => {
 });
 
 // Initialize WebSocket server after HTTP server is listening
-initializeWebSocket(server);
+initializeWebSocket(server, { prisma });
 
 const shutdown = async (signal: string) => {
   console.log(`[shutdown] received ${signal}, draining...`);
