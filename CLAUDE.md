@@ -329,25 +329,27 @@ and the opt-in Postgres suite
 ## Multi-sport (status: partial)
 
 `src/shared/constants/sport-profiles.ts` defines 10 sport profiles
-(Taekwondo, Karate, Judo, Wrestling, BJJ, Kickboxing, Muay Thai,
-Fencing, Boxing, "Other"). Each profile has:
+(Taekwondo, Karate, Judo, Wrestling, BJJ, Muay Thai, Boxing,
+Kickboxing, MMA, Kung Fu). Each profile has:
 
-- `eventTypes[0]`, `eventTypes[1]` — display names for the two event
-  slots
+- `eventTypes[0]`, `eventTypes[1]` — the sport events occupying the
+  two storage slots (see below)
 - `beltConfig.levels` — belt hierarchy
 - `scoringConfig.penaltyName` (e.g. "Gamjeon", "Shido")
 - `scoringConfig.defaultRounds` / `defaultRoundDurationSeconds` —
-  intended to drive `MatchTimer` defaults, but **currently
-  hardcoded** in `Scorekeeper.tsx:509` (always 2 rounds × 120s).
-  This is the gap to fix when multi-sport becomes a priority.
+  drive the Scorekeeper `MatchTimer`; the slot event's `isCombat`
+  decides multi-round bout vs single-round forms.
 
-The DB always stores `eventType: 'patterns' | 'sparring'` — sport-
-specific labels are display-only. `Divisions.tsx`, `Results.tsx`,
-`BracketEditor.tsx` still hardcode "Patterns"/"Sparring" filter
-options; replacing them with `getSportProfile(...).eventTypes`
-is the multi-sport completion task.
+The DB always stores `eventType: 'patterns' | 'sparring'`. **Slots map
+by position**: `eventTypes[0]` is the `'patterns'` slot and
+`eventTypes[1]` the `'sparring'` slot, regardless of name or
+`isCombat` (Judo stores Randori as `'patterns'`). Public registration
+and the categorization engine depend on this. Always label events with
+`getEventTypeLabel(slug, eventType)` / `getEventTypeLabels(slug)` (or
+the client hook `useTournamentEventLabels(tournamentId)`), never a
+hardcoded "Patterns"/"Sparring" or an `isCombat` lookup.
 
-The DB has a `SportProfile` model (`prisma/schema.prisma:402-418`)
+The DB has a `SportProfile` model (`prisma/schema.prisma`, `model SportProfile`)
 that is unused — sport config lives in TS constants. Either
 complete the migration to DB-driven sport config, or drop the
 unused model.

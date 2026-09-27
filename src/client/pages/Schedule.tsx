@@ -24,6 +24,7 @@ import { Label } from '../components/ui';
 import { DataTable, TableHead, TableBody } from '../components/ui';
 import ScheduleOptimizationReview from '../components/schedule/ScheduleOptimizationReview';
 import { isScheduleConditionBufferDirty, type ScheduleRecommendationRecord } from '../utils/schedule-recommendation';
+import { useTournamentEventLabels } from '../hooks/useTournamentEventLabels';
 
 interface ScheduledDivision {
   divisionId: string;
@@ -134,6 +135,8 @@ export default function Schedule() {
     },
     breakBetweenDivisions: 5,
   });
+
+  const { labels, eventLabel } = useTournamentEventLabels(id);
 
   const { data: schedule, isLoading, refetch } = useQuery<TournamentSchedule>({
     queryKey: ['schedule', id],
@@ -531,7 +534,7 @@ export default function Schedule() {
           doc.text(`${div.startTime}-${div.endTime}`, leftMargin, y);
           doc.text(div.divisionName.substring(0, 35), leftMargin + colWidths[0], y);
           doc.text(
-            div.eventType === 'patterns' ? 'Patterns' : 'Sparring',
+            eventLabel(div.eventType),
             leftMargin + colWidths[0] + colWidths[1],
             y
           );
@@ -791,7 +794,7 @@ export default function Schedule() {
           </div>
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div>
-              <Label htmlFor="schedule-patterns-duration">Patterns Match Duration (min)</Label>
+              <Label htmlFor="schedule-patterns-duration">{labels.patterns} Match Duration (min)</Label>
               <Input
                 id="schedule-patterns-duration"
                 type="number"
@@ -811,7 +814,7 @@ export default function Schedule() {
               />
             </div>
             <div>
-              <Label htmlFor="schedule-sparring-duration">Sparring Match Duration (min)</Label>
+              <Label htmlFor="schedule-sparring-duration">{labels.sparring} Match Duration (min)</Label>
               <Input
                 id="schedule-sparring-duration"
                 type="number"
@@ -891,7 +894,7 @@ export default function Schedule() {
                                 : 'bg-danger/100 dark:bg-danger/900/30 text-danger800 dark:text-danger300'
                             }`}
                           >
-                            {div.eventType === 'patterns' ? 'Patterns' : 'Sparring'}
+                            {eventLabel(div.eventType)}
                           </span>
                         </div>
                         <p className="font-medium text-surface-900 dark:text-white text-sm">
@@ -979,7 +982,7 @@ export default function Schedule() {
                             : 'bg-danger/100 dark:bg-danger/900/30 text-danger800 dark:text-danger300'
                         }`}
                       >
-                        {div.eventType === 'patterns' ? 'Patterns' : 'Sparring'}
+                        {eventLabel(div.eventType)}
                       </span>
                     </td>
                     <td className="text-surface-600 dark:text-surface-400">

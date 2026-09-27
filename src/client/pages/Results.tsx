@@ -38,6 +38,7 @@ import {
 import { calculateResultsStats } from '../utils/results-stats';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
+import { getEventTypeLabel, getEventTypeLabels } from '../../shared/constants/sport-profiles';
 
 // Local interfaces `Division` and `SchoolStats` removed — they now come from
 // `../utils/csv-export` as `DivisionLike` and `SchoolStats`. The other shapes
@@ -60,6 +61,7 @@ interface Tournament {
   name: string;
   date: string;
   location: string | null;
+  sportProfileSlug?: string | null;
 }
 
 // CSV export utility — see ../utils/csv-export.ts for the testable builders
@@ -84,6 +86,8 @@ export default function Results() {
       return res.json();
     },
   });
+
+  const eventLabels = getEventTypeLabels(tournament?.sportProfileSlug);
 
   // Fetch divisions with brackets and placements
   const { data: divisions, isLoading } = useQuery<DivisionLike[]>({
@@ -386,8 +390,8 @@ export default function Results() {
           className="text-sm"
         >
           <option value="all">All Events</option>
-          <option value="patterns">Patterns</option>
-          <option value="sparring">Sparring</option>
+          <option value="patterns">{eventLabels.patterns}</option>
+          <option value="sparring">{eventLabels.sparring}</option>
         </Select>
 
         <div className="flex bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg overflow-hidden">
@@ -553,7 +557,7 @@ export default function Results() {
                     <div className="px-4 py-3 bg-surface-50 dark:bg-surface-700 border-b border-surface-200 dark:border-surface-600 flex items-center justify-between">
                       <div>
                         <h3 className="font-semibold text-surface-900 dark:text-white">{division.name}</h3>
-                        <span className="text-xs text-surface-600 dark:text-surface-400 capitalize">{division.eventType}</span>
+                        <span className="text-xs text-surface-600 dark:text-surface-400">{getEventTypeLabel(tournament?.sportProfileSlug, division.eventType)}</span>
                       </div>
                       <Link
                         to={`/tournaments/${tournamentId}/divisions/${division.id}/bracket`}

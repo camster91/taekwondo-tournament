@@ -17,6 +17,7 @@ import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availabilit
 import { resolveParentScoreboardState } from '../utils/parent-scoreboard-state';
 import { fetchJson } from '../utils/api-status';
 import { buildParentMatchView, describeParentMatchTransition, filterParentMatches, parseParentScoreboardPayload, readParentFavorites, writeParentFavorites } from '../utils/parent-live-finder';
+import { getEventTypeLabel } from '../../shared/constants/sport-profiles';
 
 interface Match {
   id: string;
@@ -52,6 +53,7 @@ interface Tournament {
   date: string;
   location: string | null;
   status: string;
+  sportProfileSlug?: string | null;
 }
 
 export default function ParentScoreboard() {
@@ -267,12 +269,12 @@ export default function ParentScoreboard() {
             Now Competing
           </h2>
           {featured ? (
-            <MatchCard m={featured} highlight />
+            <MatchCard m={featured} highlight sportSlug={tournament?.sportProfileSlug} />
           ) : nowCompeting.length === 0 ? (
             <EmptyBlock message="No matches in progress right now." />
           ) : (
             <div className="space-y-2">
-              {nowCompeting.map((m) => <MatchCard key={m.id} m={m} highlight />)}
+              {nowCompeting.map((m) => <MatchCard key={m.id} m={m} highlight sportSlug={tournament?.sportProfileSlug} />)}
             </div>
           )}
         </section>
@@ -284,7 +286,7 @@ export default function ParentScoreboard() {
               Up Next
             </h2>
             <div className="space-y-2">
-              {upNext.map((m) => <MatchCard key={m.id} m={m} />)}
+              {upNext.map((m) => <MatchCard key={m.id} m={m} sportSlug={tournament?.sportProfileSlug} />)}
             </div>
           </section>
         )}
@@ -296,7 +298,7 @@ export default function ParentScoreboard() {
               Recent Results
             </h2>
             <div className="space-y-2">
-              {recent.map((m) => <MatchCard key={m.id} m={m} />)}
+              {recent.map((m) => <MatchCard key={m.id} m={m} sportSlug={tournament?.sportProfileSlug} />)}
             </div>
           </section>
         )}
@@ -353,7 +355,7 @@ function FinderMatchCard({ match, favorite, onToggleFavorite }: {
   );
 }
 
-function MatchCard({ m, highlight }: { m: Match & { divisionName: string; eventType: string }; highlight?: boolean }) {
+function MatchCard({ m, highlight, sportSlug }: { m: Match & { divisionName: string; eventType: string }; highlight?: boolean; sportSlug?: string | null }) {
   const name1 = m.competitor1?.competitor
     ? `${m.competitor1.competitor.firstName} ${m.competitor1.competitor.lastName}`
     : 'TBD';
@@ -362,7 +364,7 @@ function MatchCard({ m, highlight }: { m: Match & { divisionName: string; eventT
     : 'TBD';
   const winner1 = m.winnerId === m.competitor1?.id;
   const winner2 = m.winnerId === m.competitor2?.id;
-  const eventLabel = m.eventType === 'patterns' ? 'Patterns' : 'Sparring';
+  const eventLabel = getEventTypeLabel(sportSlug, m.eventType);
 
   return (
     <Card className={highlight ? 'border-2 border-warning shadow-md' : ''}>

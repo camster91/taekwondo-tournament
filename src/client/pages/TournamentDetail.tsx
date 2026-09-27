@@ -47,6 +47,7 @@ import { StatTile } from '../components/ui';
 import { Modal } from '../components/ui';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { readAdminOperationError } from '../utils/admin-operation-error';
+import { getEventTypeLabels } from '../../shared/constants/sport-profiles';
 
 interface Tournament {
   id: string;
@@ -55,6 +56,7 @@ interface Tournament {
   location: string | null;
   status: string;
   publicSlug?: string | null;
+  sportProfileSlug?: string | null;
   _count: {
     registrations: number;
     divisions: number;
@@ -174,6 +176,8 @@ export default function TournamentDetail() {
       return res.json();
     },
   });
+
+  const eventLabels = getEventTypeLabels(tournament?.sportProfileSlug);
 
   const { data: registrations, isLoading: regsLoading } = useQuery<Registration[]>({
     queryKey: ['registrations', id],
@@ -998,21 +1002,21 @@ export default function TournamentDetail() {
                             patterns: !reg.patterns,
                             sparring: reg.sparring,
                             competitorName: `${reg.competitor.firstName} ${reg.competitor.lastName}`,
-                            actionLabel: reg.patterns ? 'Removing Patterns' : 'Adding Patterns',
+                            actionLabel: `${reg.patterns ? 'Removing' : 'Adding'} ${eventLabels.patterns}`,
                           })
                         }
                         // Same name and toggle state as the desktop table's IconButton;
-                        // the visible "Patterns"/"Sparring" alone did not say whose
+                        // the visible event name alone did not say whose
                         // entry it changes or whether it is currently enrolled.
                         aria-pressed={reg.patterns}
-                        aria-label={`${reg.competitor.firstName} ${reg.competitor.lastName} — Patterns ${reg.patterns ? 'enrolled' : 'not enrolled'}`}
+                        aria-label={`${reg.competitor.firstName} ${reg.competitor.lastName} — ${eventLabels.patterns} ${reg.patterns ? 'enrolled' : 'not enrolled'}`}
                         className={`flex-1 min-h-11 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.patterns
                             ? 'bg-success/10 text-success dark:bg-success/20 dark:text-success'
                             : 'bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-400'
                         }`}
                       >
-                        {reg.patterns ? '✓ ' : ''}Patterns
+                        {reg.patterns ? '✓ ' : ''}{eventLabels.patterns}
                       </button>
                       <button
                         disabled={updateRegistrationMutation.isPending || removeRegistrationMutation.isPending}
@@ -1022,21 +1026,21 @@ export default function TournamentDetail() {
                             patterns: reg.patterns,
                             sparring: !reg.sparring,
                             competitorName: `${reg.competitor.firstName} ${reg.competitor.lastName}`,
-                            actionLabel: reg.sparring ? 'Removing Sparring' : 'Adding Sparring',
+                            actionLabel: `${reg.sparring ? 'Removing' : 'Adding'} ${eventLabels.sparring}`,
                           })
                         }
                         // Same name and toggle state as the desktop table's IconButton;
-                        // the visible "Patterns"/"Sparring" alone did not say whose
+                        // the visible event name alone did not say whose
                         // entry it changes or whether it is currently enrolled.
                         aria-pressed={reg.sparring}
-                        aria-label={`${reg.competitor.firstName} ${reg.competitor.lastName} — Sparring ${reg.sparring ? 'enrolled' : 'not enrolled'}`}
+                        aria-label={`${reg.competitor.firstName} ${reg.competitor.lastName} — ${eventLabels.sparring} ${reg.sparring ? 'enrolled' : 'not enrolled'}`}
                         className={`flex-1 min-h-11 py-2 rounded-lg text-sm font-medium transition-colors ${
                           reg.sparring
                             ? 'bg-success/10 text-success dark:bg-success/20 dark:text-success'
                             : 'bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-400'
                         }`}
                       >
-                        {reg.sparring ? '✓ ' : ''}Sparring
+                        {reg.sparring ? '✓ ' : ''}{eventLabels.sparring}
                       </button>
                     </div>
                   </div>
@@ -1054,8 +1058,8 @@ export default function TournamentDetail() {
                       <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-left">Weight</th>
                       <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-left">School</th>
                       <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-center">Payment</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-center">Patterns</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-center">Sparring</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-center">{eventLabels.patterns}</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-surface-600 dark:text-surface-400 text-center">{eventLabels.sparring}</th>
                       <th className="px-4 py-2.5 w-10"></th>
                     </tr>
                   </TableHead>
@@ -1097,7 +1101,7 @@ export default function TournamentDetail() {
                         <TableCell className="text-center">
                           <IconButton
                             icon={reg.patterns ? <Check className="h-4 w-4" /> : <span aria-hidden="true">—</span>}
-                            label={`${reg.competitor.firstName} ${reg.competitor.lastName} — Patterns ${reg.patterns ? 'enrolled' : 'not enrolled'}`}
+                            label={`${reg.competitor.firstName} ${reg.competitor.lastName} — ${eventLabels.patterns} ${reg.patterns ? 'enrolled' : 'not enrolled'}`}
                             variant={reg.patterns ? 'success' : 'default'}
                             size="sm"
                             pressed={reg.patterns}
@@ -1108,7 +1112,7 @@ export default function TournamentDetail() {
                                 patterns: !reg.patterns,
                                 sparring: reg.sparring,
                                 competitorName: `${reg.competitor.firstName} ${reg.competitor.lastName}`,
-                                actionLabel: reg.patterns ? 'Removing Patterns' : 'Adding Patterns',
+                                actionLabel: `${reg.patterns ? 'Removing' : 'Adding'} ${eventLabels.patterns}`,
                               })
                             }
                           />
@@ -1116,7 +1120,7 @@ export default function TournamentDetail() {
                         <TableCell className="text-center">
                           <IconButton
                             icon={reg.sparring ? <Check className="h-4 w-4" /> : <span aria-hidden="true">—</span>}
-                            label={`${reg.competitor.firstName} ${reg.competitor.lastName} — Sparring ${reg.sparring ? 'enrolled' : 'not enrolled'}`}
+                            label={`${reg.competitor.firstName} ${reg.competitor.lastName} — ${eventLabels.sparring} ${reg.sparring ? 'enrolled' : 'not enrolled'}`}
                             variant={reg.sparring ? 'success' : 'default'}
                             size="sm"
                             pressed={reg.sparring}
@@ -1127,7 +1131,7 @@ export default function TournamentDetail() {
                                 patterns: reg.patterns,
                                 sparring: !reg.sparring,
                                 competitorName: `${reg.competitor.firstName} ${reg.competitor.lastName}`,
-                                actionLabel: reg.sparring ? 'Removing Sparring' : 'Adding Sparring',
+                                actionLabel: `${reg.sparring ? 'Removing' : 'Adding'} ${eventLabels.sparring}`,
                               })
                             }
                           />
@@ -1251,7 +1255,7 @@ export default function TournamentDetail() {
                         onChange={(e) => setRegisterPatterns(e.target.checked)}
                         className="rounded border-surface-300 text-primary-600 focus:ring-primary-500"
                       />
-                      <span className="ml-2 text-sm text-surface-700 dark:text-surface-300">Patterns</span>
+                      <span className="ml-2 text-sm text-surface-700 dark:text-surface-300">{eventLabels.patterns}</span>
                     </label>
                     <label className="flex items-center cursor-pointer">
                       <input
@@ -1261,7 +1265,7 @@ export default function TournamentDetail() {
                         onChange={(e) => setRegisterSparring(e.target.checked)}
                         className="rounded border-surface-300 text-primary-600 focus:ring-primary-500"
                       />
-                      <span className="ml-2 text-sm text-surface-700 dark:text-surface-300">Sparring</span>
+                      <span className="ml-2 text-sm text-surface-700 dark:text-surface-300">{eventLabels.sparring}</span>
                     </label>
                   </div>
                 </div>

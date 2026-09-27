@@ -6,7 +6,7 @@ import {
   type RegistrationWithCompetitor,
 } from './categorization-engine.js';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { getSportProfile } from '../../shared/constants/sport-profiles.js';
+import { getSportProfile, getEventTypeLabels } from '../../shared/constants/sport-profiles.js';
 import { parseTournamentRules } from '../../shared/constants/tournament-rules.js';
 import {
   applyApprovedRecommendation,
@@ -271,10 +271,7 @@ export async function loadDivisionRecommendationInput(
       ageBoundaryTolerance: rules.divisions.ageFlexMonths,
       useBlackBeltAgeGroups: rules.ageBands.preset === 'blackBelt',
       customAgeGroups: rules.ageBands.customBands,
-      eventTypeLabels: sportProfile ? {
-        patterns: sportProfile.eventTypes[0]?.name ?? 'Patterns',
-        sparring: sportProfile.eventTypes[1]?.name ?? 'Sparring',
-      } : undefined,
+      eventTypeLabels: sportProfile ? getEventTypeLabels(sportProfile.slug) : undefined,
       customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
       rules,
     },
