@@ -5,9 +5,9 @@ Newton's Championship 2025 (root-level directories prefixed `BB` /
 `CB` for belt division) and a full-stack multi-sport **Tournament
 Manager** SaaS application at `src/` and `prisma/`.
 
-The app is branded "Martial Arts Tournament Manager" in the UI but
-internally still uses the `taekwondo-tournament` repository name and
-the `tkd_*` localStorage / branding keys. See "Rebrand status" below.
+The product is branded **bowin** (UI, emails, JWT `iss`/`aud`, cookie
+names). Only the repository name (`taekwondo-tournament`) and two
+`docker-compose.yml` container names still carry the old identity.
 
 ---
 
@@ -126,7 +126,7 @@ nodemon+ts-node in parallel. Build: `prisma generate && vite build
 │   │   ├── main.tsx
 │   │   ├── App.tsx
 │   │   ├── context/
-│   │   │   ├── AuthContext.tsx          # getAuthHeaders, tkd_auth_token / tkd_auth_user keys
+│   │   │   ├── AuthContext.tsx          # session state; getAuthHeaders() adds the CSRF header
 │   │   │   ├── ThemeContext.tsx
 │   │   │   └── ToastContext.tsx
 │   │   ├── pages/                       # see "Client pages" below
@@ -135,10 +135,8 @@ nodemon+ts-node in parallel. Build: `prisma generate && vite build
 │   │   │   ├── MatchTimer.tsx
 │   │   │   └── TournamentRulesEditor.tsx
 │   │   └── utils/
-│   │       ├── api-errors.ts            # (currently zero importers — dead)
 │   │       ├── csv-export.ts
 │   │       ├── csv-export.test.ts
-│   │       ├── auth-storage.ts         # localStorage key constants (tkd_auth_token / tkd_auth_user)
 │   │       └── test-data.ts
 │   └── shared/
 │       └── constants/
@@ -150,16 +148,11 @@ nodemon+ts-node in parallel. Build: `prisma generate && vite build
 │           ├── tournament-rules.ts
 │           ├── weight-classes.ts / .test.ts
 ├── tests/
-│   └── e2e/                             # Playwright
+│   └── e2e/                             # Playwright (~37 specs)
 │       ├── global-setup.ts
 │       ├── global-teardown.ts           # wipes e2e test records after suite
 │       ├── helpers.ts
-│       ├── checkin.spec.ts
-│       ├── login.spec.ts
-│       ├── public-register.spec.ts
-│       ├── public-register-a11y.spec.ts
-│       ├── scorekeeper-a11y.spec.ts
-│       └── tournament-create.spec.ts
+│       └── *.spec.ts
 ├── CLAUDE.md                           # this file
 ├── Dockerfile                           # production image
 ├── docker-compose.yml
@@ -216,11 +209,16 @@ client-side auth gate.
 
 ## Authentication
 
-All `/api/*` routes except `/api/public/*` and `/api/sports/*` require:
+All `/api/*` routes except `/api/public/*` and `/api/sports/*` require
+a session. The browser session is the **HttpOnly `bowin_session`
+cookie** (set on login, 7-day `maxAge`); the SPA never sees the JWT.
+Non-browser clients and tests may send `Authorization: Bearer <jwt>`
+instead. `/ws/brackets` authenticates the same way (cookie or Bearer,
+never a query-string token) and re-checks open sockets every 60 s.
 
-```
-Authorization: Bearer <jwt>
-```
+**CSRF:** cookie-authenticated `POST`/`PUT`/`PATCH`/`DELETE` requests
+must send `X-CSRF-Token` equal to the readable `bowin_csrf` cookie
+(double submit), or they get 403. Bearer requests are exempt.
 
 ### JWT shape
 
@@ -228,18 +226,24 @@ Authorization: Bearer <jwt>
   process exits if missing in production).
 - Default TTL: 7 days. The demo login uses a 4-hour TTL via
   `createToken(payload, expiresIn)`.
-- Claims: `iss = 'tkd-app'`, `aud = 'tkd-app'`, `algorithm: HS256`
+- Claims: `iss = 'bowin'`, `aud = 'bowin'`, `algorithm: HS256`
   pinned on both `jwt.sign` and `jwt.verify`. Don't relax these.
-- Server validates `iss` and `aud` on every request; a token issued
-  before this hardening will be rejected with 401. Users re-login.
+- The token embeds `User.tokenVersion`; the middleware rejects a
+  token whose version no longer matches. Logout, role changes and
+  deactivation bump it, so they revoke existing sessions (within the
+  ~15 s auth-cache TTL).
 
-### localStorage keys (client-side)
+### Client requests
 
-The client stores the JWT under `tkd_auth_token` and the user
-object under `tkd_auth_user`. **These keys are not `auth_token`** —
-the previous CLAUDE.md value is wrong. The `getAuthHeaders()`
-helper in `src/client/context/AuthContext.tsx` is the only
-supported way to read them.
+Client mutations spread `getAuthHeaders()` from
+`src/client/context/AuthContext.tsx`. It no longer returns a bearer
+token; it returns the `X-CSRF-Token` header read from the
+`bowin_csrf` cookie. The session cookie is sent automatically on
+same-origin requests. The JWT is never in localStorage; the only
+auth-related entry there is the offline scorekeeper capability
+(`bowin_offline_auth_v2`, `src/client/utils/offline-auth-snapshot.ts`),
+a short-lived server-signed capability the client verifies against
+the server's public key before restoring an offline session.
 
 ### Magic-link / OTP flow
 
@@ -658,8 +662,10 @@ boundaries.
 ## Security
 
 - **Auth**: JWT (HS256, pinned algorithm + iss + aud on sign and
-  verify). 7-day default TTL. `JWT_SECRET` required in production,
-  ≥ 32 chars enforced.
+  verify) in an HttpOnly session cookie with double-submit CSRF.
+  7-day default TTL. `JWT_SECRET` required in production, ≥ 32 chars
+  enforced. `tokenVersion` revokes sessions on logout / role change /
+  deactivation.
 - **Demo login** gated by `ENABLE_DEMO_LOGIN=1` (defaults off in
   prod). 4-hour admin JWT.
 - **Dev auto-create** in magic-link flow is `role: 'viewer'`,
@@ -701,10 +707,9 @@ boundaries.
   per request, which could lose scores during a concurrent
   regenerate.
 
-Things still to fix:
-- JWT in localStorage is XSS-leakable. httpOnly Secure cookie
-  would be safer.
-- No `jti` denylist, so `logout()` doesn't invalidate server-side.
+Known limits:
+- Revocation lags by up to the per-process auth-cache TTL (~15 s);
+  the cache is per container.
 
 ---
 
@@ -726,7 +731,7 @@ list (`grep process.env.`):
 | `MAILGUN_API_KEY` | `email.ts` | yes for email | if absent, dev mode |
 | `MAILGUN_DOMAIN` | `email.ts` | yes for email | defaults to `'ashbi.ca'` |
 | `MAILGUN_BASE_URL` | `email.ts` | no | defaults to `https://api.mailgun.net/v3` |
-| `EMAIL_FROM_NAME` | `email.ts` | no | defaults to `'TKD Tournament Manager'` (see rebrand notes) |
+| `EMAIL_FROM_NAME` | `email.ts` | no | defaults to `'bowin'` |
 | `EMAIL_FROM_ADDRESS` | `email.ts` | no | defaults to `noreply@${MAILGUN_DOMAIN}` |
 | `ENABLE_DEMO_LOGIN` | demo route | no | `'1'` to enable |
 | `ENABLE_DEV_AUTH` | dev-auth + dev-token | no | `'1'` to enable |
@@ -784,7 +789,7 @@ it bypasses migration history and is only for disposable local dev.
 
 ## Testing
 
-- `npm test` — vitest (~1,450 tests, ~155 files). Includes full
+- `npm test` — vitest (~1,470 tests, ~170 files). Includes full
   bracket playthrough simulations (`bracket-simulation.test.ts`, DE
   and SE for N=1..17 plus larger sizes). DB-backed suites
   (`src/server/contracts/*`, `*.integration.test.ts`) skip unless a
@@ -792,7 +797,9 @@ it bypasses migration history and is only for disposable local dev.
 - CI (`.github/workflows/ci.yml`) runs `npm run typecheck` (server
   then client — the client check only runs if the server one
   passes), `npm test`, `npm run lint`. Keep all three green.
-- `npm run test:e2e` — Playwright. 7 spec files in `tests/e2e/`.
+- `npm run test:e2e` — Playwright, ~37 spec files in `tests/e2e/`.
+  CI runs them on chromium, firefox, webkit and mobile-chrome,
+  serially against one database (~35 min).
   Global teardown wipes test records from the live DB.
   `npm run test:e2e:install` once to download the Chromium
   browser.
@@ -850,43 +857,24 @@ Running 23 tests using 1 worker
 
 ### What's NOT tested (gaps)
 
-- `src/server/routes/**` (no route-level unit tests; e2e covers
-  the happy paths).
-- `src/server/services/pdf-export.ts`, `email.ts`,
-  `match-advancement.ts`, `backup-recovery.ts` (no unit tests).
-- `src/client/**` (no React component tests; no hook tests).
-- `src/server/services/categorization-engine.ts` (the most
-  complex untested service — known bugs in weight handling,
-  see "Categorization engine").
-
-The per-competitor double-booking detector in
-`schedule-generator.ts` is unit-tested in
-`schedule-generator.test.ts` (6 tests).
+- Most of `src/server/routes/**` has no route-level unit tests; e2e
+  covers the main paths.
+- `pdf-export.ts` and `email.ts` have no unit tests.
+- React pages have little component-level coverage (client tests are
+  mostly utilities, hooks and a few components).
+- `match-advancement` and `backup-recovery` are covered by
+  `*.integration.test.ts` suites that only run with a database.
 
 ---
 
-## Rebrand status (half-done)
+## Branding
 
-UI chrome is rebranded "Martial Arts TM" / "Tournament OS"
-(`src/client/App.tsx:184`, `index.html:8`), but the rest of the
-codebase still uses the old TKD identity:
-
-- `src/client/context/AuthContext.tsx:27` — `tkd_auth_token` /
-  `tkd_auth_user` localStorage keys.
-- `src/server/services/email.ts:34` — default from-name is
-  `'TKD Tournament Manager'`.
-- `src/server/services/email-templates.ts` — hardcoded `<h1>TKD
-  Tournament Manager</h1>` in 5 templates (magic link, welcome,
-  invitation, registration confirm).
-- `docker-compose.yml:8,28` — container names `martial-arts-
-  tournament` and `taekwondo-db`.
-- `EMAIL_FROM_NAME` default is `'TKD Tournament Manager'`.
-- `MAILGUN_DOMAIN` default is `'ashbi.ca'`.
-
-To finish the rebrand: sweep all `tkd_*` keys / `TKD` strings
-in one commit. The work is mechanical; the decision is whether
-to commit to the new identity or revert the UI to the old TKD
-chrome.
+The rebrand to **bowin** is complete in the UI, emails
+(`EMAIL_FROM_NAME` default, templates), JWT `iss`/`aud` and cookie
+names (`bowin_session`, `bowin_csrf`). Leftovers: the repository name
+and the `docker-compose.yml` container names
+(`martial-arts-tournament`, `taekwondo-db`). `MAILGUN_DOMAIN` still
+defaults to `'ashbi.ca'`.
 
 ---
 
@@ -910,8 +898,8 @@ and `2025 NEWTONS CHAMPIONSHIP LIST.xlsm` only as reference.
   typed errors with HTTP status codes.
 - **Validation** is via Zod schemas in `src/server/middleware/
   validate.ts`. Every POST/PUT body should be validated.
-- **Client mutations** always include `getAuthHeaders()` (or
-  the `headers` object spread).
+- **Client mutations** always spread `getAuthHeaders()` (it carries
+  the CSRF token; without it cookie-authenticated writes get 403).
 - **Database changes**: use `npm run db:push` only for disposable local work.
   Release changes require a checked-in migration validated with
   `prisma migrate deploy` on a production-compatible database.
