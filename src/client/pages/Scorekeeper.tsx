@@ -20,7 +20,7 @@ import SpecialNeedsBadge from '../components/SpecialNeedsBadge';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import CloseButton from '../components/ui/CloseButton';
 import { useToast } from '../context/ToastContext';
-import { getSportProfile } from '../../shared/constants/sport-profiles';
+import { getSportProfile, getEventTypeLabel, getEventForSlot } from '../../shared/constants/sport-profiles';
 import { Card, CardBody, ConfirmDialog } from '../components/ui';
 import { Button } from '../components/ui';
 import { StatTile } from '../components/ui';
@@ -213,10 +213,7 @@ export default function Scorekeeper() {
     return getSportProfile(slug) ?? getSportProfile('taekwondo')!;
   }, [tournament]);
 
-  const getEventLabel = (eventType: string) => {
-    const idx = eventType === 'patterns' ? 0 : 1;
-    return sportProfile.eventTypes[idx]?.name ?? eventType;
-  };
+  const getEventLabel = (eventType: string) => getEventTypeLabel(sportProfile.slug, eventType);
 
   const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions } = useQuery<ApiDivision[]>({
     queryKey: ['scorekeeper-divisions', tournamentId],
@@ -1114,10 +1111,11 @@ export default function Scorekeeper() {
           configured multi-round count with a 30s break between rounds. */}
       {showTimer && division && (() => {
         const cfg = sportProfile.scoringConfig;
-        const isCombat = sportProfile.eventTypes[1]?.isCombat ?? false;
-        const isSparring = division.eventType === 'sparring' && isCombat;
-        const isPatterns = division.eventType === 'patterns';
-        if (!isSparring && !isPatterns) return null;
+        if (division.eventType !== 'patterns' && division.eventType !== 'sparring') return null;
+        // Timer shape follows the sport event in this storage slot (e.g.
+        // Judo Randori lives in the 'patterns' slot but is a bout).
+        const isSparring = getEventForSlot(sportProfile.slug, division.eventType)?.isCombat
+          ?? division.eventType === 'sparring';
 
         // Combat events use the sport's configured round count + duration
         // with a 30s break. Patterns (forms) stay a single round — single

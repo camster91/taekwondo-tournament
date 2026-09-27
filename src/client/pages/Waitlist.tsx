@@ -7,6 +7,7 @@ import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useState } from 'react';
+import { useTournamentEventLabels } from '../hooks/useTournamentEventLabels';
 
 interface WaitlistedCompetitor {
   id: string;
@@ -35,6 +36,7 @@ function Waitlist() {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [confirmPromote, setConfirmPromote] = useState<string | null>(null);
+  const { labels: eventLabels } = useTournamentEventLabels(tournamentId);
 
   const { data: waitlisted, isLoading } = useQuery<WaitlistedCompetitor[]>({
     queryKey: ['waitlist', tournamentId],
@@ -132,8 +134,8 @@ function Waitlist() {
           <tbody className="bg-white dark:bg-surface-900 divide-y divide-surface-200 dark:divide-surface-700">
             {waitlisted.map((item) => {
               const events = [
-                item.patterns && 'Patterns',
-                item.sparring && 'Sparring',
+                item.patterns && eventLabels.patterns,
+                item.sparring && eventLabels.sparring,
               ].filter(Boolean).join(', ');
               
               return (

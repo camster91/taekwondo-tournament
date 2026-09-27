@@ -405,21 +405,44 @@ export function getSportEventType(sportSlug: string, eventTypeId: string): Sport
   return profile?.eventTypes.find(e => e.id === eventTypeId);
 }
 
-// Map legacy boolean fields (patterns/sparring) to sport event types
-export function getEventTypeLabel(sportSlug: string, eventId: 'patterns' | 'sparring' | string): string {
-  const profile = getSportProfile(sportSlug);
-  if (!profile) return eventId;
-  // Try direct ID match first
-  const exact = profile.eventTypes.find(e => e.id === eventId);
-  if (exact) return exact.name;
-  // Legacy mapping: patterns -> first non-combat, sparring -> first combat
-  if (eventId === 'patterns') {
-    return profile.eventTypes.find(e => !e.isCombat)?.name ?? 'Patterns';
-  }
-  if (eventId === 'sparring') {
-    return profile.eventTypes.find(e => e.isCombat)?.name ?? 'Sparring';
-  }
-  return eventId;
+/**
+ * The database stores every event as one of two slots, `'patterns'` or
+ * `'sparring'` (Registration.patterns/sparring, Division.eventType).
+ * Sports map onto those slots by position: `eventTypes[0]` is the
+ * `'patterns'` slot and `eventTypes[1]` the `'sparring'` slot, whatever
+ * the events are called or whether they are combat events. Public
+ * registration, the categorization engine and every screen rely on this
+ * mapping, so labels must never be derived any other way.
+ */
+export type EventSlot = 'patterns' | 'sparring';
+
+const DEFAULT_SLOT_LABELS: Record<EventSlot, string> = { patterns: 'Patterns', sparring: 'Sparring' };
+
+function profileOrDefault(sportSlug: string | null | undefined): SportProfile {
+  return (sportSlug ? getSportProfile(sportSlug) : undefined) ?? TAEKWONDO_PROFILE;
+}
+
+/** The sport event occupying a storage slot, if the sport defines one. */
+export function getEventForSlot(sportSlug: string | null | undefined, slot: EventSlot): SportEventType | undefined {
+  return profileOrDefault(sportSlug).eventTypes[slot === 'patterns' ? 0 : 1];
+}
+
+/**
+ * Display name for a stored event slot. Unknown sports fall back to
+ * Taekwondo; a sport with a single event falls back to the generic slot
+ * name for the unused slot. Non-slot values are returned unchanged.
+ */
+export function getEventTypeLabel(sportSlug: string | null | undefined, eventType: string): string {
+  if (eventType !== 'patterns' && eventType !== 'sparring') return eventType;
+  return getEventForSlot(sportSlug, eventType)?.name ?? DEFAULT_SLOT_LABELS[eventType];
+}
+
+/** Both slot labels, e.g. for filters and the categorization engine. */
+export function getEventTypeLabels(sportSlug: string | null | undefined): Record<EventSlot, string> {
+  return {
+    patterns: getEventTypeLabel(sportSlug, 'patterns'),
+    sparring: getEventTypeLabel(sportSlug, 'sparring'),
+  };
 }
 
 export function getBeltLevelLabel(sportSlug: string, belt: string): string {

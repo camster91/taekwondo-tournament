@@ -3,7 +3,7 @@ import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { autoCategorize, previewCategorization, type CategorizationConfig } from '../services/categorization-engine.js';
 import { getBracketPlacementsFromLoaded } from '../services/match-advancement.js';
-import { getSportProfile } from '../../shared/constants/sport-profiles.js';
+import { getEventTypeLabels } from '../../shared/constants/sport-profiles.js';
 import { Errors } from '../utils/errors.js';
 import {
   checkDataLoss,
@@ -282,10 +282,7 @@ router.post('/tournament/:tournamentId/preview', authenticate, requireTournament
   }
 
   // Derive event type labels from sport profile
-  const sportProfile = getSportProfile(tournament.sportProfileSlug || 'taekwondo');
-  const eventTypeLabels = sportProfile
-    ? { patterns: sportProfile.eventTypes[0]?.name ?? 'Patterns', sparring: sportProfile.eventTypes[1]?.name ?? 'Sparring' }
-    : undefined;
+  const eventTypeLabels = getEventTypeLabels(tournament.sportProfileSlug);
 
   // Fetch custom weight classes from DB
   const customWeightClasses = await prisma.weightClass.findMany({
@@ -359,10 +356,7 @@ router.post('/tournament/:tournamentId/auto-generate', authenticate, requireTour
   });
 
   // Derive event type labels from sport profile
-  const sportProfile = getSportProfile(tournament.sportProfileSlug || 'taekwondo');
-  const eventTypeLabels = sportProfile
-    ? { patterns: sportProfile.eventTypes[0]?.name ?? 'Patterns', sparring: sportProfile.eventTypes[1]?.name ?? 'Sparring' }
-    : undefined;
+  const eventTypeLabels = getEventTypeLabels(tournament.sportProfileSlug);
 
   // Fetch custom weight classes from DB
   const customWeightClasses = await prisma.weightClass.findMany({

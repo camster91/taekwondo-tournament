@@ -47,7 +47,7 @@ import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { getSportProfile } from '../../shared/constants/sport-profiles';
+import { getSportProfile, getEventTypeLabel } from '../../shared/constants/sport-profiles';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
@@ -256,10 +256,7 @@ export default function Divisions() {
     return getSportProfile(slug) ?? getSportProfile('taekwondo')!;
   }, [tournament]);
 
-  const getEventLabel = (eventType: string) => {
-    const idx = eventType === 'patterns' ? 0 : 1;
-    return sportProfile.eventTypes[idx]?.name ?? eventType;
-  };
+  const getEventLabel = (eventType: string) => getEventTypeLabel(sportProfile.slug, eventType);
 
   const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions } = useQuery<Division[]>({
     queryKey: ['divisions', id],
