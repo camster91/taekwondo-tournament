@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { resetDemoShowcase } from '../../prisma/demo-seed.js';
@@ -99,6 +99,23 @@ export async function loginAsEmail(page: Page, email: string) {
 
   // Login redirects to "/" on success.
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 10_000 });
+  await waitForSessionCookie(page);
+}
+
+/**
+ * Callers usually `page.goto()` a protected route right after login.
+ * WebKit commits Set-Cookie from its network process asynchronously, so
+ * the client-side redirect can finish before the HttpOnly session cookie
+ * is visible to the next navigation. Wait until the context actually
+ * holds it so the next request is authenticated.
+ */
+async function waitForSessionCookie(page: Page) {
+  await expect
+    .poll(async () => (await page.context().cookies()).some((c) => c.name === 'bowin_session' && c.value), {
+      message: 'bowin_session cookie was not stored after login',
+      timeout: 10_000,
+    })
+    .toBe(true);
 }
 
 /**

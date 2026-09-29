@@ -106,6 +106,19 @@ jobs:
         env:
           JWT_SECRET: ci-throwaway-secret-not-used-in-tests-min-32-chars-xx
 
+      - name: Upload Playwright results on failure
+        # Traces, screenshots and videos are kept on failure
+        # (playwright.config.ts) but were never uploaded, so intermittent
+        # browser-specific failures left no evidence. Only throwaway e2e
+        # data and the CI JWT stub end up in these files.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Fresh migration test
         # Validates that `prisma migrate deploy` brings a fresh database to the
         # exact current schema. This is the release gate for schema changes.
