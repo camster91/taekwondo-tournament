@@ -20,6 +20,7 @@ import {
   type RegistrationConsentResult,
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
+import { getEventTypeLabel } from '../../shared/constants/sport-profiles.js';
 import {
   createPublicRegistration,
   entryFeeLineItems,
@@ -302,6 +303,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
           settings: true,
           brandName: true,
           organizationId: true,
+          sportProfileSlug: true,
         },
         take: 1,
       },
@@ -359,7 +361,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
   if (!gender || !['M', 'F'].includes(gender)) errors.push('Gender is required (M or F)');
   if (!dateOfBirth) errors.push('Date of birth is required');
   if (!belt?.trim()) errors.push('Belt level is required');
-  if (!patterns && !sparring) errors.push('Please select at least one event (Patterns or Sparring)');
+  if (!patterns && !sparring) errors.push('Please select at least one event');
   if (schoolDojang && schoolDojang.length > 200) errors.push('School/dojang name must be 200 characters or fewer');
   if (specialNeeds && specialNeeds.length > 2000) errors.push('Special needs must be 2000 characters or fewer');
   if (parentName && parentName.length > 200) errors.push('Parent name must be 200 characters or fewer');
@@ -553,8 +555,8 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
     // Send confirmation email if parent email is provided and email is configured
     if (parentEmail && isEmailConfigured()) {
       const eventList = [
-        patterns && 'Patterns',
-        sparring && 'Sparring',
+        patterns && getEventTypeLabel(tournament.sportProfileSlug, 'patterns'),
+        sparring && getEventTypeLabel(tournament.sportProfileSlug, 'sparring'),
       ].filter(Boolean).join(' & ');
       
       // P2.6: Use org brand/name, never UUID

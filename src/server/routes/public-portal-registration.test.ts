@@ -313,7 +313,7 @@ describe('Portal-scoped registration (real router)', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBe('Validation failed');
-    expect(response.body.details).toContain('Please select at least one event (Patterns or Sparring)');
+    expect(response.body.details).toContain('Please select at least one event');
   });
 
   it('requires weight for sparring registration', async () => {

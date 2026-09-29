@@ -42,6 +42,7 @@ import {
 } from '../services/bracket-correction.js';
 import { broadcastMatchUpdate, broadcastBracketRegenerated } from '../services/websocket.js';
 import { createBracketWriteLimiter, createBracketRebuildLimiter } from '../middleware/bracket-rate-limit.js';
+import { getEventTypeLabel } from '../../shared/constants/sport-profiles.js';
 
 const router = Router();
 
@@ -1105,7 +1106,7 @@ router.get('/division/:divisionId/pdf', authenticate, async (req: AuthenticatedR
     name: division.name,
     beltLevel: division.beltLevel,
     gender: division.gender,
-    eventType: division.eventType,
+    eventType: getEventTypeLabel(division.tournament.sportProfileSlug, division.eventType),
     ageMin: division.ageMin,
     ageMax: division.ageMax,
     weightClass: division.weightClass,
@@ -1240,7 +1241,7 @@ router.get('/tournament/:tournamentId/pdf', authenticate, requireTournamentAcces
           name: d.name,
           beltLevel: d.beltLevel,
           gender: d.gender,
-          eventType: d.eventType,
+          eventType: getEventTypeLabel(tournament.sportProfileSlug, d.eventType),
           ageMin: d.ageMin,
           ageMax: d.ageMax,
           weightClass: d.weightClass,
@@ -1356,7 +1357,7 @@ router.get('/tournament/:tournamentId/results/pdf', authenticate, requireTournam
             name: d.name,
             beltLevel: d.beltLevel,
             gender: d.gender,
-            eventType: d.eventType,
+            eventType: getEventTypeLabel(tournament.sportProfileSlug, d.eventType),
             ageMin: d.ageMin,
             ageMax: d.ageMax,
             weightClass: d.weightClass,
@@ -1438,7 +1439,7 @@ router.get('/division/:divisionId/certificate/:place', authenticate, async (req:
     competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
     place,
     divisionName: division.name,
-    eventType: division.eventType,
+    eventType: getEventTypeLabel(division.tournament.sportProfileSlug, division.eventType),
     tournament: tournamentInfo,
     branding: {
       organizationName: division.tournament.brandName,
@@ -1512,7 +1513,7 @@ router.get('/tournament/:tournamentId/certificates', authenticate, requireTourna
         place: placement.place,
         competitorId: placement.competitorId,
         divisionName: division.name,
-        eventType: division.eventType,
+        eventType: getEventTypeLabel(tournament.sportProfileSlug, division.eventType),
       });
     }
   }
@@ -1629,7 +1630,7 @@ router.get('/tournament/:tournamentId/school-report', authenticate, requireTourn
       placements.push({
         competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
         divisionName: division.name,
-        eventType: division.eventType,
+        eventType: getEventTypeLabel(tournament.sportProfileSlug, division.eventType),
         place: placement.place,
       });
 
