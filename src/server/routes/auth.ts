@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { type RateLimitExceededEventHandler } from 'express-rate-limit';
@@ -12,6 +12,7 @@ import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
 import { maybeIssueOfflineCapability } from '../services/offline-capability.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
+import { checkInvitationToken, InvitationAlreadyClaimedError } from '../services/invitation-lifecycle.js';
 import { createRateLimiter } from '../middleware/rate-limit.js';
 
 const router = Router();
@@ -981,23 +982,30 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
     if (!invitation) {
       return res.status(400).json({ error: 'Invalid invitation token' });
     }
-    if (invitation.status === 'accepted') {
-      return res.status(400).json({ error: 'Invitation already accepted' });
-    }
-    if (invitation.tokenExpiry < new Date()) {
-      return res.status(400).json({ error: 'Invitation has expired' });
+    const check = checkInvitationToken(invitation);
+    if (!check.ok) {
+      return res.status(check.httpStatus).json({ error: check.error, code: check.code });
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: invitation.email },
+    // Case-insensitive, matching the duplicate check in POST /api/invites/send.
+    const existingUser = await prisma.user.findFirst({
+      where: { email: { equals: invitation.email, mode: 'insensitive' } },
+      select: { id: true },
     });
     if (existingUser) {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
-    // Create user and optionally add to organization in a transaction
+    // Create user and optionally add to organization in a transaction.
+    // Claim the invitation first with a conditional update so two
+    // concurrent accepts (or a replayed request) create one account.
     const result = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.invitation.updateMany({
+        where: { id: invitation.id, status: 'pending', tokenExpiry: { gt: new Date() } },
+        data: { status: 'accepted' },
+      });
+      if (claimed.count !== 1) throw new InvitationAlreadyClaimedError();
+
       const user = await tx.user.create({
         data: {
           email: invitation.email,
@@ -1026,12 +1034,6 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
           },
         });
       }
-
-      // Mark invitation as accepted
-      await tx.invitation.update({
-        where: { id: invitation.id },
-        data: { status: 'accepted' },
-      });
 
       return { user, organizationId: invitation.organizationId };
     });
@@ -1078,6 +1080,12 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
       message: 'Account created successfully',
     });
   } catch (error) {
+    if (error instanceof InvitationAlreadyClaimedError) {
+      return res.status(409).json({ error: 'This invitation is no longer valid. It may already have been used.' });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return res.status(409).json({ error: 'An account with this email already exists' });
+    }
     console.error('Accept invitation error:', error);
     res.status(500).json({ error: 'Failed to create account' });
   }

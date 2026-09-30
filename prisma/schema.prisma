@@ -586,7 +586,12 @@ model Invitation {
   token          String   @unique
   tokenExpiry    DateTime
   invitedBy      String
-  status         String   @default("pending") // pending, accepted, expired
+  status         String   @default("pending") // pending, accepted, expired, cancelled
+  // Outcome of the last send/resend: sent, failed, not_configured.
+  deliveryStatus    String?
+  lastDeliveryError String?
+  lastSentAt        DateTime?
+  cancelledAt       DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   organizationId String?

@@ -57,6 +57,11 @@ Track invitations in the team list:
 - **Pending**: Invitation sent, not yet accepted
 - **Accepted**: Team member active
 - **Expired**: Invitation expired (72 hours), resend if needed
+- **Cancelled**: You cancelled it; the link no longer works
+
+Under **Sent**, pending invitations also show whether the email went out.
+"Delivery failed" or "Not emailed" means the invitee has nothing in their
+inbox: fix the email settings, then click **Resend**.
 
 ### Resending Invitations
 

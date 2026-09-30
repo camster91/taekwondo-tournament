@@ -15,6 +15,7 @@ import {
 import { hashSecret, secretLookupValues } from '../utils/token-hash.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
+import { checkInvitationToken, deliveryFields } from '../services/invitation-lifecycle.js';
 
 const router = Router();
 
@@ -121,6 +122,12 @@ router.post('/send', authenticate, async (req: AuthenticatedRequest, res: Respon
     });
 
     const emailResult = await sendEmail(email.toLowerCase(), subject, html);
+    const delivery = deliveryFields(emailResult);
+    // The email already went out (or didn't); a failed bookkeeping write
+    // must not turn that into a 500 the admin would retry into a 409.
+    await prisma.invitation.update({ where: { id: invitation.id }, data: delivery }).catch((err) => {
+      console.error('[invites] recording delivery status failed:', err);
+    });
 
     // Audit log: org invite sent (P1-3)
     await createAuditLog(prisma, {
@@ -144,6 +151,9 @@ router.post('/send', authenticate, async (req: AuthenticatedRequest, res: Respon
         status: invitation.status,
         organizationId: invitation.organizationId,
         createdAt: invitation.createdAt,
+        deliveryStatus: delivery.deliveryStatus,
+        lastDeliveryError: delivery.lastDeliveryError,
+        lastSentAt: delivery.lastSentAt,
       },
       emailSent: emailResult.success,
       emailError: emailResult.error,
@@ -183,6 +193,10 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
         organizationId: true,
         createdAt: true,
         tokenExpiry: true,
+        deliveryStatus: true,
+        lastDeliveryError: true,
+        lastSentAt: true,
+        cancelledAt: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -210,10 +224,36 @@ router.post('/resend/:id', authenticate, async (req: AuthenticatedRequest, res: 
     }
 
     if (invitation.status === 'accepted') {
-      return res.status(400).json({ error: 'Invitation already accepted' });
+      return res.status(409).json({ error: 'Invitation already accepted' });
+    }
+    if (invitation.status === 'cancelled') {
+      return res.status(409).json({ error: 'Invitation was cancelled. Send a new invitation instead.' });
     }
 
-    // Generate new token and expiry
+    // The invitee may have joined another way since the first send.
+    const existingUser = await prisma.user.findFirst({
+      where: { email: { equals: invitation.email, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existingUser) {
+      return res.status(409).json({ error: 'A user with this email already exists' });
+    }
+    // Reviving an expired invite must not leave two live links for one email.
+    const otherPending = await prisma.invitation.findFirst({
+      where: {
+        id: { not: id },
+        email: { equals: invitation.email, mode: 'insensitive' },
+        status: 'pending',
+        tokenExpiry: { gt: new Date() },
+      },
+      select: { id: true },
+    });
+    if (otherPending) {
+      return res.status(409).json({ error: 'Another pending invitation exists for this email. Resend that one instead.' });
+    }
+
+    // Generate new token and expiry. Rotating the token invalidates
+    // the link in any earlier email.
     const token = crypto.randomBytes(32).toString('hex');
     const tokenExpiry = new Date(Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000);
 
@@ -234,15 +274,26 @@ router.post('/resend/:id', authenticate, async (req: AuthenticatedRequest, res: 
     });
 
     const emailResult = await sendEmail(invitation.email, subject, html);
+    const delivery = deliveryFields(emailResult);
+    await prisma.invitation.update({ where: { id }, data: delivery }).catch((err) => {
+      console.error('[invites] recording delivery status failed:', err);
+    });
 
-    res.json({ emailSent: emailResult.success, emailError: emailResult.error });
+    res.json({
+      emailSent: emailResult.success,
+      emailError: emailResult.error,
+      deliveryStatus: delivery.deliveryStatus,
+    });
   } catch (error) {
     console.error('Resend invitation error:', error);
     res.status(500).json({ error: 'Failed to resend invitation' });
   }
 });
 
-// DELETE /api/invites/:id — Admin cancels an invitation
+// DELETE /api/invites/:id — Admin cancels a pending invitation, or
+// removes a finished (accepted/expired/cancelled) one from the list.
+// Cancelling keeps the row so the token answers 410 "cancelled"
+// rather than looking like it never existed.
 router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   if (req.user!.role !== 'admin') {
     return res.status(403).json({ error: 'Admin access required' });
@@ -255,11 +306,36 @@ router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Respo
     // Check existence first so we can return 404 instead of 500.
     // Prisma's `delete` throws P2025 if the row doesn't exist,
     // which the catch-all below would surface as a generic 500.
-    const existing = await prisma.invitation.findUnique({ where: { id }, select: { id: true } });
+    const existing = await prisma.invitation.findUnique({
+      where: { id },
+      select: { id: true, status: true, email: true, organizationId: true },
+    });
     if (!existing) {
       return res.status(404).json({ error: 'Invitation not found' });
     }
-    await prisma.invitation.delete({ where: { id } });
+    if (existing.status !== 'pending') {
+      await prisma.invitation.delete({ where: { id } });
+      return res.status(204).send();
+    }
+    // Conditional update: an invite accepted between the read and
+    // this write stays accepted.
+    const cancelled = await prisma.invitation.updateMany({
+      where: { id, status: 'pending' },
+      data: { status: 'cancelled', cancelledAt: new Date() },
+    });
+    if (cancelled.count === 0) {
+      return res.status(409).json({ error: 'Invitation is no longer pending' });
+    }
+    await createAuditLog(prisma, {
+      userId: req.user!.id,
+      action: 'org_invite_cancelled',
+      details: { invitationId: id, inviteeEmail: existing.email },
+      ipAddress: getClientIp(req),
+      userAgent: getUserAgent(req),
+      organizationId: existing.organizationId || undefined,
+    }).catch((err) => {
+      console.error('[audit-log] org_invite_cancelled event failed:', err);
+    });
     res.status(204).send();
   } catch (error) {
     console.error('Cancel invitation error:', error);
@@ -290,12 +366,9 @@ router.get('/verify/:token', inviteVerifyLimiter, async (req: Request, res: Resp
       return res.status(404).json({ error: 'Invalid invitation token' });
     }
 
-    if (invitation.status === 'accepted') {
-      return res.status(400).json({ error: 'Invitation already accepted' });
-    }
-
-    if (invitation.tokenExpiry < new Date()) {
-      return res.status(400).json({ error: 'Invitation has expired' });
+    const check = checkInvitationToken(invitation);
+    if (!check.ok) {
+      return res.status(check.httpStatus).json({ error: check.error, code: check.code });
     }
 
     res.json({

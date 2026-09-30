@@ -6,6 +6,7 @@ export type AuditAction =
   | 'role_change'
   | 'org_invite_sent'
   | 'org_invite_accepted'
+  | 'org_invite_cancelled'
   | 'org_member_added'
   | 'org_member_removed'
   | 'tournament_created'

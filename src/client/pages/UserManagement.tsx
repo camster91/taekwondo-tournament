@@ -53,6 +53,18 @@ interface Invitation {
   status: string;
   createdAt: string;
   tokenExpiry: string;
+  deliveryStatus?: 'sent' | 'failed' | 'not_configured' | null;
+  lastDeliveryError?: string | null;
+  lastSentAt?: string | null;
+}
+
+function deliveryLabel(inv: Invitation): { text: string; tone: 'ok' | 'warn' | 'muted' } | null {
+  if (inv.status !== 'pending' || !inv.deliveryStatus) return null;
+  if (inv.deliveryStatus === 'sent') return { text: 'Email sent', tone: 'ok' };
+  if (inv.deliveryStatus === 'not_configured') {
+    return { text: 'Not emailed: email is not configured. Configure Mailgun, then resend.', tone: 'warn' };
+  }
+  return { text: `Delivery failed${inv.lastDeliveryError ? `: ${inv.lastDeliveryError}` : ''}. Check email settings, then resend.`, tone: 'warn' };
 }
 
 const ROLES = [
@@ -225,17 +237,26 @@ export default function UserManagement() {
   });
 
   const cancelInviteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/invites/${id}`, {
+    mutationFn: async (inv: Invitation) => {
+      const res = await fetch(`/api/invites/${inv.id}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
-      if (!res.ok) throw new Error('Failed to cancel invitation');
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Failed to cancel invitation');
+      }
+      return inv.status === 'pending' ? 'Invitation cancelled' : 'Invitation removed';
     },
-    onSuccess: () => {
+    onSuccess: (message) => {
       queryClient.invalidateQueries({ queryKey: ['invitations'] });
-      setSuccess('Invitation cancelled');
+      setSuccess(message);
       setTimeout(() => setSuccess(null), 3000);
+    },
+    onError: (err: Error) => {
+      queryClient.invalidateQueries({ queryKey: ['invitations'] });
+      setError(err.message);
+      setTimeout(() => setError(null), 3000);
     },
   });
 
@@ -530,8 +551,22 @@ export default function UserManagement() {
                           {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap text-sm text-surface-600 dark:text-surface-400">
-                        {new Date(inv.createdAt).toLocaleDateString()}
+                      <td className="text-sm text-surface-600 dark:text-surface-400">
+                        <div className="whitespace-nowrap">
+                          {new Date(inv.lastSentAt || inv.createdAt).toLocaleDateString()}
+                        </div>
+                        {(() => {
+                          const delivery = deliveryLabel(inv);
+                          if (!delivery) return null;
+                          return (
+                            <div
+                              className={`mt-0.5 max-w-xs text-xs ${delivery.tone === 'ok' ? 'text-success' : 'text-warning'}`}
+                              data-testid="invite-delivery-status"
+                            >
+                              {delivery.text}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="whitespace-nowrap">
                         {inv.status === 'pending' && (
@@ -541,14 +576,16 @@ export default function UserManagement() {
                               disabled={resendInviteMutation.isPending}
                               className="text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
                               title="Resend"
+                              aria-label={`Resend invitation to ${inv.email}`}
                             >
                               <RefreshCw className="h-4 w-4" />
                             </button>
                             <button
-                              onClick={() => cancelInviteMutation.mutate(inv.id)}
+                              onClick={() => cancelInviteMutation.mutate(inv)}
                               disabled={cancelInviteMutation.isPending}
                               className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
                               title="Cancel"
+                              aria-label={`Cancel invitation to ${inv.email}`}
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -556,10 +593,11 @@ export default function UserManagement() {
                         )}
                         {inv.status !== 'pending' && (
                           <button
-                            onClick={() => cancelInviteMutation.mutate(inv.id)}
+                            onClick={() => cancelInviteMutation.mutate(inv)}
                             disabled={cancelInviteMutation.isPending}
                             className="text-surface-600 dark:text-surface-500 hover:text-danger"
                             title="Remove"
+                            aria-label={`Remove ${inv.status} invitation for ${inv.email} from the list`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
