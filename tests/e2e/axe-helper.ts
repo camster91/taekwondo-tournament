@@ -39,8 +39,39 @@ export async function checkA11y(
     builder.disableRules(options.disableRules);
   }
 
-  // Run against WCAG 2.2 AA
-  builder.withTags(['wcag2a', 'wcag2aa', 'wcag22aa']);
+  // WCAG 2.0, 2.1 and 2.2 at levels A and AA. axe tags each rule with the
+  // version that introduced it, so 2.1 rules (reflow, autocomplete,
+  // orientation, ...) only run when `wcag21a`/`wcag21aa` are listed.
+  builder.withTags(WCAG_AA_TAGS);
 
   return builder.analyze();
+}
+
+export const WCAG_AA_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
+
+/**
+ * Durations (in ms) of every running CSS animation and transition on the
+ * page, excluding ones already at or below `thresholdMs`. Used to prove
+ * that `prefers-reduced-motion: reduce` actually removes motion.
+ */
+export async function motionLongerThan(page: Page, thresholdMs = 0.01) {
+  return page.evaluate((threshold) => {
+    const toMs = (value: string) => Math.max(0, ...value.split(',').map((part) => {
+      const v = part.trim();
+      return v.endsWith('ms') ? parseFloat(v) : parseFloat(v) * 1000;
+    }));
+    const found: string[] = [];
+    for (const el of Array.from(document.querySelectorAll('*'))) {
+      const style = getComputedStyle(el);
+      const animation = style.animationName !== 'none' ? toMs(style.animationDuration) : 0;
+      const transition = style.transitionProperty !== 'none' ? toMs(style.transitionDuration) : 0;
+      const longest = Math.max(animation, transition);
+      if (longest > threshold) {
+        const name = el.tagName.toLowerCase() + (el.id ? `#${el.id}` : '') +
+          (typeof el.className === 'string' && el.className ? `.${el.className.trim().split(/\s+/).slice(0, 2).join('.')}` : '');
+        found.push(`${name} ${longest}ms`);
+      }
+    }
+    return found;
+  }, thresholdMs);
 }
