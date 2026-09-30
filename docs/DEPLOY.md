@@ -2,7 +2,12 @@
 
 The supported production topology is the full-stack Docker image plus PostgreSQL, deployed to an Ashbi VPS (187.77.26.99) via `scripts/deploy-production.sh`. The Node process serves both the Vite build and `/api`; do not deploy the Vite client separately unless an explicit same-origin API gateway is configured.
 
-**Deployment method:** Immutable, rollback-safe manual deployment via `scripts/deploy-production.sh`. The script requires a clean worktree, uploads a verified source archive to the VPS, builds a Docker image on-host, validates a private candidate container, performs a stopped-write cutover with automatic database backup, runs `prisma migrate deploy`, and automatically rolls back if health checks fail.
+**Deployment methods:** the same `Dockerfile` serves two paths.
+
+- **Coolify** (or any platform that builds a Dockerfile and injects environment variables): see [Coolify](#coolify) below.
+- **VPS script**: immutable, rollback-safe manual deployment via `scripts/deploy-production.sh`. The script requires a clean worktree on a commit with a green `Build` check, uploads a verified source archive to the VPS, builds a Docker image on-host, validates a private candidate container, performs a stopped-write cutover with automatic database backup, runs `prisma migrate deploy`, and automatically rolls back if health checks fail.
+
+Whichever path you use, deploy only commits on `main` whose `Build` check passed.
 
 ## Required configuration
 
@@ -19,8 +24,8 @@ The supported production topology is the full-stack Docker image plus PostgreSQL
 - `RETENTION_PURGE_DRY_RUN=true`: with the purge enabled, only count and log what would be purged (nothing is deleted). Recommended for the first runs after enabling.
 
 Every purge run, real or dry, is recorded in the `RetentionPurgeRun` table (cutoff and per-type counts). Records under **legal hold** are never purged or hard-deleted: admins set a hold with `PUT /api/tournaments/:id/legal-hold` or `PUT /api/competitors/:id/legal-hold` and body `{ "hold": true, "reason": "..." }` (release with `{ "hold": false }`). A tournament hold also protects its divisions, incidents and every competitor registered in it; `DELETE /api/tournaments/:id?hard=true` and `DELETE /api/competitors/:id/purge` return 409 for held records.
-- `REGISTRATION_CONSENT_VERSION`: immutable identifier for the approved notice/terms presented during registration
-- `PRIVACY_NOTICE_URL`, `TOURNAMENT_TERMS_URL`: public HTTPS URLs for those exact approved versions; production startup fails if they are absent or non-HTTPS
+- `REGISTRATION_CONSENT_VERSION`: identifier for the approved notice/terms presented during registration (production default `2026-08-24`); change it whenever the notice or terms change
+- `PRIVACY_NOTICE_URL`, `TOURNAMENT_TERMS_URL`: links shown on the registration form; default to the in-app `/legal/privacy` and `/legal/terms`. Production refuses to start if either is set to a non-HTTPS absolute URL
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_STARTER_PRICE_ID`, `STRIPE_PRO_PRICE_ID`: configure all four to enable self-service billing; omit them for a managed-invoice pilot
 
 Keep `ENABLE_DEV_AUTH`, `ENABLE_DEMO_LOGIN`, `ENABLE_E2E_AUTH_BYPASS`, and `RATE_LIMIT_DISABLED` unset in production. `POSTGRES_PASSWORD` is mandatory when using `docker-compose.yml`.
@@ -49,7 +54,7 @@ Automatic retention is deliberately disabled by default. Verify a backup and obt
 
 ## Release sequence
 
-1. **Local verification (optional but recommended):** Run `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` on the exact commit. GitHub Actions CI runs automatically on push/PR but is NOT a hard ship gate — Cameron's Actions often fail on spending-limit noise. Ignore Actions spending-limit failures; VPS verification is the actual ship gate.
+1. **CI:** the commit must be on `main` with a green `Build` check (typecheck, lint, unit tests, audit, build, fresh-migration drift check, and Playwright on four browsers). `deploy-production.sh` enforces this; on Coolify, deploy from `main` only.
 2. **Review security advisories:** Check `npm audit` output and bounded exceptions documented in `SECURITY.md` or `docs/ADVISORY-TRACKING-*.md`.
 3. **Staging validation (recommended):** Deploy to staging VPS via `scripts/deploy-staging.sh` against a database restored from production snapshot. Run smoke tests.
 4. **Production deploy:** Execute `scripts/deploy-production.sh` from a clean worktree. The script:
@@ -158,3 +163,33 @@ This evidence is recorded without exposing secrets and enables audit trails for 
 **VPS access:** Deployment requires SSH access to the Ashbi VPS (187.77.26.99) with the appropriate SSH key (`BOWIN_PRODUCTION_SSH_KEY` env var, defaults to `/c/Users/camst/.ssh/id_ed25519_hostinger`). Environment variables for the live container are preserved from the previous deployment and updated only for changed legal/consent fields.
 
 **Traefik reverse proxy:** The VPS runs Traefik for TLS termination and routing. Public URL `tkd.ashbi.ca` routes to `127.0.0.1:{LIVE_PORT}` where `{LIVE_PORT}` is the port allocated to the `taekwondo-tournament` container. Custom domain support (PR #256) requires dynamic Traefik configuration to route tenant-specific hostnames.
+
+## Coolify
+
+The image is self-contained: it serves the SPA and `/api` from one Node process, runs `prisma migrate deploy` before starting, and declares a Docker `HEALTHCHECK` on `/api/health/ready`. CI proves this on every commit with `scripts/container-smoke.sh` (build, boot on an empty database, check the endpoints); you can run the same script locally before switching Coolify on.
+
+**Application**
+- Build pack: **Dockerfile** (repository root). Port: **3001** (or set `PORT` and use that).
+- Branch: `main`. Enable automatic deploys only after branch protection requires the `Build` check, so a red commit can never reach production.
+- Health check path: `/api/health/ready` (returns 503 until the database answers).
+- Build variable: `VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64` (public half of the offline key pair; baked into the client bundle). Enable Coolify's "Include source commit in build" so `SOURCE_COMMIT` reaches the build; `/api/health` then reports the running revision (or pass `BUILD_SHA` yourself).
+- Runtime variables: everything under [Required configuration](#required-configuration), plus `OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64`. Mark secrets as secret; never commit them.
+
+**Database**
+- A Coolify PostgreSQL 16 resource on the same network. Set `DATABASE_URL` to its internal connection string.
+- Enable Coolify's scheduled backups for it (and an off-host destination such as S3). A deploy that applies migrations cannot be rolled back without a backup: take one before deploying a release that lists new migrations in `CHANGELOG.md`.
+
+**Scaling**
+- Run one replica. The auth cache, rate limits and WebSocket fan-out are per process; the background jobs (retention purge, billing grace period) are safe to run in more than one process but gain nothing from it.
+
+**Rollback**
+- Redeploy the previous image from Coolify's deployment history. If that release predates a migration, the extra columns/tables are ignored by the old code (all migrations here are additive). If a migration must be reverted, restore the pre-deploy backup.
+
+**Public demo (#164)**
+- A separate Coolify application and database, never the production ones. Set `ENABLE_DEMO_LOGIN=1` and `DEMO_ISOLATED_DATA=1` only there, with its own `JWT_SECRET` and offline key pair.
+- Reset the fabricated data with a Coolify scheduled task in that application, for example nightly: `DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 npm run demo:reset:production`. The confirmation lives in the task command, not in the environment.
+
+**After the first deploy**
+1. Create the first administrator: set `ADMIN_SETUP_KEY`, call `POST /api/auth/setup-admin`, then remove the key.
+2. Run the post-deploy checks in [Release sequence](#release-sequence) step 5.
+

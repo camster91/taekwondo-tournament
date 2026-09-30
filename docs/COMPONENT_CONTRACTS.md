@@ -690,7 +690,7 @@ Target: 2-3 highest-traffic day-of surfaces with inconsistent patterns.
 - [ ] Smoke test: migrated surfaces compile and basic flow works
 
 ### Ship Plan Update
-- [ ] `docs/END_TO_END_SHIP_PLAN.md` updated with:
+- [ ] `docs/archive/END_TO_END_SHIP_PLAN.md` updated with:
   - [ ] #147 status (met acceptance criteria vs leftovers)
   - [ ] Technical decisions made (which surfaces migrated, why)
   - [ ] Known gaps (surfaces not yet migrated, future work)

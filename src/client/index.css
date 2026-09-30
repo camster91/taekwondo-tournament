@@ -569,6 +569,14 @@ a:focus:not(:focus-visible) {
   .no-print { display: none !important; }
   body { background: white; }
 
+  /* Staffing roster: black on white regardless of theme. */
+  .staffing-print-root,
+  .staffing-print-root * {
+    background: white !important;
+    color: #111 !important;
+    box-shadow: none !important;
+  }
+
   /* Bracket print layout: collapse the horizontal scroller so the
      whole bracket fits on letter paper. Loses the dark theme,
      keeps competitor names + scores + winner markers readable. */

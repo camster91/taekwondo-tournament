@@ -11,232 +11,64 @@ Bowin is currently being prepared as an approval-based managed pilot. Taekwondo 
 | Managed-pilot candidate | Taekwondo | Sparring and patterns; organizer review of the event rules remains mandatory |
 | Experimental profiles | Karate, Judo, BJJ, Wrestling, Muay Thai, Boxing, Kickboxing, MMA, Kung Fu | Configuration starting points only; not commercially supported or federation-certified |
 
-## Core Features
+## What it does
 
-### Tournament Management
-- **Multi-Sport Support:** Configure tournaments for any martial art with sport-appropriate scoring
-- **Automated Bracket Generation:** Parse Excel `.xlsm` rosters to dynamically generate brackets
-- **Division Management:** Handle divisions by rank, gender, age, and weight classes
-- **Event Templates:** Pre-configured templates for each martial art
+- **Registration**: staff entry, Excel/CSV import with column auto-mapping, and a public self-registration form with parental consent, waitlist, optional entry-fee checkout, and confirmation emails.
+- **Divisions**: automatic categorization by belt, gender, age, event and weight class, with manual moves, splits and merges.
+- **Brackets**: double and single elimination with byes, seeding and school separation; correctable results with a full audit trail; PDF brackets, certificates and school reports.
+- **Event day**: check-in with weigh-in, an offline-capable scorekeeper, a director control room, ring schedules with delay propagation, and a public scoreboard for TVs and parents.
+- **Organizations**: multi-tenant organizations, staff invitations with roles, per-tournament access grants, branded public pages and custom domains, and Stripe billing (optional).
 
-### Live Scheduling
-- **Real-time Sync:** Schedules update across all devices instantly
-- **Multi-Ring Support:** Manage multiple rings/mats simultaneously
-- **Digital Displays:** Clean, high-contrast UI for TV monitors
-- **Delay Propagation:** Automatically adjust schedules when delays occur
-
-### Competitor Management
-- **Registration:** Import from Excel or manual entry
-- **Check-in System:** Track competitor arrival and readiness
-- **Weight Verification:** Record verified weights for weight-class events
-- **Belt Verification:** Confirm rank eligibility
-
-### Scoring & Results
-- **Custom Scoring:** Sport-specific scoring rules
-- **Judge Interface:** Easy-to-use scoring panels
-- **Live Results:** Real-time bracket updates
-- **Medal Standings:** Track school/team standings
-
-## Tech Stack
+## Tech stack
 
 | Category | Technology |
 |----------|------------|
-| Frontend | React 19 + Vite + TypeScript |
-| Backend | Node.js + Express |
-| Database | Prisma ORM + PostgreSQL 16 |
-| Styling | Tailwind CSS v4 |
-| Charts | Recharts |
-| PDF Export | jsPDF |
-| Deployment | Docker + Traefik (VPS) |
+| Frontend | React 19 + Vite 7 + TypeScript, Tailwind CSS v4, TanStack Query |
+| Backend | Node.js 22 + Express 4 |
+| Database | PostgreSQL 16 via Prisma 7 (checked-in migrations) |
+| PDF / Excel | jsPDF, SheetJS |
+| Email | Mailgun HTTP API |
+| Deployment | One Docker image (serves the SPA and `/api`) + PostgreSQL |
 
-## Prerequisites
+## Local development
 
-- Node.js 20.19+ (Node.js 22 LTS recommended)
-- npm 9+
-- PostgreSQL 16
-
-## Installation
+Requires Node.js 22 and a reachable PostgreSQL 16.
 
 ```bash
-# Clone the repository
 git clone https://github.com/camster91/taekwondo-tournament.git
 cd taekwondo-tournament
-
-# Install dependencies
-npm install
-
-# Configure DATABASE_URL, then initialize the development database
-npx prisma generate
-npx prisma migrate dev
-
-# Start development server
-npm run dev
+cp .env.example .env          # set DATABASE_URL and JWT_SECRET
+npm install                   # also runs prisma generate
+npm run db:migrate:deploy     # apply the checked-in migrations
+npm run seed                  # optional sample tournament
+npm run dev                   # Vite on :5173, API on :3001
 ```
 
-## Usage
+Without Mailgun configured, sign-in links and codes are printed to the server console.
 
-### Development
+Useful scripts: `npm run typecheck`, `npm run lint`, `npm test` (unit), `npm run test:e2e` (Playwright), `npm run build`.
 
-```bash
-# Run both frontend and backend
-npm run dev
-
-# Run frontend only
-npm run dev:client
-
-# Run backend only
-npm run dev:server
-```
-
-### Production Build
-
-```bash
-# Build both frontend and backend
-npm run build
-
-# Start production server
-npm run start
-```
-
-### Database Management
-
-```bash
-# Generate Prisma client
-npm run db:generate
-
-# Push schema changes
-npm run db:push
-
-# Run migrations
-npm run db:migrate
-
-# Open Prisma Studio
-npm run db:studio
-
-# Seed sample data
-npm run seed
-```
-
-## Project Structure
-
-```
-src/
-├── client/                 # React frontend
-│   ├── components/        # UI components
-│   ├── pages/             # Route pages
-│   ├── hooks/             # Custom hooks
-│   └── utils/             # Frontend utilities
-├── server/                 # Express backend
-│   ├── routes/            # API routes
-│   ├── middleware/        # Express middleware
-│   ├── services/          # Business logic
-│   └── utils/             # Backend utilities
-└── shared/                 # Shared types and utilities
-
-prisma/
-├── schema.prisma          # Database schema
-└── seed.ts                # Seed data
-
-public/
-└── index.html             # Entry HTML
-
-dist/                       # Production build (frontend)
-dist-server/               # Production build (backend)
-```
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/tournaments` | List tournaments |
-| POST | `/api/tournaments` | Create tournament |
-| GET | `/api/tournaments/:id` | Get tournament details |
-| POST | `/api/tournaments/:id/import` | Import Excel roster |
-| GET | `/api/tournaments/:id/brackets` | Get brackets |
-| POST | `/api/brackets/:id/score` | Submit score |
-| GET | `/api/displays/:ring` | Get ring display data |
-
-## Excel Import Format
-
-The system accepts `.xlsm` files with competitor rosters. Expected columns:
-- Name
-- Belt/Rank
-- Age
-- Weight
-- Gender
-- School/Affiliation
-- Events (Sparring, Patterns, etc.)
+Schema changes need a migration (`npm run db:migrate` creates one against a local database). Never run `db:push` against staging or production.
 
 ## Deployment
 
-**Production deployment** is performed via `scripts/deploy-production.sh`, which executes an immutable, rollback-safe deployment to the Ashbi VPS (187.77.26.99). The script:
+The app ships as a single Docker image built from `Dockerfile`. On start the container runs `prisma migrate deploy` and then the server; `/api/health/ready` is its health check. Any Docker host works:
 
-1. Uploads a verified source archive to the VPS
-2. Builds a Docker image on-host from the immutable source
-3. Validates a private candidate container
-4. Performs a stopped-write cutover with automatic database backup
-5. Runs `prisma migrate deploy` to apply pending migrations
-6. Automatically rolls back (DB + container) if health checks fail
+- **Coolify** (or any platform that builds from a Dockerfile): see [docs/DEPLOY.md](docs/DEPLOY.md#coolify) for the settings and environment variables.
+- **VPS script**: `scripts/deploy-production.sh` performs a verified, rollback-safe deploy to the Ashbi VPS.
 
-**Reverse proxy:** Traefik on the VPS terminates TLS and routes `tkd.ashbi.ca` to the live container port.
+Before real events, work through [docs/LAUNCH-STATUS.md](docs/LAUNCH-STATUS.md) (what is done and the operator checklist).
 
-**Rollback:** Manual rollback procedure is documented in `scripts/deploy-production.sh` with < 5 minute RTO.
+## Documentation
 
-See [docs/DEPLOY.md](docs/DEPLOY.md) for full deployment runbook and [scripts/deploy-production.sh](scripts/deploy-production.sh) for the deployment script.
-
-### Local Docker (development/testing)
-
-```bash
-# Build image locally
-docker build -t bowin-tournament .
-
-# Run with environment file
-docker run --env-file .env -p 3001:3001 bowin-tournament
-```
-
-### Docker Compose (local development)
-
-```bash
-POSTGRES_PASSWORD="strong-password" \
-JWT_SECRET="at-least-32-random-characters" \
-docker-compose up -d
-```
-
-## Testing
-
-```bash
-# Run tests
-npm run test
-
-# Run tests in watch mode
-npm run test:watch
-
-# Run tests with coverage
-npm run test:coverage
-```
-
-## Roadmap
-
-- [ ] White-label packaging for independent dojos/gyms
-- [ ] GlowOS integration for voice-controlled schedule updates
-- [ ] Payment gateway for registration fees
-- [ ] Mobile app for judges
-- [ ] Live streaming integration
-
-## Release Status
-
-The current release candidate is intended for a controlled, supervised pilot—not unattended self-service signup or a federation-scale event. See [the SaaS launch checklist](docs/SAAS-LAUNCH-CHECKLIST.md), [deployment runbook](docs/DEPLOY.md), and [operator quickstart](docs/OPERATOR-QUICKSTART.md) before using real competitor data.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push and open a Pull Request
+- [CLAUDE.md](CLAUDE.md): codebase guide, API reference, security model
+- [docs/DEPLOY.md](docs/DEPLOY.md): configuration, deployment and rollback
+- [docs/LAUNCH-STATUS.md](docs/LAUNCH-STATUS.md): current status and launch checklist
+- [docs/OPERATOR-QUICKSTART.md](docs/OPERATOR-QUICKSTART.md): running an event
+- [docs/help/](docs/help/): end-user help articles
+- [CONTRIBUTING.md](CONTRIBUTING.md): branch, PR and CI rules
 
 ## License
 
 Bowin is proprietary software, copyright 2026 Cameron Ashley. The repository is marked `UNLICENSED`; hosted access does not grant source-code copying, modification, or redistribution rights. Third-party components remain subject to their own licenses and attribution requirements.
 
----
-Developed by Cameron Ashley / Nexus AI.

@@ -2,6 +2,8 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate, useParams, Navigate } from 'react-router-dom';
 import {
   Trophy,
+  ClipboardList,
+  UserCheck,
   Users,
   Home,
   UserPlus,
@@ -76,6 +78,8 @@ const Results = lazy(() => import('./pages/Results'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
 const Profile = lazy(() => import('./pages/Profile'));
 const DirectorDashboard = lazy(() => import('./pages/DirectorDashboard'));
+const Staffing = lazy(() => import('./pages/Staffing'));
+const MyAssignments = lazy(() => import('./pages/MyAssignments'));
 const AcceptInvite = lazy(() => import('./pages/AcceptInvite'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const FairnessRules = lazy(() => import('./pages/FairnessRules'));
@@ -122,6 +126,7 @@ const primaryNav = [
   { name: 'Competitors', href: '/competitors', icon: Users, section: 'workspace' },
   { name: 'Trash', href: '/trash', icon: Trash2, section: 'admin' },
   { name: 'Tournaments', href: '/tournaments', icon: Trophy, section: 'workspace' },
+  { name: 'My Assignments', href: '/my-assignments', icon: ClipboardList, section: 'workspace' },
 ];
 
 // Per-tournament views (only when a tournament is selected)
@@ -129,6 +134,7 @@ const tournamentNav = [
   { name: 'Overview', icon: LayoutGrid, paramKey: 'id', paramValue: 'id' },
   { name: 'Divisions', icon: Users, pathSuffix: '/divisions' },
   { name: 'Schedule', icon: Calendar, pathSuffix: '/schedule' },
+  { name: 'Staffing', icon: UserCheck, pathSuffix: '/staffing', roles: ['admin', 'director'] },
   { name: 'Settings', icon: SettingsIcon, pathSuffix: '/settings', roles: ['admin', 'director'] },
 ];
 
@@ -287,7 +293,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                 </div>
               )}
               <div className={classNames('space-y-0.5', sidebarCollapsed && 'flex flex-col items-center')}>
-                {tournamentNav.map((item) => {
+                {tournamentNav.filter((item) => !item.roles || item.roles.includes(user?.role ?? '')).map((item) => {
                   const target = `/tournaments/${tournamentId}${item.pathSuffix || ''}`;
                   const isActive = location.pathname === target;
                   return (
@@ -711,6 +717,15 @@ function AppRoutes() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/tournaments/:id/staffing"
+              element={
+                <ProtectedRoute requiredRoles={['admin', 'director']}>
+                  <Staffing />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/my-assignments" element={<MyAssignments />} />
             <Route
               path="/tournaments/:tournamentId/fairness"
               element={

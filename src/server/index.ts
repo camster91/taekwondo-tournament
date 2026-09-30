@@ -30,6 +30,7 @@ import organizationLogoRouter, { setLogoResponseHeaders } from './routes/organiz
 import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import supportRouter from './routes/support.js';
 import sosAlertsRouter from './routes/sos-alerts.js';
+import staffingRouter from './routes/staffing.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { mountLargeJsonBodyRoutes } from './middleware/large-json-body.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
@@ -37,6 +38,7 @@ import {
   retentionConfigFromEnv,
   startRetentionPurgeJob,
 } from './services/retention-policy.js';
+import { startGracePeriodJob } from './services/grace-period.js';
 import { registrationLegalConfigFromEnv } from './routes/public-validation.js';
 import { validateProductionServiceConfig } from './services/production-config.js';
 import {
@@ -273,6 +275,7 @@ app.use('/api/organizations', organizationsRouter);
 app.use('/api/organizations', organizationLogoRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/sos-alerts', sosAlertsRouter);
+app.use('/api/staffing', staffingRouter);
 
 // Serve uploaded organization logos (P1-11)
 // Logos are inert raster images: serve them with a locked-down, sandboxed
@@ -401,6 +404,8 @@ const server = app.listen(Number(PORT), '0.0.0.0', async () => {
   } else {
     console.log('[retention] automatic purge disabled');
   }
+
+  await startGracePeriodJob({ database: prisma });
 
   if (isEmailConfigured()) {
     const ok = await verifyEmailConnection();

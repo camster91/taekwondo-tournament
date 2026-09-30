@@ -1,8 +1,6 @@
-# Ship handoff
-
-> **Read `docs/AGENT_HANDOFF.md` first** for product status, next agent track, and Cameron-gated work.
-
 # AGENTS.md
+
+Current product status and the operator launch checklist: `docs/LAUNCH-STATUS.md`.
 
 See `CLAUDE.md` for the full codebase guide (architecture, routes, DB
 models, conventions). This file adds environment/operational notes.

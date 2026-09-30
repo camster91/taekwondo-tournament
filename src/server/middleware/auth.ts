@@ -443,6 +443,12 @@ const ORG_MEMBERSHIP_ROLE_LEVEL: Record<string, number> = {
   member: ROLE_HIERARCHY.director,
 };
 
+/** Level of a global or per-tournament role (0 for unknown roles). */
+export function tournamentRoleLevel(role: string | null | undefined): number {
+  if (!role) return 0;
+  return ROLE_HIERARCHY[role as TournamentRole] ?? 0;
+}
+
 export function orgMembershipRoleLevel(role: string | null | undefined): number {
   if (!role) return 0;
   return ORG_MEMBERSHIP_ROLE_LEVEL[role] ?? 0;

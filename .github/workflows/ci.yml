@@ -125,3 +125,11 @@ jobs:
         run: ./scripts/test-fresh-migration.sh
         env:
           JWT_SECRET: ci-throwaway-secret-not-used-in-tests-min-32-chars-xx
+
+      - name: Container smoke test
+        # Builds the production image and boots it with environment
+        # variables only against an empty database (as Coolify does), then
+        # checks health, revision, the SPA, metrics auth and first-admin
+        # setup. Catches runtime dependencies missing from the
+        # `npm ci --omit=dev` layer, which no other step exercises.
+        run: ./scripts/container-smoke.sh

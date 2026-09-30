@@ -36,11 +36,13 @@ WORKDIR /app
 
 # Setup env variables
 ENV NODE_ENV=production
-# Git revision reported by /api/health (deploy scripts pass --build-arg BUILD_SHA=<sha>).
-ARG BUILD_SHA=unknown
+# Git revision reported by /api/health. The deploy scripts and CI pass
+# --build-arg BUILD_SHA=<sha>; Coolify supplies SOURCE_COMMIT.
+ARG SOURCE_COMMIT=unknown
+ARG BUILD_SHA=${SOURCE_COMMIT}
 ENV BUILD_SHA=${BUILD_SHA}
-# DATABASE_URL is provided at runtime via Coolify env vars
-# (Coolify injects the linked Postgres service's connection string)
+# DATABASE_URL and the other secrets are provided at runtime by the
+# platform (Coolify environment variables, or --env-file on the VPS).
 
 # Install OpenSSL 1.1 for Prisma engines (Alpine needs this)
 RUN apk add --no-cache openssl
@@ -61,7 +63,7 @@ USER node
 EXPOSE 3001
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
-  CMD wget -q -O /dev/null http://127.0.0.1:3001/api/health/ready || exit 1
+  CMD wget -q -O /dev/null "http://127.0.0.1:${PORT:-3001}/api/health/ready" || exit 1
 
 # Run schema migrations and start server (use local prisma binary to ensure correct version).
 # Closes D1 + D2: previously the deploy used `prisma db push --accept-data-loss`,
