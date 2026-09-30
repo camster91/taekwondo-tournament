@@ -185,6 +185,10 @@ The image is self-contained: it serves the SPA and `/api` from one Node process,
 **Rollback**
 - Redeploy the previous image from Coolify's deployment history. If that release predates a migration, the extra columns/tables are ignored by the old code (all migrations here are additive). If a migration must be reverted, restore the pre-deploy backup.
 
+**Public demo (#164)**
+- A separate Coolify application and database, never the production ones. Set `ENABLE_DEMO_LOGIN=1` and `DEMO_ISOLATED_DATA=1` only there, with its own `JWT_SECRET` and offline key pair.
+- Reset the fabricated data with a Coolify scheduled task in that application, for example nightly: `DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 npm run demo:reset:production`. The confirmation lives in the task command, not in the environment.
+
 **After the first deploy**
 1. Create the first administrator: set `ADMIN_SETUP_KEY`, call `POST /api/auth/setup-admin`, then remove the key.
 2. Run the post-deploy checks in [Release sequence](#release-sequence) step 5.

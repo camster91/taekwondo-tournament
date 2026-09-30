@@ -7,6 +7,9 @@ vi.mock('../middleware/auth.js', () => ({
   authenticate: (_req: any, _res: any, next: any) => next(),
   checkTournamentAccess: (...args: any[]) => mocks.checkTournamentAccess(...args),
   buildTournamentAccessFilter: (...args: any[]) => mocks.buildTournamentAccessFilter(...args),
+  tournamentRoleLevel: (role: string) => ({ director: 3, scorekeeper: 2, viewer: 1 } as Record<string, number>)[role] ?? 0,
+  orgMembershipRoleLevel: (role: string) =>
+    ({ owner: 3, admin: 3, member: 3, director: 3, scorekeeper: 2, viewer: 1 } as Record<string, number>)[role] ?? 0,
 }));
 vi.mock('express', () => {
   const router: any = {};
@@ -38,8 +41,11 @@ function prismaFor(overrides: Record<string, any> = {}) {
       findUnique: vi.fn().mockResolvedValue({ id: 't-1', name: 'Open', date: new Date(), settings, organizationId: 'org-1' }),
     },
     userTournamentAccess: { findMany: vi.fn().mockResolvedValue([]) },
-    organizationMember: { findMany: vi.fn().mockResolvedValue([{ user: staffer }]) },
-    user: { findMany: vi.fn().mockResolvedValue([]) },
+    organizationMember: { findMany: vi.fn().mockResolvedValue([{ role: 'member', user: staffer }]) },
+    user: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn(async ({ where }: any) => (where.id === staffer.id ? { ...staffer, isActive: true } : null)),
+    },
     staffAssignment: {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn(),
@@ -98,13 +104,35 @@ describe('staffing routes', () => {
     expect(res.body.eligibleStaff).toEqual([staffer]);
   });
 
-  it('only lists staff who pass the real access check', async () => {
-    const prisma = prismaFor();
-    mocks.checkTournamentAccess.mockImplementation(async (req: any) =>
-      (req.user.id === staffer.id ? { ok: false, status: 403 } : { ok: true }));
+  it('applies the access precedence: a grant decides alone, unknown roles grant nothing', async () => {
+    const viewer = { ...staffer, id: 'u-2', lastName: 'Viewer', role: 'viewer' };
+    const unknownMember = { ...staffer, id: 'u-3', lastName: 'Unknown' };
+    const overridden = { ...staffer, id: 'u-4', lastName: 'Overridden' };
+    const prisma = prismaFor({
+      userTournamentAccess: { findMany: vi.fn().mockResolvedValue([{ role: 'bogus', user: overridden }]) },
+      organizationMember: {
+        findMany: vi.fn().mockResolvedValue([
+          { role: 'viewer', user: viewer },
+          { role: 'guest', user: unknownMember },
+          { role: 'owner', user: overridden },
+        ]),
+      },
+    });
     const res = response();
     await handler('get', '/tournament/:tournamentId')(request(prisma), res);
-    expect(res.body.eligibleStaff).toEqual([]);
+    expect(res.body.eligibleStaff.map((u: any) => u.id)).toEqual(['u-2']);
+    // One access check for the director only, not one per candidate.
+    expect(mocks.checkTournamentAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists the legacy no-org pool for an org-less tournament', async () => {
+    const prisma = prismaFor();
+    prisma.tournament.findUnique.mockResolvedValue({ id: 't-1', name: 'Open', date: new Date(), settings, organizationId: null });
+    prisma.user.findMany.mockResolvedValue([staffer]);
+    const res = response();
+    await handler('get', '/tournament/:tournamentId')(request(prisma), res);
+    expect(prisma.organizationMember.findMany).not.toHaveBeenCalled();
+    expect(res.body.eligibleStaff).toEqual([staffer]);
   });
 
   it('creates an assignment for eligible staff and audits it', async () => {
@@ -140,6 +168,18 @@ describe('staffing routes', () => {
     }), res);
     expect(res.statusCode).toBe(400);
     expect(res.body.error).toMatch(/cannot open this tournament/);
+    expect(prisma.staffAssignment.create).not.toHaveBeenCalled();
+  });
+
+  it('runs the authoritative access check for the person being assigned', async () => {
+    const prisma = prismaFor();
+    mocks.checkTournamentAccess.mockImplementation(async (req: any) =>
+      (req.user.id === staffer.id ? { ok: false, status: 403 } : { ok: true }));
+    const res = response();
+    await handler('post', '/tournament/:tournamentId/assignments')(request(prisma, {
+      body: { userId: staffer.id, duty: 'runner', ringNumber: null, startTime: '08:00', endTime: '12:00' },
+    }), res);
+    expect(res.statusCode).toBe(400);
     expect(prisma.staffAssignment.create).not.toHaveBeenCalled();
   });
 

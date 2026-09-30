@@ -8,6 +8,8 @@ import {
   authenticate,
   buildTournamentAccessFilter,
   checkTournamentAccess,
+  orgMembershipRoleLevel,
+  tournamentRoleLevel,
   type AuthenticatedRequest,
 } from '../middleware/auth.js';
 import { readStoredScheduleConfig } from '../services/schedule-correction.js';
@@ -61,11 +63,11 @@ function param(value: string | string[] | undefined): string {
 }
 
 /**
- * Active users who can open this tournament at viewer level or above: its
- * organization's members, explicit per-tournament grants and, for a legacy
- * org-less tournament, users outside every organization. Each candidate is
- * re-checked with the real access rules so the list can never drift from
- * what the user could actually open.
+ * Active users who can open this tournament at viewer level or above, using
+ * the same precedence as checkTournamentAccess without a query per person:
+ * an explicit per-tournament grant decides on its own; otherwise, for an org
+ * tournament, the org membership (capped by the global role); otherwise, for
+ * a legacy org-less tournament, users outside every organization.
  */
 async function eligibleStaff(prisma: PrismaClient, tournamentId: string): Promise<StaffUser[]> {
   const tournament = await prisma.tournament.findUnique({
@@ -77,12 +79,12 @@ async function eligibleStaff(prisma: PrismaClient, tournamentId: string): Promis
   const [grants, members, legacyPool] = await Promise.all([
     prisma.userTournamentAccess.findMany({
       where: { tournamentId, user: { isActive: true } },
-      select: { user: { select: staffUserSelect } },
+      select: { role: true, user: { select: staffUserSelect } },
     }),
     tournament.organizationId
       ? prisma.organizationMember.findMany({
         where: { organizationId: tournament.organizationId, user: { isActive: true } },
-        select: { user: { select: staffUserSelect } },
+        select: { role: true, user: { select: staffUserSelect } },
       })
       : Promise.resolve([]),
     tournament.organizationId
@@ -94,21 +96,33 @@ async function eligibleStaff(prisma: PrismaClient, tournamentId: string): Promis
       }),
   ]);
 
-  const candidates = new Map<string, StaffUser>();
-  for (const row of [...grants, ...members]) candidates.set(row.user.id, row.user);
-  for (const user of legacyPool) candidates.set(user.id, user);
+  const canView = (user: StaffUser, grantedLevel: number) =>
+    user.role === 'admin' || Math.min(tournamentRoleLevel(user.role), grantedLevel) >= 1;
 
-  const eligible: StaffUser[] = [];
-  for (const user of candidates.values()) {
-    const access = await checkTournamentAccess(
-      { user: { ...user, isDemo: false } },
-      prisma,
-      tournamentId,
-      'viewer',
-    );
-    if (access.ok) eligible.push(user);
+  const eligible = new Map<string, StaffUser>();
+  const decidedByGrant = new Set<string>();
+  for (const grant of grants) {
+    decidedByGrant.add(grant.user.id);
+    if (canView(grant.user, tournamentRoleLevel(grant.role))) eligible.set(grant.user.id, grant.user);
   }
-  return eligible.sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`));
+  for (const member of members) {
+    if (decidedByGrant.has(member.user.id)) continue;
+    if (canView(member.user, orgMembershipRoleLevel(member.role))) eligible.set(member.user.id, member.user);
+  }
+  for (const user of legacyPool) {
+    if (decidedByGrant.has(user.id)) continue;
+    if (canView(user, Number.POSITIVE_INFINITY)) eligible.set(user.id, user);
+  }
+  return [...eligible.values()]
+    .sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`));
+}
+
+/** Authoritative check for the one person being assigned. */
+async function canOpenTournament(prisma: PrismaClient, userId: string, tournamentId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { ...staffUserSelect, isActive: true } });
+  if (!user?.isActive) return false;
+  const access = await checkTournamentAccess({ user: { ...user, isDemo: false } }, prisma, tournamentId, 'viewer');
+  return access.ok;
 }
 
 async function loadBoard(prisma: PrismaClient, tournamentId: string) {
@@ -226,8 +240,7 @@ router.post(
     if (body.ringNumber !== null && body.ringNumber > ringCount) {
       return res.status(400).json({ error: `This tournament has ${ringCount} ring(s)` });
     }
-    const staff = await eligibleStaff(prisma, tournamentId);
-    if (!staff.some((user) => user.id === body.userId)) {
+    if (!(await canOpenTournament(prisma, body.userId, tournamentId))) {
       return res.status(400).json({ error: 'That person cannot open this tournament. Invite them or grant access first.' });
     }
 
