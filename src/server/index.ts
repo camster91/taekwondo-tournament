@@ -40,6 +40,8 @@ import {
 import { registrationLegalConfigFromEnv } from './routes/public-validation.js';
 import { validateProductionServiceConfig } from './services/production-config.js';
 import {
+  appMetrics,
+  buildRevisionFromEnv,
   createHttpMetrics,
   metricsTokenFromEnv,
   normalizeMetricRoute,
@@ -163,7 +165,16 @@ app.use(
 
 // Stripe signs the exact request bytes. Mount this before express.json(),
 // otherwise signature verification receives a re-serialized object.
-app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: '256kb' }), stripeWebhookHandler);
+app.post(
+  '/api/billing/webhook',
+  (_req: Request, res: Response, next: NextFunction) => {
+    // Outcome by final status, whichever of the handler's return paths ran.
+    res.on('finish', () => appMetrics.recordStripeWebhook(res.statusCode));
+    next();
+  },
+  express.raw({ type: 'application/json', limit: '256kb' }),
+  stripeWebhookHandler,
+);
 
 // 1 MB JSON body limit. Heavy endpoints (Excel auto-map, import) accept
 // multipart/form-data or pre-parsed JSON from the client. A larger
@@ -232,7 +243,7 @@ app.get('/api/internal/metrics', (req: Request, res: Response) => {
   const authorized = expectedBuffer.length === suppliedBuffer.length
     && crypto.timingSafeEqual(expectedBuffer, suppliedBuffer);
   if (!authorized) return res.status(401).json({ error: 'Invalid metrics credentials.' });
-  res.type('text/plain; version=0.0.4').send(httpMetrics.render());
+  res.type('text/plain; version=0.0.4').send(httpMetrics.render() + appMetrics.render());
 });
 
 // API Routes
@@ -276,8 +287,9 @@ app.use('/logos', express.static('/opt/cursor/logos', {
 
 // Health check (liveness — the process is up and the HTTP server
 // is bound). This is the cheap probe for the load balancer.
+const buildRevision = buildRevisionFromEnv(process.env);
 app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), revision: buildRevision });
 });
 
 // Readiness check (closes D10). Confirms the process is bound AND

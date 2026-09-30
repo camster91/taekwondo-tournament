@@ -36,6 +36,9 @@ WORKDIR /app
 
 # Setup env variables
 ENV NODE_ENV=production
+# Git revision reported by /api/health (deploy scripts pass --build-arg BUILD_SHA=<sha>).
+ARG BUILD_SHA=unknown
+ENV BUILD_SHA=${BUILD_SHA}
 # DATABASE_URL is provided at runtime via Coolify env vars
 # (Coolify injects the linked Postgres service's connection string)
 

@@ -174,6 +174,7 @@ mkdir -p "$RELEASE_DIR"
 tar xzf "$ARCHIVE" -C "$RELEASE_DIR" --strip-components=1
 echo "==> Building ${IMAGE} remotely from verified source"
 docker build --label "org.opencontainers.image.revision=${RELEASE_SHA}" \
+  --build-arg "BUILD_SHA=${RELEASE_SHA}" \
   --build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${PUBLIC_KEY}" -t "$IMAGE" "$RELEASE_DIR" >/tmp/bowin-build-${STAMP}.log 2>&1
 test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"
 

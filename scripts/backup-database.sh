@@ -176,6 +176,13 @@ find "${BACKUP_DIR}" -name "bowin-backup-*.sql.gpg" -mtime "+${RETENTION_DAYS}" 
 find "${BACKUP_DIR}" -name "bowin-backup-*.sql.gpg.sha256" -mtime "+${RETENTION_DAYS}" -delete
 log "Cleanup complete"
 
+# Freshness marker for monitoring (#165): check-backup-freshness.sh
+# alerts when this file is missing or older than the allowed age.
+cat > "${BACKUP_DIR}/last-success.json.tmp" <<MARKER
+{"completed_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","completed_epoch":$(date -u +%s),"file":"${ENCRYPTED_FILE}","sha256":"${CHECKSUM}","off_host":${OFF_HOST}}
+MARKER
+mv "${BACKUP_DIR}/last-success.json.tmp" "${BACKUP_DIR}/last-success.json"
+
 log "Backup completed successfully at $(date)"
 log "Backup file: ${BACKUP_DIR}/${ENCRYPTED_FILE}"
 log "To restore: gpg --decrypt ${ENCRYPTED_FILE} | pg_restore --dbname=\$DATABASE_URL"

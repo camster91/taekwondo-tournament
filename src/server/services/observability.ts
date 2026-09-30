@@ -65,3 +65,56 @@ export function metricsTokenFromEnv(
   if (token && token.length < 32) throw new Error('METRICS_TOKEN must be at least 32 characters');
   return token;
 }
+
+/**
+ * Application-level counters for monitoring (#165), rendered alongside the
+ * HTTP metrics on the token-protected /api/internal/metrics endpoint.
+ * Process-local: each container reports its own values.
+ */
+export type WebhookOutcome = 'success' | 'rejected' | 'failure';
+
+export function createAppMetrics(now: () => number = Date.now) {
+  let emailSends = 0;
+  let emailFailures = 0;
+  const webhookOutcomes: Record<WebhookOutcome, number> = { success: 0, rejected: 0, failure: 0 };
+  let webhookLastSuccessSeconds = 0;
+
+  return {
+    recordEmail(success: boolean) {
+      if (success) emailSends += 1;
+      else emailFailures += 1;
+    },
+    recordStripeWebhook(statusCode: number) {
+      const outcome: WebhookOutcome = statusCode >= 500 ? 'failure' : statusCode >= 400 ? 'rejected' : 'success';
+      webhookOutcomes[outcome] += 1;
+      if (outcome === 'success') webhookLastSuccessSeconds = Math.floor(now() / 1000);
+    },
+    render(): string {
+      const lines = [
+        '# HELP bowin_email_sends_total Emails accepted by the mail provider.',
+        '# TYPE bowin_email_sends_total counter',
+        `bowin_email_sends_total ${emailSends}`,
+        '# HELP bowin_email_send_failures_total Email sends that failed (provider error or network).',
+        '# TYPE bowin_email_send_failures_total counter',
+        `bowin_email_send_failures_total ${emailFailures}`,
+        '# HELP bowin_stripe_webhook_events_total Stripe webhook deliveries by outcome (success=2xx, rejected=4xx, failure=5xx).',
+        '# TYPE bowin_stripe_webhook_events_total counter',
+        ...(Object.keys(webhookOutcomes) as WebhookOutcome[]).map(
+          (outcome) => `bowin_stripe_webhook_events_total{outcome="${outcome}"} ${webhookOutcomes[outcome]}`,
+        ),
+        '# HELP bowin_stripe_webhook_last_success_timestamp_seconds Unix time of the last successfully handled Stripe webhook (0 = none since start).',
+        '# TYPE bowin_stripe_webhook_last_success_timestamp_seconds gauge',
+        `bowin_stripe_webhook_last_success_timestamp_seconds ${webhookLastSuccessSeconds}`,
+      ];
+      return `${lines.join('\n')}\n`;
+    },
+  };
+}
+
+export const appMetrics = createAppMetrics();
+
+/** Deployed revision for /api/health (set via the BUILD_SHA build arg). */
+export function buildRevisionFromEnv(env: Record<string, string | undefined>): string {
+  const sha = env.BUILD_SHA?.trim();
+  return sha && /^[0-9a-f]{7,40}$/i.test(sha) ? sha : 'unknown';
+}

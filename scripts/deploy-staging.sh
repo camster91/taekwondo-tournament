@@ -153,6 +153,7 @@ mkdir -p "$RELEASE_DIR"
 tar xzf "$ARCHIVE" -C "$RELEASE_DIR" --strip-components=1
 docker build \
   --build-arg "VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${PUBLIC_KEY}" \
+  --build-arg "BUILD_SHA=${RELEASE_SHA}" \
   --label "org.opencontainers.image.revision=${RELEASE_SHA}" \
   -t "$IMAGE" "$RELEASE_DIR" >/tmp/bowin-staging-build-${RELEASE_SHA}.log 2>&1
 test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"
