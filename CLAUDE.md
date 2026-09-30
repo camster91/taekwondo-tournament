@@ -781,6 +781,8 @@ Production runs in a Docker container on the Ashbi VPS
 - `20260910_add_capacity_waitlist` (capacity + waitlist)
 - `20260924_registration_waitlist_fields` (Registration waitlist columns that were in the schema without a migration)
 - `20260925_tournament_created_by` (Tournament.createdById, backfilled from `tournament_created` audit entries)
+- `20260925_competitor_organization` (Competitor.organizationId, backfilled)
+- `20260930_retention_legal_hold` (legal-hold columns on Tournament/Competitor, `RetentionPurgeRun` table)
 
 The deploy script runs `prisma migrate deploy` automatically
 during cutover. Do NOT use `npm run db:push` on production —

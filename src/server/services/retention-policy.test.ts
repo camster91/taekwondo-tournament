@@ -3,28 +3,32 @@ import {
   calculateRetentionCutoff,
   purgeExpiredSoftDeletes,
   retentionConfigFromEnv,
+  retentionWhere,
   startRetentionPurgeJob,
   RETENTION_TRANSACTION_TIMEOUT_MS,
   type RetentionDatabase,
-  type RetentionDelegates,
+  type RetentionTransaction,
 } from './retention-policy.js';
 
-type DeleteManyFn = RetentionDelegates['incident']['deleteMany'];
+type DeleteManyFn = RetentionTransaction['incident']['deleteMany'];
+type CountFn = RetentionTransaction['incident']['count'];
 type TransactionFn = RetentionDatabase['$transaction'];
 
 /**
  * Builds an in-memory database whose `$transaction` hands the callback the
  * same delegates.
  */
-function makeDatabase(deleteMany: DeleteManyFn) {
-  const delegates: RetentionDelegates = {
-    incident: { deleteMany },
-    division: { deleteMany },
-    tournament: { deleteMany },
-    competitor: { deleteMany },
+function makeDatabase(deleteMany: DeleteManyFn, count: CountFn = vi.fn().mockResolvedValue(0)) {
+  const create = vi.fn().mockResolvedValue({});
+  const delegates: RetentionTransaction = {
+    incident: { deleteMany, count },
+    division: { deleteMany, count },
+    tournament: { deleteMany, count },
+    competitor: { deleteMany, count },
+    retentionPurgeRun: { create },
   };
   const $transaction = vi.fn<TransactionFn>((fn) => fn(delegates));
-  return { ...delegates, $transaction };
+  return { ...delegates, $transaction, create };
 }
 
 describe('calculateRetentionCutoff', () => {
@@ -39,8 +43,32 @@ describe('calculateRetentionCutoff', () => {
   });
 });
 
+describe('retentionWhere (legal hold)', () => {
+  const cutoff = new Date('2026-07-31T12:00:00.000Z');
+  const where = retentionWhere(cutoff);
+
+  it('only matches records soft-deleted on or before the cutoff', () => {
+    for (const filter of Object.values(where)) {
+      expect(filter).toMatchObject({ deletedAt: { lte: cutoff } });
+    }
+  });
+
+  it('excludes held tournaments and everything that belongs to them', () => {
+    expect(where.tournament).toMatchObject({ legalHoldAt: null });
+    expect(where.division).toMatchObject({ tournament: { legalHoldAt: null } });
+    expect(where.incident).toMatchObject({ tournament: { legalHoldAt: null } });
+  });
+
+  it('excludes held competitors and competitors registered in a held tournament', () => {
+    expect(where.competitor).toMatchObject({
+      legalHoldAt: null,
+      registrations: { none: { tournament: { legalHoldAt: { not: null } } } },
+    });
+  });
+});
+
 describe('purgeExpiredSoftDeletes', () => {
-  it('purges only records soft-deleted on or before the cutoff and reports counts', async () => {
+  it('purges with the legal-hold-aware filters and reports counts', async () => {
     const deleteMany = vi.fn()
       .mockResolvedValueOnce({ count: 2 })
       .mockResolvedValueOnce({ count: 3 })
@@ -48,31 +76,84 @@ describe('purgeExpiredSoftDeletes', () => {
       .mockResolvedValueOnce({ count: 4 });
     const database = makeDatabase(deleteMany);
     const cutoff = new Date('2026-07-31T12:00:00.000Z');
+    const where = retentionWhere(cutoff);
 
     const result = await purgeExpiredSoftDeletes(database, cutoff);
 
-    expect(deleteMany).toHaveBeenCalledTimes(4);
-    for (const [args] of deleteMany.mock.calls) {
-      expect(args).toEqual({ where: { deletedAt: { lte: cutoff } } });
-    }
-    expect(result).toEqual({ incidents: 2, divisions: 3, tournaments: 1, competitors: 4, total: 10 });
+    expect(deleteMany.mock.calls.map(([args]) => args)).toEqual([
+      { where: where.incident },
+      { where: where.division },
+      { where: where.tournament },
+      { where: where.competitor },
+    ]);
+    expect(result).toEqual({ incidents: 2, divisions: 3, tournaments: 1, competitors: 4, total: 10, dryRun: false });
+  });
+
+  it('records the run inside the same transaction as the deletes', async () => {
+    const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    const database = makeDatabase(deleteMany);
+    const cutoff = new Date('2026-07-31T12:00:00.000Z');
+    database.$transaction.mockImplementation(async (fn) => {
+      // The audit row must be written before the transaction commits.
+      const value = await fn(database);
+      expect(database.create).toHaveBeenCalledTimes(1);
+      return value;
+    });
+
+    await purgeExpiredSoftDeletes(database, cutoff);
+
+    expect(database.create).toHaveBeenCalledWith({
+      data: { cutoff, dryRun: false, incidents: 1, divisions: 1, tournaments: 1, competitors: 1 },
+    });
+  });
+
+  it('dry run counts with the same filters, deletes nothing, and records the run', async () => {
+    const deleteMany = vi.fn();
+    const count = vi.fn()
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(1);
+    const database = makeDatabase(deleteMany, count);
+    const cutoff = new Date('2026-07-31T12:00:00.000Z');
+    const where = retentionWhere(cutoff);
+
+    const result = await purgeExpiredSoftDeletes(database, cutoff, { dryRun: true });
+
+    expect(deleteMany).not.toHaveBeenCalled();
+    expect(database.$transaction).not.toHaveBeenCalled();
+    expect(count.mock.calls.map(([args]) => args)).toEqual([
+      { where: where.incident },
+      { where: where.division },
+      { where: where.tournament },
+      { where: where.competitor },
+    ]);
+    expect(result).toEqual({ incidents: 5, divisions: 0, tournaments: 2, competitors: 1, total: 8, dryRun: true });
+    expect(database.create).toHaveBeenCalledWith({
+      data: { cutoff, dryRun: true, incidents: 5, divisions: 0, tournaments: 2, competitors: 1 },
+    });
   });
 
   it('runs every delete inside one transaction, never against the root client', async () => {
     const rootDeleteMany = vi.fn().mockResolvedValue({ count: 99 });
     const txDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
-    const txDelegates: RetentionDelegates = {
-      incident: { deleteMany: txDeleteMany },
-      division: { deleteMany: txDeleteMany },
-      tournament: { deleteMany: txDeleteMany },
-      competitor: { deleteMany: txDeleteMany },
+    const count = vi.fn().mockResolvedValue(0);
+    const txCreate = vi.fn().mockResolvedValue({});
+    const rootCreate = vi.fn().mockResolvedValue({});
+    const txDelegates: RetentionTransaction = {
+      incident: { deleteMany: txDeleteMany, count },
+      division: { deleteMany: txDeleteMany, count },
+      tournament: { deleteMany: txDeleteMany, count },
+      competitor: { deleteMany: txDeleteMany, count },
+      retentionPurgeRun: { create: txCreate },
     };
     const $transaction = vi.fn<TransactionFn>((fn) => fn(txDelegates));
     const database: RetentionDatabase = {
-      incident: { deleteMany: rootDeleteMany },
-      division: { deleteMany: rootDeleteMany },
-      tournament: { deleteMany: rootDeleteMany },
-      competitor: { deleteMany: rootDeleteMany },
+      incident: { deleteMany: rootDeleteMany, count },
+      division: { deleteMany: rootDeleteMany, count },
+      tournament: { deleteMany: rootDeleteMany, count },
+      competitor: { deleteMany: rootDeleteMany, count },
+      retentionPurgeRun: { create: rootCreate },
       $transaction,
     };
 
@@ -81,11 +162,13 @@ describe('purgeExpiredSoftDeletes', () => {
     expect($transaction).toHaveBeenCalledTimes(1);
     expect($transaction.mock.calls[0][1]).toEqual({ timeout: RETENTION_TRANSACTION_TIMEOUT_MS });
     expect(txDeleteMany).toHaveBeenCalledTimes(4);
+    expect(txCreate).toHaveBeenCalledTimes(1);
     expect(rootDeleteMany).not.toHaveBeenCalled();
+    expect(rootCreate).not.toHaveBeenCalled();
     expect(result.total).toBe(4);
   });
 
-  it('propagates a mid-purge failure so the transaction rolls back and nothing is reported as purged', async () => {
+  it('propagates a mid-purge failure so the transaction rolls back and nothing is recorded', async () => {
     const deleteMany = vi.fn()
       .mockResolvedValueOnce({ count: 2 })
       .mockResolvedValueOnce({ count: 3 })
@@ -102,8 +185,9 @@ describe('purgeExpiredSoftDeletes', () => {
 
     await expect(purgeExpiredSoftDeletes(database, new Date())).rejects.toThrow('FK violation');
     expect(committed).toEqual([]);
-    // The fourth delete is never attempted after the third fails.
+    // The fourth delete and the audit row are never attempted.
     expect(deleteMany).toHaveBeenCalledTimes(3);
+    expect(database.create).not.toHaveBeenCalled();
   });
 });
 
@@ -130,6 +214,21 @@ describe('startRetentionPurgeJob', () => {
     expect(database.$transaction).toHaveBeenCalledTimes(2);
   });
 
+  it('in dry-run mode only counts and logs what it would purge', async () => {
+    const deleteMany = vi.fn();
+    const count = vi.fn().mockResolvedValue(3);
+    const database = makeDatabase(deleteMany, count);
+    const logger = { info: vi.fn(), error: vi.fn() };
+
+    await startRetentionPurgeJob({
+      database, retentionDays: 7, intervalMs: 1000, dryRun: true,
+      schedule: vi.fn(() => ({ unref: vi.fn() })), logger,
+    });
+
+    expect(deleteMany).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('DRY RUN: would purge 12'));
+  });
+
   it('logs and keeps scheduling when a purge transaction fails', async () => {
     const deleteMany = vi.fn().mockRejectedValue(new Error('db down'));
     const database = makeDatabase(deleteMany);
@@ -154,7 +253,13 @@ describe('retentionConfigFromEnv', () => {
     expect(retentionConfigFromEnv({ RETENTION_PURGE_ENABLED: 'true' })).toEqual({
       retentionDays: 7,
       intervalMs: 86_400_000,
+      dryRun: false,
     });
+  });
+
+  it('supports a dry-run mode', () => {
+    expect(retentionConfigFromEnv({ RETENTION_PURGE_ENABLED: 'true', RETENTION_PURGE_DRY_RUN: 'true' }))
+      .toMatchObject({ dryRun: true });
   });
 
   it('rejects an invalid enabled retention period instead of silently choosing one', () => {

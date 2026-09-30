@@ -16,6 +16,9 @@ The supported production topology is the full-stack Docker image plus PostgreSQL
 - `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`: verified production email configuration
 - `RETENTION_PURGE_ENABLED=true`: enables the destructive soft-delete purge only after the retention policy is approved
 - `SOFT_DELETE_RETENTION_DAYS`: whole days before soft-deleted competitors, tournaments, divisions, and incidents are permanently purged (default `7` when enabled)
+- `RETENTION_PURGE_DRY_RUN=true`: with the purge enabled, only count and log what would be purged (nothing is deleted). Recommended for the first runs after enabling.
+
+Every purge run, real or dry, is recorded in the `RetentionPurgeRun` table (cutoff and per-type counts). Records under **legal hold** are never purged or hard-deleted: admins set a hold with `PUT /api/tournaments/:id/legal-hold` or `PUT /api/competitors/:id/legal-hold` and body `{ "hold": true, "reason": "..." }` (release with `{ "hold": false }`). A tournament hold also protects its divisions, incidents and every competitor registered in it; `DELETE /api/tournaments/:id?hard=true` and `DELETE /api/competitors/:id/purge` return 409 for held records.
 - `REGISTRATION_CONSENT_VERSION`: immutable identifier for the approved notice/terms presented during registration
 - `PRIVACY_NOTICE_URL`, `TOURNAMENT_TERMS_URL`: public HTTPS URLs for those exact approved versions; production startup fails if they are absent or non-HTTPS
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_STARTER_PRICE_ID`, `STRIPE_PRO_PRICE_ID`: configure all four to enable self-service billing; omit them for a managed-invoice pilot

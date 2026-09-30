@@ -17,6 +17,8 @@ import {
   type AuthenticatedRequest,
 } from '../middleware/auth.js';
 import { parseBoundedInt, parseOptionalInt } from './query-parsing.js';
+import { legalHoldSchema, legalHoldData, competitorIsHeld } from '../services/legal-hold.js';
+import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 import { findPotentialDuplicates, mergeCompetitors, MIN_DUPLICATE_THRESHOLD } from '../services/competitor-deduplication.js';
 
 const router = Router();
@@ -673,10 +675,44 @@ router.post('/:id/restore', authenticate, requireRole('admin', 'director'), asyn
 // cron after 7 days. Manager can also call it from Trash if they're sure.
 router.delete('/:id/purge', authenticate, requireRole('admin'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+  if (await competitorIsHeld(prisma, id)) {
+    return res.status(409).json({ error: 'Competitor is under legal hold and cannot be permanently deleted' });
+  }
   await prisma.competitor.delete({
-    where: { id: getParam(req.params.id) },
+    where: { id },
   });
   res.status(204).send();
+});
+
+// Place or release a legal hold on a competitor (#121). Admin only.
+router.put('/:id/legal-hold', authenticate, requireRole('admin'), validateRequest(legalHoldSchema), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const authReq = req as AuthenticatedRequest;
+  const id = getParam(req.params.id);
+  const body = legalHoldSchema.parse(req.body);
+  try {
+    const updated = await prisma.competitor.update({
+      where: { id },
+      data: legalHoldData(body),
+      select: { id: true, legalHoldAt: true, legalHoldReason: true },
+    });
+    await createAuditLog(prisma, {
+      userId: authReq.user!.id,
+      action: body.hold ? 'legal_hold_placed' : 'legal_hold_released',
+      details: { competitorId: id, reason: body.reason ?? null },
+      ipAddress: getClientIp(authReq),
+      userAgent: getUserAgent(authReq),
+    }).catch((err) => {
+      console.error('[audit-log] legal hold event failed:', err);
+    });
+    res.json(updated);
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'P2025') {
+      return res.status(404).json({ error: 'Competitor not found' });
+    }
+    throw error;
+  }
 });
 
 // Import from Excel (requires authentication + admin/director role)
