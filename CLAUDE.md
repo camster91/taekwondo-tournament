@@ -903,6 +903,7 @@ and `2025 NEWTONS CHAMPIONSHIP LIST.xlsm` only as reference.
 - **Database changes**: use `npm run db:push` only for disposable local work.
   Release changes require a checked-in migration validated with
   `prisma migrate deploy` on a production-compatible database.
-- **Git branch**: `main` (single branch). PRs land directly.
-  GitHub and Ashbi CI validate pull requests; production deployment remains a
-  separately approved, rollback-guarded operation.
+- **Git workflow**: see [CONTRIBUTING.md](./CONTRIBUTING.md). Branch per
+  change, draft PR, squash-merge to `main` once the `Build` check is
+  green. Production deployment remains a separately approved,
+  rollback-guarded operation (`scripts/deploy-production.sh`).
