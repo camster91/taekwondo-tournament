@@ -172,7 +172,7 @@ The image is self-contained: it serves the SPA and `/api` from one Node process,
 - Build pack: **Dockerfile** (repository root). Port: **3001** (or set `PORT` and use that).
 - Branch: `main`. Enable automatic deploys only after branch protection requires the `Build` check, so a red commit can never reach production.
 - Health check path: `/api/health/ready` (returns 503 until the database answers).
-- Build variable: `VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64` (public half of the offline key pair; baked into the client bundle). Optionally `BUILD_SHA` = the commit SHA so `/api/health` reports the running revision (Coolify exposes it as `SOURCE_COMMIT`).
+- Build variable: `VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64` (public half of the offline key pair; baked into the client bundle). Enable Coolify's "Include source commit in build" so `SOURCE_COMMIT` reaches the build; `/api/health` then reports the running revision (or pass `BUILD_SHA` yourself).
 - Runtime variables: everything under [Required configuration](#required-configuration), plus `OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64`. Mark secrets as secret; never commit them.
 
 **Database**

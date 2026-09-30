@@ -36,8 +36,10 @@ WORKDIR /app
 
 # Setup env variables
 ENV NODE_ENV=production
-# Git revision reported by /api/health (deploy scripts pass --build-arg BUILD_SHA=<sha>).
-ARG BUILD_SHA=unknown
+# Git revision reported by /api/health. The deploy scripts and CI pass
+# --build-arg BUILD_SHA=<sha>; Coolify supplies SOURCE_COMMIT.
+ARG SOURCE_COMMIT=unknown
+ARG BUILD_SHA=${SOURCE_COMMIT}
 ENV BUILD_SHA=${BUILD_SHA}
 # DATABASE_URL and the other secrets are provided at runtime by the
 # platform (Coolify environment variables, or --env-file on the VPS).
