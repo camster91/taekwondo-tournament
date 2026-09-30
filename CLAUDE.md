@@ -311,8 +311,9 @@ Authorization precedence (first match wins):
    required level.
 5. **Org tournament + user is a member of that org** — effective
    role = min(global role, membership role); `owner`/`admin`
-   memberships count as director, `member` as viewer, unknown
-   roles grant nothing.
+   memberships and `member` count as director; explicit
+   `scorekeeper`/`viewer` memberships restrict; unknown roles grant
+   nothing.
 6. **Orphan tournament (`organizationId` null)** — the legacy
    single-tenant pool, reachable ONLY by users with no org
    memberships. Tenant users never see orphan data (except via
@@ -547,7 +548,7 @@ Auth required. Mutates `Invitation` rows; consumed by
 | POST | `/api/invites/send` | Send an invite email. Body: `{ email, firstName, lastName, role }`. |
 | GET | `/api/invites` | List all pending + accepted invites. |
 | POST | `/api/invites/resend/:id` | Resend the invite email for a specific invitation. |
-| DELETE | `/api/invites/:id` | Cancel a pending invite. |
+| DELETE | `/api/invites/:id` | Cancel a pending invite (kept as `cancelled`; its link answers 410), or remove a finished one. |
 | GET | `/api/invites/verify/:token` | Public (no auth) — preview an invite before accepting. |
 
 ### `/api/public` (`src/server/routes/public.ts`)
@@ -780,6 +781,9 @@ Production runs in a Docker container on the Ashbi VPS
 - `20260910_add_capacity_waitlist` (capacity + waitlist)
 - `20260924_registration_waitlist_fields` (Registration waitlist columns that were in the schema without a migration)
 - `20260925_tournament_created_by` (Tournament.createdById, backfilled from `tournament_created` audit entries)
+- `20260925_competitor_organization` (Competitor.organizationId, backfilled)
+- `20260930_retention_legal_hold` (legal-hold columns on Tournament/Competitor, `RetentionPurgeRun` table)
+- `20261001_invitation_delivery_status` (Invitation delivery status + `cancelledAt`)
 
 The deploy script runs `prisma migrate deploy` automatically
 during cutover. Do NOT use `npm run db:push` on production —

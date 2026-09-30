@@ -6,6 +6,7 @@ export type AuditAction =
   | 'role_change'
   | 'org_invite_sent'
   | 'org_invite_accepted'
+  | 'org_invite_cancelled'
   | 'org_member_added'
   | 'org_member_removed'
   | 'tournament_created'
@@ -15,7 +16,9 @@ export type AuditAction =
   | 'bracket_generated'
   | 'match_scored'
   | 'user_status_changed'
-  | 'waitlist_promoted';
+  | 'waitlist_promoted'
+  | 'legal_hold_placed'
+  | 'legal_hold_released';
 
 export interface AuditLogOptions {
   userId: string;

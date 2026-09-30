@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsDemo, resetSeededCheckIn } from './helpers';
-import { checkA11y } from './axe-helper';
+import { checkA11y, motionLongerThan } from './axe-helper';
 
 /**
  * Slice 2 — Check-in a11y coverage (axe WCAG 2.2 AA)
@@ -214,9 +214,15 @@ test.describe('check-in accessibility (WCAG 2.2 AA)', () => {
     await page.goto(`/tournaments/${tournamentId}/checkin`);
     await page.waitForLoadState('networkidle');
 
-    // Page should load without motion-heavy animations
-    // (Playwright can't directly test CSS transitions, but we verify page renders correctly)
     const heading = page.getByRole('heading', { name: /Check-?In/i });
     await expect(heading).toBeVisible();
+
+    // Control: with no preference the page does animate, so the check
+    // below is not vacuous.
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    expect((await motionLongerThan(page)).length).toBeGreaterThan(0);
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    expect(await motionLongerThan(page)).toEqual([]);
   });
 });

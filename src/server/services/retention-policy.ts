@@ -1,8 +1,10 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type DeleteResult = { count: number };
+type Where = Record<string, unknown>;
 type SoftDeleteDelegate = {
-  deleteMany(args: { where: { deletedAt: { lte: Date } } }): Promise<DeleteResult>;
+  deleteMany(args: { where: Where }): Promise<DeleteResult>;
+  count(args: { where: Where }): Promise<number>;
 };
 
 export type RetentionDelegates = {
@@ -21,9 +23,21 @@ export type RetentionDelegates = {
  */
 export type RetentionDeleteResults = Record<keyof RetentionDelegates, DeleteResult>;
 
-export type RetentionDatabase = RetentionDelegates & {
+export type RetentionPurgeRunRecord = {
+  cutoff: Date;
+  dryRun: boolean;
+  incidents: number;
+  divisions: number;
+  tournaments: number;
+  competitors: number;
+};
+
+type PurgeRunDelegate = { create(args: { data: RetentionPurgeRunRecord }): Promise<unknown> };
+export type RetentionTransaction = RetentionDelegates & { retentionPurgeRun: PurgeRunDelegate };
+
+export type RetentionDatabase = RetentionTransaction & {
   $transaction(
-    fn: (tx: RetentionDelegates) => Promise<RetentionDeleteResults>,
+    fn: (tx: RetentionTransaction) => Promise<RetentionDeleteResults>,
     options?: { maxWait?: number; timeout?: number },
   ): Promise<RetentionDeleteResults>;
 };
@@ -40,19 +54,42 @@ export type RetentionPurgeResult = {
   tournaments: number;
   competitors: number;
   total: number;
+  dryRun: boolean;
 };
+
+/**
+ * Filters for records that are past the cutoff AND not under legal hold.
+ * A hold on a tournament also protects its soft-deleted divisions and
+ * incidents, and every competitor registered in it (deleting a
+ * competitor cascades to its registrations, including the held
+ * tournament's).
+ */
+export function retentionWhere(cutoff: Date): Record<keyof RetentionDelegates, Where> {
+  const expired = { deletedAt: { lte: cutoff } };
+  return {
+    incident: { ...expired, tournament: { legalHoldAt: null } },
+    division: { ...expired, tournament: { legalHoldAt: null } },
+    tournament: { ...expired, legalHoldAt: null },
+    competitor: {
+      ...expired,
+      legalHoldAt: null,
+      registrations: { none: { tournament: { legalHoldAt: { not: null } } } },
+    },
+  };
+}
 
 export function retentionConfigFromEnv(
   env: Record<string, string | undefined>,
-): { retentionDays: number; intervalMs: number } | null {
+): { retentionDays: number; intervalMs: number; dryRun: boolean } | null {
   if (env.RETENTION_PURGE_ENABLED !== 'true') return null;
+  const dryRun = env.RETENTION_PURGE_DRY_RUN === 'true';
 
   const rawDays = env.SOFT_DELETE_RETENTION_DAYS ?? '7';
   const retentionDays = Number(rawDays);
   if (!Number.isInteger(retentionDays) || retentionDays < 1) {
     throw new Error('SOFT_DELETE_RETENTION_DAYS must be an integer of at least 1');
   }
-  return { retentionDays, intervalMs: DAY_MS };
+  return { retentionDays, intervalMs: DAY_MS, dryRun };
 }
 
 export function calculateRetentionCutoff(now: Date, retentionDays: number): Date {
@@ -65,24 +102,71 @@ export function calculateRetentionCutoff(now: Date, retentionDays: number): Date
 export async function purgeExpiredSoftDeletes(
   database: RetentionDatabase,
   cutoff: Date,
+  { dryRun = false }: { dryRun?: boolean } = {},
 ): Promise<RetentionPurgeResult> {
-  const where = { deletedAt: { lte: cutoff } };
-  const { incident: incidents, division: divisions, tournament: tournaments, competitor: competitors } = await database.$transaction(
-    async (tx) => ({
-      incident: await tx.incident.deleteMany({ where }),
-      division: await tx.division.deleteMany({ where }),
-      tournament: await tx.tournament.deleteMany({ where }),
-      competitor: await tx.competitor.deleteMany({ where }),
-    }),
-    { timeout: RETENTION_TRANSACTION_TIMEOUT_MS },
-  );
-  return {
-    incidents: incidents.count,
-    divisions: divisions.count,
-    tournaments: tournaments.count,
-    competitors: competitors.count,
-    total: incidents.count + divisions.count + tournaments.count + competitors.count,
+  const where = retentionWhere(cutoff);
+  let counts: Record<keyof RetentionDelegates, number>;
+  if (dryRun) {
+    // Same filters, nothing deleted: shows what the next real run would purge.
+    counts = {
+      incident: await database.incident.count({ where: where.incident }),
+      division: await database.division.count({ where: where.division }),
+      tournament: await database.tournament.count({ where: where.tournament }),
+      competitor: await database.competitor.count({ where: where.competitor }),
+    };
+  } else {
+    // The audit row is written in the same transaction, so a purge and
+    // its record commit (or roll back) together.
+    const deleted = await database.$transaction(
+      async (tx) => {
+        const results = {
+          incident: await tx.incident.deleteMany({ where: where.incident }),
+          division: await tx.division.deleteMany({ where: where.division }),
+          tournament: await tx.tournament.deleteMany({ where: where.tournament }),
+          competitor: await tx.competitor.deleteMany({ where: where.competitor }),
+        };
+        await tx.retentionPurgeRun.create({
+          data: {
+            cutoff,
+            dryRun: false,
+            incidents: results.incident.count,
+            divisions: results.division.count,
+            tournaments: results.tournament.count,
+            competitors: results.competitor.count,
+          },
+        });
+        return results;
+      },
+      { timeout: RETENTION_TRANSACTION_TIMEOUT_MS },
+    );
+    counts = {
+      incident: deleted.incident.count,
+      division: deleted.division.count,
+      tournament: deleted.tournament.count,
+      competitor: deleted.competitor.count,
+    };
+  }
+  const result: RetentionPurgeResult = {
+    incidents: counts.incident,
+    divisions: counts.division,
+    tournaments: counts.tournament,
+    competitors: counts.competitor,
+    total: counts.incident + counts.division + counts.tournament + counts.competitor,
+    dryRun,
   };
+  if (dryRun) {
+    await database.retentionPurgeRun.create({
+      data: {
+        cutoff,
+        dryRun: true,
+        incidents: result.incidents,
+        divisions: result.divisions,
+        tournaments: result.tournaments,
+        competitors: result.competitors,
+      },
+    });
+  }
+  return result;
 }
 
 type RetentionLogger = {
@@ -99,6 +183,7 @@ type StartRetentionPurgeOptions = {
   database: RetentionDatabase;
   retentionDays: number;
   intervalMs: number;
+  dryRun?: boolean;
   now?: () => Date;
   schedule?: RetentionScheduler;
   logger?: RetentionLogger;
@@ -108,6 +193,7 @@ export async function startRetentionPurgeJob({
   database,
   retentionDays,
   intervalMs,
+  dryRun = false,
   now = () => new Date(),
   schedule = setInterval,
   logger = console,
@@ -115,8 +201,11 @@ export async function startRetentionPurgeJob({
   const run = async () => {
     try {
       const cutoff = calculateRetentionCutoff(now(), retentionDays);
-      const result = await purgeExpiredSoftDeletes(database, cutoff);
-      logger.info(`[retention] purged ${result.total} expired soft-deleted records`);
+      const result = await purgeExpiredSoftDeletes(database, cutoff, { dryRun });
+      const detail = `tournaments=${result.tournaments} divisions=${result.divisions} competitors=${result.competitors} incidents=${result.incidents}`;
+      logger.info(dryRun
+        ? `[retention] DRY RUN: would purge ${result.total} expired soft-deleted records (${detail})`
+        : `[retention] purged ${result.total} expired soft-deleted records (${detail})`);
     } catch (error) {
       logger.error('[retention] purge failed', error);
     }

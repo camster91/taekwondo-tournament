@@ -16,6 +16,9 @@ The supported production topology is the full-stack Docker image plus PostgreSQL
 - `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`: verified production email configuration
 - `RETENTION_PURGE_ENABLED=true`: enables the destructive soft-delete purge only after the retention policy is approved
 - `SOFT_DELETE_RETENTION_DAYS`: whole days before soft-deleted competitors, tournaments, divisions, and incidents are permanently purged (default `7` when enabled)
+- `RETENTION_PURGE_DRY_RUN=true`: with the purge enabled, only count and log what would be purged (nothing is deleted). Recommended for the first runs after enabling.
+
+Every purge run, real or dry, is recorded in the `RetentionPurgeRun` table (cutoff and per-type counts). Records under **legal hold** are never purged or hard-deleted: admins set a hold with `PUT /api/tournaments/:id/legal-hold` or `PUT /api/competitors/:id/legal-hold` and body `{ "hold": true, "reason": "..." }` (release with `{ "hold": false }`). A tournament hold also protects its divisions, incidents and every competitor registered in it; `DELETE /api/tournaments/:id?hard=true` and `DELETE /api/competitors/:id/purge` return 409 for held records.
 - `REGISTRATION_CONSENT_VERSION`: immutable identifier for the approved notice/terms presented during registration
 - `PRIVACY_NOTICE_URL`, `TOURNAMENT_TERMS_URL`: public HTTPS URLs for those exact approved versions; production startup fails if they are absent or non-HTTPS
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_STARTER_PRICE_ID`, `STRIPE_PRO_PRICE_ID`: configure all four to enable self-service billing; omit them for a managed-invoice pilot
@@ -134,16 +137,17 @@ This evidence is recorded without exposing secrets and enables audit trails for 
 
 **CI:** GitHub Actions runs on pushes to `main`. Workflows include:
 - `.github/workflows/ci.yml`: lint, typecheck, unit tests, E2E tests (Playwright), build verification
-- `.github/workflows/build-and-push.yml`: multi-arch Docker image build (amd64 + arm64) and push to `ghcr.io/camster91/taekwondo-tournament`
+- `.github/workflows/build-and-push.yml`: multi-arch Docker image build (amd64 + arm64) and push to `ghcr.io/camster91/taekwondo-tournament`. Runs only after `CI Build` **succeeds** for a push to `main` (a `workflow_run` trigger), and builds that exact commit. Version tags (`v*`) also publish.
 
-**Artifact publishing (fail-closed):** 
-- Primary immutable tag: `ghcr.io/camster91/taekwondo-tournament:main-<sha>` (content-addressable, never mutates)
+**Artifact publishing (fail-closed):**
+- Only immutable tags: `ghcr.io/camster91/taekwondo-tournament:main-<sha>` for main, `:<version>` / `:<version>-<sha>` for version tags
 - Content digest: `@sha256:<digest>` (pinned to exact build output)
-- Branch pointer: `ghcr.io/camster91/taekwondo-tournament:main` (mutable, updated on each push)
-- Legacy tag: `ghcr.io/camster91/taekwondo-tournament:latest` (deprecated; backward compatibility only)
-- **IMPORTANT:** Pull requests do NOT publish artifacts (no PR-triggered builds that could mutate production tags)
+- No mutable `:main` or `:latest` pointers (removed; nothing in this repo pulls them)
+- **IMPORTANT:** Pull requests and red CI runs do NOT publish artifacts
 
 **Deployment:** Production deployment is **manual-only** via `scripts/deploy-production.sh` executed from a developer's local machine (requires SSH key for VPS). There is NO automated GitHub Actions deployment workflow. The script performs an immutable, rollback-safe deploy with automatic health-check validation.
+
+**Deploy preflight:** before uploading anything, the script refuses to deploy unless the local `HEAD` is on `origin/main` **and** the GitHub `Build` check for that commit concluded `success` (looked up with `gh`, or `curl` + `GITHUB_TOKEN` + `jq`). If GitHub can't be reached, `BOWIN_ALLOW_UNVERIFIED_CI="<reason>"` overrides the CI lookup only; the reason, the CI result and the previous live revision are written to the deployment record.
 
 **Deployment artifact source:** VPS production deployment builds Docker images from **immutable git source archives** (SHA-verified tar.gz), NOT from pre-built GHCR images. The GHCR images published by CI are for local testing and non-production deployments only. This ensures production deployments are:
 - Reproducible from source at any time

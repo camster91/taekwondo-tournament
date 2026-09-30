@@ -1,3 +1,5 @@
+import { appMetrics } from './observability.js';
+
 const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY || '';
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'ashbi.ca';
 const MAILGUN_BASE_URL = process.env.MAILGUN_BASE_URL || 'https://api.mailgun.net/v3';
@@ -60,8 +62,10 @@ export async function sendEmail(
       throw new Error(`Mailgun API error: ${res.status} - ${err}`);
     }
 
+    appMetrics.recordEmail(true);
     return { success: true };
   } catch (err: unknown) {
+    appMetrics.recordEmail(false);
     console.error('Failed to send email:', err);
     const message = err instanceof Error ? err.message : 'Failed to send email';
     return { success: false, error: message };

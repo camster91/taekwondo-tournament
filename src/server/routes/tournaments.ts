@@ -29,6 +29,7 @@ import {
 } from '../services/entitlements.js';
 import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic, stripReservedOperationSettings, stripReservedOperationSettingsFromRaw } from '../services/tournament-settings.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
+import { legalHoldSchema, legalHoldData } from '../services/legal-hold.js';
 import { generateManagementToken, getManagementTokenExpiry, hashManagementToken } from '../utils/registration-management-token.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
@@ -1031,10 +1032,13 @@ router.delete('/:id', authenticate, requireTournamentAccess('director', { allowD
   // Fetch tournament name for audit log before deletion
   const tournament = await prisma.tournament.findUnique({
     where: { id: tournamentId },
-    select: { name: true, organizationId: true, deletedAt: true },
+    select: { name: true, organizationId: true, deletedAt: true, legalHoldAt: true },
   });
   if (!tournament || (tournament.deletedAt && !hard)) {
     return res.status(404).json({ error: 'Tournament not found' });
+  }
+  if (hard && tournament.legalHoldAt) {
+    return res.status(409).json({ error: 'Tournament is under legal hold and cannot be permanently deleted' });
   }
 
   if (hard) {
@@ -1088,6 +1092,35 @@ router.delete('/:id', authenticate, requireTournamentAccess('director', { allowD
 // director-level membership, explicit grants, or legacy-pool users)
 // reach their own soft-deleted tournament here. Every other route
 // keeps treating a soft-deleted tournament as 404.
+// Place or release a legal hold (#121). Admin only. Works on soft-deleted
+// tournaments too, since holds usually matter for records awaiting purge.
+router.put('/:id/legal-hold', authenticate, requireRole('admin'), validateRequest(legalHoldSchema), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const authReq = req as AuthenticatedRequest;
+  const tournamentId = getParam(req.params.id);
+  const body = legalHoldSchema.parse(req.body);
+  const existing = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { name: true, organizationId: true } });
+  if (!existing) return res.status(404).json({ error: 'Tournament not found' });
+
+  const updated = await prisma.tournament.update({
+    where: { id: tournamentId },
+    data: legalHoldData(body),
+    select: { id: true, legalHoldAt: true, legalHoldReason: true },
+  });
+  await createAuditLog(prisma, {
+    userId: authReq.user!.id,
+    action: body.hold ? 'legal_hold_placed' : 'legal_hold_released',
+    details: { tournamentId, tournamentName: existing.name, reason: body.reason ?? null },
+    ipAddress: getClientIp(authReq),
+    userAgent: getUserAgent(authReq),
+    organizationId: existing.organizationId || undefined,
+    tournamentId,
+  }).catch((err) => {
+    console.error('[audit-log] legal hold event failed:', err);
+  });
+  res.json(updated);
+});
+
 router.post('/:id/restore', authenticate, requireTournamentAccess('director', { allowDeleted: true }), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const authReq = req as AuthenticatedRequest;

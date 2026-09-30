@@ -6,6 +6,8 @@ This document defines the accessibility (a11y) compliance gates that **MUST** pa
 
 **WCAG 2.2 Level AA** across desktop and mobile viewports.
 
+The axe scans (`tests/e2e/axe-helper.ts`) run the `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` and `wcag22aa` rule sets. `tests/e2e/a11y-gate-selftest.spec.ts` proves the gate fails on planted violations (including a WCAG 2.1-only rule), so an empty violation list means something. Visual screenshot baselines are not yet a gate; they need owner-approved baselines first.
+
 ---
 
 ## Automated Gates
@@ -93,6 +95,8 @@ Users with `prefers-reduced-motion: reduce` must not experience distracting or i
 **Pass:** Animations are either eliminated or reduced to <50ms (instant feel). No infinite shimmer/spinner loops without a hard stop.
 
 **Implementation:** The global `@media (prefers-reduced-motion: reduce)` rule in `src/client/index.css` already covers this. Verify no new CSS animations bypass it.
+
+**Automated:** `motionLongerThan()` in `tests/e2e/axe-helper.ts` reads the computed animation and transition durations of every element. The check-in and tournament-settings specs assert the page does animate with no preference (control), and that nothing runs longer than 0.01ms under `reduce`.
 
 ---
 

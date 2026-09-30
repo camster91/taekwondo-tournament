@@ -5,7 +5,7 @@
  * Coverage:
  *  - POST /api/invites/send — create invitation with deterministic behavior
  *  - POST /api/invites/resend/:id — renew token + expiry, status reset
- *  - DELETE /api/invites/:id — cancel pending invitation
+ *  - DELETE /api/invites/:id — cancel (soft) a pending invitation, remove a finished one
  *  - GET /api/invites/verify/:token — public token verification
  *  - POST /api/auth/accept-invite — accept invitation, create user
  *  - Expiry handling — expired invitations marked + rejected
@@ -152,6 +152,7 @@ describe('POST /api/invites/send', () => {
       },
       invitation: {
         findFirst: vi.fn().mockResolvedValue(null), // No pending invite
+        update: vi.fn().mockResolvedValue({}),
         create: vi.fn().mockResolvedValue({
           id: 'inv-1',
           email: 'newuser@example.com',
@@ -305,6 +306,7 @@ describe('POST /api/invites/send', () => {
       },
       invitation: {
         findFirst: vi.fn().mockResolvedValue(null),
+        update: vi.fn().mockResolvedValue({}),
         create: vi.fn().mockResolvedValue({
           id: 'inv-1',
           email: 'test@example.com',
@@ -341,6 +343,61 @@ describe('POST /api/invites/send', () => {
       }),
     );
   });
+
+  it('records a failed delivery so the admin list shows an actionable state', async () => {
+    const { sendEmail } = await import('../services/email.js');
+    vi.mocked(sendEmail).mockResolvedValueOnce({ success: false, error: 'Mailgun error: 401 Forbidden' });
+    const mockPrisma: any = {
+      user: { findFirst: vi.fn().mockResolvedValue(null) },
+      invitation: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        update: vi.fn().mockResolvedValue({}),
+        create: vi.fn().mockResolvedValue({
+          id: 'inv-9', email: 'x@example.com', role: 'viewer', status: 'pending', createdAt: new Date(),
+        }),
+      },
+    };
+    const req = mockReq(
+      { id: 'admin-1', role: 'admin', firstName: 'Admin', lastName: 'User' },
+      { email: 'x@example.com', firstName: 'X', lastName: 'Y', role: 'viewer' },
+    );
+    req.app.locals.prisma = mockPrisma;
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(mockPrisma.invitation.update).toHaveBeenCalledWith({
+      where: { id: 'inv-9' },
+      data: expect.objectContaining({
+        deliveryStatus: 'failed',
+        lastDeliveryError: 'Mailgun error: 401 Forbidden',
+        lastSentAt: expect.any(Date),
+      }),
+    });
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      emailSent: false,
+      invitation: expect.objectContaining({ deliveryStatus: 'failed' }),
+    }));
+  });
+
+  it('refuses to invite the email of a deactivated account (duplicate check ignores isActive)', async () => {
+    const mockPrisma: any = {
+      user: { findFirst: vi.fn().mockResolvedValue({ id: 'u-1', email: 'gone@example.com', isActive: false }) },
+      invitation: { findFirst: vi.fn(), create: vi.fn() },
+    };
+    const req = mockReq(
+      { id: 'admin-1', role: 'admin', firstName: 'A', lastName: 'B' },
+      { email: 'GONE@example.com', firstName: 'X', lastName: 'Y', role: 'viewer' },
+    );
+    req.app.locals.prisma = mockPrisma;
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockPrisma.invitation.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /api/invites/resend/:id', () => {
@@ -357,11 +414,13 @@ describe('POST /api/invites/resend/:id', () => {
           role: 'viewer',
           status: 'expired',
         }),
+        findFirst: vi.fn().mockResolvedValue(null),
         update: vi.fn().mockResolvedValue({
           id: 'inv-1',
           status: 'pending',
         }),
       },
+      user: { findFirst: vi.fn().mockResolvedValue(null) },
     };
 
     const req = mockReq(
@@ -384,6 +443,64 @@ describe('POST /api/invites/resend/:id', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ emailSent: expect.any(Boolean) }),
     );
+    expect(mockPrisma.invitation.update).toHaveBeenCalledWith({
+      where: { id: 'inv-1' },
+      data: expect.objectContaining({ deliveryStatus: expect.any(String), lastSentAt: expect.any(Date) }),
+    });
+  });
+
+  it('rejects resend for a cancelled invitation', async () => {
+    const mockPrisma: any = {
+      invitation: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'inv-1', email: 'a@example.com', status: 'cancelled' }),
+        update: vi.fn(),
+      },
+    };
+    const req = mockReq({ id: 'admin-1', role: 'admin' }, {}, { id: 'inv-1' });
+    req.app.locals.prisma = mockPrisma;
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockPrisma.invitation.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects resend once the invitee already has an account', async () => {
+    const mockPrisma: any = {
+      invitation: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'inv-1', email: 'a@example.com', status: 'pending' }),
+        update: vi.fn(),
+      },
+      user: { findFirst: vi.fn().mockResolvedValue({ id: 'u-1' }) },
+    };
+    const req = mockReq({ id: 'admin-1', role: 'admin' }, {}, { id: 'inv-1' });
+    req.app.locals.prisma = mockPrisma;
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockPrisma.invitation.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to revive an expired invite while another is pending for the email', async () => {
+    const mockPrisma: any = {
+      invitation: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'inv-1', email: 'a@example.com', status: 'expired' }),
+        findFirst: vi.fn().mockResolvedValue({ id: 'inv-2' }),
+        update: vi.fn(),
+      },
+      user: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+    const req = mockReq({ id: 'admin-1', role: 'admin' }, {}, { id: 'inv-1' });
+    req.app.locals.prisma = mockPrisma;
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockPrisma.invitation.update).not.toHaveBeenCalled();
   });
 
   it('rejects resend for accepted invitation', async () => {
@@ -403,7 +520,7 @@ describe('POST /api/invites/resend/:id', () => {
 
     await handler(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith({ error: 'Invitation already accepted' });
   });
 
@@ -437,14 +554,52 @@ describe('POST /api/invites/resend/:id', () => {
 describe('DELETE /api/invites/:id', () => {
   const handler = findHandler('delete', /^\/:id$/);
 
-  it('deletes pending invitation', async () => {
+  it('cancels a pending invitation and keeps the row', async () => {
     const mockPrisma: any = {
       invitation: {
-        findUnique: vi.fn().mockResolvedValue({ id: 'inv-1' }),
-        delete: vi.fn().mockResolvedValue({ id: 'inv-1' }),
+        findUnique: vi.fn().mockResolvedValue({ id: 'inv-1', status: 'pending', email: 'a@example.com', organizationId: null }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        delete: vi.fn(),
       },
     };
 
+    const req = mockReq({ id: 'admin-1', role: 'admin' }, {}, { id: 'inv-1' });
+    req.app.locals.prisma = mockPrisma;
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(mockPrisma.invitation.updateMany).toHaveBeenCalledWith({
+      where: { id: 'inv-1', status: 'pending' },
+      data: { status: 'cancelled', cancelledAt: expect.any(Date) },
+    });
+    expect(mockPrisma.invitation.delete).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(204);
+  });
+
+  it('returns 409 when the invitation was accepted before the cancel landed', async () => {
+    const mockPrisma: any = {
+      invitation: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'inv-1', status: 'pending', email: 'a@example.com', organizationId: null }),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+    const req = mockReq({ id: 'admin-1', role: 'admin' }, {}, { id: 'inv-1' });
+    req.app.locals.prisma = mockPrisma;
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+  });
+
+  it('removes a finished invitation from the list', async () => {
+    const mockPrisma: any = {
+      invitation: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'inv-1', status: 'expired', email: 'a@example.com', organizationId: null }),
+        delete: vi.fn().mockResolvedValue({ id: 'inv-1' }),
+      },
+    };
     const req = mockReq({ id: 'admin-1', role: 'admin' }, {}, { id: 'inv-1' });
     req.app.locals.prisma = mockPrisma;
     const res = mockRes();
@@ -534,8 +689,8 @@ describe('GET /api/invites/verify/:token', () => {
 
     await handler(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Invitation has expired' });
+    expect(res.status).toHaveBeenCalledWith(410);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'expired' }));
   });
 
   it('rejects already-accepted token', async () => {
@@ -557,8 +712,27 @@ describe('GET /api/invites/verify/:token', () => {
 
     await handler(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Invitation already accepted' });
+    expect(res.status).toHaveBeenCalledWith(410);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'accepted' }));
+  });
+
+  it('rejects a cancelled token with 410', async () => {
+    const mockPrisma: any = {
+      invitation: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'inv-1', email: 'test@example.com', status: 'cancelled',
+          tokenExpiry: new Date(Date.now() + 60_000),
+        }),
+      },
+    };
+    const req = mockReq(null, {}, { token: 'cancelled-token' });
+    req.app.locals.prisma = mockPrisma;
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(410);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'cancelled' }));
   });
 
   it('returns 404 for invalid token', async () => {
@@ -615,7 +789,7 @@ describe('POST /api/auth/accept-invite', () => {
         }),
       },
       user: {
-        findUnique: vi.fn().mockResolvedValue(null), // No existing user
+        findFirst: vi.fn().mockResolvedValue(null), // No existing user
       },
       $transaction: vi.fn(async (cb) => {
         transactionCallback = cb;
@@ -635,7 +809,7 @@ describe('POST /api/auth/accept-invite', () => {
             create: vi.fn().mockResolvedValue({}),
           },
           invitation: {
-            update: vi.fn().mockResolvedValue({ status: 'accepted' }),
+            updateMany: vi.fn().mockResolvedValue({ count: 1 }),
           },
         };
         return await cb(mockTx);
@@ -682,7 +856,7 @@ describe('POST /api/auth/accept-invite', () => {
         }),
       },
       user: {
-        findUnique: vi.fn().mockResolvedValue({
+        findFirst: vi.fn().mockResolvedValue({
           id: 'user-1',
           email: 'existing@example.com',
         }),
@@ -729,8 +903,8 @@ describe('POST /api/auth/accept-invite', () => {
 
     await handler(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Invitation has expired' });
+    expect(res.status).toHaveBeenCalledWith(410);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'expired' }));
   });
 
   it('rejects already-accepted invitation', async () => {
@@ -756,8 +930,57 @@ describe('POST /api/auth/accept-invite', () => {
 
     await handler(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Invitation already accepted' });
+    expect(res.status).toHaveBeenCalledWith(410);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'accepted' }));
+  });
+
+  it('a concurrent or replayed accept that loses the claim creates no account', async () => {
+    const userCreate = vi.fn();
+    const mockPrisma: any = {
+      invitation: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'inv-1', email: 'race@example.com', role: 'director', status: 'pending',
+          tokenExpiry: new Date(Date.now() + 60_000), organizationId: null,
+        }),
+      },
+      user: { findFirst: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(async (cb) => cb({
+        invitation: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+        user: { create: userCreate },
+        organizationMember: { create: vi.fn() },
+      })),
+    };
+    const req = mockReq(null, { token: 'valid-token', firstName: 'R', lastName: 'C' });
+    req.app.locals.prisma = mockPrisma;
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(userCreate).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.cookie).not.toHaveBeenCalled();
+  });
+
+  it('checks for an existing account case-insensitively', async () => {
+    const mockPrisma: any = {
+      invitation: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'inv-1', email: 'mixed@example.com', role: 'viewer', status: 'pending',
+          tokenExpiry: new Date(Date.now() + 60_000),
+        }),
+      },
+      user: { findFirst: vi.fn().mockResolvedValue({ id: 'u-1' }) },
+    };
+    const req = mockReq(null, { token: 'valid-token', firstName: 'A', lastName: 'B' });
+    req.app.locals.prisma = mockPrisma;
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(mockPrisma.user.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { email: { equals: 'mixed@example.com', mode: 'insensitive' } },
+    }));
+    expect(res.status).toHaveBeenCalledWith(409);
   });
 
   it('requires firstName and lastName', async () => {
@@ -786,7 +1009,7 @@ describe('POST /api/auth/accept-invite', () => {
         }),
       },
       user: {
-        findUnique: vi.fn().mockResolvedValue(null),
+        findFirst: vi.fn().mockResolvedValue(null),
       },
       $transaction: vi.fn(async (cb) => {
         const mockTx = {
@@ -802,7 +1025,7 @@ describe('POST /api/auth/accept-invite', () => {
             }),
           },
           invitation: {
-            update: vi.fn().mockResolvedValue({}),
+            updateMany: vi.fn().mockResolvedValue({ count: 1 }),
           },
         };
         return await cb(mockTx);
@@ -883,20 +1106,6 @@ describe('GET /api/invites (list)', () => {
 });
 
 describe('User account lifecycle integration', () => {
-  it('deactivated user cannot accept new invitations (blocked at login)', async () => {
-    // This test documents the expected behavior: a deactivated user
-    // can technically accept an invitation (create a NEW account),
-    // but if somehow the same email is reused, the authenticate
-    // middleware will block them at login due to isActive=false.
-    // This is a corner case that should be prevented at the invite
-    // stage (checking isActive before sending), which is currently
-    // NOT implemented. Mark as leftover for Cameron.
-
-    // For now, we document that the system fails closed: even if
-    // an invite slips through, the user can't actually log in.
-    expect(true).toBe(true); // Placeholder — leftover for Cameron
-  });
-
   it('role change on existing user bumps tokenVersion (auth.ts)', async () => {
     // This is tested in auth-route.test.ts but documented here
     // for completeness of the invitation lifecycle story.

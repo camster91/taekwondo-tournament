@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsDemo } from './helpers';
-import { checkA11y } from './axe-helper';
+import { checkA11y, motionLongerThan } from './axe-helper';
 
 /**
  * Slice 2 — Tournament management a11y coverage (axe WCAG 2.2 AA)
@@ -305,8 +305,15 @@ test.describe('tournament settings accessibility (WCAG 2.2 AA)', () => {
     await page.goto(`/tournaments/${tournamentId}/settings`);
     await page.waitForLoadState('networkidle');
 
-    // Page should load without motion-heavy animations
     const settingsTab = page.getByRole('tab', { name: /^Setup/i });
     await expect(settingsTab).toBeVisible();
+
+    // Control: with no preference the page does animate, so the check
+    // below is not vacuous.
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    expect((await motionLongerThan(page)).length).toBeGreaterThan(0);
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    expect(await motionLongerThan(page)).toEqual([]);
   });
 });

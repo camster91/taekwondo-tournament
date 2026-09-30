@@ -216,10 +216,19 @@ Both use the same SDK (`@sentry/node` and `@sentry/react`), so switching between
 The application exposes Prometheus-compatible metrics at `/api/internal/metrics` (requires `Authorization: Bearer <METRICS_TOKEN>`).
 
 ### Available Metrics
-- HTTP request counts (by route, method, status code)
-- HTTP request durations (P50, P95, P99)
-- Database connection pool stats (via Prisma)
-- Custom business metrics (registrations, brackets generated, matches scored)
+All counters are per process (per container) and reset on restart.
+- `bowin_http_requests_total{method,route,status}`: responses by normalized route and status class
+- `bowin_http_request_duration_milliseconds_sum{method,route}`: cumulative response time (divide by the request count for an average; no percentiles)
+- `bowin_email_sends_total` / `bowin_email_send_failures_total`: Mailgun sends accepted / failed
+- `bowin_stripe_webhook_events_total{outcome}`: Stripe webhook deliveries (`success` 2xx, `rejected` 4xx such as a bad signature, `failure` 5xx)
+- `bowin_stripe_webhook_last_success_timestamp_seconds`: Unix time of the last handled webhook (0 = none since start)
+
+`GET /api/health` also returns `revision`, the git SHA the running image was built from (`BUILD_SHA`, set by the deploy scripts), so a monitor can confirm which release is live.
+
+### Suggested alerts
+- `increase(bowin_email_send_failures_total[15m]) > 0`: email delivery failing (magic links, invitations, confirmations)
+- `increase(bowin_stripe_webhook_events_total{outcome=~"rejected|failure"}[1h]) > 0`: webhook secret mismatch or handler errors
+- `time() - bowin_stripe_webhook_last_success_timestamp_seconds > 86400` during active registration (only meaningful once billing is live)
 
 ### Grafana Dashboard (optional)
 If using Prometheus + Grafana:
@@ -286,6 +295,13 @@ See `docs/BACKUP-RECOVERY.md` for detailed backup procedures.
 - [ ] Weekly backup restore drill is performed
 - [ ] Backup alerts fire if backup job fails
 - [ ] Backup retention policy is enforced (e.g., keep 30 days)
+
+**Backup freshness check:** `backup-database.sh` writes `last-success.json` (time, file, sha256) to the backup directory after each successful run. Point a monitor or cron at:
+
+```bash
+BACKUP_DIR=/opt/bowin/backups ./scripts/check-backup-freshness.sh 26
+# exit 0 = fresh, 1 = older than 26h, 2 = no successful backup recorded
+```
 
 ---
 
