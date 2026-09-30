@@ -130,6 +130,7 @@ model Tournament {
   matchupHistories       MatchupHistory[]
   publicDisplayHeartbeat PublicDisplayHeartbeat?
   operationAudits        TournamentOperationAudit[]
+  staffAssignments       StaffAssignment[]
   recommendations        Recommendation[]
   auditLogs              UserAuditLog[]
   sosAlerts              SOSAlert[]
@@ -361,6 +362,7 @@ model User {
 
   // Tournament-specific permissions
   tournamentAccess    UserTournamentAccess[]
+  staffAssignments    StaffAssignment[]
   organizationMembers OrganizationMember[]
   auditLogs           UserAuditLog[]
   createdTournaments  Tournament[]             @relation("TournamentCreatedBy")
@@ -984,3 +986,31 @@ model RetentionPurgeRun {
 
   @@index([createdAt])
 }
+
+// Day-of staffing (#192): who covers which ring (or the whole venue when
+// ringNumber is null) between two schedule times, and in what duty. Purely
+// operational: it never grants or changes access. Withdrawn assignments are
+// kept for history.
+model StaffAssignment {
+  id           String    @id @default(uuid())
+  tournamentId String
+  userId       String
+  duty         String // scorekeeper, ring_lead, official, check_in, runner, other
+  ringNumber   Int?
+  startTime    String // "HH:MM", same clock as the tournament schedule
+  endTime      String // "HH:MM"
+  note         String?
+  status       String    @default("active") // active, withdrawn
+  createdById  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  withdrawnAt  DateTime?
+  withdrawnById String?
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, status])
+  @@index([userId, status])
+}
+

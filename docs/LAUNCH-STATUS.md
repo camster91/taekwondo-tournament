@@ -18,7 +18,7 @@ Firefox, WebKit and mobile Chrome):
 | Organizations | Multi-tenant isolation, per-tournament access grants, branded public pages, custom domains, templates |
 | Registration | Staff entry, Excel/CSV import with auto-mapping, public self-registration with parental consent, capacity + waitlist, optional Stripe entry fees, confirmation emails, self-service registration management |
 | Divisions & brackets | Auto-categorization, manual moves/splits/merges, DE/SE brackets with byes and seeding, correctable results with audit history |
-| Event day | Check-in with weigh-in, offline-capable scorekeeper, director control room, ring schedule with delay propagation, public scoreboard, printable brackets/certificates/school reports |
+| Event day | Check-in with weigh-in, offline-capable scorekeeper, director control room, ring schedule with delay propagation, ring staffing with coverage warnings and staff run sheets, public scoreboard, printable brackets/certificates/school reports |
 | Compliance | Privacy/terms pages, consent versioning, GDPR export and account deletion, retention purge with dry run and legal hold |
 | Operations | Health/readiness probes, Prometheus-style metrics, backup scripts with freshness check, fail-closed CI and deploy gates |
 

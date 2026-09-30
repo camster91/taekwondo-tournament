@@ -183,7 +183,9 @@ this file is wrong.
 | `VerifyMagicLink.tsx` | `/verify?token=...` | Consume the magic link |
 | `AcceptInvite.tsx` | `/accept-invite?token=...` | Invited-user signup |
 | `Dashboard.tsx` | `/` | Director view: counts + recent tournaments |
-| `DirectorDashboard.tsx` | `/tournaments/:id/director` | Per-tournament live control room — ring status, division progress, day-of warnings |
+| `DirectorDashboard.tsx` | `/tournaments/:id/director` | Per-tournament live control room — ring status, staff coverage, division progress, day-of warnings |
+| `Staffing.tsx` | `/tournaments/:id/staffing` | Assign staff to rings/times, coverage gaps + double-bookings, printable/CSV roster |
+| `MyAssignments.tsx` | `/my-assignments` | Staff run sheet: the viewer's own ring/time/duty lines |
 | `Tournaments.tsx` | `/tournaments` | List + create |
 | `TournamentDetail.tsx` | `/tournaments/:id` | Overview |
 | `TournamentSettings.tsx` | `/tournaments/:id/settings` | Edit settings, weight classes, rules |
@@ -384,6 +386,7 @@ Judo test seed would prove the multi-sport path end-to-end.
 | `MagicLink` | `token` (32-byte hex) + 6-digit `code`, both stored as SHA-256 hashes (`src/server/utils/token-hash.ts`). |
 | `MatchAuditLog` | Every match update records previous + new state. |
 | `Invitation` | Staff invite: email, role, hashed token, `status` (pending/accepted/expired/cancelled), last delivery outcome. |
+| `StaffAssignment` | Day-of staffing: user + duty + ring (null = whole venue) + `HH:MM` window; `status` active/withdrawn. Never grants access. |
 | `SportProfile` | Unused, see "Multi-sport". |
 
 For local experimentation after modifying `schema.prisma`, run
@@ -549,6 +552,25 @@ Auth required. Mutates `Invitation` rows; consumed by
 | POST | `/api/invites/resend/:id` | Resend the invite email for a specific invitation. |
 | DELETE | `/api/invites/:id` | Cancel a pending invite (kept as `cancelled`; its link answers 410), or remove a finished one. |
 | GET | `/api/invites/verify/:token` | Public (no auth) — preview an invite before accepting. |
+
+### `/api/staffing` (`src/server/routes/staffing.ts`)
+
+Day-of staffing (#192). Operational only: an assignment never changes
+what a user can access. Every ring needs a `scorekeeper` for the whole
+schedule window (`REQUIRED_RING_DUTIES` in
+`src/server/services/staffing-coverage.ts`); overlapping assignments for
+one person are reported as double-bookings (warned, not blocked).
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/staffing/tournament/:tournamentId` | director. Assignments, coverage (gaps, conflicts), eligible staff (users who can open the tournament). |
+| POST | `/api/staffing/tournament/:tournamentId/assignments` | director. Body: `{ userId, duty, ringNumber \| null, startTime, endTime, note? }`; the user must be able to open the tournament. |
+| PUT | `/api/staffing/assignments/:id` | director. Change duty/ring/times/note of an active assignment. |
+| POST | `/api/staffing/assignments/:id/withdraw` | director. Keeps the row as `withdrawn`. |
+| GET | `/api/staffing/tournament/:tournamentId/mine` | viewer+. The caller's own active lines. |
+| GET | `/api/staffing/mine` | The caller's active lines across open, accessible tournaments. |
+
+Changes are audited in `TournamentOperationAudit` (`staff_assignment_*`).
 
 ### `/api/public` (`src/server/routes/public.ts`)
 
@@ -792,6 +814,7 @@ Production runs in a Docker container on the Ashbi VPS
 - `20260925_competitor_organization` (Competitor.organizationId, backfilled)
 - `20260930_retention_legal_hold` (legal-hold columns on Tournament/Competitor, `RetentionPurgeRun` table)
 - `20261001_invitation_delivery_status` (Invitation delivery status + `cancelledAt`)
+- `20261001_staff_assignments` (StaffAssignment table, #192)
 
 The deploy script runs `prisma migrate deploy` automatically
 during cutover. Do NOT use `npm run db:push` on production —

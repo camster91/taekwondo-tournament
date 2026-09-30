@@ -183,3 +183,17 @@ If a team member works with multiple organizations:
 - Role is per-organization
 - Switch organizations via dashboard dropdown
 - Access is isolated per organization
+
+## Staffing rings on event day
+
+Open a tournament and choose **Staffing** in the sidebar (directors only).
+
+1. Pick a person, a duty, a ring (or *Whole venue* for roles like check-in lead) and the time they cover. Times default to the schedule's start and end.
+2. The **Coverage** box lists every ring that has no scorekeeper for part of the day, and anyone booked in two places at once. The director dashboard shows the same summary.
+3. **Print roster** gives a paper copy for the venue fallback kit; **CSV** exports the same list.
+4. To take someone off a shift, click **Withdraw**. The line moves to the withdrawn list, so the history stays visible.
+
+Only people who can already open the tournament can be assigned. To add someone new, invite them first.
+
+Staff see their own shifts under **My Assignments**: ring, time and duty only. Assignments never change what a person can access; their role does.
+

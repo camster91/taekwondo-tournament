@@ -21,6 +21,7 @@ import {
   RefreshCw,
   AlertCircle,
   Bell,
+  UserCheck,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { Card, CardHeader, CardBody } from '../components/ui';
@@ -437,6 +438,21 @@ export default function DirectorDashboard() {
       return response.json() as Promise<{ alerts: SOSAlert[] }>;
     },
     refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+  });
+
+  // #192: staffing coverage summary (gaps / double-bookings)
+  const staffingQuery = useQuery<{
+    coverage: { gaps: unknown[]; conflicts: unknown[]; staffedRings: number; ringCount: number };
+  }>({
+    queryKey: ['staffing', tournamentId],
+    enabled: Boolean(tournamentId),
+    queryFn: async () => {
+      const response = await fetch(`/api/staffing/tournament/${tournamentId}`, { headers: getAuthHeaders() });
+      if (!response.ok) throw new Error('Failed to load staffing');
+      return response.json();
+    },
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
 
@@ -1011,6 +1027,37 @@ export default function DirectorDashboard() {
                 );
               })}
             </div>
+          )}
+        </CardBody>
+      </Card>
+
+      {/* Staff coverage (#192) */}
+      <Card>
+        <CardHeader
+          title="Staff Coverage"
+          icon={UserCheck}
+          action={(
+            <Button as={Link} to={`/tournaments/${tournamentId}/staffing`} variant="secondary" size="sm">
+              Manage staffing
+            </Button>
+          )}
+        />
+        <CardBody>
+          {staffingQuery.data ? (() => {
+            const { gaps, conflicts, staffedRings, ringCount } = staffingQuery.data.coverage;
+            const ok = gaps.length === 0 && conflicts.length === 0;
+            return (
+              <p className={`flex items-center gap-2 text-sm ${ok ? 'text-success' : 'text-surface-900 dark:text-white'}`} data-testid="director-staff-coverage">
+                {ok
+                  ? <CheckCircle className="h-4 w-4" aria-hidden="true" />
+                  : <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />}
+                {staffedRings} of {ringCount} rings fully staffed · {gaps.length} gap{gaps.length === 1 ? '' : 's'} · {conflicts.length} double-booking{conflicts.length === 1 ? '' : 's'}
+              </p>
+            );
+          })() : (
+            <p className="text-sm text-surface-600 dark:text-surface-300">
+              {staffingQuery.isError ? 'Staffing could not be loaded.' : 'Loading staffing…'}
+            </p>
           )}
         </CardBody>
       </Card>
