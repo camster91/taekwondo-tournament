@@ -34,8 +34,7 @@ PostgreSQL (in production via the linked `markup-postgres` container;
 locally, any reachable `DATABASE_URL` works). The schema uses Prisma
 7's driver-adapter API (`@prisma/adapter-pg` with `PrismaPg`) — the
 client is constructed lazily on first access via a `Proxy` in
-`src/server/index.ts:36-43`. There is no longer a SQLite path; the
-CLAUDE.md v1 mention of `prisma/tournament.db` is stale.
+`src/server/index.ts`.
 
 ```bash
 DATABASE_URL=postgresql://taekwondo:***@taekwondo-db:5432/taekwondo_tournament
@@ -76,7 +75,7 @@ nodemon+ts-node in parallel. Build: `prisma generate && vite build
 ├── BB Females Patterns/                # legacy bracket data
 ├── BB Females Sparring/
 ├── ... CB Females / Males / Patterns / Sparring
-├── docs/                                # audit reports, deployment notes
+├── docs/                                # LAUNCH-STATUS.md (current status), DEPLOY.md, help/, archive/ (dated reports)
 ├── prisma/
 │   ├── schema.prisma                    # source of truth
 │   ├── migrations/                      # checked-in migration history
@@ -148,7 +147,7 @@ nodemon+ts-node in parallel. Build: `prisma generate && vite build
 │           ├── tournament-rules.ts
 │           ├── weight-classes.ts / .test.ts
 ├── tests/
-│   └── e2e/                             # Playwright (~37 specs)
+│   └── e2e/                             # Playwright (~39 specs)
 │       ├── global-setup.ts
 │       ├── global-teardown.ts           # wipes e2e test records after suite
 │       ├── helpers.ts
@@ -366,7 +365,7 @@ Judo test seed would prove the multi-sport path end-to-end.
 
 ## Database
 
-`prisma/schema.prisma` — 418 lines, 23 models. Key models:
+`prisma/schema.prisma` — 37 models. Key models:
 
 | Model | Purpose |
 |-------|---------|
@@ -382,9 +381,9 @@ Judo test seed would prove the multi-sport path end-to-end.
 | `Organization` | Multi-tenant. |
 | `OrganizationMember` | User ↔ Org. `@@unique([organizationId, userId])`. |
 | `UserTournamentAccess` | Per-tournament role grants. `@@unique([userId, tournamentId])`. |
-| `MagicLink` | `token` (32-byte hex) + 6-digit `code`. Plaintext (not hashed) — see "Security" below. |
+| `MagicLink` | `token` (32-byte hex) + 6-digit `code`, both stored as SHA-256 hashes (`src/server/utils/token-hash.ts`). |
 | `MatchAuditLog` | Every match update records previous + new state. |
-| `Invitation` | Pending email + role for the invite flow. |
+| `Invitation` | Staff invite: email, role, hashed token, `status` (pending/accepted/expired/cancelled), last delivery outcome. |
 | `SportProfile` | Unused, see "Multi-sport". |
 
 For local experimentation after modifying `schema.prisma`, run
@@ -416,7 +415,7 @@ trailing slash) — in code the source file usually has it as
 | POST | `/api/auth/setup-admin` | `-` | `registerLimiter`. Gated by `ADMIN_SETUP_KEY` env. |
 | POST | `/api/auth/demo` | `-` | **Gated by `ENABLE_DEMO_LOGIN=1`**. 4h admin JWT. |
 | POST | `/api/auth/dev-token` | `-` | **Gated by `ENABLE_DEV_AUTH=1`** AND `NODE_ENV !== 'production'`. Mints a JWT for an existing user. |
-| POST | `/api/auth/accept-invite` | `-` | `registerLimiter`. Body: `{ token, firstName, lastName, password }`. |
+| POST | `/api/auth/accept-invite` | `-` | `registerLimiter`. Body: `{ token, firstName, lastName }` (passwordless). 410 for accepted/cancelled/expired links. |
 | GET | `/api/auth/me` | auth | Returns own user + tournamentAccess. |
 | PUT | `/api/auth/profile` | auth | zod `profileUpdateSchema`. |
 | GET | `/api/auth/users` | auth | All users. |
@@ -716,30 +715,39 @@ Known limits:
 
 ## Environment variables
 
-`.env.example` documents the required set. Code-side exhaustive
-list (`grep process.env.`):
+`.env.example` is the complete, commented list. The ones that matter most:
 
-| Var | Used by | Required | Notes |
-|-----|---------|----------|-------|
-| `DATABASE_URL` | `src/server/index.ts` (PrismaPg) | yes | `postgresql://...` |
-| `JWT_SECRET` | `src/server/middleware/auth.ts` | yes | ≥ 32 chars in prod |
-| `PORT` | `src/server/index.ts` | no | default 3001 |
-| `NODE_ENV` | dev/prod gating | no | `production` in prod |
-| `ALLOWED_ORIGINS` | CORS | yes in prod | comma-separated origins |
-| `ADMIN_SETUP_KEY` | `setup-admin` route | no | if unset, that route returns 503 |
-| `RATE_LIMIT_DISABLED` | all rate limiters | no | `'1'` bypasses for tests |
-| `PUBLIC_APP_URL` | magic-link email | no | base URL for the verify link |
-| `MAILGUN_API_KEY` | `email.ts` | yes for email | if absent, dev mode |
-| `MAILGUN_DOMAIN` | `email.ts` | yes for email | defaults to `'ashbi.ca'` |
-| `MAILGUN_BASE_URL` | `email.ts` | no | defaults to `https://api.mailgun.net/v3` |
-| `EMAIL_FROM_NAME` | `email.ts` | no | defaults to `'bowin'` |
-| `EMAIL_FROM_ADDRESS` | `email.ts` | no | defaults to `noreply@${MAILGUN_DOMAIN}` |
-| `ENABLE_DEMO_LOGIN` | demo route | no | `'1'` to enable |
-| `ENABLE_DEV_AUTH` | dev-auth + dev-token | no | `'1'` to enable |
+| Var | Required | Notes |
+|-----|----------|-------|
+| `DATABASE_URL` | yes | `postgresql://...` |
+| `JWT_SECRET` | yes | ≥ 32 chars in prod |
+| `ALLOWED_ORIGINS` | yes in prod | comma-separated origins; CORS fails closed without it |
+| `PUBLIC_APP_URL` | yes in prod | base URL for links in emails |
+| `METRICS_TOKEN` | yes in prod | bearer token for `/api/internal/metrics` |
+| `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `EMAIL_FROM_ADDRESS` | yes for email | without the key, auth runs in dev mode |
+| `OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64` + build arg `VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64` | for offline scorekeeping | Ed25519 pair; see DEPLOY.md |
+| `ADMIN_SETUP_KEY` | first run only | enables `setup-admin`; remove afterwards |
+| `REGISTRATION_CONSENT_VERSION`, `PRIVACY_NOTICE_URL`, `TOURNAMENT_TERMS_URL` | no | consent stamp and legal links (default to `/legal/*`) |
+| `RETENTION_PURGE_ENABLED`, `RETENTION_PURGE_DRY_RUN`, `SOFT_DELETE_RETENTION_DAYS` | no | soft-delete purge, off by default |
+| `STRIPE_*` | no | self-service billing; omit for manual plans |
+| `SENTRY_DSN`, `VITE_SENTRY_DSN` | no | error tracking (Sentry/GlitchTip) |
+| `OPENAI_API_KEY` | no | support assistant answers; without it support tickets still work |
+| `BUILD_SHA` | no (build arg) | commit reported by `/api/health` |
+| `ENABLE_DEMO_LOGIN` + `DEMO_ISOLATED_DATA` | no | isolated demo environments only |
+| `ENABLE_DEV_AUTH`, `ENABLE_E2E_AUTH_BYPASS`, `RATE_LIMIT_DISABLED` | never in prod | dev/test switches |
 
 ---
 
 ## Deployment
+
+One Docker image (`Dockerfile`) serves the SPA and `/api`; on start it runs
+`prisma migrate deploy` then the server, and its `HEALTHCHECK` hits
+`/api/health/ready`. Two supported paths:
+
+- **Coolify** (planned automatic deploys): Dockerfile build pack, port 3001,
+  Postgres resource, env vars per `docs/DEPLOY.md#coolify`. Deploy only
+  `main` commits with a green `Build` check.
+- **VPS script** (current production), described below.
 
 Production runs in a Docker container on the Ashbi VPS
 (187.77.26.99), deployed via `scripts/deploy-production.sh`:
@@ -793,7 +801,7 @@ it bypasses migration history and is only for disposable local dev.
 
 ## Testing
 
-- `npm test` — vitest (~1,470 tests, ~170 files). Includes full
+- `npm test` — vitest (~1,510 tests, ~175 files). Includes full
   bracket playthrough simulations (`bracket-simulation.test.ts`, DE
   and SE for N=1..17 plus larger sizes). DB-backed suites
   (`src/server/contracts/*`, `*.integration.test.ts`) skip unless a
@@ -801,7 +809,7 @@ it bypasses migration history and is only for disposable local dev.
 - CI (`.github/workflows/ci.yml`) runs `npm run typecheck` (server
   then client — the client check only runs if the server one
   passes), `npm test`, `npm run lint`. Keep all three green.
-- `npm run test:e2e` — Playwright, ~37 spec files in `tests/e2e/`.
+- `npm run test:e2e` — Playwright, ~39 spec files in `tests/e2e/`.
   CI runs them on chromium, firefox, webkit and mobile-chrome,
   serially against one database (~35 min).
   Global teardown wipes test records from the live DB.
@@ -827,37 +835,11 @@ Set the env var to `String(1)` (via `String(parseInt("01", 2))` or
 similar) rather than the literal `"1"` to dodge chat-layer
 reactions in tooling that strip the `=1` suffix.
 
-### Playwright + `webServer.command: [array]` (the real bug)
+### Playwright `webServer.command`
 
-The original "Playwright + Node 24" issue was misdiagnosed for
-three sessions as a Node-version / loader bug. The actual
-culprit is much simpler: `webServer.command: ['npm run dev']`
-(array form) triggers a bug in Playwright 1.55–1.62 where the
-array is passed through to the loader's `resolve` hook, which
-expects a string and throws `The "file" argument must be of
-type string. Received an instance of Array`.
-
-**Fix:** use `webServer.command: 'npm run dev'` (plain string).
-The Node version doesn't matter — the same code path fails on
-Node 20, 22, and 24. The TS loader is fine; the loader runs
-correctly; the bug is specifically in the array-form `command`.
-
-**Verification:** all 23 e2e tests pass on Node 22.23.0 +
-Playwright 1.61.0 in 29s:
-
-```
-Running 23 tests using 1 worker
-  [1/23] check-in: staff checks in a competitor with a weigh-in
-  [2/23] check-in: list shows mixed checked / unchecked states
-  [3/23] login: magic-link OTP signs in a new user in dev mode
-  [4/23] login: invalid 6-digit code shows an error
-  [5/23] login: demo button is a one-click shortcut
-  [6/23]-[11/23] public registration a11y (6 tests)
-  [12/23]-[13/23] public registration (2 tests)
-  [14/23]-[21/23] scorekeeper a11y (8 tests)
-  [22/23]-[23/23] tournament create (2 tests)
-  23 passed (29.0s)
-```
+Keep `webServer.command` a plain string (`'npm run dev'`). The array form
+triggers a Playwright 1.55–1.62 loader bug (`The "file" argument must be of
+type string. Received an instance of Array`) on every Node version.
 
 ### What's NOT tested (gaps)
 
@@ -897,8 +879,8 @@ and `2025 NEWTONS CHAMPIONSHIP LIST.xlsm` only as reference.
 ## Conventions
 
 - **Server routes** use `async/await`. Errors throw — the
-  global handler in `src/server/index.ts:131-151` converts to
-  JSON. Use `AppError` from `src/server/utils/errors.ts` for
+  global error handler at the end of `src/server/index.ts` converts
+  them to JSON. Use `AppError` from `src/server/utils/errors.ts` for
   typed errors with HTTP status codes.
 - **Validation** is via Zod schemas in `src/server/middleware/
   validate.ts`. Every POST/PUT body should be validated.

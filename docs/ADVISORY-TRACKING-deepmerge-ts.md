@@ -85,7 +85,7 @@ npm view prisma dependencies.deepmerge-ts
 
 - Advisory: https://github.com/advisories/GHSA-ggr8-5vv4-36mx
 - Prisma Release Notes: https://github.com/prisma/prisma/releases
-- Ship Plan Context: `docs/END_TO_END_SHIP_PLAN.md` Appendix #3
+- Ship Plan Context: `docs/archive/END_TO_END_SHIP_PLAN.md` Appendix #3
 
 ---
 

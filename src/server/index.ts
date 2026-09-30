@@ -37,6 +37,7 @@ import {
   retentionConfigFromEnv,
   startRetentionPurgeJob,
 } from './services/retention-policy.js';
+import { startGracePeriodJob } from './services/grace-period.js';
 import { registrationLegalConfigFromEnv } from './routes/public-validation.js';
 import { validateProductionServiceConfig } from './services/production-config.js';
 import {
@@ -401,6 +402,8 @@ const server = app.listen(Number(PORT), '0.0.0.0', async () => {
   } else {
     console.log('[retention] automatic purge disabled');
   }
+
+  await startGracePeriodJob({ database: prisma });
 
   if (isEmailConfigured()) {
     const ok = await verifyEmailConnection();

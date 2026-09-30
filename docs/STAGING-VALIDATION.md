@@ -361,7 +361,7 @@ Ideas for improving the staging workflow (do NOT implement without explicit task
 - `scripts/deploy-production.sh` — production deploy with similar rollback-safe pattern
 - `scripts/production-smoke.mjs` — production smoke tests (no demo login, real data)
 - `docs/DESTRUCTIVE-MIGRATION-POLICY.md` — migration testing policy
-- `docs/END_TO_END_SHIP_PLAN.md` — Appendix #8 (staging environment status)
+- `docs/archive/END_TO_END_SHIP_PLAN.md` — Appendix #8 (staging environment status)
 
 ---
 

@@ -435,7 +435,7 @@ npm test           # Unit tests (no visual regression yet)
 
 - **CLAUDE.md**: Full codebase architecture
 - **COMPONENT_CONTRACTS.md**: Shared component behavioral contracts
-- **END_TO_END_SHIP_PLAN.md**: #150 status tracking
+- **archive/END_TO_END_SHIP_PLAN.md**: #150 status tracking
 - **src/client/index.css**: CSS token definitions
 - **tailwind.config.js**: Tailwind theme extension
 
