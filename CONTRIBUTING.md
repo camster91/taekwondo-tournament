@@ -205,6 +205,7 @@ Its steps, in order:
 | E2E tests | Playwright on chromium, firefox, webkit and mobile-chrome against a fresh Postgres (~35 min) |
 | Upload Playwright results | on failure only: traces, screenshots, videos (7 days) |
 | Fresh migration test | `scripts/test-fresh-migration.sh`: `migrate deploy` on an empty DB must match the schema |
+| Container smoke test | `scripts/container-smoke.sh`: the production image must boot on an empty DB with env vars only and pass health, revision, SPA, metrics-auth and first-admin checks |
 
 GitGuardian also scans each PR for secrets. `build-and-push.yml`
 publishes an immutable `:main-<sha>` image to `ghcr.io` only after CI

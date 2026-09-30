@@ -37,4 +37,13 @@ describe('release gates contract', () => {
     expect(script).not.toContain('Possible schema drift detected');
     expect(script).toMatch(/DRIFT_STATUS} -eq 2[\s\S]*exit 3/);
   });
+
+  it('boots the production image in CI before anything can deploy it', () => {
+    const ci = read('.github/workflows', 'ci.yml');
+    expect(ci).toContain('run: ./scripts/container-smoke.sh');
+    const smoke = read('scripts', 'container-smoke.sh');
+    expect(smoke).toContain("docker inspect -f '{{.State.Health.Status}}'");
+    expect(smoke).toContain('/api/health/ready');
+    expect(smoke).toContain('fail "/api/health revision');
+  });
 });

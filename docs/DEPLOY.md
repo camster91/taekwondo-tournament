@@ -166,7 +166,7 @@ This evidence is recorded without exposing secrets and enables audit trails for 
 
 ## Coolify
 
-The image is self-contained: it serves the SPA and `/api` from one Node process, runs `prisma migrate deploy` before starting, and declares a Docker `HEALTHCHECK` on `/api/health/ready`.
+The image is self-contained: it serves the SPA and `/api` from one Node process, runs `prisma migrate deploy` before starting, and declares a Docker `HEALTHCHECK` on `/api/health/ready`. CI proves this on every commit with `scripts/container-smoke.sh` (build, boot on an empty database, check the endpoints); you can run the same script locally before switching Coolify on.
 
 **Application**
 - Build pack: **Dockerfile** (repository root). Port: **3001** (or set `PORT` and use that).
