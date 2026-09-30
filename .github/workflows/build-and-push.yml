@@ -138,6 +138,7 @@ jobs:
           file: ${{ inputs.dockerfile || 'Dockerfile' }}
           build-args: |
             VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${{ vars.OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64 }}
+            BUILD_SHA=${{ env.SOURCE_SHA }}
           platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
           push: true
           # Version tags get :<version> as well; main gets only the
