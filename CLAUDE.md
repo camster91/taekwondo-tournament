@@ -311,8 +311,9 @@ Authorization precedence (first match wins):
    required level.
 5. **Org tournament + user is a member of that org** — effective
    role = min(global role, membership role); `owner`/`admin`
-   memberships count as director, `member` as viewer, unknown
-   roles grant nothing.
+   memberships and `member` count as director; explicit
+   `scorekeeper`/`viewer` memberships restrict; unknown roles grant
+   nothing.
 6. **Orphan tournament (`organizationId` null)** — the legacy
    single-tenant pool, reachable ONLY by users with no org
    memberships. Tenant users never see orphan data (except via

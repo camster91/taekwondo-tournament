@@ -22,6 +22,40 @@ case "$BOWIN_TOURNAMENT_TERMS_URL" in https://*) ;; *) echo "Tournament terms UR
 cd "$ROOT"
 test -z "$(git status --porcelain)" || { echo "Refusing production deploy from a dirty worktree" >&2; exit 1; }
 RELEASE_SHA=$(git rev-parse --verify HEAD)
+
+# Preflight: only deploy a commit that is on origin/main AND whose CI
+# `Build` check passed. BOWIN_ALLOW_UNVERIFIED_CI="<reason>" overrides the
+# CI lookup (e.g. GitHub outage); the reason is recorded in the deployment
+# record. There is no override for deploying a commit that is not on main.
+GITHUB_REPO=${BOWIN_GITHUB_REPO:-camster91/taekwondo-tournament}
+git fetch --quiet origin main
+git merge-base --is-ancestor "$RELEASE_SHA" origin/main \
+  || { echo "Refusing to deploy ${RELEASE_SHA}: it is not on origin/main" >&2; exit 1; }
+ci_build_conclusion() {
+  local path="repos/${GITHUB_REPO}/commits/${RELEASE_SHA}/check-runs?check_name=Build"
+  local filter='[.check_runs[] | select(.name == "Build")] | sort_by(.completed_at) | last | .conclusion // "missing"'
+  if command -v gh >/dev/null 2>&1; then
+    gh api "$path" --jq "$filter"
+  elif [ -n "${GITHUB_TOKEN:-}" ] && command -v jq >/dev/null 2>&1; then
+    curl -fsS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \
+      "https://api.github.com/${path}" | jq -r "$filter"
+  else
+    echo "unverifiable"
+  fi
+}
+CI_CONCLUSION=$(ci_build_conclusion 2>/dev/null || echo "unverifiable")
+if [ "$CI_CONCLUSION" = "success" ]; then
+  CI_VERIFICATION="Build=success"
+elif [ -n "${BOWIN_ALLOW_UNVERIFIED_CI:-}" ]; then
+  case "$BOWIN_ALLOW_UNVERIFIED_CI" in *[!A-Za-z0-9\ ._:#/-]*) echo "BOWIN_ALLOW_UNVERIFIED_CI may only contain letters, digits, spaces and . _ : # / -" >&2; exit 1;; esac
+  CI_VERIFICATION="OVERRIDE (Build=${CI_CONCLUSION}): ${BOWIN_ALLOW_UNVERIFIED_CI}"
+  echo "WARNING: deploying without a verified green CI Build: ${BOWIN_ALLOW_UNVERIFIED_CI}" >&2
+else
+  echo "Refusing to deploy ${RELEASE_SHA}: CI Build check is '${CI_CONCLUSION}', not 'success'." >&2
+  echo "Wait for CI, or set BOWIN_ALLOW_UNVERIFIED_CI=\"<reason>\" to override (recorded)." >&2
+  exit 1
+fi
+echo "==> Preflight passed: ${RELEASE_SHA} is on origin/main (${CI_VERIFICATION})"
 ARCHIVE=$(mktemp "${TMPDIR:-/tmp}/bowin-production-${RELEASE_SHA}.XXXXXX.tar.gz")
 trap 'rm -f "$ARCHIVE"' EXIT
 git archive --format=tar.gz --prefix=app/ --output="$ARCHIVE" "$RELEASE_SHA"
@@ -36,7 +70,7 @@ ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes "$VPS_HOST" \
   "mv /opt/bowin-production-releases/${RELEASE_SHA}.tar.gz.part /opt/bowin-production-releases/${RELEASE_SHA}.tar.gz"
 
 ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes "$VPS_HOST" \
-  "RELEASE_SHA='$RELEASE_SHA' ARCHIVE_SHA256='$ARCHIVE_SHA256' PUBLIC_URL='$PUBLIC_URL' PROVISION_OFFLINE_KEYS='$BOWIN_PRODUCTION_PROVISION_OFFLINE_KEYS' RESET_DEMO='$BOWIN_PRODUCTION_RESET_DEMO' REGISTRATION_CONSENT_VERSION='$BOWIN_REGISTRATION_CONSENT_VERSION' PRIVACY_NOTICE_URL='$BOWIN_PRIVACY_NOTICE_URL' TOURNAMENT_TERMS_URL='$BOWIN_TOURNAMENT_TERMS_URL' bash -s" <<'REMOTE'
+  "RELEASE_SHA='$RELEASE_SHA' CI_VERIFICATION='$CI_VERIFICATION' ARCHIVE_SHA256='$ARCHIVE_SHA256' PUBLIC_URL='$PUBLIC_URL' PROVISION_OFFLINE_KEYS='$BOWIN_PRODUCTION_PROVISION_OFFLINE_KEYS' RESET_DEMO='$BOWIN_PRODUCTION_RESET_DEMO' REGISTRATION_CONSENT_VERSION='$BOWIN_REGISTRATION_CONSENT_VERSION' PRIVACY_NOTICE_URL='$BOWIN_PRIVACY_NOTICE_URL' TOURNAMENT_TERMS_URL='$BOWIN_TOURNAMENT_TERMS_URL' bash -s" <<'REMOTE'
 set -Eeuo pipefail
 LIVE=taekwondo-tournament
 CANDIDATE=taekwondo-tournament-candidate
@@ -231,6 +265,9 @@ cat > "/opt/bowin-production-releases/deployments/${STAMP}.json" <<DEPLOY_RECORD
   "deployed_at": "${DEPLOYED_AT}",
   "deployed_by": "$(whoami)@$(hostname)",
   "image_id": "${DEPLOYED_IMAGE}",
+  "previous_image_id": "${PREVIOUS_IMAGE_ID}",
+  "previous_revision": "$(docker image inspect "$PREVIOUS_IMAGE_ID" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null || true)",
+  "ci_verification": "${CI_VERIFICATION}",
   "backup": "$(basename "$BACKUP")",
   "rollback_container": "${ROLLBACK}",
   "public_url": "${PUBLIC_URL}",

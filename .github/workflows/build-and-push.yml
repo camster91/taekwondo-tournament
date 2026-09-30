@@ -1,15 +1,17 @@
 name: Build and Push Image
 
 # Reusable build workflow for camster91/* Node.js web apps.
-# Triggered on push to main and on tag. Builds a multi-stage Docker image
+# Triggered after the "CI Build" workflow SUCCEEDS on main (never on PRs,
+# never on a red commit), and on version tags. Builds a multi-stage Docker image
 # and pushes it to ghcr.io. The image becomes the canonical deployable
 # artifact — any host can run it without needing source code, Node, or
 # build tools on the host.
 #
 # Tag strategy (fail-closed artifact publishing):
-#   - PRIMARY: :<tag>-<sha> (immutable, content-addressable)
-#   - SECONDARY: :<tag> (main or version, updated pointer)
-#   - DEPRECATED: :latest (backward compatibility only; VPS deploy uses SHA)
+#   - main: only the immutable :main-<sha> tag (plus the digest). No
+#     mutable :main or :latest pointers, so nothing can silently move a
+#     tag to an untested build.
+#   - version tags (v*): :<version> and :<version>-<sha>.
 #   - Image: ghcr.io/camster91/<repo>
 #   - Multi-arch: linux/amd64 + linux/arm64 (Raspberry Pi, Apple Silicon hosts)
 #   - Buildx cache pushed to GHCR type=cache (saves ~3min per build)
@@ -20,8 +22,11 @@ name: Build and Push Image
 # published images are for local testing and non-production deployments only.
 
 on:
+  workflow_run:
+    workflows: ['CI Build']
+    types: [completed]
+    branches: [main]
   push:
-    branches: [main, master]
     tags: ['v*']
   workflow_call:
     inputs:
@@ -70,11 +75,20 @@ jobs:
     name: Build & push image
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # A workflow_run fires for every completed CI run; publish only the
+    # exact commit CI passed, and only for pushes to main (not PR runs).
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    env:
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Resolve image metadata
         id: meta
@@ -82,14 +96,14 @@ jobs:
           REPO_NAME="${{ github.event.repository.name }}"
           if [ -n "${{ inputs.image_name }}" ]; then REPO_NAME="${{ inputs.image_name }}"; fi
           REF="${{ github.ref }}"
-          if [[ "$REF" == refs/tags/* ]]; then
-            TAG="${REF#refs/tags/}"
-          elif [[ "$REF" == refs/heads/main || "$REF" == refs/heads/master ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             TAG="main"
+          elif [[ "$REF" == refs/tags/* ]]; then
+            TAG="${REF#refs/tags/}"
           else
             TAG="${REF#refs/heads/}"
           fi
-          SHA_SHORT=$(echo "${{ github.sha }}" | head -c 7)
+          SHA_SHORT=$(echo "${SOURCE_SHA}" | head -c 7)
           echo "image=ghcr.io/camster91/${REPO_NAME}" >> $GITHUB_OUTPUT
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "sha=${SHA_SHORT}" >> $GITHUB_OUTPUT
@@ -126,10 +140,11 @@ jobs:
             VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${{ vars.OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64 }}
           platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
           push: true
+          # Version tags get :<version> as well; main gets only the
+          # immutable :main-<sha>.
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}-${{ steps.meta.outputs.sha }}
-            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
-            ${{ steps.meta.outputs.image }}:latest
+            ${{ startsWith(github.ref, 'refs/tags/') && format('{0}:{1}', steps.meta.outputs.image, steps.meta.outputs.tag) || '' }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           provenance: true
@@ -138,7 +153,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.source=${{ github.event.repository.html_url }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
             org.opencontainers.image.created=${{ github.event.repository.updated_at }}
 
       - name: Image summary
@@ -148,13 +163,12 @@ jobs:
           echo "**Primary (immutable):** \`${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}-${{ steps.meta.outputs.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Digest:** \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch pointer:** \`${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Legacy:** \`${{ steps.meta.outputs.image }}:latest\` (deprecated; use SHA tag)" >> $GITHUB_STEP_SUMMARY
+          echo "**Source:** CI-passed commit \`${SOURCE_SHA}\` (no mutable :main / :latest tags)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Pull (recommended):** \`docker pull ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}-${{ steps.meta.outputs.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Pull by digest:** \`docker pull ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Platforms:** ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${SOURCE_SHA}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "⚠️ **Note:** VPS production deployment builds from immutable git archives, not GHCR." >> $GITHUB_STEP_SUMMARY

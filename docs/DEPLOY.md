@@ -134,16 +134,17 @@ This evidence is recorded without exposing secrets and enables audit trails for 
 
 **CI:** GitHub Actions runs on pushes to `main`. Workflows include:
 - `.github/workflows/ci.yml`: lint, typecheck, unit tests, E2E tests (Playwright), build verification
-- `.github/workflows/build-and-push.yml`: multi-arch Docker image build (amd64 + arm64) and push to `ghcr.io/camster91/taekwondo-tournament`
+- `.github/workflows/build-and-push.yml`: multi-arch Docker image build (amd64 + arm64) and push to `ghcr.io/camster91/taekwondo-tournament`. Runs only after `CI Build` **succeeds** for a push to `main` (a `workflow_run` trigger), and builds that exact commit. Version tags (`v*`) also publish.
 
-**Artifact publishing (fail-closed):** 
-- Primary immutable tag: `ghcr.io/camster91/taekwondo-tournament:main-<sha>` (content-addressable, never mutates)
+**Artifact publishing (fail-closed):**
+- Only immutable tags: `ghcr.io/camster91/taekwondo-tournament:main-<sha>` for main, `:<version>` / `:<version>-<sha>` for version tags
 - Content digest: `@sha256:<digest>` (pinned to exact build output)
-- Branch pointer: `ghcr.io/camster91/taekwondo-tournament:main` (mutable, updated on each push)
-- Legacy tag: `ghcr.io/camster91/taekwondo-tournament:latest` (deprecated; backward compatibility only)
-- **IMPORTANT:** Pull requests do NOT publish artifacts (no PR-triggered builds that could mutate production tags)
+- No mutable `:main` or `:latest` pointers (removed; nothing in this repo pulls them)
+- **IMPORTANT:** Pull requests and red CI runs do NOT publish artifacts
 
 **Deployment:** Production deployment is **manual-only** via `scripts/deploy-production.sh` executed from a developer's local machine (requires SSH key for VPS). There is NO automated GitHub Actions deployment workflow. The script performs an immutable, rollback-safe deploy with automatic health-check validation.
+
+**Deploy preflight:** before uploading anything, the script refuses to deploy unless the local `HEAD` is on `origin/main` **and** the GitHub `Build` check for that commit concluded `success` (looked up with `gh`, or `curl` + `GITHUB_TOKEN` + `jq`). If GitHub can't be reached, `BOWIN_ALLOW_UNVERIFIED_CI="<reason>"` overrides the CI lookup only; the reason, the CI result and the previous live revision are written to the deployment record.
 
 **Deployment artifact source:** VPS production deployment builds Docker images from **immutable git source archives** (SHA-verified tar.gz), NOT from pre-built GHCR images. The GHCR images published by CI are for local testing and non-production deployments only. This ensures production deployments are:
 - Reproducible from source at any time

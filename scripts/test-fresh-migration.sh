@@ -149,18 +149,29 @@ MIGRATION_COUNT=$(PGPASSWORD="${DB_PASS}" psql \
 
 log "Applied ${MIGRATION_COUNT} migrations"
 
-# Check for schema drift (compare introspected schema to prisma/schema.prisma)
+# Check for schema drift: the database built purely from the checked-in
+# migrations must match prisma/schema.prisma exactly. `migrate diff
+# --exit-code` exits 2 when they differ, so drift fails this script (and CI).
 log "Checking for schema drift..."
-DRIFT_OUTPUT=$(DATABASE_URL="${TEST_DB_URL}" npx prisma db pull --print 2>&1 || true)
+set +e
+DRIFT_OUTPUT=$(DATABASE_URL="${TEST_DB_URL}" npx prisma migrate diff \
+    --from-config-datasource \
+    --to-schema prisma/schema.prisma \
+    --script --exit-code 2>&1)
+DRIFT_STATUS=$?
+set -e
 
-if echo "${DRIFT_OUTPUT}" | grep -q "Your database is now in sync with your Prisma schema"; then
+if [[ ${DRIFT_STATUS} -eq 0 ]]; then
     log "✅ Schema matches: no drift detected"
-elif echo "${DRIFT_OUTPUT}" | grep -q "already in sync"; then
-    log "✅ Schema matches: no drift detected"
-else
-    warn "⚠️  Possible schema drift detected"
-    warn "This may indicate migrations are out of sync with schema.prisma"
+elif [[ ${DRIFT_STATUS} -eq 2 ]]; then
+    error "Schema drift: prisma/schema.prisma differs from the migration history."
+    error "Add a migration for these changes (npx prisma migrate dev --create-only):"
     echo "${DRIFT_OUTPUT}"
+    exit 3
+else
+    error "Could not compare schema to migrations (prisma migrate diff exited ${DRIFT_STATUS}):"
+    echo "${DRIFT_OUTPUT}"
+    exit 4
 fi
 
 log "Fresh migration test passed ✅"

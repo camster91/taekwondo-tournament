@@ -207,9 +207,10 @@ Its steps, in order:
 | Fresh migration test | `scripts/test-fresh-migration.sh`: `migrate deploy` on an empty DB must match the schema |
 
 GitGuardian also scans each PR for secrets. `build-and-push.yml`
-publishes an image to `ghcr.io` on pushes to `main`; it is not a PR
-gate, and production builds from an immutable source archive instead
-(`scripts/deploy-production.sh`).
+publishes an immutable `:main-<sha>` image to `ghcr.io` only after CI
+passes on `main`; it is not a PR gate. Production builds from an
+immutable source archive instead (`scripts/deploy-production.sh`), which
+refuses commits that are not on `origin/main` or lack a green `Build`.
 
 ## Review checklist
 
