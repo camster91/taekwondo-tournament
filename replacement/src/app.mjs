@@ -1,4 +1,5 @@
 import express from 'express';
+import {fileURLToPath} from 'node:url';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -12,7 +13,7 @@ export function createApp({ pool, origin, setupToken, revision, secureCookies = 
   const app = express();
   app.locals.canonicalOrigin=origin;
   app.disable('x-powered-by');
-  app.use(helmet());
+  app.use(helmet({contentSecurityPolicy:{directives:{'upgrade-insecure-requests':secureCookies?[]:null}}}));
   app.use(express.json({ limit: '16kb' }));
   app.use('/api', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   app.use((req, res, next) => {
@@ -107,6 +108,9 @@ export function createApp({ pool, origin, setupToken, revision, secureCookies = 
   mountTournamentRoutes({app,pool,requireAuth,route});
   mountInviteRoutes({app,pool,origin,requireAuth,route,issueSession});
   mountPublicResults({app,pool,route,Problem});
+  const publicDirectory=fileURLToPath(new URL('./public/',import.meta.url));
+  app.use(express.static(publicDirectory,{index:false}));
+  app.get(['/','/accept-invite','/results/:publicId'],(_req,res)=>{res.set('Cache-Control','no-store');res.sendFile(publicDirectory+'index.html');});
   app.use((_req,res)=>res.status(404).json({error:'NOT_FOUND'}));
   app.use((error,_req,res,_next)=>{
     if(error instanceof Problem)return res.status(error.status).json({error:error.code});

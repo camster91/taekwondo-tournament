@@ -48,6 +48,13 @@ export function mountSchedulePublication({router,pool,access,mutate,Problem,orig
       });res.json(result);
     }catch(error){next(error);}
   });
+  router.get('/publication',async(req,res,next)=>{
+    try{
+      await access(pool,req);
+      const tournament=(await pool.query('SELECT publication_enabled,public_id FROM bowin_rebuild.tournaments WHERE organization_id=$1 AND id=$2',[req.params.organizationId,req.params.tournamentId])).rows[0];
+      res.json({published:tournament.publication_enabled,publicUrl:tournament.publication_enabled?origin+'/results/'+tournament.public_id:null});
+    }catch(error){next(error);}
+  });
   router.post('/publication',async(req,res,next)=>{
     try{
       const published=req.body?.published;

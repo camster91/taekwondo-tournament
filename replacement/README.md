@@ -49,13 +49,13 @@ Integration QA proves competing score submissions and rollback when scoring or f
 completion cannot write its audit, including rollback of the division status.
 
 The complete rebuild still requires public/self-service registration where enabled,
-registration edits/withdrawals, the browser interface, and end-to-end QA. This foundation is
+registration edits/withdrawals, production HTTPS/browser acceptance, and complete replacement-host recovery. This foundation is
 not a completed rebuild or a live release. Existing API integration tests against
 fresh isolated PostgreSQL prove invite/session/tenant/role and registration boundaries,
 the three-competitor final and concurrent score submission rejection. Domain tests
 exercise all 2–256 bracket sizes, verifying every entrant appears exactly once and
 exactly n–1 actual matches decide the champion.
-Browser acceptance and complete replacement-host recovery remain required.
+Full release handoff and complete replacement-host recovery remain required.
 
 Use `npm ci`, `npm test`, and `npm run migrate` with a dedicated disposable database.
 Runtime configuration: DATABASE_URL, REBUILD_DATABASE_NAME, APP_ORIGIN, SETUP_TOKEN,
@@ -75,11 +75,12 @@ organization isolation, roles, registration/check-in, scheduling, bracket scorin
 public-result privacy and session revocation. Both runtime and test-client databases
 are disposable QA databases; provider credentials are absent. The job checks the
 unprivileged runtime UID, readiness/source revision, repeated image migrations and
-database content preservation across an image restart. These are API checks; they
-do not prove browser workflows or completion of the rebuilt product.
+database content preservation across an image restart. These are API checks. A separate browser job imports the same saved image and
+exercises the new browser tournament desk with fictional data and an explicit
+HTTP-only local QA cookie exception; it does not prove production HTTPS or product completion.
 
 Image publication is disabled unless `BOWIN_IMMUTABLE_RELEASE_ENABLED=true`, and
-then only runs for a main push after both replacement jobs pass. It loads and
+then only runs for a main push after source, imported API/recovery and imported browser jobs pass. It loads and
 verifies the saved image again, publishes a source/run/attempt-specific tag to
 `ghcr.io/camster91/bowin-rebuild`, and records its immutable registry digest.
 It never rebuilds during publication. A separate draft GitHub release stores and
@@ -96,3 +97,13 @@ does not publish this replacement image. No replacement production promotion,
 default-branch change, secret enrollment, live routing change or database reset is
 part of these image checks. A reviewed Coolify consumer and recovery handoff remain
 required before enabling production automation.
+
+The browser tournament desk serves setup/sign-in, tournaments, divisions, competitor
+entry and division assignment/check-in, explicit bracket seed ordering and sparring
+scoring, patterns scoring/completion, ring bookings, staff invitation acceptance,
+publication/withdrawal and anonymous alias-only results. The interface hides owner
+and organizer controls from scorekeepers; server authorization remains authoritative.
+Untrusted names render as text. Invite fragments are cleared on arrival, and no
+session credentials are stored in browser storage. Forms use associated labels and
+native keyboard controls, with responsive layouts for tournament-day phones.
+Browser checks use a separate disposable database and fictional accounts only.

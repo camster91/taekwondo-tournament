@@ -91,9 +91,48 @@ jobs:
         run: python3 .github/scripts/checked-image.py load --directory "$RUNNER_TEMP/bowin-checked-image"
       - name: Test the imported runtime against a disposable database
         run: bash .github/scripts/test-checked-runtime.sh
+  browser:
+    name: Imported runtime browser journeys
+    needs: foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RELEASE_SHA: ${{ github.sha }}
+      BOWIN_CHECKED_IMAGE: bowin-rebuild-checked-runtime:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: replacement/package-lock.json
+      - name: Install browser client
+        working-directory: replacement
+        run: npm ci --ignore-scripts
+      - name: Install Chromium
+        working-directory: replacement
+        run: npx playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: bowin-checked-image-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bowin-checked-image/
+      - name: Verify and import the saved runtime
+        run: python3 .github/scripts/checked-image.py load --directory "$RUNNER_TEMP/bowin-checked-image"
+      - name: Exercise browser workflows against the imported runtime
+        run: bash .github/scripts/test-browser-runtime.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bowin-browser-qa-attempt-${{ github.run_attempt }}
+          path: |
+            bowin-browser-verification.json
+            bowin-browser-desktop.png
+            bowin-browser-mobile.png
+            bowin-browser-failure.png
+          retention-days: 14
   publish:
     name: Publish checked rebuild image
-    needs: [foundation, checked-image]
+    needs: [foundation, checked-image, browser]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.BOWIN_IMMUTABLE_RELEASE_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
