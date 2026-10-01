@@ -47,6 +47,8 @@ ready() {
     if node --input-type=module -e 'const r=await fetch(process.env.BOWIN_CHECKED_RUNTIME_URL+"/api/health/ready");const b=await r.json();if(!r.ok||b.revision!==process.env.RELEASE_SHA)process.exit(1)' >/dev/null 2>&1; then return; fi
     sleep 1
   done
+  echo 'Checked runtime readiness did not recover' >&2
+  docker inspect --format '{{.State.Status}} exit={{.State.ExitCode}}' "$runtime" >&2
   return 1
 }
 ready
@@ -66,6 +68,9 @@ for attempt in 1 2; do
     -e REBUILD_DATABASE_NAME="$database_name" "$BOWIN_CHECKED_IMAGE" node src/migrate.mjs
 done
 docker restart "$runtime" >/dev/null
+# Docker may assign a new ephemeral loopback host port on restart.
+runtime_port=$(docker inspect --format '{{(index (index .NetworkSettings.Ports "3001/tcp") 0).HostPort}}' "$runtime")
+export BOWIN_CHECKED_RUNTIME_URL="http://127.0.0.1:$runtime_port"
 ready
 after=$(snapshot)
 [[ "$before" == "$after" && -n "$before" ]]
