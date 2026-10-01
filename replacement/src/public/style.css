@@ -3,3 +3,5 @@
 @media(max-width:760px){main{padding:16px}header{padding:18px 16px}.workspace-bar{grid-template-columns:1fr 1fr;gap:14px}.workspace-bar button{justify-self:start}form{grid-template-columns:1fr;padding:18px}.cards{grid-template-columns:1fr}.heading-row{align-items:flex-start}.tabs{gap:3px}.tabs button{padding:10px 12px}.auth{margin:20px auto 40px}.card{padding:18px}}@media(prefers-reduced-motion:no-preference){button{transition:background-color .15s}}
 
 h1,h2,h3{overflow-wrap:anywhere}
+
+.field{display:flex;flex-direction:column;gap:7px;min-width:0}
