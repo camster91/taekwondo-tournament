@@ -14,6 +14,7 @@ import { Button } from '../components/ui';
 import { Input } from '../components/ui';
 import { Label } from '../components/ui';
 import { Modal } from '../components/ui';
+import { formatDateOnly } from '../utils/date-only';
 
 interface Competitor {
   id: string;
@@ -133,13 +134,12 @@ export default function CompetitorDuplicates() {
     mergeMutation.mutate({ primaryId, secondaryId, mergeOptions });
   };
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
+  // Dates of birth are date-only values: format without a time-zone shift.
+  const formatDate = (dateStr: string) => formatDateOnly(dateStr, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }, 'en-US');
 
   const getMatchScoreColor = (score: number) => {
     if (score >= 0.9) return 'text-danger dark:text-danger';

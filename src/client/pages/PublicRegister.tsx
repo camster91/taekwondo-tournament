@@ -11,6 +11,7 @@ import { Select } from '../components/ui';
 import { Textarea } from '../components/ui';
 import { getSportProfile } from '../../shared/constants/sport-profiles';
 import { fetchJson, getApiFailure } from '../utils/api-status';
+import { ageOnDate } from '../utils/date-only';
 import {
   parseRegistrationLegalConfig,
   parseRegistrationResult,
@@ -166,15 +167,10 @@ export default function PublicRegister() {
   // autoCategorize would assign on submit.
   const ageBandPreview = useMemo(() => {
     if (!formData.dateOfBirth) return null;
-    const dob = new Date(formData.dateOfBirth);
-    if (isNaN(dob.getTime())) return null;
-    const now = new Date();
-    let age = now.getFullYear() - dob.getFullYear();
-    // Adjust if birthday hasn't occurred yet this year.
-    const monthDiff = now.getMonth() - dob.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
-      age--;
-    }
+    // Parse the YYYY-MM-DD input as a calendar date; `new Date(...)` reads it
+    // as UTC midnight, which is the previous local day west of UTC.
+    const age = ageOnDate(formData.dateOfBirth);
+    if (age === null) return null;
     if (age < 4 || age > 99) return null;
 
     // Pick CB vs BB grouping based on belt. "Black" or "Poom" → BB.
@@ -232,14 +228,10 @@ export default function PublicRegister() {
 
   const isMinor = useMemo(() => {
     if (!formData.dateOfBirth) return false;
-    const dob = new Date(formData.dateOfBirth);
-    const today = new Date();
-    let age = today.getFullYear() - dob.getFullYear();
-    const monthDiff = today.getMonth() - dob.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-      age--;
-    }
-    return age < 18;
+    // Calendar-date age: UTC parsing made a 17-year-old count as 18 on the
+    // day before their birthday west of UTC (skipping guardian fields).
+    const age = ageOnDate(formData.dateOfBirth);
+    return age !== null && age < 18;
   }, [formData.dateOfBirth]);
 
   // Map sport event types to the two boolean fields (patterns = first event, sparring = second)

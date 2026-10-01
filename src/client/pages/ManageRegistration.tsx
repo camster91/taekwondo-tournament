@@ -31,6 +31,7 @@ import Label from '../components/ui/Label';
 import Select from '../components/ui/Select';
 import { classifyWithdrawalResponse } from '../utils/registration-withdrawal';
 import { fetchJson, getApiFailure } from '../utils/api-status';
+import { formatDateOnly } from '../utils/date-only';
 import {
   managedRegistrationMatchesUpdate,
   normalizeManagedRegistrationUpdate,
@@ -387,7 +388,7 @@ export default function ManageRegistration() {
                 </div>
                 <div>
                   <Label htmlFor="m-dob">Date of birth</Label>
-                  <ReadonlyField value={new Date(registration.dateOfBirth).toLocaleDateString()} />
+                  <ReadonlyField value={formatDateOnly(registration.dateOfBirth)} />
                   <p className="text-xs text-surface-500 mt-1">Locked for verification — can't be changed.</p>
                 </div>
                 <div>
