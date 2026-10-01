@@ -16,6 +16,22 @@ export interface ManagedRegistration {
   tournamentDate: string;
   tournamentStatus: string;
   checkedIn: boolean;
+  paymentStatus?: string | null;
+  paymentAmountCents?: number | null;
+  waitlistStatus?: string | null;
+  waitlistPosition?: number | null;
+}
+
+/** Payment states in which the parent can (re)start the entry-fee checkout. */
+const PAYABLE_STATUSES = new Set(['pending', 'failed']);
+
+/** Whether the management page should offer "Complete payment". */
+export function registrationPaymentDue(registration: Pick<ManagedRegistration,
+  'paymentStatus' | 'waitlistStatus' | 'checkedIn' | 'tournamentStatus'>): boolean {
+  return PAYABLE_STATUSES.has(registration.paymentStatus ?? '')
+    && registration.waitlistStatus !== 'waitlisted'
+    && !registration.checkedIn
+    && !['in_progress', 'completed'].includes(registration.tournamentStatus);
 }
 
 export type ManagedRegistrationUpdate = Pick<ManagedRegistration,

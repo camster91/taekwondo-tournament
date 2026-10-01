@@ -165,6 +165,9 @@ export async function createPublicRegistration(
     const registration = await tx.registration.create({
       data: {
         ...input.registration,
+        // A waitlisted registrant holds no spot, so nothing is charged yet;
+        // promotion turns the fee due (see promotedRegistrationPaymentData).
+        ...(slot.waitlistStatus === 'waitlisted' ? WAITLISTED_PAYMENT_DATA : {}),
         tournamentId: input.tournamentId,
         competitorId: competitor.id,
         managementTokenHash: hashManagementToken(managementToken),
@@ -252,6 +255,26 @@ export async function isCompetitorOwnedByRegistration(
 
 /** Payment states from which a parent may (re)start an entry-fee checkout. */
 export const CHECKOUT_ALLOWED_PAYMENT_STATUSES = ['pending', 'failed'] as const;
+
+/** Payment fields for a waitlisted registration: no spot, nothing due. */
+export const WAITLISTED_PAYMENT_DATA = { paymentStatus: 'not_required', paymentAmountCents: null } as const;
+
+/**
+ * Payment fields to set when a waitlisted registration is promoted. A
+ * waitlisted entry was stored as `not_required` (see WAITLISTED_PAYMENT_DATA),
+ * so once it holds a spot the tournament's entry fee becomes due and the
+ * parent pays through the management link. Settled states (paid / waived)
+ * and an already-pending fee are left alone; free tournaments need nothing.
+ */
+export function promotedRegistrationPaymentData(
+  tournamentSettings: string | null,
+  currentPaymentStatus: string | null,
+): { paymentStatus: 'pending'; paymentAmountCents: number } | Record<string, never> {
+  const feeCents = parseTournamentFeeCents(tournamentSettings);
+  if (feeCents <= 0) return {};
+  if (currentPaymentStatus !== null && currentPaymentStatus !== 'not_required') return {};
+  return { paymentStatus: 'pending', paymentAmountCents: feeCents };
+}
 
 export function parseTournamentFeeCents(settings: string | null): number {
   if (!settings) return 0;

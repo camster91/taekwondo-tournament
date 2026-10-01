@@ -806,6 +806,12 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
       tournamentDate: registration.tournament.date,
       tournamentStatus: registration.tournament.status,
       checkedIn: registration.checkedIn,
+      // Lets the parent finish an unpaid entry fee (e.g. after an abandoned
+      // Checkout or a waitlist promotion) via POST /checkout.
+      paymentStatus: registration.paymentStatus,
+      paymentAmountCents: registration.paymentAmountCents,
+      waitlistStatus: registration.waitlistStatus,
+      waitlistPosition: registration.waitlistPosition,
     },
   });
 });
@@ -1413,6 +1419,7 @@ router.post('/checkout', registrationLimiter, async (req: Request, res: Response
       id: true,
       paymentStatus: true,
       paymentIntentId: true,
+      waitlistStatus: true,
       managementTokenExpiresAt: true,
       managementTokenRevokedAt: true,
       tournament: { select: { id: true, name: true, settings: true, deletedAt: true } },
@@ -1432,6 +1439,14 @@ router.post('/checkout', registrationLimiter, async (req: Request, res: Response
 
   if (registration.paymentStatus === 'paid') {
     return res.status(409).json({ error: 'This registration has already been paid' });
+  }
+
+  // A waitlisted registrant holds no spot; payment opens on promotion.
+  if (registration.waitlistStatus === 'waitlisted') {
+    return res.status(409).json({
+      error: 'This registration is on the waitlist. Payment opens if a spot becomes available.',
+      code: 'WAITLISTED',
+    });
   }
 
   // Only pending/failed registrations can start a checkout. waived /

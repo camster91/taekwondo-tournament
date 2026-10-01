@@ -32,6 +32,7 @@ import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic,
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 import { legalHoldSchema, legalHoldData } from '../services/legal-hold.js';
 import { generateManagementToken, getManagementTokenExpiry, hashManagementToken } from '../utils/registration-management-token.js';
+import { promotedRegistrationPaymentData } from '../services/public-registration.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
 import { generateQRPoster } from '../services/qr-poster.js';
@@ -1321,6 +1322,7 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
           brandName: true,
           maxCapacity: true,
           organizationId: true,
+          settings: true,
           organization: {
             select: { brandName: true },
           },
@@ -1350,12 +1352,22 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
   // one transaction holding the tournament lock that public registration
   // uses, so concurrent promotes cannot overfill the tournament and a
   // double-click cannot promote twice (or rotate the emailed token).
+  // A waitlisted entry owed nothing; the entry fee is due once promoted and
+  // the parent pays through the management link in the promotion email.
+  const promotionPayment = promotedRegistrationPaymentData(
+    registration.tournament.settings,
+    registration.paymentStatus,
+  );
   const { promoteWaitlistedRegistration } = await import('../services/waitlist.js');
   const outcome = await promoteWaitlistedRegistration(
     prisma,
     tournamentId,
     registrationId,
-    { managementTokenHash: hashManagementToken(newManagementToken), managementTokenExpiresAt: newExpiry },
+    {
+      managementTokenHash: hashManagementToken(newManagementToken),
+      managementTokenExpiresAt: newExpiry,
+      payment: promotionPayment,
+    },
     async (tx) => {
       // Audit log
       if (authReq.user) {
@@ -1409,6 +1421,11 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
       confirmationCode: registration.id.slice(0, 8),
       managementUrl,
       organizerBrandName,
+      paymentDueCents: 'paymentAmountCents' in promotionPayment
+        ? promotionPayment.paymentAmountCents
+        : registration.paymentStatus === 'pending' || registration.paymentStatus === 'failed'
+          ? registration.paymentAmountCents
+          : null,
     });
 
     sendEmail(registration.parentEmail, subject, html).catch((err) => {

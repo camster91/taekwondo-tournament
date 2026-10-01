@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { promotedRegistrationPaymentData } from './public-registration.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -195,7 +196,7 @@ export async function promoteNextWaitlisted(
       const next = await tx.registration.findFirst({
         where: { tournamentId, waitlistStatus: 'waitlisted' },
         orderBy: [{ waitlistPosition: 'asc' }, { createdAt: 'asc' }],
-        select: { id: true },
+        select: { id: true, paymentStatus: true, tournament: { select: { settings: true } } },
       });
       if (next) {
         await tx.registration.update({
@@ -204,6 +205,8 @@ export async function promoteNextWaitlisted(
             waitlistStatus: 'promoted',
             waitlistPosition: null,
             waitlistPromotedAt: new Date(),
+            // The entry fee becomes due now that the registrant holds a spot.
+            ...promotedRegistrationPaymentData(next.tournament.settings, next.paymentStatus),
           },
         });
         promotedRegistrationId = next.id;
@@ -234,7 +237,11 @@ export async function promoteWaitlistedRegistration(
   prisma: PrismaClient,
   tournamentId: string,
   registrationId: string,
-  data: { managementTokenHash: string; managementTokenExpiresAt: Date },
+  data: {
+    managementTokenHash: string;
+    managementTokenExpiresAt: Date;
+    payment?: ReturnType<typeof promotedRegistrationPaymentData>;
+  },
   onPromoted?: (tx: Prisma.TransactionClient) => Promise<void>,
 ): Promise<ManualPromotionResult> {
   return prisma.$transaction(async (tx) => {
@@ -268,6 +275,7 @@ export async function promoteWaitlistedRegistration(
         managementTokenHash: data.managementTokenHash,
         managementTokenExpiresAt: data.managementTokenExpiresAt,
         managementTokenRevokedAt: null,
+        ...data.payment,
       },
     });
     await renumberWaitlist(tx, tournamentId);

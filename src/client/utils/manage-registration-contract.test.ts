@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { managedRegistrationMatchesUpdate, normalizeManagedRegistrationUpdate, parseManagedRegistrationResponse } from './manage-registration-contract.js';
+import { managedRegistrationMatchesUpdate, normalizeManagedRegistrationUpdate, parseManagedRegistrationResponse, registrationPaymentDue } from './manage-registration-contract.js';
 
 const registration = {
   confirmationCode: '12345678', firstName: 'Amina', lastName: 'Kim',
@@ -36,5 +36,23 @@ describe('managed registration response', () => {
     const expected = normalizeManagedRegistrationUpdate({ ...registration, firstName: '  Amira  ', school: '' });
     expect(managedRegistrationMatchesUpdate({ ...registration, firstName: 'Amira', school: null }, expected)).toBe(true);
     expect(managedRegistrationMatchesUpdate(registration, expected)).toBe(false);
+  });
+});
+
+describe('registrationPaymentDue', () => {
+  const base = { paymentStatus: 'pending', waitlistStatus: 'active', checkedIn: false, tournamentStatus: 'registration' };
+
+  it('offers payment for an unpaid (pending/failed) spot-holding registration', () => {
+    expect(registrationPaymentDue(base)).toBe(true);
+    expect(registrationPaymentDue({ ...base, paymentStatus: 'failed', waitlistStatus: 'promoted' })).toBe(true);
+  });
+
+  it('never asks a waitlisted, settled, checked-in or started registration to pay', () => {
+    expect(registrationPaymentDue({ ...base, waitlistStatus: 'waitlisted' })).toBe(false);
+    expect(registrationPaymentDue({ ...base, paymentStatus: 'paid' })).toBe(false);
+    expect(registrationPaymentDue({ ...base, paymentStatus: 'not_required' })).toBe(false);
+    expect(registrationPaymentDue({ ...base, paymentStatus: undefined })).toBe(false);
+    expect(registrationPaymentDue({ ...base, checkedIn: true })).toBe(false);
+    expect(registrationPaymentDue({ ...base, tournamentStatus: 'in_progress' })).toBe(false);
   });
 });

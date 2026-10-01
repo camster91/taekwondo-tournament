@@ -395,16 +395,22 @@ export function waitlistPromotionEmail(params: {
   confirmationCode: string;
   managementUrl: string;
   organizerBrandName?: string;
+  /** Entry fee now due (cents); the parent pays through the management link. */
+  paymentDueCents?: number | null;
 }): { subject: string; html: string } {
   const safeCompetitorName = escapeHtml(params.competitorName);
   const safeTournamentName = escapeHtml(params.tournamentName);
   const safeConfirmationCode = escapeHtml(params.confirmationCode);
   const safeManagementUrl = escapeHtml(params.managementUrl);
   const safeBrandName = params.organizerBrandName ? escapeHtml(params.organizerBrandName) : safeTournamentName;
-  
+
   const tournamentDate = new Date(params.tournamentDate).toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
+  const paymentDue = typeof params.paymentDueCents === 'number' && params.paymentDueCents > 0;
+  const nextStep = paymentDue
+    ? `<p><strong>Payment required:</strong> the entry fee of $${(params.paymentDueCents! / 100).toFixed(2)} is now due. Use the button below to complete payment and secure the spot.</p>`
+    : `<p>Your registration is now active. No further action is required — you're all set!</p>`;
 
   return {
     subject: `A Spot Opened Up! — ${safeTournamentName}`,
@@ -416,9 +422,9 @@ export function waitlistPromotionEmail(params: {
         <p style="margin: 4px 0;"><strong>Date:</strong> ${escapeHtml(tournamentDate)}</p>
         <p style="margin: 4px 0;"><strong>Confirmation Code:</strong> <span style="font-family:monospace; background:#fff; padding:4px 8px; border-radius:4px;">${safeConfirmationCode}</span></p>
       </div>
-      <p>Your registration is now active. No further action is required — you're all set!</p>
+      ${nextStep}
       <p style="text-align:center; margin: 24px 0;">
-        <a href="${safeManagementUrl}" class="btn">View Registration</a>
+        <a href="${safeManagementUrl}" class="btn">${paymentDue ? 'Complete Payment' : 'View Registration'}</a>
       </p>
       <p class="muted">Please keep this email for your records. You may be asked to provide your confirmation code at check-in.</p>
     `, {
