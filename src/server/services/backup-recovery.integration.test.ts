@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { getBackup, restoreDivisionState, restoreSavedDivisionBackup, saveBackup, type TournamentBackup } from './backup-recovery.js';
+import { backupDivisionState, getBackup, restoreDivisionState, restoreSavedDivisionBackup, saveBackup, type TournamentBackup } from './backup-recovery.js';
 
 const databaseUrl = process.env.BACKUP_RECOVERY_DATABASE_URL;
 const integration = databaseUrl ? describe : describe.skip;
@@ -91,7 +91,7 @@ integration('division backup recovery against disposable Postgres', () => {
     const division = (name: string) => ({
       id: randomUUID(), name, beltLevel: 'Black', gender: 'mixed', eventType: 'patterns', ageMin: 10, ageMax: 40,
       beltColors: null, danMin: null, danMax: null, weightClass: null, divisionNumber: 1, isSpecialNeeds: false, displayOrder: null,
-      assignments: [], bracket: { id: bracketId, structure: '{}' },
+      assignments: [], bracket: { id: bracketId, structure: '{}', format: 'double_elim', matches: [] },
     });
     const backup: TournamentBackup = { tournamentId, timestamp: new Date(), divisions: [division('First bracket'), division('Duplicate bracket')] };
     await saveBackup(prisma, backup);
@@ -110,6 +110,80 @@ integration('division backup recovery against disposable Postgres', () => {
     await expect(restoreSavedDivisionBackup(prisma, tournamentId)).resolves.toMatchObject({ restored: 1, errors: [] });
     expect(await getBackup(prisma, tournamentId)).toBeUndefined();
     expect(await prisma.division.findMany({ where: { tournamentId }, select: { id: true } })).toEqual([{ id: restoredId }]);
+  });
+
+  it('round-trips brackets with match results, format and division fields', async () => {
+    const competitorIds = [randomUUID(), randomUUID()];
+    const registrationIds = [randomUUID(), randomUUID()];
+    for (const [i, id] of competitorIds.entries()) {
+      await prisma.competitor.create({ data: {
+        id, organizationId, firstName: `Backup${i}`, lastName: 'Fighter', gender: 'M', dateOfBirth: new Date('2012-01-01'), belt: 'Black',
+      } });
+      await prisma.registration.create({ data: { id: registrationIds[i], tournamentId, competitorId: id, sparring: true } });
+    }
+    try {
+      const divisionId = randomUUID();
+      const bracketId = randomUUID();
+      const matchId = randomUUID();
+      const deletedDivisionId = randomUUID();
+      await prisma.division.create({ data: {
+        id: divisionId, tournamentId, name: 'Scored division', beltLevel: 'BB', gender: 'M', eventType: 'sparring', ageMin: 10, ageMax: 14,
+        bracketDifficulty: 0.7, matchupQuality: 0.8, avgSkillRating: 1234,
+        assignments: { create: registrationIds.map((registrationId, i) => ({ registrationId, seedPosition: i + 1 })) },
+        bracket: { create: { id: bracketId, structure: '{"winners":[]}', format: 'single_elim', matches: { create: [{
+          id: matchId, roundNumber: 1, matchNumber: 1, bracketType: 'winners',
+          competitor1Id: registrationIds[0], competitor2Id: registrationIds[1], winnerId: registrationIds[1],
+          score1: '3', score2: '7', status: 'completed', ringNumber: 2, notes: 'kept',
+        }] } } },
+      } });
+      await prisma.division.create({ data: {
+        id: deletedDivisionId, tournamentId, name: 'Trashed division', beltLevel: 'BB', gender: 'F', eventType: 'patterns', ageMin: 10, ageMax: 14,
+        deletedAt: new Date('2030-01-02T00:00:00Z'),
+      } });
+
+      // Same path as the forced clear-all: back up, persist, delete.
+      await saveBackup(prisma, await backupDivisionState(prisma, tournamentId));
+      await prisma.division.deleteMany({ where: { tournamentId } });
+      expect(await prisma.match.count({ where: { id: matchId } })).toBe(0);
+
+      await expect(restoreSavedDivisionBackup(prisma, tournamentId)).resolves.toMatchObject({ restored: 3, errors: [] });
+
+      const division = await prisma.division.findUniqueOrThrow({
+        where: { id: divisionId },
+        include: { assignments: true, bracket: { include: { matches: true } } },
+      });
+      expect(division).toMatchObject({ bracketDifficulty: 0.7, matchupQuality: 0.8, avgSkillRating: 1234, deletedAt: null });
+      expect(division.assignments.map((a) => a.seedPosition).sort()).toEqual([1, 2]);
+      expect(division.bracket).toMatchObject({ id: bracketId, format: 'single_elim', structure: '{"winners":[]}' });
+      expect(division.bracket!.matches).toEqual([expect.objectContaining({
+        id: matchId, winnerId: registrationIds[1], score1: '3', score2: '7', status: 'completed', ringNumber: 2, notes: 'kept',
+      })]);
+      const trashed = await prisma.division.findUniqueOrThrow({ where: { id: deletedDivisionId } });
+      expect(trashed.deletedAt?.toISOString()).toBe('2030-01-02T00:00:00.000Z');
+    } finally {
+      await prisma.division.deleteMany({ where: { tournamentId } });
+      await prisma.competitor.deleteMany({ where: { id: { in: competitorIds } } });
+    }
+  });
+
+  it('restores a legacy (v1) backup without recreating a bracket that has no match data', async () => {
+    const divisionId = randomUUID();
+    const backup: TournamentBackup = { tournamentId, timestamp: new Date(), divisions: [{
+      id: divisionId, name: 'Legacy division', beltLevel: 'Black', gender: 'mixed', eventType: 'patterns', ageMin: 10, ageMax: 40,
+      beltColors: null, danMin: null, danMax: null, weightClass: null, divisionNumber: 1, isSpecialNeeds: false, displayOrder: null,
+      assignments: [], bracket: { id: randomUUID(), structure: '{}' },
+    }] };
+    await saveBackup(prisma, backup);
+    const result = await restoreSavedDivisionBackup(prisma, tournamentId);
+    expect(result?.restored).toBe(1);
+    expect(result?.errors).toEqual([expect.stringContaining('Legacy division')]);
+    expect(await prisma.division.findUnique({ where: { id: divisionId }, include: { bracket: true } })).toMatchObject({ bracket: null });
+  });
+
+  it('throws (so destructive callers abort) when the backup cannot be saved', async () => {
+    const failingPrisma = prisma.$extends({ query: { backupState: { upsert: async () => { throw new Error('disk full'); } } } });
+    await expect(saveBackup(failingPrisma as unknown as PrismaClient, { tournamentId, timestamp: new Date(), divisions: [] }))
+      .rejects.toThrow('Could not save a recovery backup');
   });
 
   it('does not report success when the restored artifact cannot be cleared', async () => {

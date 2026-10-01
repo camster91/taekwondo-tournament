@@ -603,7 +603,8 @@ router.delete('/tournament/:tournamentId/all', authenticate, requireTournamentAc
     }
   }
 
-  // Create backup before deleting
+  // Create backup before deleting. saveBackup throws (503) when the backup
+  // cannot be stored, so nothing is deleted without a restorable backup.
   const backup = await backupDivisionState(prisma, tournamentId);
   await saveBackup(prisma, backup);
 

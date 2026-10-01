@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { AppError, ErrorCode } from '../utils/errors.js';
 
 /**
  * State backup for recovery purposes
@@ -6,7 +7,32 @@ import { PrismaClient } from '@prisma/client';
 export interface TournamentBackup {
   tournamentId: string;
   timestamp: Date;
+  /**
+   * Shape version. Absent (v1) backups predate match/format capture: their
+   * brackets carry only the structure JSON. v2 adds bracket format, matches
+   * and the division soft-delete/fairness fields.
+   */
+  version?: 2;
   divisions: DivisionBackup[];
+}
+
+export interface MatchBackup {
+  id: string;
+  roundNumber: number;
+  matchNumber: number;
+  bracketType: string;
+  competitor1Id: string | null;
+  competitor2Id: string | null;
+  winnerId: string | null;
+  score1: string | null;
+  score2: string | null;
+  status: string;
+  scheduledTime: Date | string | null;
+  ringNumber: number | null;
+  notes: string | null;
+  videoUrl: string | null;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
 }
 
 export interface DivisionBackup {
@@ -24,6 +50,12 @@ export interface DivisionBackup {
   divisionNumber: number;
   isSpecialNeeds: boolean;
   displayOrder: number | null;
+  // v2 fields (optional so v1 backups still type-check and restore)
+  deletedAt?: Date | string | null;
+  createdAt?: Date | string;
+  bracketDifficulty?: number | null;
+  matchupQuality?: number | null;
+  avgSkillRating?: number | null;
   assignments: Array<{
     registrationId: string;
     seedPosition: number | null;
@@ -32,7 +64,22 @@ export interface DivisionBackup {
   bracket?: {
     id: string;
     structure: string;
+    format?: string;
+    /** v2: every match with its result. Absent in v1 backups. */
+    matches?: MatchBackup[];
   };
+}
+
+/**
+ * Interactive-transaction budget for a restore. A tournament restore
+ * recreates every division, assignment, bracket and match; Prisma's default
+ * 5 s timeout rolled a large one back half-way through.
+ */
+export const RESTORE_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 120_000 } as const;
+
+function toDate(value: Date | string | null | undefined): Date | null {
+  if (value === null || value === undefined) return null;
+  return value instanceof Date ? value : new Date(value);
 }
 
 /**
@@ -56,6 +103,28 @@ export async function backupDivisionState(
         select: {
           id: true,
           structure: true,
+          format: true,
+          matches: {
+            select: {
+              id: true,
+              roundNumber: true,
+              matchNumber: true,
+              bracketType: true,
+              competitor1Id: true,
+              competitor2Id: true,
+              winnerId: true,
+              score1: true,
+              score2: true,
+              status: true,
+              scheduledTime: true,
+              ringNumber: true,
+              notes: true,
+              videoUrl: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+            orderBy: { matchNumber: 'asc' },
+          },
         },
       },
     },
@@ -64,6 +133,7 @@ export async function backupDivisionState(
   return {
     tournamentId,
     timestamp: new Date(),
+    version: 2,
     divisions: divisions.map((d) => ({
       id: d.id,
       name: d.name,
@@ -79,6 +149,11 @@ export async function backupDivisionState(
       divisionNumber: d.divisionNumber,
       isSpecialNeeds: d.isSpecialNeeds,
       displayOrder: d.displayOrder,
+      deletedAt: d.deletedAt,
+      createdAt: d.createdAt,
+      bracketDifficulty: d.bracketDifficulty,
+      matchupQuality: d.matchupQuality,
+      avgSkillRating: d.avgSkillRating,
       assignments: d.assignments,
       bracket: d.bracket || undefined,
     })),
@@ -86,7 +161,17 @@ export async function backupDivisionState(
 }
 
 /**
- * Restore tournament division state from backup
+ * Restore tournament division state from backup.
+ *
+ * Divisions, brackets and matches keep their original ids, so rows that
+ * reference them without a foreign key (MatchAuditLog.matchId,
+ * MatchupHistory, CompetitorHistory) stay linked. All-or-nothing: any row
+ * that cannot be recreated (e.g. a registration deleted since the backup)
+ * rolls the whole restore back and leaves the current state untouched.
+ *
+ * v1 backups (no `matches` on the bracket) cannot reproduce match rows; their
+ * brackets are skipped (an empty bracket would block regeneration) and the
+ * division is reported in `errors` so the director regenerates it.
  */
 export async function restoreDivisionState(
   prisma: PrismaClient,
@@ -105,6 +190,7 @@ export async function restoreDivisionState(
     for (const div of backup.divisions) {
       // Any failure must escape the transaction. Catching per-division errors
       // commits a partial restore after the current state has been deleted.
+      const createdAt = toDate(div.createdAt);
       const division = await tx.division.create({
           data: {
             id: div.id,
@@ -122,6 +208,11 @@ export async function restoreDivisionState(
             divisionNumber: div.divisionNumber,
             isSpecialNeeds: div.isSpecialNeeds,
             displayOrder: div.displayOrder,
+            deletedAt: toDate(div.deletedAt),
+            ...(createdAt ? { createdAt } : {}),
+            bracketDifficulty: div.bracketDifficulty ?? null,
+            matchupQuality: div.matchupQuality ?? null,
+            avgSkillRating: div.avgSkillRating ?? null,
           },
       });
 
@@ -137,20 +228,54 @@ export async function restoreDivisionState(
         });
       }
 
-      // Restore bracket if exists
-      if (div.bracket) {
+      // Restore bracket (with its matches and results) if it exists
+      const bracket = div.bracket;
+      if (bracket && !Array.isArray(bracket.matches)) {
+        errors.push(
+          `Division "${div.name}": its bracket was backed up without match data (older backup format) and was not restored; regenerate it.`,
+        );
+      } else if (bracket) {
         await tx.bracket.create({
             data: {
-              id: div.bracket.id,
+              id: bracket.id,
               divisionId: division.id,
-              structure: div.bracket.structure,
+              structure: bracket.structure,
+              ...(bracket.format ? { format: bracket.format } : {}),
             },
         });
+        const matches = bracket.matches ?? [];
+        if (matches.length > 0) {
+          await tx.match.createMany({
+            data: matches.map((m) => {
+              const matchCreatedAt = toDate(m.createdAt);
+              const matchUpdatedAt = toDate(m.updatedAt);
+              return {
+                id: m.id,
+                bracketId: bracket.id,
+                roundNumber: m.roundNumber,
+                matchNumber: m.matchNumber,
+                bracketType: m.bracketType,
+                competitor1Id: m.competitor1Id,
+                competitor2Id: m.competitor2Id,
+                winnerId: m.winnerId,
+                score1: m.score1,
+                score2: m.score2,
+                status: m.status,
+                scheduledTime: toDate(m.scheduledTime),
+                ringNumber: m.ringNumber,
+                notes: m.notes,
+                videoUrl: m.videoUrl,
+                ...(matchCreatedAt ? { createdAt: matchCreatedAt } : {}),
+                ...(matchUpdatedAt ? { updatedAt: matchUpdatedAt } : {}),
+              };
+            }),
+          });
+        }
       }
 
       restored++;
     }
-  });
+  }, RESTORE_TRANSACTION_OPTIONS);
 
   return { restored, errors };
 }
@@ -188,6 +313,10 @@ export async function restoreDivisionState(
  * (tournamentId) DO UPDATE so the row is overwritten in place.
  * One round-trip per save; the payload is a single ~10 KB column.
  * Closes day-2 follow-up: move backupStore to DB table.
+ *
+ * Throws when the backup cannot be stored. Callers run it BEFORE a
+ * destructive operation, so a failed save aborts the operation instead
+ * of deleting data while claiming a backup exists.
  */
 export async function saveBackup(
   prisma: PrismaClient,
@@ -207,6 +336,12 @@ export async function saveBackup(
     });
   } catch (err) {
     console.error(`[backup-recovery] saveBackup failed for ${backup.tournamentId}:`, err);
+    throw new AppError(
+      'Could not save a recovery backup; nothing was changed.',
+      ErrorCode.DATABASE_ERROR,
+      503,
+      { recoverable: true, suggestion: 'Try again. If it keeps failing, export your data before retrying.' },
+    );
   }
 }
 
