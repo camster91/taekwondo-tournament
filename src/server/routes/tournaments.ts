@@ -926,8 +926,12 @@ router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'),
     return res.status(404).json({ error: 'Tournament not found.' });
   }
 
-  // Pull all registrations + competitor + parent contact info.
-  const where: Record<string, unknown> = { tournamentId: getParam(req.params.id) };
+  // Pull the registrations in the field (not waitlisted or withdrawn)
+  // with competitor + parent contact info.
+  const where: Record<string, unknown> = {
+    tournamentId: getParam(req.params.id),
+    waitlistStatus: { in: ['active', 'promoted'] },
+  };
   if (!test) {
     // Production sends go only to entries that have a parentEmail set.
     where.parentEmail = { not: null };
@@ -935,20 +939,19 @@ router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'),
   const regs = await prisma.registration.findMany({
     where,
     include: { competitor: true },
+    // Test mode previews one email built from the first registration.
+    ...(test ? { take: 1, orderBy: { createdAt: 'asc' as const } } : {}),
   });
 
   if (regs.length === 0) {
     return res.json({ sent: 0, failures: 0, message: 'No recipients matched.' });
   }
 
-  // Closes S7: test mode now actually restricts the send to the
-  // requesting director's own email. The previous implementation
-  // sent to every parent regardless of the `test` flag, which
-  // meant a director clicking "Send test" with placeholder text
-  // would email every parent. We do this by replacing the `to`
-  // address with the director's own email; the merge fields still
-  // resolve from the first registration so the test preview
-  // looks like a real send.
+  // Closes S7: test mode restricts the send to the requesting
+  // director's own email, and sends exactly ONE preview (the query
+  // above takes a single registration) rather than one copy per
+  // registration. The merge fields resolve from that registration so
+  // the preview looks like a real send.
   const tDate = new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const directorEmail = req.user?.email?.trim();
   if (test && !directorEmail) {
@@ -997,7 +1000,9 @@ router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'),
     failures,
     total: regs.length,
     message: test
-      ? `Test mode: sent ${sent} email(s) to the director (${directorEmail}) for preview.`
+      ? (sent > 0
+        ? `Test mode: sent a preview email to the director (${directorEmail}).`
+        : `Test mode: the preview email to the director (${directorEmail}) failed.`)
       : `Sent to ${sent} parent(s). ${failures} failed.`,
   });
 });
