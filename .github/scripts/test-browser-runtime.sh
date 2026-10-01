@@ -20,7 +20,7 @@ internal_url="postgres://postgres:QaDatabaseOnly-123456@$database:5432/$database
 docker run -d --name "$database" --network "$network" --tmpfs /var/lib/postgresql/data \
   -e POSTGRES_PASSWORD=QaDatabaseOnly-123456 -e POSTGRES_DB="$database_name" postgres:16-alpine >/dev/null
 for attempt in $(seq 1 60); do
-  if docker exec "$database" pg_isready -U postgres -d "$database_name" >/dev/null 2>&1; then break; fi
+  if docker exec "$database" pg_isready -h 127.0.0.1 -U postgres -d "$database_name" >/dev/null 2>&1; then break; fi
   [[ $attempt != 60 ]] || exit 1
   sleep 1
 done

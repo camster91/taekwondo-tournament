@@ -12,7 +12,7 @@ case ${1:-} in
   started=$(docker inspect "$runtime" --format '{{.State.StartedAt}}')
   docker restart "$database" >/dev/null
   for attempt in $(seq 1 60); do
-   if docker exec "$database" pg_isready -U postgres >/dev/null 2>&1; then break; fi
+   if docker exec "$database" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then break; fi
    [[ $attempt != 60 ]] || exit 1
    sleep 1
   done

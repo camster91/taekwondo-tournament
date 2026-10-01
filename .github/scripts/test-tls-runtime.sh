@@ -39,7 +39,7 @@ docker run -d --name "$database" --network "$network" --label "bowin.qa.fixture=
  -v "$volume:/var/lib/postgresql/data" -e POSTGRES_PASSWORD=QaDatabaseOnly-123456 \
  -e POSTGRES_DB="$database_name" postgres:16-alpine >/dev/null
 for attempt in $(seq 1 60); do
- if docker exec "$database" pg_isready -U postgres -d "$database_name" >/dev/null 2>&1; then break; fi
+ if docker exec "$database" pg_isready -h 127.0.0.1 -U postgres -d "$database_name" >/dev/null 2>&1; then break; fi
  [[ $attempt != 60 ]] || exit 1
  sleep 1
 done
