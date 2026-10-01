@@ -102,7 +102,6 @@ jobs:
       packages: write
     env:
       RELEASE_SHA: ${{ github.sha }}
-      CHECKED_IMAGE_DIRECTORY: ${{ runner.temp }}/bowin-checked-image
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -118,10 +117,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the verified saved image without rebuilding
-        run: python3 .github/scripts/checked-image.py publish --directory "$CHECKED_IMAGE_DIRECTORY"
+        run: python3 .github/scripts/checked-image.py publish --directory "$RUNNER_TEMP/bowin-checked-image"
       - name: Preserve and refetch the durable release receipt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHECKED_IMAGE_DIRECTORY: ${{ runner.temp }}/bowin-checked-image
         run: node .github/scripts/preserve-image-receipt.mjs
       - name: Preserve temporary publication metadata
         uses: actions/upload-artifact@v4
