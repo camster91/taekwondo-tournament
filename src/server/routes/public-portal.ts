@@ -562,7 +562,8 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
       // P2.6: Use org brand/name, never UUID
       const organizerBrandName = tournament.brandName || organization.brandName || organization.name || tournament.name;
       const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`;
-      
+      const paymentDueCents = registration.paymentStatus === 'pending' ? registration.paymentAmountCents : null;
+
       if (isMinor) {
         const { createParentalConsentVerification } = await import('../services/parental-consent-verification.js');
         const { parentalConsentVerificationEmail } = await import('../services/email-templates.js');
@@ -581,6 +582,12 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
           tournamentDate: tournament.date,
           verificationUrl,
           code: verificationCode,
+          // The consent email is the only email a minor's parent gets, so it
+          // must carry the management link (pay / edit / withdraw).
+          managementUrl,
+          confirmationCode: registration.id.slice(0, 8),
+          waitlistPosition: registration.waitlistStatus === 'waitlisted' ? registration.waitlistPosition : null,
+          paymentDueCents,
           organizerBrandName,
         });
         
@@ -614,6 +621,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
             confirmationCode: registration.id.slice(0, 8),
             managementUrl,
             organizerBrandName,
+            paymentDueCents,
           });
           sendEmail(parentEmail, subject, html).catch((err) => {
             console.error('[portal/register] confirmation email failed:', err);

@@ -492,7 +492,8 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       
       const organizerBrandName = tournamentForEmail?.brandName || tournamentForEmail?.organization?.brandName || undefined;
       const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`;
-      
+      const paymentDueCents = registration.paymentStatus === 'pending' ? registration.paymentAmountCents : null;
+
       // P2-14: For minors, send parental consent verification email INSTEAD of confirmation
       if (isMinor) {
         const { createParentalConsentVerification } = await import('../services/parental-consent-verification.js');
@@ -512,6 +513,12 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
           tournamentDate: tournamentForEmail?.date || registration.tournament.date,
           verificationUrl,
           code: verificationCode,
+          // The consent email is the only email a minor's parent gets, so it
+          // must carry the management link (pay / edit / withdraw).
+          managementUrl,
+          confirmationCode: registration.id.slice(0, 8),
+          waitlistPosition: registration.waitlistStatus === 'waitlisted' ? registration.waitlistPosition : null,
+          paymentDueCents,
           organizerBrandName,
         });
         
@@ -548,6 +555,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
             confirmationCode: registration.id.slice(0, 8),
             managementUrl,
             organizerBrandName,
+            paymentDueCents,
           });
           sendEmail(parentEmail, subject, html).catch((err) => {
             console.error('[public/register] confirmation email failed:', err);

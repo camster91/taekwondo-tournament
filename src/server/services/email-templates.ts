@@ -246,6 +246,16 @@ export function welcomeEmail(params: {
   };
 }
 
+function formatFeeCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+/** Notice for an unpaid entry fee; payment is finished via the management link. */
+function paymentDueNotice(paymentDueCents: number | null | undefined): string {
+  if (typeof paymentDueCents !== 'number' || paymentDueCents <= 0) return '';
+  return `<p><strong>Entry fee due:</strong> ${escapeHtml(formatFeeCents(paymentDueCents))}. If you have not completed payment, open the management link below and choose <em>Complete payment</em>.</p>`;
+}
+
 export function registrationConfirmationEmail(params: {
   competitorName: string;
   tournamentName: string;
@@ -259,6 +269,8 @@ export function registrationConfirmationEmail(params: {
   organizerBrandName?: string;
   brandPrimaryColor?: string;
   brandLogoUrl?: string;
+  /** Unpaid entry fee (cents) at the time of registration. */
+  paymentDueCents?: number | null;
 }): { subject: string; html: string } {
   const safeCompetitorName = escapeHtml(params.competitorName);
   const safeTournamentName = escapeHtml(params.tournamentName);
@@ -290,6 +302,7 @@ export function registrationConfirmationEmail(params: {
         <p style="margin: 6px 0; font-size: 15px;"><strong>Age Group:</strong> ${safeAgeGroup}</p>
         <p style="margin: 6px 0; font-size: 15px;"><strong>Confirmation Code:</strong> <span style="font-family:monospace; background:#fff; padding:6px 10px; border-radius:6px; border: 1px solid #D1D5DB; font-weight: 600;">${safeConfirmationCode}</span></p>
       </div>
+      ${paymentDueNotice(params.paymentDueCents)}
       <p style="text-align:center; margin: 28px 0;">
         <a href="${safeManagementUrl}" class="btn">Manage Registration</a>
       </p>
@@ -311,6 +324,12 @@ export function parentalConsentVerificationEmail(params: {
   tournamentDate: Date;
   verificationUrl: string;
   code: string;
+  /** Private management link: the only way the parent can pay, edit or withdraw. */
+  managementUrl: string;
+  confirmationCode: string;
+  waitlistPosition?: number | null;
+  /** Unpaid entry fee (cents) at the time of registration. */
+  paymentDueCents?: number | null;
   organizerBrandName?: string;
   brandPrimaryColor?: string;
   brandLogoUrl?: string;
@@ -320,9 +339,25 @@ export function parentalConsentVerificationEmail(params: {
   const safeTournamentName = escapeHtml(params.tournamentName);
   const safeVerificationUrl = escapeHtml(params.verificationUrl);
   const safeCode = escapeHtml(params.code);
+  const safeManagementUrl = escapeHtml(params.managementUrl);
+  const safeConfirmationCode = escapeHtml(params.confirmationCode);
   const tournamentDate = new Date(params.tournamentDate).toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
+  const waitlistLine = params.waitlistPosition
+    ? `<p>This registration is on the <strong>waitlist (position #${escapeHtml(String(params.waitlistPosition))})</strong>. No payment is due unless a spot opens up; we will email you if it does.</p>`
+    : '';
+  const manageSection = `
+      <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 10px; padding: 16px; margin: 20px 0;">
+        <p style="margin: 4px 0;"><strong>Confirmation Code:</strong> <span style="font-family:monospace;">${safeConfirmationCode}</span></p>
+        ${waitlistLine}
+        ${paymentDueNotice(params.paymentDueCents)}
+        <p style="margin: 4px 0;">Use your private management link to view, pay for, edit or withdraw this registration:</p>
+        <p style="text-align:center; margin: 16px 0;">
+          <a href="${safeManagementUrl}" class="btn">Manage Registration</a>
+        </p>
+        <p class="muted" style="word-break:break-all;">Keep this email — the link is the only way to manage this registration: ${safeManagementUrl}</p>
+      </div>`;
 
   return {
     subject: `Verify parental consent for ${safeTournamentName}`,
@@ -339,6 +374,7 @@ export function parentalConsentVerificationEmail(params: {
       </div>
       <p class="muted">This verification link expires in 48 hours. If you did not register your child for this tournament, please disregard this email.</p>
       <p class="muted" style="word-break:break-all;">Or copy this link: ${safeVerificationUrl}</p>
+      ${manageSection}
     `, {
       organizerBrandName: params.organizerBrandName,
       brandPrimaryColor: params.brandPrimaryColor,
