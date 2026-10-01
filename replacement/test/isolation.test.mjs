@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
+import {patternsJourney} from './patterns-journey.mjs';
 import {createApp} from '../src/app.mjs';
 const connection=process.env.DATABASE_URL;
 test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{skip:!connection},async()=>{
@@ -158,6 +159,8 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
     for(const privateValue of [fixture.email,fixture.name,competitorBody.name,competitorBody.club,competitorId,divisionId,userId,'checked_in_by','token_hash','audit_events'])assert.ok(!serialized.includes(privateValue),`Public projection exposed ${privateValue}`);
     assert.equal((await request(publishPath,{method:'POST',cookie,body:{published:false}})).status,200);
     assert.equal((await request('/api/public/tournaments/'+publicId)).status,404);
+    assert.equal((await pool.query('SELECT 1 FROM bowin_rebuild.audit_events')).rowCount,30);
+    const patternAudits=await patternsJourney({request,pool,path,cookie,scoreCookie,organizationId,foreign,foreignCompetitorId:competitorId});
     await pool.query("UPDATE bowin_rebuild.memberships SET role='scorekeeper' WHERE user_id=$1 AND organization_id=$2",[userId,organizationId]);
     assert.equal((await request(path,{method:'POST',cookie,body:payload})).status,403);
     for(const [suffix,body] of [['divisions',divisionBody],['competitors',competitorBody],['registrations',registrationBody],[`registrations/${registrationId}/check-in`,undefined]])assert.equal((await request(tournamentPath+'/'+suffix,{method:'POST',cookie,body})).status,403);
@@ -168,7 +171,7 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
     const loggedIn=login.headers.get('set-cookie').split(';')[0];
     await pool.query("UPDATE bowin_rebuild.sessions SET expires_at=now()-interval '1 second'");
     assert.equal((await request('/api/me',{cookie:loggedIn})).status,401);
-    assert.equal((await pool.query('SELECT 1 FROM bowin_rebuild.audit_events')).rowCount,30);
+    assert.equal((await pool.query('SELECT 1 FROM bowin_rebuild.audit_events')).rowCount,30+patternAudits);
   } finally {
     if(server)await new Promise(resolve=>server.close(resolve));await pool.end();
   }

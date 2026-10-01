@@ -1,3 +1,4 @@
+import {publicPatterns} from './pattern-routes.mjs';
 import {randomUUID} from 'node:crypto';
 import {text,uuid} from './security.mjs';
 
@@ -71,9 +72,9 @@ export function mountPublicResults({app,pool,route,Problem}){
       const params=[tournament.organization_id,tournament.id];
       const competitors=(await client.query('SELECT id,public_display_name FROM bowin_rebuild.competitors WHERE organization_id=$1 AND tournament_id=$2',params)).rows;
       const aliases=new Map(competitors.map(row=>[row.id,row.public_display_name]));
-      const divisions=(await client.query('SELECT d.name,d.discipline,d.status,s.ring,s.starts_at,s.ends_at,b.matches,b.champion_id FROM bowin_rebuild.divisions d LEFT JOIN bowin_rebuild.division_schedule s ON s.division_id=d.id LEFT JOIN bowin_rebuild.brackets b ON b.division_id=d.id WHERE d.organization_id=$1 AND d.tournament_id=$2 ORDER BY d.name',params)).rows;
+      const divisions=(await client.query('SELECT d.name,d.discipline,d.status,s.ring,s.starts_at,s.ends_at,b.matches,b.champion_id,p.results AS pattern_results,p.completed_at AS patterns_completed_at FROM bowin_rebuild.divisions d LEFT JOIN bowin_rebuild.division_schedule s ON s.division_id=d.id LEFT JOIN bowin_rebuild.brackets b ON b.division_id=d.id LEFT JOIN bowin_rebuild.pattern_finals p ON p.division_id=d.id WHERE d.organization_id=$1 AND d.tournament_id=$2 ORDER BY d.name',params)).rows;
       await client.query('COMMIT');
-      res.json({organizer:{name:tournament.organizer},tournament:{name:tournament.name,eventDate:tournament.event_date,venue:tournament.venue,status:tournament.status,timeZone:tournament.time_zone},divisions:divisions.map(division=>({name:division.name,discipline:division.discipline,status:division.status,schedule:division.ring?{ring:division.ring,startsAt:division.starts_at,endsAt:division.ends_at}:null,champion:aliases.get(division.champion_id)||null,matches:(division.matches||[]).map(match=>publicMatch(match,aliases))}))});
+      res.json({organizer:{name:tournament.organizer},tournament:{name:tournament.name,eventDate:tournament.event_date,venue:tournament.venue,status:tournament.status,timeZone:tournament.time_zone},divisions:divisions.map(division=>({name:division.name,discipline:division.discipline,status:division.status,schedule:division.ring?{ring:division.ring,startsAt:division.starts_at,endsAt:division.ends_at}:null,champion:aliases.get(division.champion_id)||null,matches:(division.matches||[]).map(match=>publicMatch(match,aliases)),patterns:division.patterns_completed_at?publicPatterns(division.pattern_results,aliases):null}))});
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }));
 }

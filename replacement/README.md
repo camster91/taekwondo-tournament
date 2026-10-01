@@ -19,7 +19,7 @@ byes, advances winners and stores the final champion. Owner/organizer roles gene
 brackets; owner/organizer/scorekeeper roles record integer point totals. Ties, premature
 matches and overwriting completed results are rejected. Scoring records actor, match,
 scores and winner in the audit transaction. This is manual single-elimination scoring;
-double elimination, penalties/clock automation, result correction and patterns scoring
+double elimination, penalties/clock automation and result correction
 remain pending rather than implied to follow any federation's complete rulebook.
 A dedicated database name beginning `bowin_rebuild_`
 is required by both migration and server startup. The old database `taekwondo` is rejected.
@@ -36,8 +36,20 @@ are disabled by default and may be withdrawn; their field allowlist includes
 organizer branding, event details, schedules, aliases and scores, excluding private
 names, clubs, account details, internal identifiers and audit records.
 
+Patterns divisions support a manual scored final: an owner/organizer freezes all
+1-256 registered checked-in entrants, staff records one aggregate score per entrant,
+and the owner/organizer completes the final only after every entrant has a score.
+Scores are integer hundredths from 0 to 1000 (0.00 to 10.00), not an implied federation
+rulebook or a judging-panel calculation. Equal scores share a competition rank
+(e.g. 1, 1, 3); ties are not silently broken. Version checks reject stale submissions,
+completed scores cannot be overwritten, and changes plus actor/winner audits commit
+in one transaction. Published results expose aliases, ranks and scores only.
+Correction workflows and configurable federation/judge criteria remain future work.
+Integration QA proves competing score submissions and rollback when scoring or final
+completion cannot write its audit, including rollback of the division status.
+
 The complete rebuild still requires public/self-service registration where enabled,
-registration edits/withdrawals, patterns scoring, the browser interface, and end-to-end QA. This foundation is
+registration edits/withdrawals, the browser interface, and end-to-end QA. This foundation is
 not a completed rebuild or a live release. Existing API integration tests against
 fresh isolated PostgreSQL prove invite/session/tenant/role and registration boundaries,
 the three-competitor final and concurrent score submission rejection. Domain tests

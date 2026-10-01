@@ -2,6 +2,7 @@ import express from 'express';
 import {randomUUID} from 'node:crypto';
 import {text,uuid} from './security.mjs';
 import {bracketChampion,createBracket,scoreBracket} from './brackets.mjs';
+import {mountPatternRoutes} from './pattern-routes.mjs';
 import {mountSchedulePublication} from './schedule-public-routes.mjs';
 
 export class Problem extends Error {
@@ -133,6 +134,7 @@ export function mountTournamentRoutes({app,pool,requireAuth,route}){
       return{id:bracket.id,matches,champion_id:champion,auditDetails:{matchKey:key,scoreLeft:left,scoreRight:right,winnerId:matches.find(match=>match.key===key).winner}};
     },['owner','organizer','scorekeeper']);res.json(result);
   }));
+  mountPatternRoutes({router,pool,access,mutate,route,Problem});
   mountSchedulePublication({router,pool,access,mutate,Problem,origin:app.locals.canonicalOrigin});
   app.use('/api/organizations/:organizationId/tournaments/:tournamentId',requireAuth,router);
 }
