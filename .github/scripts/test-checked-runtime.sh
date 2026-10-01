@@ -11,7 +11,10 @@ cleanup() {
   docker network rm "$network" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
-docker network create --internal "$network" >/dev/null
+# A dedicated bridge supplies loopback-only published ports to the host test
+# client. Docker's internal-only bridge can omit these bindings on newer engines.
+# Neither database nor application is published on an external interface.
+docker network create "$network" >/dev/null
 password="QaDatabaseOnly-123456"
 setup_token="QaSetupOnly-QaSetupOnly-QaSetupOnly-QaSetupOnly-"
 database_name=bowin_rebuild_qa_checked_ci
