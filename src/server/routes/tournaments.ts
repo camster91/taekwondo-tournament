@@ -227,6 +227,41 @@ router.get('/:id', authenticate, requireTournamentAccess('viewer'), async (req: 
   res.json(tournament);
 });
 
+/**
+ * Plan limit for adding a live (not soft-deleted) tournament to an
+ * organization: used by create, clone and restore so none of them can
+ * push an org past its plan. Returns the error response to send, or null.
+ */
+async function orgTournamentLimitError(
+  prisma: PrismaClient,
+  organizationId: string,
+): Promise<{ status: 402 | 404; body: Record<string, string> } | null> {
+  const organization = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { plan: true },
+  });
+  if (!organization) return { status: 404, body: { error: 'Organization not found' } };
+  const tournamentCount = await prisma.tournament.count({
+    where: { organizationId, deletedAt: null },
+  });
+  if (!canCreateTournament(organization.plan, tournamentCount)) {
+    return {
+      status: 402,
+      body: { error: 'Your organization has reached its tournament limit.', code: 'TOURNAMENT_LIMIT_REACHED' },
+    };
+  }
+  return null;
+}
+
+const tournamentCloneSchema = z.preprocess(
+  (value) => value ?? {},
+  z.object({
+    name: z.string().trim().min(1, 'Tournament name cannot be empty').max(200).optional(),
+    date: z.string().refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' }).optional(),
+    includeRegistrations: z.boolean().optional(),
+  }),
+);
+
 // Create tournament (requires authentication + admin/director role)
 router.post('/', authenticate, requireRole('admin', 'director'), validateRequest(tournamentCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
@@ -708,7 +743,7 @@ router.get('/:id/qr-poster', authenticate, requireTournamentAccess('viewer'), as
 // Clone a tournament as a template for next year. Deep-copies settings
 // (age groups, weight classes, fee note, division threshold) and resets
 // all registrations / divisions / brackets. Closes M2 from the UI audit.
-router.post('/:id/clone', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+router.post('/:id/clone', authenticate, requireTournamentAccess('director'), validateRequest(tournamentCloneSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const original = await prisma.tournament.findUnique({
     where: { id: getParam(req.params.id) },
@@ -720,9 +755,15 @@ router.post('/:id/clone', authenticate, requireTournamentAccess('director'), asy
   // Default the cloned tournament's date to +1 year at the same month/day,
   // unless the request supplies one. Default the name to "<original> (copy)"
   // unless the request overrides.
-  const body = (req.body ?? {}) as { name?: string; date?: string; includeRegistrations?: boolean };
+  const body = req.body as z.infer<typeof tournamentCloneSchema>;
   const newDate = body.date ? new Date(body.date) : new Date(new Date(original.date).setFullYear(new Date(original.date).getFullYear() + 1));
-  const newName = body.name?.trim() || `${original.name} (copy)`;
+  const newName = body.name || `${original.name} (copy)`;
+
+  // A clone is a new tournament: same plan limit as POST /.
+  if (original.organizationId) {
+    const limitError = await orgTournamentLimitError(prisma, original.organizationId);
+    if (limitError) return res.status(limitError.status).json(limitError.body);
+  }
 
   const cloned = await prisma.tournament.create({
     data: {
@@ -1142,8 +1183,15 @@ router.post('/:id/restore', authenticate, requireTournamentAccess('director', { 
   // Fetch tournament info for audit log
   const tournament = await prisma.tournament.findUnique({
     where: { id: tournamentId },
-    select: { name: true, organizationId: true },
+    select: { name: true, organizationId: true, deletedAt: true },
   });
+
+  // Restoring brings a tournament back into the live count, so it is
+  // subject to the same plan limit as creating one.
+  if (tournament?.deletedAt && tournament.organizationId) {
+    const limitError = await orgTournamentLimitError(prisma, tournament.organizationId);
+    if (limitError) return res.status(limitError.status).json(limitError.body);
+  }
 
   await prisma.tournament.update({
     where: { id: tournamentId },
