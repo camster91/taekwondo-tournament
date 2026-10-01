@@ -36,7 +36,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REBUILD_DATABASE_NAME: bowin_rebuild_staging
-      APP_ORIGIN: https://bowin-staging.invalid
+      APP_ORIGIN: ${APP_ORIGIN:-https://bowin-staging.invalid}
       SETUP_TOKEN: ${SETUP_TOKEN}
     depends_on:
       migrate:
