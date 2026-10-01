@@ -15,6 +15,11 @@ import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log
 import { checkInvitationToken, InvitationAlreadyClaimedError } from '../services/invitation-lifecycle.js';
 import { createRateLimiter } from '../middleware/rate-limit.js';
 
+
+/** True for a Prisma known-request error with the given code (e.g. P2025 not found). */
+function isPrismaError(error: unknown, code: string): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
+}
 const router = Router();
 
 /** Include JWT in JSON only outside production (Bearer tooling / e2e). Cookie is the real session. */
@@ -97,6 +102,9 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
 
   if (!email) {
     return res.status(400).json({ error: 'Email is required' });
+  }
+  if (typeof email !== 'string' || email.length > 254) {
+    return res.status(400).json({ error: 'Invalid email format' });
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -214,7 +222,14 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
       code,
     });
 
-    const emailResult = await sendEmail(activeUser.email, template.subject, template.html);
+    // With a mail provider configured, send in the background: awaiting it
+    // made known accounts measurably slower to answer than unknown ones,
+    // which leaks whether an email has an account.
+    const emailResult = isEmailConfigured()
+      ? (sendEmail(activeUser.email, template.subject, template.html).catch((err) => {
+        console.error('[auth] magic-link email failed:', err);
+      }), { success: true })
+      : await sendEmail(activeUser.email, template.subject, template.html);
 
     // Dev mode: email not configured — log the link to the server console so
     // the operator can use it, but DO NOT echo it in the JSON response.
@@ -800,6 +815,7 @@ router.put('/users/:userId/role', authenticate, requireRole('admin'), validateRe
 
     res.json(user);
   } catch (error) {
+    if (isPrismaError(error, 'P2025')) return res.status(404).json({ error: 'User not found' });
     console.error('Update role error:', error);
     res.status(500).json({ error: 'Failed to update user role' });
   }
@@ -833,8 +849,6 @@ router.put('/users/:userId/status', authenticate, requireRole('admin'), validate
         isActive: true,
       },
     });
-    // Drop the cached auth entry so the deactivation / version bump
-    // takes effect on the very next request, not after the cache TTL.
 
     // Audit log: user status change (P1-3)
     await createAuditLog(prisma, {
@@ -849,6 +863,7 @@ router.put('/users/:userId/status', authenticate, requireRole('admin'), validate
 
     res.json(user);
   } catch (error) {
+    if (isPrismaError(error, 'P2025')) return res.status(404).json({ error: 'User not found' });
     console.error('Update status error:', error);
     res.status(500).json({ error: 'Failed to update user status' });
   }
@@ -905,6 +920,9 @@ router.post('/tournaments/:tournamentId/access', authenticate, requireRole('admi
 
     res.json(access);
   } catch (error) {
+    if (isPrismaError(error, 'P2003') || isPrismaError(error, 'P2025')) {
+      return res.status(404).json({ error: 'User or tournament not found' });
+    }
     console.error('Grant access error:', error);
     res.status(500).json({ error: 'Failed to grant tournament access' });
   }
@@ -962,8 +980,11 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
   if (!token) {
     return res.status(400).json({ error: 'Token is required' });
   }
-  if (!firstName || !lastName) {
+  if (typeof firstName !== 'string' || typeof lastName !== 'string' || !firstName.trim() || !lastName.trim()) {
     return res.status(400).json({ error: 'First name and last name are required' });
+  }
+  if (firstName.length > 100 || lastName.length > 100) {
+    return res.status(400).json({ error: 'Names must be 100 characters or fewer' });
   }
 
   try {

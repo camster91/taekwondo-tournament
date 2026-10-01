@@ -164,14 +164,8 @@ const buildPrismaMock = (overrides: any = {}) => {
   };
 };
 
-// Cross-test clean state. Don't reset the captured-handler
-// array — the route file's handlers register once per import
-// (ESM-cached).
-beforeEach(() => {
-});
-
 describe('POST /tournaments/:tournamentId/access — tokenVersion bump', () => {
-  it('bumps tokenVersion + invalidates cache when role changes', async () => {
+  it('bumps tokenVersion when role changes', async () => {
     const prisma = buildPrismaMock({
       userTournamentAccess: {
         findUnique: vi.fn().mockResolvedValue({ role: 'viewer' }),
@@ -264,7 +258,7 @@ describe('POST /tournaments/:tournamentId/access — tokenVersion bump', () => {
 });
 
 describe('DELETE /tournaments/:tournamentId/access/:userId — tokenVersion bump', () => {
-  it('bumps tokenVersion + invalidates cache when access row exists', async () => {
+  it('bumps tokenVersion when access row exists', async () => {
     const prisma = buildPrismaMock({
       userTournamentAccess: {
         findUnique: vi.fn().mockResolvedValue({ userId: 'target-user' }),
@@ -426,3 +420,75 @@ describe('POST /request-magic-link — dev-mode auto-create gate (D16-2)', () =>
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
 });
+
+describe('input validation and not-found handling (review round 1)', () => {
+  it('rejects a non-string email with 400 instead of crashing', async () => {
+    const prisma = buildPrismaMock();
+    const res = mockRes();
+    await findHandler('post', /\/request-magic-link$/).handler(
+      mockReq({ body: { email: ['a@b.co'] }, app: { locals: { prisma } } }), res,
+    );
+    expect(res.statusCode).toBe(400);
+    expect(prisma.magicLink.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-string or blank invite names with 400', async () => {
+    const handler = findHandler('post', /\/accept-invite$/).handler;
+    for (const body of [
+      { token: 't', firstName: { x: 1 }, lastName: 'B' },
+      { token: 't', firstName: '   ', lastName: 'B' },
+      { token: 't', firstName: 'A', lastName: 'x'.repeat(101) },
+    ]) {
+      const res = mockRes();
+      await handler(mockReq({ body, app: { locals: { prisma: buildPrismaMock() } } }), res);
+      expect(res.statusCode).toBe(400);
+    }
+  });
+
+  it('answers 404 (not 500) when an admin edits a user that does not exist', async () => {
+    const { Prisma } = await import('@prisma/client');
+    const notFound = new Prisma.PrismaClientKnownRequestError('missing', { code: 'P2025', clientVersion: 'test' });
+    const prisma = buildPrismaMock({ user: { findUnique: vi.fn().mockResolvedValue(null), update: vi.fn().mockRejectedValue(notFound) } });
+    for (const [path, body] of [[/\/users\/:userId\/role$/, { role: 'viewer' }], [/\/users\/:userId\/status$/, { isActive: false }]] as const) {
+      const res = mockRes();
+      await findHandler('put', path).handler(
+        mockReq({ params: { userId: 'ghost' }, body, user: { id: 'admin-1', role: 'admin' }, app: { locals: { prisma } } }), res,
+      );
+      expect(res.statusCode).toBe(404);
+    }
+  });
+
+  it('answers 404 when granting access to an unknown user or tournament', async () => {
+    const { Prisma } = await import('@prisma/client');
+    const fk = new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'test' });
+    const prisma = buildPrismaMock({ userTournamentAccess: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockRejectedValue(fk) } });
+    const res = mockRes();
+    await findHandler('post', /\/tournaments\/:tournamentId\/access$/).handler(
+      mockReq({ params: { tournamentId: 'ghost' }, body: { userId: 'ghost', role: 'viewer' }, user: { id: 'admin-1', role: 'admin' }, app: { locals: { prisma } } }), res,
+    );
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('does not wait for the mail provider when email is configured (no timing oracle)', async () => {
+    const email = await import('../services/email.js');
+    vi.mocked(email.isEmailConfigured).mockReturnValue(true);
+    let release!: () => void;
+    vi.mocked(email.sendEmail).mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({ success: true }); }));
+    const prisma = buildPrismaMock({
+      user: { findUnique: vi.fn().mockResolvedValue({ id: 'u-1', email: 'known@example.com', firstName: 'K', isActive: true }) },
+    });
+    const res = mockRes();
+    try {
+      await findHandler('post', /\/request-magic-link$/).handler(
+        mockReq({ body: { email: 'known@example.com' }, app: { locals: { prisma } } }), res,
+      );
+      // Responded while the email send is still pending.
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toEqual(expect.objectContaining({ message: expect.stringContaining('If an account exists') }));
+    } finally {
+      release?.();
+      vi.mocked(email.isEmailConfigured).mockReturnValue(false);
+    }
+  });
+});
+
