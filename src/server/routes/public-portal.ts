@@ -20,6 +20,7 @@ import {
   type RegistrationConsentResult,
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
+import { isOrgSlugAllowedOnHost } from '../middleware/custom-domain-host.js';
 import { getEventTypeLabel } from '../../shared/constants/sport-profiles.js';
 import {
   createPublicRegistration,
@@ -66,8 +67,8 @@ router.get('/:orgSlug', portalLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { orgSlug } = req.params;
 
-  // Validate orgSlug format
-  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug)) {
+  // Validate orgSlug format. On a custom domain only its own org is served.
+  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug) || !isOrgSlugAllowedOnHost(res, orgSlug)) {
     // Fail closed: wrong format gets empty list, not an error that leaks existence
     return res.json({ organization: null, events: [] });
   }
@@ -153,7 +154,7 @@ router.get('/:orgSlug/:eventSlug', portalLimiter, async (req: Request, res: Resp
   const { orgSlug, eventSlug } = req.params;
 
   // Validate slug formats
-  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug)) {
+  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug) || !isOrgSlugAllowedOnHost(res, orgSlug)) {
     return res.status(404).json({ error: 'Event not found' });
   }
   if (!eventSlug || !/^[a-z0-9-]{3,63}$/.test(eventSlug)) {
@@ -273,7 +274,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
   const { orgSlug, eventSlug } = req.params;
 
   // Validate slug formats
-  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug)) {
+  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug) || !isOrgSlugAllowedOnHost(res, orgSlug)) {
     return res.status(404).json({ error: 'Event not found' });
   }
   if (!eventSlug || !/^[a-z0-9-]{3,63}$/.test(eventSlug)) {

@@ -155,3 +155,15 @@ export function resolveCustomDomainHost(options: ResolveCustomDomainHostOptions 
 export function getResolvedOrg(res: Response): CustomDomainLocals | null {
   return (res.locals.customDomain as CustomDomainLocals | undefined) ?? null;
 }
+
+/**
+ * Whether `orgSlug` may be served on this request's host. On a verified
+ * custom domain only the owning organization's portal is reachable (org A's
+ * domain must never serve org B's pages); on the default app host any slug
+ * is allowed.
+ */
+export function isOrgSlugAllowedOnHost(res: Response, orgSlug: string): boolean {
+  const resolved = getResolvedOrg(res);
+  if (!resolved?.isCustomDomain) return true;
+  return resolved.resolvedOrgSlug === orgSlug;
+}
