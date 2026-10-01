@@ -165,13 +165,16 @@ async function lockDivisionRecommendationInputs(db: RecommendationDatabase, tour
   await db.$queryRawUnsafe('SELECT a.id FROM "DivisionAssignment" a JOIN "Division" d ON d.id = a."divisionId" WHERE d."tournamentId" = $1 ORDER BY a.id FOR UPDATE OF a', tournamentId);
 }
 
+const toIsoDate = (value: Date | string | null | undefined): string | null =>
+  value ? new Date(value).toISOString() : null;
+
 export async function loadDivisionRecommendationInput(
   db: RecommendationDatabase,
   tournamentId: string,
 ): Promise<DivisionRecommendationInput> {
   const tournament = await db.tournament.findUnique({
     where: { id: tournamentId },
-    select: { id: true, settings: true, sportProfileSlug: true },
+    select: { id: true, settings: true, sportProfileSlug: true, date: true },
   });
   if (!tournament) throw new Error('Tournament not found');
   const registrations = await db.registration.findMany({
@@ -187,7 +190,7 @@ export async function loadDivisionRecommendationInput(
       },
       competitor: { select: {
         firstName: true, lastName: true, belt: true, gender: true,
-        schoolDojang: true, weightLbs: true, danRank: true,
+        schoolDojang: true, weightLbs: true, danRank: true, dateOfBirth: true,
       } },
     },
     orderBy: { id: 'asc' },
@@ -255,6 +258,8 @@ export async function loadDivisionRecommendationInput(
       }
       return {
         ...registration,
+        // ISO string so the stored snapshot hashes the same after a JSON round-trip.
+        competitor: { ...registration.competitor, dateOfBirth: toIsoDate(registration.competitor.dateOfBirth) },
         manualDivisionId: [...pinCandidates][0] ?? null,
       };
     }),
@@ -274,6 +279,7 @@ export async function loadDivisionRecommendationInput(
       eventTypeLabels: sportProfile ? getEventTypeLabels(sportProfile.slug) : undefined,
       customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
       rules,
+      tournamentDate: toIsoDate(tournament.date) ?? undefined,
     },
   };
 }

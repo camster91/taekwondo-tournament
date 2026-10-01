@@ -84,20 +84,33 @@ export const DEFAULT_WEIGHT_CLASSES: WeightClassConfig[] = [
   { name: 'Heavy', gender: 'F', ageMin: 36, ageMax: 99, weightMinLbs: 155, weightMaxLbs: 999 },
 ];
 
-export function getWeightClass(
+/**
+ * The full weight-class row (including the age range of the weight
+ * table it belongs to) for a competitor. Callers that group competitors
+ * must key on the table's age range as well as the class name: "Light"
+ * for 6-7 and "Light" for 10-11 are different weight brackets.
+ */
+export function findWeightClass(
   weight: number,
   age: number,
   gender: 'M' | 'F',
   weightClasses: WeightClassConfig[] = DEFAULT_WEIGHT_CLASSES
-): string | null {
-  const applicable = weightClasses.find(
+): WeightClassConfig | null {
+  return weightClasses.find(
     (wc) =>
       (wc.gender === null || wc.gender === gender) &&
       age >= wc.ageMin &&
       age <= wc.ageMax &&
       weight >= wc.weightMinLbs &&
       weight < wc.weightMaxLbs
-  );
+  ) ?? null;
+}
 
-  return applicable?.name || null;
+export function getWeightClass(
+  weight: number,
+  age: number,
+  gender: 'M' | 'F',
+  weightClasses: WeightClassConfig[] = DEFAULT_WEIGHT_CLASSES
+): string | null {
+  return findWeightClass(weight, age, gender, weightClasses)?.name || null;
 }

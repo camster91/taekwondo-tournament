@@ -295,6 +295,7 @@ router.post('/tournament/:tournamentId/preview', authenticate, requireTournament
     ...config,
     eventTypeLabels,
     customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
+    tournamentDate: tournament.date,
   };
 
   const preview = previewCategorization(registrations, categorizationConfig);
@@ -380,6 +381,7 @@ router.post('/tournament/:tournamentId/auto-generate', authenticate, requireTour
     customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
     // v2: pass the full rules object
     rules,
+    tournamentDate: tournament.date,
   };
 
   const result = await autoCategorize(prisma, tournamentId, registrations, categorizationConfig);
