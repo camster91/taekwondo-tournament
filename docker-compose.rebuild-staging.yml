@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: bowin_rebuild_staging
       POSTGRES_USER: bowin_staging
-      POSTGRES_PASSWORD: ${STAGING_DATABASE_PASSWORD:?required}
+      POSTGRES_PASSWORD: ${STAGING_DATABASE_PASSWORD}
     volumes:
       - bowin_rebuild_staging_database:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
       args:
         SOURCE_COMMIT: ${SOURCE_COMMIT:?required}
     environment:
-      DATABASE_URL: postgres://bowin_staging:${STAGING_DATABASE_PASSWORD:?required}@postgres:5432/bowin_rebuild_staging
+      DATABASE_URL: postgres://bowin_staging:${STAGING_DATABASE_PASSWORD}@postgres:5432/bowin_rebuild_staging
       REBUILD_DATABASE_NAME: bowin_rebuild_staging
     command: [node, src/migrate.mjs]
     depends_on:
@@ -34,10 +34,10 @@ services:
       args:
         SOURCE_COMMIT: ${SOURCE_COMMIT:?required}
     environment:
-      DATABASE_URL: postgres://bowin_staging:${STAGING_DATABASE_PASSWORD:?required}@postgres:5432/bowin_rebuild_staging
+      DATABASE_URL: postgres://bowin_staging:${STAGING_DATABASE_PASSWORD}@postgres:5432/bowin_rebuild_staging
       REBUILD_DATABASE_NAME: bowin_rebuild_staging
       APP_ORIGIN: https://bowin-staging.invalid
-      SETUP_TOKEN: ${STAGING_SETUP_TOKEN:?required}
+      SETUP_TOKEN: ${STAGING_SETUP_TOKEN}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -49,3 +49,4 @@ services:
     restart: unless-stopped
 volumes:
   bowin_rebuild_staging_database:
+
