@@ -824,6 +824,28 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
   });
 });
 
+/** Registration fields that decide division placement. */
+const DIVISION_REGISTRATION_FIELDS = ['patterns', 'sparring', 'weightAtRegistration', 'competeWithOlder'] as const;
+/** Competitor fields that decide division placement. */
+const DIVISION_COMPETITOR_FIELDS = ['gender', 'belt', 'danRank'] as const;
+
+const BRACKET_LOCKED_MESSAGE = 'Brackets have already been drawn for this competitor. Please contact the tournament organizer to change events, belt, weight or gender, or to withdraw.';
+
+/**
+ * Whether the registration is placed in a (live) division whose bracket has
+ * been generated. Such a bracket's matches and structure reference the
+ * registration, so self-service must not change its placement.
+ */
+async function isRegistrationInDrawnBracket(
+  db: Pick<PrismaClient, 'divisionAssignment'>,
+  registrationId: string,
+): Promise<boolean> {
+  const count = await db.divisionAssignment.count({
+    where: { registrationId, division: { deletedAt: null, bracket: { isNot: null } } },
+  });
+  return count > 0;
+}
+
 const manageUpdateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -906,56 +928,69 @@ router.patch('/registrations/:token', manageUpdateLimiter, async (req: Request, 
   // anywhere else; otherwise it may be a record shared with other
   // tournaments (or entered by the organizer) and a token holder must
   // not overwrite it.
+  // Division placement depends only on these fields. Any other edit (name
+  // typo, school, special needs) leaves division assignments alone.
+  //
+  // Self-service never deletes Match rows: they belong to both competitors
+  // and Bracket.structure references them. Once the registration sits in a
+  // division whose bracket has been drawn, division-relevant edits (and
+  // withdrawal, below) are refused with 409 so the organizer handles them
+  // with the director tools. Before any bracket exists there are no
+  // matches, and the stale division assignments are simply dropped so the
+  // next auto-categorization places the competitor correctly.
   const outcome = await prisma.$transaction(async (tx) => {
+    let divisionChange = DIVISION_REGISTRATION_FIELDS.some(
+      (key) => key in regData && regData[key] !== registration[key],
+    );
+    let competitorChanges: Record<string, unknown> = {};
     if (Object.keys(data).length > 0) {
       const current = await tx.competitor.findUnique({
         where: { id: registration.competitorId },
         select: { firstName: true, gender: true, belt: true, danRank: true, schoolDojang: true },
       });
-      const changed = Object.fromEntries(
+      competitorChanges = Object.fromEntries(
         Object.entries(data).filter(([key, value]) => current?.[key as keyof typeof current] !== value),
       );
-      if (Object.keys(changed).length > 0) {
+      if (Object.keys(competitorChanges).length > 0) {
         const owned = await isCompetitorOwnedByRegistration(tx, registration);
-        if (!owned) return 'profile_locked' as const;
-        await tx.competitor.update({ where: { id: registration.competitorId }, data: changed });
+        if (!owned) return { status: 'profile_locked' as const };
       }
+      divisionChange ||= DIVISION_COMPETITOR_FIELDS.some((key) => key in competitorChanges);
+    }
+    if (divisionChange && await isRegistrationInDrawnBracket(tx, registration.id)) {
+      return { status: 'bracket_locked' as const };
+    }
+    if (Object.keys(competitorChanges).length > 0) {
+      await tx.competitor.update({ where: { id: registration.competitorId }, data: competitorChanges });
     }
     if (Object.keys(regData).length > 0) {
       await tx.registration.update({ where: { id: registration.id }, data: regData });
     }
-    return 'ok' as const;
+    if (divisionChange) {
+      await tx.divisionAssignment.deleteMany({ where: { registrationId: registration.id } });
+    }
+    return { status: 'ok' as const, divisionChange };
   });
 
-  if (outcome === 'profile_locked') {
+  if (outcome.status === 'profile_locked') {
     return res.status(409).json({
       error: 'Name, gender, belt and school for this competitor are managed by the tournament organizer. Please contact them to change these details.',
       code: 'COMPETITOR_PROFILE_LOCKED',
     });
   }
+  if (outcome.status === 'bracket_locked') {
+    return res.status(409).json({ error: BRACKET_LOCKED_MESSAGE, code: 'BRACKET_LOCKED' });
+  }
 
   // #118 acceptance: Audit log (non-sensitive)
   console.log(`[registration-manage-update] Registration ${registration.id.slice(0, 8)} updated via management token`);
 
-  // Invalidate bracket regeneration since the data changed.
-  // Closes B4: the previous code did an unconditional
-  //   bracket.deleteMany({ where: { division: { assignments: { some:
-  //     { registrationId: thisRegistration.id } } } } })
-  // which, because Bracket is 1:1 with Division, deleted the WHOLE
-  // bracket for the division — wiping every other competitor's
-  // match results when one parent fixed a typo. Now we delete
-  // only the matches that involved the patching registration
-  // (already done on the line above) and skip the bracket wipe
-  // entirely. The next bracket regeneration will produce a fresh
-  // structure that omits the changed registration.
-  await prisma.divisionAssignment.deleteMany({ where: { registrationId: registration.id } });
-  await prisma.match.deleteMany({ where: { OR: [{ competitor1Id: registration.id }, { competitor2Id: registration.id }] } });
-  // NOTE: do not delete the bracket — see B4. The downstream
-  // matches still reference the now-removed registration by
-  // id, but the scorekeeper / match view shows them as TBD
-  // until the director regenerates the bracket.
-
-  res.json({ success: true, message: 'Registration updated. Your division assignment may change when brackets are regenerated.' });
+  res.json({
+    success: true,
+    message: outcome.divisionChange
+      ? 'Registration updated. Your division assignment may change when divisions are regenerated.'
+      : 'Registration updated.',
+  });
 });
 
 // Withdraw a registration by confirmation code. Parents can do this
@@ -992,12 +1027,18 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
     return res.status(409).json({ error: 'Cannot withdraw once the tournament has started.' });
   }
 
-  // Cascade-delete related rows before removing the registration.
-  await prisma.$transaction(async (tx) => {
+  // Never delete Match rows here (they are shared with the opponent and
+  // referenced by Bracket.structure). Once a bracket including this
+  // registration exists, withdrawal goes through the organizer.
+  const withdrawal = await prisma.$transaction(async (tx) => {
+    if (await isRegistrationInDrawnBracket(tx, registration.id)) return 'bracket_locked' as const;
     await tx.divisionAssignment.deleteMany({ where: { registrationId: registration.id } });
-    await tx.match.deleteMany({ where: { OR: [{ competitor1Id: registration.id }, { competitor2Id: registration.id }] } });
     await tx.registration.delete({ where: { id: registration.id } });
+    return 'withdrawn' as const;
   });
+  if (withdrawal === 'bracket_locked') {
+    return res.status(409).json({ error: BRACKET_LOCKED_MESSAGE, code: 'BRACKET_LOCKED' });
+  }
 
   // #118 acceptance: Audit log (non-sensitive)
   console.log(`[registration-manage-withdraw] Registration ${registration.id.slice(0, 8)} withdrawn via management token`);
