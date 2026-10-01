@@ -128,8 +128,17 @@ function finalsPositions(structure: BracketStructure): { grandFinals: number | n
 }
 
 /** A match that was auto-resolved as a BYE (never actually contested). */
-function isAutoBye(m: EngineMatch): boolean {
+export function isAutoByeMatch(m: {
+  status: string;
+  notes?: string | null;
+  competitor1Id: string | null;
+  competitor2Id: string | null;
+}): boolean {
   return m.status === 'completed' && m.notes === BYE_NOTE && !(m.competitor1Id && m.competitor2Id);
+}
+
+function isAutoBye(m: EngineMatch): boolean {
+  return isAutoByeMatch(m);
 }
 
 /** Has this match been contested (so its competitors must not be rewritten)? */

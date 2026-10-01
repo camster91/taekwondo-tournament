@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { readCanonicalSchedule, type CanonicalScheduleSnapshot, mergeCanonicalScheduleSettings, canonicalScheduleVersion } from './canonical-schedule.js';
 import { invalidateScheduleRecommendations } from './schedule-recommendation-invalidation.js';
+import { isAutoByeMatch } from './match-advancement.js';
 
 export interface ScheduleDelayInput {
   tournamentId: string;
@@ -74,6 +75,67 @@ function timeToMinutes(time: string): number {
   return hours * 60 + minutes;
 }
 
+type ScheduleRow = CanonicalScheduleSnapshot['rows'][number];
+
+const overlaps = (a: ScheduleRow, b: ScheduleRow) =>
+  a.startMinutes < b.startMinutes + b.durationMinutes && b.startMinutes < a.startMinutes + a.durationMinutes;
+
+/**
+ * Resolve same-ring overlaps introduced by a delay, in place.
+ *
+ * Only pairs where at least one division moved and which did not
+ * already overlap before the delay are considered (an overlap that was
+ * in the schedule already is not this operation's doing). The later of
+ * the two is pushed to start when the earlier ends, which may in turn
+ * push the next one (cascade). If the later one cannot move, the delay
+ * is refused via `onBlocked`. Exported for unit tests.
+ */
+export function cascadeRingOverlaps(
+  rows: ScheduleRow[],
+  options: {
+    movedIds: Set<string>;
+    originalById: Map<string, ScheduleRow>;
+    isImmovable: (row: ScheduleRow) => boolean;
+    onCascade: (row: ScheduleRow) => void;
+    onBlocked: (blocked: ScheduleRow, shifted: ScheduleRow) => never;
+  },
+): void {
+  const { movedIds, originalById, isImmovable, onCascade, onBlocked } = options;
+  const rings = [...new Set(rows.map((row) => row.ring))];
+  for (const ring of rings) {
+    // Each pass fixes the earliest new overlap; every fix moves a row
+    // strictly later, so this terminates. The bound is a safety net.
+    for (let guard = 0; guard <= rows.length * rows.length; guard++) {
+      const ringRows = rows
+        .filter((row) => row.ring === ring)
+        .sort((a, b) => a.startMinutes - b.startMinutes
+          || (originalById.get(a.divisionId)?.startMinutes ?? 0) - (originalById.get(b.divisionId)?.startMinutes ?? 0));
+      let fixed = false;
+      search: for (let i = 0; i < ringRows.length; i++) {
+        for (let j = i + 1; j < ringRows.length; j++) {
+          const earlier = ringRows[i];
+          const later = ringRows[j];
+          if (!overlaps(earlier, later)) continue;
+          if (!movedIds.has(earlier.divisionId) && !movedIds.has(later.divisionId)) continue;
+          const before1 = originalById.get(earlier.divisionId);
+          const before2 = originalById.get(later.divisionId);
+          if (before1 && before2 && overlaps(before1, before2)) continue;
+          if (isImmovable(later)) {
+            // Moving the earlier (shifted) row back would undo the delay.
+            onBlocked(later, earlier);
+          }
+          later.startMinutes = earlier.startMinutes + earlier.durationMinutes;
+          movedIds.add(later.divisionId);
+          onCascade(later);
+          fixed = true;
+          break search;
+        }
+      }
+      if (!fixed) break;
+    }
+  }
+}
+
 /**
  * Calculate delay propagation: shift eligible downstream divisions deterministically.
  * Preserve completed and in-progress matches by only moving "pending" divisions.
@@ -103,7 +165,7 @@ async function calculateDelayPropagation(
                     { status: 'completed' },
                   ],
                 },
-                select: { id: true, status: true },
+                select: { id: true, status: true, notes: true, competitor1Id: true, competitor2Id: true },
               },
             },
           },
@@ -123,12 +185,16 @@ async function calculateDelayPropagation(
   const scheduleConfig = settings.schedule as { endTime?: string } | undefined;
   const endMinutes = scheduleConfig?.endTime ? timeToMinutes(scheduleConfig.endTime) : 17 * 60; // Default 17:00
 
-  // Build set of divisions with completed or in-progress matches (cannot be moved)
+  // Build set of divisions with real results or in-progress matches
+  // (cannot be moved). BYE matches are auto-completed when the bracket
+  // is generated, so they say nothing about whether the division has
+  // started; counting them locked almost every division from the start.
   const lockedDivisionIds = new Set<string>();
   for (const division of tournament.divisions) {
-    if (division.bracket?.matches && division.bracket.matches.length > 0) {
-      lockedDivisionIds.add(division.id);
-    }
+    const started = (division.bracket?.matches ?? []).some((match) =>
+      match.status === 'in_progress' || (match.status === 'completed' && !isAutoByeMatch(match))
+    );
+    if (started) lockedDivisionIds.add(division.id);
   }
 
   // Build registry of division metadata
@@ -226,9 +292,56 @@ async function calculateDelayPropagation(
         );
       }
     } else {
-      newRows.push(row);
+      // Copy: the overlap cascade below may move this row, and the
+      // original belongs to the "before" snapshot.
+      newRows.push({ ...row });
     }
   }
+
+  // Same-ring overlaps: a shifted division may now run into a later
+  // division on its ring that did not move (a locked one, or one that
+  // was outside the shifted range). Cascade the shift onto movable
+  // divisions; refuse if the one in the way is genuinely locked.
+  const movedIds = new Set(divisionMoves.map((move) => move.divisionId));
+  const originalById = new Map(sortedRows.map((row) => [row.divisionId, row]));
+  const nameOf = (divisionId: string) => divisionRegistry.get(divisionId)?.name ?? divisionId;
+  const isImmovable = (row: (typeof newRows)[number]) => row.locked || lockedDivisionIds.has(row.divisionId);
+  cascadeRingOverlaps(newRows, {
+    movedIds,
+    originalById,
+    isImmovable,
+    onCascade: (row) => {
+      const existing = divisionMoves.find((move) => move.divisionId === row.divisionId);
+      const original = originalById.get(row.divisionId)!;
+      const newEndMinutes = row.startMinutes + row.durationMinutes;
+      const move = {
+        divisionId: row.divisionId,
+        divisionName: nameOf(row.divisionId),
+        oldStartTime: minutesToTime(original.startMinutes),
+        newStartTime: minutesToTime(row.startMinutes),
+        oldEndTime: minutesToTime(original.startMinutes + original.durationMinutes),
+        newEndTime: minutesToTime(newEndMinutes),
+        ring: row.ring,
+      };
+      if (existing) Object.assign(existing, move);
+      else divisionMoves.push(move);
+      if (newEndMinutes > endMinutes) {
+        const overrun = `${move.divisionName} (Ring ${row.ring}) now ends at ${minutesToTime(newEndMinutes)}, after tournament end time ${minutesToTime(endMinutes)}`;
+        const index = endTimeOverruns.findIndex((entry) => entry.startsWith(`${move.divisionName} (Ring ${row.ring})`));
+        if (index >= 0) endTimeOverruns[index] = overrun;
+        else endTimeOverruns.push(overrun);
+      }
+    },
+    onBlocked: (blocked, shifted) => {
+      throw new Error(
+        `Cannot apply this delay: ${nameOf(blocked.divisionId)} on Ring ${blocked.ring} `
+        + `${lockedDivisionIds.has(blocked.divisionId) ? 'has recorded results or a match in progress' : 'has a locked start time'} `
+        + `and cannot move, but ${nameOf(shifted.divisionId)} would now overlap it `
+        + `(${minutesToTime(shifted.startMinutes)}-${minutesToTime(shifted.startMinutes + shifted.durationMinutes)}). `
+        + 'Use a shorter delay or move one of these divisions to another ring.',
+      );
+    },
+  });
 
   // Detect conflicts: athlete double-booking
   const conflicts: ScheduleDelayImpact['conflicts'] = [];
