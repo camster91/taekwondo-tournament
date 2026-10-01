@@ -4,6 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
+import { recomputeRegistrationAges } from '../services/registration-age.js';
 import { generateSchedule, validateScheduleConfig, DEFAULT_CONFIG, type ScheduleConfig } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
 import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, buildCompetitorAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
@@ -930,6 +931,12 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
           waitlistEnabled: waitlistEnabled !== undefined ? waitlistEnabled : undefined,
         },
       });
+
+      // Ages are stored per registration and drive categorization, so a
+      // date change must refresh them in the same transaction.
+      if (date) {
+        await recomputeRegistrationAges(tx, { tournamentId });
+      }
 
       // Record usage when tournament is completed
       if (status === 'completed' && current.status !== 'completed' && current.organizationId) {

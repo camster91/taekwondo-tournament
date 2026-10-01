@@ -20,6 +20,7 @@ import { parseBoundedInt, parseOptionalInt } from './query-parsing.js';
 import { legalHoldSchema, legalHoldData, competitorIsHeld } from '../services/legal-hold.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 import { findPotentialDuplicates, mergeCompetitors, MIN_DUPLICATE_THRESHOLD } from '../services/competitor-deduplication.js';
+import { recomputeRegistrationAges } from '../services/registration-age.js';
 
 const router = Router();
 
@@ -595,21 +596,29 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
     specialNeeds,
   } = req.body;
 
-  const competitor = await prisma.competitor.update({
-    where: { id },
-    data: {
-      firstName,
-      lastName,
-      gender,
-      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
-      belt,
-      beltStripe,
-      danRank,
-      heightInches,
-      weightLbs,
-      schoolDojang,
-      specialNeeds,
-    },
+  const competitor = await prisma.$transaction(async (tx) => {
+    const updated = await tx.competitor.update({
+      where: { id },
+      data: {
+        firstName,
+        lastName,
+        gender,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+        belt,
+        beltStripe,
+        danRank,
+        heightInches,
+        weightLbs,
+        schoolDojang,
+        specialNeeds,
+      },
+    });
+    // A corrected date of birth changes the stored age on every
+    // registration, which categorization reads.
+    if (dateOfBirth) {
+      await recomputeRegistrationAges(tx, { competitorId: id });
+    }
+    return updated;
   });
 
   res.json(competitor);
