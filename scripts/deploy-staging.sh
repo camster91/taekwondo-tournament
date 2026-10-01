@@ -111,7 +111,7 @@ test "$(docker inspect bowin-staging-db --format '{{.HostConfig.NetworkMode}}')"
 test "$(docker inspect bowin-staging-app --format '{{.HostConfig.NetworkMode}}')" = bowin-staging-net
 test "$(docker inspect bowin-staging-db --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}')" = bowin-staging-pgdata
 
-ALLOWED_ENV='^(DATABASE_URL|JWT_SECRET|METRICS_TOKEN|ADMIN_SETUP_KEY|MAILGUN_API_KEY|MAILGUN_DOMAIN|MAILGUN_BASE_URL|EMAIL_FROM_NAME|EMAIL_FROM_ADDRESS|OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64|RETENTION_PURGE_ENABLED|SOFT_DELETE_RETENTION_DAYS|REGISTRATION_CONSENT_VERSION|PRIVACY_NOTICE_URL|TOURNAMENT_TERMS_URL|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_STARTER_PRICE_ID|STRIPE_PRO_PRICE_ID|DEBUG)='
+ALLOWED_ENV='^(DATABASE_URL|JWT_SECRET|METRICS_TOKEN|ADMIN_SETUP_KEY|MAILGUN_API_KEY|MAILGUN_DOMAIN|MAILGUN_BASE_URL|EMAIL_FROM_NAME|EMAIL_FROM_ADDRESS|OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64|RETENTION_PURGE_ENABLED|SOFT_DELETE_RETENTION_DAYS|REGISTRATION_CONSENT_VERSION|PRIVACY_NOTICE_URL|TOURNAMENT_TERMS_URL|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_STARTER_PRICE_ID|STRIPE_PRO_PRICE_ID|DEBUG|RETENTION_PURGE_DRY_RUN|SENTRY_DSN|SENTRY_ENVIRONMENT|STRIPE_PER_EVENT_SMALL_PRICE_ID|STRIPE_PER_EVENT_MEDIUM_PRICE_ID|STRIPE_PER_EVENT_LARGE_PRICE_ID|LOGO_STORAGE_PATH|OPENAI_API_KEY|OPENAI_MODEL|OPENAI_BASE_URL|SUPPORT_ALERT_EMAIL)='
 docker inspect bowin-staging-app --format '{{range .Config.Env}}{{println .}}{{end}}' \
   | grep -E "$ALLOWED_ENV" > "$ENV_FILE"
 if ! grep -q '^OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64=' "$ENV_FILE"; then
@@ -185,6 +185,7 @@ docker rm -f bowin-staging-candidate >/dev/null 2>&1 || true
 docker run -d \
   --name bowin-staging-candidate \
   --network bowin-staging-net \
+  -v bowin-staging-data:/app/data \
   --env-file "$ENV_FILE" \
   "$IMAGE" >/dev/null
 for _ in $(seq 1 60); do
@@ -207,6 +208,7 @@ docker run -d \
   --restart unless-stopped \
   --network bowin-staging-net \
   -p 127.0.0.1:18302:3001 \
+  -v bowin-staging-data:/app/data \
   --env-file "$ENV_FILE" \
   "$IMAGE" >/dev/null
 

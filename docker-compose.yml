@@ -5,6 +5,12 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64: ${VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64:?offline capability public key must be set}
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        VITE_SENTRY_ENVIRONMENT: ${VITE_SENTRY_ENVIRONMENT:-}
+        VITE_CRISP_WEBSITE_ID: ${VITE_CRISP_WEBSITE_ID:-}
+        VITE_TUTORIAL_QUICKSTART_URL: ${VITE_TUTORIAL_QUICKSTART_URL:-}
+        VITE_TUTORIAL_IMPORT_URL: ${VITE_TUTORIAL_IMPORT_URL:-}
+        VITE_TUTORIAL_RUN_EVENT_URL: ${VITE_TUTORIAL_RUN_EVENT_URL:-}
     container_name: martial-arts-tournament
     ports:
       - "3001:3001"
@@ -37,6 +43,12 @@ services:
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
       - STRIPE_STARTER_PRICE_ID=${STRIPE_STARTER_PRICE_ID:-}
       - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID:-}
+      # Organization logo uploads; lives on the app_data volume below.
+      - LOGO_STORAGE_PATH=/app/data/logos
+    volumes:
+      # The root filesystem is read_only: uploads need a writable,
+      # persistent volume or they fail (and would be lost on redeploy).
+      - app_data:/app/data
     depends_on:
       taekwondo-db:
         condition: service_healthy
@@ -86,6 +98,7 @@ services:
 
 volumes:
   postgres_data:
+  app_data:
 
 networks:
   tkd-net:

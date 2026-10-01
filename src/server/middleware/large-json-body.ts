@@ -1,5 +1,5 @@
 /**
- * Large JSON body routes (Excel auto-map / import).
+ * Large JSON body routes (Excel auto-map / import, organization logo upload).
  *
  * Body-parser only parses a request once, so a route that needs a bigger
  * limit than the global 1 MB parser must be parsed BEFORE the global parser
@@ -20,6 +20,14 @@ import { createRateLimiter } from './rate-limit.js';
 export const LARGE_JSON_BODY_ROUTES = ['/api/competitors/auto-map', '/api/competitors/import'] as const;
 export const LARGE_JSON_BODY_LIMIT = '40mb';
 
+/**
+ * Organization logo upload (base64 JSON). The route caps the decoded image
+ * at 2 MB; base64 inflates that ~4/3 (≈2.7 MB) plus the JSON envelope, so
+ * the global 1 MB parser would reject every logo over ~750 KB with 413.
+ */
+export const LOGO_JSON_BODY_ROUTES = ['/api/organizations/:orgId/logo-base64'] as const;
+export const LOGO_JSON_BODY_LIMIT = '3mb';
+
 export function mountLargeJsonBodyRoutes(app: ReturnType<typeof express>): void {
   const largeBodyLimiter = createRateLimiter({
     windowMs: 15 * 60 * 1000,
@@ -32,5 +40,12 @@ export function mountLargeJsonBodyRoutes(app: ReturnType<typeof express>): void 
     authenticate,
     requireRole('admin', 'director'),
     express.json({ limit: LARGE_JSON_BODY_LIMIT }),
+  );
+  app.post(
+    [...LOGO_JSON_BODY_ROUTES],
+    largeBodyLimiter,
+    authenticate,
+    requireRole('admin', 'director'),
+    express.json({ limit: LOGO_JSON_BODY_LIMIT }),
   );
 }

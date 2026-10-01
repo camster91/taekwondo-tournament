@@ -517,7 +517,7 @@ export default function OrganizationSettings() {
             <input
               id="org-logo"
               type="file"
-              accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
+              accept="image/png,image/jpeg,image/gif,image/webp"
               className="block w-full text-sm text-surface-500 dark:text-surface-400
                 file:mr-4 file:py-2 file:px-4
                 file:rounded-md file:border-0
@@ -527,7 +527,8 @@ export default function OrganizationSettings() {
                 dark:file:bg-primary-500/10 dark:file:text-primary-400
                 dark:hover:file:bg-primary-500/20"
               onChange={async (event) => {
-                const file = event.target.files?.[0];
+                const input = event.currentTarget;
+                const file = input.files?.[0];
                 if (!file) return;
                 
                 // Validate file size (2MB)
@@ -537,35 +538,36 @@ export default function OrganizationSettings() {
                 }
 
                 try {
-                  // Convert to base64
-                  const reader = new FileReader();
-                  reader.onload = async () => {
-                    const base64 = reader.result as string;
-                    const res = await fetch(`/api/organizations/${organization.id}/logo-base64`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                      body: JSON.stringify({ data: base64, mimeType: file.type }),
-                    });
-                    if (!res.ok) {
-                      const data = await res.json();
-                      throw new Error(data.error || 'Failed to upload logo');
-                    }
-                    toast.success('Logo uploaded successfully');
-                    await queryClient.invalidateQueries({ queryKey: ['organizations', 'current'] });
-                    // Clear the file input
-                    event.target.value = '';
-                  };
-                  reader.onerror = () => {
-                    toast.error('Failed to read file');
-                  };
-                  reader.readAsDataURL(file);
+                  // Convert to base64. Wrapping FileReader in a Promise keeps
+                  // read and upload failures inside this try/catch (a throw in
+                  // an async onload callback would escape it unreported).
+                  const base64 = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = () => reject(new Error('Failed to read file'));
+                    reader.readAsDataURL(file);
+                  });
+                  const res = await fetch(`/api/organizations/${organization.id}/logo-base64`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                    body: JSON.stringify({ data: base64, mimeType: file.type }),
+                  });
+                  if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.error || 'Failed to upload logo');
+                  }
+                  toast.success('Logo uploaded successfully');
+                  await queryClient.invalidateQueries({ queryKey: ['organizations', 'current'] });
                 } catch (error) {
                   toast.error(error instanceof Error ? error.message : 'Failed to upload logo');
+                } finally {
+                  // Clear the file input so the same file can be re-selected
+                  input.value = '';
                 }
               }}
             />
             <p className="mt-2 text-xs text-surface-500 dark:text-surface-400">
-              PNG, JPG, GIF, WebP, or SVG. Maximum 2MB.
+              PNG, JPG, GIF, or WebP. Maximum 2MB.
             </p>
           </div>
         </div>

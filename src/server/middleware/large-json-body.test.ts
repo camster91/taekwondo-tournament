@@ -32,6 +32,7 @@ function buildApp(role: string) {
   };
   app.post('/api/competitors/import', echo);
   app.post('/api/competitors/auto-map', echo);
+  app.post('/api/organizations/:orgId/logo-base64', echo);
   app.post('/api/other', echo);
   return { app, findUnique };
 }
@@ -77,5 +78,32 @@ describe('mountLargeJsonBodyRoutes', () => {
       .set('Authorization', `Bearer ${tokenFor('director-2', 'director')}`)
       .send(twoMegabyteBody);
     expect(res.status).toBe(413);
+  });
+
+  it('accepts a base64-encoded 2 MB logo on logo-base64 for directors', async () => {
+    const { app } = buildApp('director');
+    // 2 MB of image bytes encode to ~2.7 MB of base64.
+    const logoBody = { data: Buffer.alloc(2 * 1024 * 1024, 7).toString('base64'), mimeType: 'image/png' };
+    const res = await request(app)
+      .post('/api/organizations/org-1/logo-base64')
+      .set('Authorization', `Bearer ${tokenFor('director-3', 'director')}`)
+      .send(logoBody);
+    expect(res.status).toBe(200);
+    expect(res.body.bytes).toBeGreaterThan(2.6 * 1024 * 1024);
+  });
+
+  it('keeps the logo route below the 40 MB Excel limit', async () => {
+    const { app } = buildApp('director');
+    const res = await request(app)
+      .post('/api/organizations/org-1/logo-base64')
+      .set('Authorization', `Bearer ${tokenFor('director-4', 'director')}`)
+      .send({ data: 'A'.repeat(4 * 1024 * 1024) });
+    expect(res.status).toBe(413);
+  });
+
+  it('rejects anonymous logo uploads with 401 before parsing the body', async () => {
+    const { app } = buildApp('admin');
+    const res = await request(app).post('/api/organizations/org-1/logo-base64').send(twoMegabyteBody);
+    expect(res.status).toBe(401);
   });
 });

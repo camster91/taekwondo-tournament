@@ -2,8 +2,25 @@
 # runtime use the same pinned, supported baseline.
 FROM node:22.18-alpine3.22 AS builder
 
+# Client build variables. Vite inlines every VITE_* value into the bundle
+# at `vite build`, so they must be build args (Coolify: "Build Variable");
+# setting them only at runtime has no effect. All are public values.
 ARG VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64
-ENV VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64}
+ARG VITE_SENTRY_DSN
+ARG VITE_SENTRY_ENVIRONMENT
+ARG VITE_CRISP_WEBSITE_ID
+ARG VITE_POSTHOG_KEY
+ARG VITE_TUTORIAL_QUICKSTART_URL
+ARG VITE_TUTORIAL_IMPORT_URL
+ARG VITE_TUTORIAL_RUN_EVENT_URL
+ENV VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64} \
+    VITE_SENTRY_DSN=${VITE_SENTRY_DSN} \
+    VITE_SENTRY_ENVIRONMENT=${VITE_SENTRY_ENVIRONMENT} \
+    VITE_CRISP_WEBSITE_ID=${VITE_CRISP_WEBSITE_ID} \
+    VITE_POSTHOG_KEY=${VITE_POSTHOG_KEY} \
+    VITE_TUTORIAL_QUICKSTART_URL=${VITE_TUTORIAL_QUICKSTART_URL} \
+    VITE_TUTORIAL_IMPORT_URL=${VITE_TUTORIAL_IMPORT_URL} \
+    VITE_TUTORIAL_RUN_EVENT_URL=${VITE_TUTORIAL_RUN_EVENT_URL}
 
 WORKDIR /app
 
@@ -56,6 +73,13 @@ COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --from=builder --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 COPY --chown=node:node package.json ./
 COPY --chown=node:node server.js ./
+
+# Persistent upload storage (organization logos, LOGO_STORAGE_PATH).
+# Created node-owned so the unprivileged server can write it; mount a
+# volume / persistent storage here or uploads are lost on redeploy.
+ENV LOGO_STORAGE_PATH=/app/data/logos
+RUN mkdir -p /app/data/logos && chown -R node:node /app/data
+VOLUME ["/app/data"]
 
 # Switch to node user for security
 USER node
