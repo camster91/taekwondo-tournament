@@ -244,6 +244,10 @@ export async function generateSchedule(
       { beltLevel: 'asc' }, // BB then CB
       { gender: 'asc' },
       { ageMin: 'asc' },
+      // Tie-breakers: without them Postgres may return equal rows in any
+      // order, so the same schedule could reshuffle between two reads.
+      { divisionNumber: 'asc' },
+      { id: 'asc' },
     ],
   });
 

@@ -251,6 +251,16 @@ describe('generateSchedule: soft-deleted divisions and late days', () => {
     );
   });
 
+  it('orders divisions deterministically, ending with unique tie-breakers', async () => {
+    const findMany = vi.fn(async () => []);
+    await generateSchedule(
+      { tournament: { findUnique: async () => tournament }, division: { findMany } } as never,
+      tournament.id
+    );
+    const { orderBy } = (findMany.mock.calls[0] as unknown as [{ orderBy: Array<Record<string, string>> }])[0];
+    expect(orderBy.slice(-2)).toEqual([{ divisionNumber: 'asc' }, { id: 'asc' }]);
+  });
+
   it('does not crash when the schedule runs past midnight (regression: 24:05 threw)', async () => {
     // One ring, 22:00 start, two 16-person DE sparring divisions (31 matches x 5 min each).
     const result = await generateSchedule(
