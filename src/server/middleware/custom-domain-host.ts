@@ -153,7 +153,7 @@ export function resolveCustomDomainHost(options: ResolveCustomDomainHostOptions 
  * Helper to get resolved org info from custom domain middleware
  */
 export function getResolvedOrg(res: Response): CustomDomainLocals | null {
-  return (res.locals.customDomain as CustomDomainLocals | undefined) ?? null;
+  return (res.locals?.customDomain as CustomDomainLocals | undefined) ?? null;
 }
 
 /**
