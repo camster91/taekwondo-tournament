@@ -87,6 +87,31 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
     const expiredToken=(await expired.json()).inviteUrl.split('#')[1];
     await pool.query("UPDATE bowin_rebuild.invites SET expires_at=now()-interval '1 second' WHERE email='expired@example.invalid'");
     assert.equal((await request('/api/auth/accept-invite',{method:'POST',body:{token:expiredToken,name:'Expired user',password:'ExpiredPassword-123456'}})).status,404);
+    const seeds=[competitorId],pendingRegistrations=[];
+    for(const label of ['B','C']){
+      const next=await request(tournamentPath+'/competitors',{method:'POST',cookie,body:{name:'Private QA '+label,club:'QA club',publicDisplayName:'QA athlete '+label}});
+      assert.equal(next.status,201);const nextId=(await next.json()).id;seeds.push(nextId);
+      const registered=await request(tournamentPath+'/registrations',{method:'POST',cookie,body:{competitorId:nextId,divisionId}});
+      assert.equal(registered.status,201);pendingRegistrations.push((await registered.json()).id);
+    }
+    const bracketPath=tournamentPath+`/divisions/${divisionId}/bracket`;
+    assert.equal((await request(bracketPath,{method:'POST',cookie,body:{competitorIds:seeds}})).status,409);
+    for(const id of pendingRegistrations)assert.equal((await request(tournamentPath+`/registrations/${id}/check-in`,{method:'POST',cookie})).status,200);
+    assert.equal((await request(bracketPath,{method:'POST',cookie:scoreCookie,body:{competitorIds:seeds}})).status,403);
+    const generated=await request(bracketPath,{method:'POST',cookie,body:{competitorIds:seeds}});assert.equal(generated.status,201);
+    const generatedMatches=(await generated.json()).matches;
+    assert.equal(generatedMatches[0].status,'bye');assert.equal(generatedMatches[2].status,'waiting');
+    assert.equal((await request(bracketPath,{method:'POST',cookie,body:{competitorIds:seeds}})).status,409);
+    assert.equal((await request(bracketPath+'/score',{method:'POST',cookie:scoreCookie,body:{matchKey:'2:1',scoreLeft:2,scoreRight:0}})).status,409);
+    const semifinal={matchKey:'1:2',scoreLeft:0,scoreRight:2};
+    const raced=await Promise.all([request(bracketPath+'/score',{method:'POST',cookie:scoreCookie,body:semifinal}),request(bracketPath+'/score',{method:'POST',cookie:scoreCookie,body:semifinal})]);
+    assert.deepEqual(raced.map(response=>response.status).sort(),[200,409]);
+    assert.equal((await request(foreignPath+`/${tournamentId}/divisions/${divisionId}/bracket/score`,{method:'POST',cookie:scoreCookie,body:{matchKey:'2:1',scoreLeft:1,scoreRight:0}})).status,404);
+    const final=await request(bracketPath+'/score',{method:'POST',cookie:scoreCookie,body:{matchKey:'2:1',scoreLeft:3,scoreRight:1}});
+    assert.equal(final.status,200);assert.equal((await final.json()).champion_id,competitorId);
+    const persisted=await request(bracketPath,{cookie});assert.equal((await persisted.json()).champion_id,competitorId);
+    const scoreAudit=(await pool.query("SELECT details FROM bowin_rebuild.audit_events WHERE action='match.scored' ORDER BY id DESC LIMIT 1")).rows[0].details;
+    assert.deepEqual(scoreAudit,{matchKey:'2:1',scoreLeft:3,scoreRight:1,winnerId:competitorId});
     await pool.query("UPDATE bowin_rebuild.memberships SET role='scorekeeper' WHERE user_id=$1 AND organization_id=$2",[userId,organizationId]);
     assert.equal((await request(path,{method:'POST',cookie,body:payload})).status,403);
     for(const [suffix,body] of [['divisions',divisionBody],['competitors',competitorBody],['registrations',registrationBody],[`registrations/${registrationId}/check-in`,undefined]])assert.equal((await request(tournamentPath+'/'+suffix,{method:'POST',cookie,body})).status,403);
@@ -97,7 +122,7 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
     const loggedIn=login.headers.get('set-cookie').split(';')[0];
     await pool.query("UPDATE bowin_rebuild.sessions SET expires_at=now()-interval '1 second'");
     assert.equal((await request('/api/me',{cookie:loggedIn})).status,401);
-    assert.equal((await pool.query('SELECT 1 FROM bowin_rebuild.audit_events')).rowCount,12);
+    assert.equal((await pool.query('SELECT 1 FROM bowin_rebuild.audit_events')).rowCount,21);
   } finally {
     await new Promise(resolve=>server.close(resolve));await pool.end();
   }

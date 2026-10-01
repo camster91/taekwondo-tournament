@@ -1,6 +1,7 @@
 import express from 'express';
 import {randomUUID} from 'node:crypto';
 import {text,uuid} from './security.mjs';
+import {bracketChampion,createBracket,scoreBracket} from './brackets.mjs';
 
 export class Problem extends Error {
   constructor(status,code){super(code);this.status=status;this.code=code;}
@@ -18,15 +19,17 @@ export function mountTournamentRoutes({app,pool,requireAuth,route}){
     if(!result.rowCount)throw new Problem(404,'NOT_FOUND');
     return result.rows[0];
   }
-  async function mutate(req,action,fn){
+  async function mutate(req,action,fn,roles=['owner','organizer']){
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
       const tournament=await access(client,req,true);
-      if(!['owner','organizer'].includes(tournament.role))throw new Problem(403,'ROLE_REJECTED');
+      if(!roles.includes(tournament.role))throw new Problem(403,'ROLE_REJECTED');
       const result=await fn(client,tournament);
-      await client.query('INSERT INTO bowin_rebuild.audit_events(organization_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)',[req.params.organizationId,req.user.id,action,result.id]);
-      await client.query('COMMIT');return result;
+      await client.query('INSERT INTO bowin_rebuild.audit_events(organization_id,actor_id,action,target_id,details) VALUES($1,$2,$3,$4,$5)',[req.params.organizationId,req.user.id,action,result.id,JSON.stringify(result.auditDetails||{})]);
+      await client.query('COMMIT');
+      const {auditDetails,...response}=result;
+      return response;
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }
   function editable(tournament){if(!['draft','registration'].includes(tournament.status))throw new Problem(409,'REGISTRATION_CLOSED');}
@@ -85,6 +88,49 @@ export function mountTournamentRoutes({app,pool,requireAuth,route}){
       if(!updated.rowCount)throw new Problem(404,'NOT_FOUND');
       return updated.rows[0];
     });res.json(result);
+  }));
+  router.get('/divisions/:divisionId/bracket',route(async(req,res)=>{
+    await access(pool,req);
+    if(!uuid(req.params.divisionId))throw new Problem(404,'NOT_FOUND');
+    const result=await pool.query('SELECT id,matches,champion_id FROM bowin_rebuild.brackets WHERE organization_id=$1 AND tournament_id=$2 AND division_id=$3',[req.params.organizationId,req.params.tournamentId,req.params.divisionId]);
+    if(!result.rowCount)throw new Problem(404,'NOT_FOUND');
+    res.json(result.rows[0]);
+  }));
+  router.post('/divisions/:divisionId/bracket',route(async(req,res)=>{
+    if(!uuid(req.params.divisionId))throw new Problem(404,'NOT_FOUND');
+    const entrants=req.body?.competitorIds;
+    if(!Array.isArray(entrants)||entrants.length<2||entrants.length>256||entrants.some(id=>!uuid(id))||new Set(entrants).size!==entrants.length)throw new Error('Invalid bracket entrants');
+    const result=await mutate(req,'bracket.created',async(client,tournament)=>{
+      editable(tournament);
+      const division=(await client.query('SELECT status,discipline,format FROM bowin_rebuild.divisions WHERE id=$1 AND organization_id=$2 AND tournament_id=$3 FOR UPDATE',[req.params.divisionId,req.params.organizationId,req.params.tournamentId])).rows[0];
+      if(!division)throw new Problem(404,'NOT_FOUND');
+      if(division.status!=='draft')throw new Problem(409,'DIVISION_LOCKED');
+      if(division.format!=='single_elimination'||division.discipline!=='sparring')throw new Problem(409,'FORMAT_NOT_SUPPORTED');
+      const registrations=(await client.query('SELECT competitor_id,checked_in_at FROM bowin_rebuild.registrations WHERE organization_id=$1 AND tournament_id=$2 AND division_id=$3 FOR UPDATE',[req.params.organizationId,req.params.tournamentId,req.params.divisionId])).rows;
+      if(registrations.length!==entrants.length||registrations.some(row=>!row.checked_in_at||!entrants.includes(row.competitor_id)))throw new Problem(409,'CHECKED_IN_ROSTER_REQUIRED');
+      const id=randomUUID(),matches=createBracket(entrants);
+      await client.query('INSERT INTO bowin_rebuild.brackets(id,organization_id,tournament_id,division_id,matches) VALUES($1,$2,$3,$4,$5)',[id,req.params.organizationId,req.params.tournamentId,req.params.divisionId,JSON.stringify(matches)]);
+      await client.query("UPDATE bowin_rebuild.divisions SET status='locked' WHERE id=$1",[req.params.divisionId]);
+      return{id,matches};
+    });res.status(201).json(result);
+  }));
+  router.post('/divisions/:divisionId/bracket/score',route(async(req,res)=>{
+    if(!uuid(req.params.divisionId))throw new Problem(404,'NOT_FOUND');
+    const key=req.body?.matchKey,left=req.body?.scoreLeft,right=req.body?.scoreRight;
+    if(typeof key!=='string'||!/^\d{1,2}:\d{1,3}$/.test(key)||![left,right].every(value=>Number.isInteger(value)&&value>=0&&value<=999)||left===right)throw new Error('Invalid score');
+    const result=await mutate(req,'match.scored',async(client,tournament)=>{
+      if(tournament.status==='completed')throw new Problem(409,'TOURNAMENT_COMPLETED');
+      const division=(await client.query('SELECT id,status FROM bowin_rebuild.divisions WHERE id=$1 AND organization_id=$2 AND tournament_id=$3 FOR UPDATE',[req.params.divisionId,req.params.organizationId,req.params.tournamentId])).rows[0];
+      if(!division)throw new Problem(404,'NOT_FOUND');
+      const bracket=(await client.query('SELECT id,matches FROM bowin_rebuild.brackets WHERE organization_id=$1 AND tournament_id=$2 AND division_id=$3 FOR UPDATE',[req.params.organizationId,req.params.tournamentId,req.params.divisionId])).rows[0];
+      if(!bracket)throw new Problem(404,'NOT_FOUND');
+      if(!bracket.matches.some(match=>match.key===key&&match.status==='ready'))throw new Problem(409,'MATCH_NOT_READY');
+      const matches=scoreBracket(bracket.matches,key,left,right),champion=bracketChampion(matches);
+      await client.query('UPDATE bowin_rebuild.brackets SET matches=$1,champion_id=$2,updated_at=now() WHERE id=$3',[JSON.stringify(matches),champion,bracket.id]);
+      await client.query('UPDATE bowin_rebuild.divisions SET status=$1 WHERE id=$2',[champion?'completed':'running',division.id]);
+      await client.query("UPDATE bowin_rebuild.tournaments SET status='running' WHERE id=$1 AND status IN ('draft','registration')",[tournament.id]);
+      return{id:bracket.id,matches,champion_id:champion,auditDetails:{matchKey:key,scoreLeft:left,scoreRight:right,winnerId:matches.find(match=>match.key===key).winner}};
+    },['owner','organizer','scorekeeper']);res.json(result);
   }));
   app.use('/api/organizations/:organizationId/tournaments/:tournamentId',requireAuth,router);
 }

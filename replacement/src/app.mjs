@@ -38,7 +38,7 @@ export function createApp({ pool, origin, setupToken, revision, secureCookies = 
   };
   app.get('/api/health/ready', route(async (_req, res) => {
     const result=await pool.query('SELECT version FROM public.bowin_rebuild_migrations ORDER BY version');
-    if(result.rows.map(row=>row.version).join(',')!=='1,2,3')throw new Error('Required migration missing');
+    if(result.rows.map(row=>row.version).join(',')!=='1,2,3,4')throw new Error('Required migration missing');
     res.json({ status: 'ok', database: 'ok', revision });
   }));
   app.post('/api/auth/bootstrap', route(async (req, res) => {
