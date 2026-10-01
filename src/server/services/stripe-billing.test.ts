@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   checkoutPlanFromInput,
   mapStripeSubscription,
+  resolveSubscriptionGrace,
   stripeRuntimeConfigFromEnv,
   stripePriceMapFromEnv,
 } from './stripe-billing.js';
@@ -116,5 +117,63 @@ describe('mapStripeSubscription', () => {
     };
     expect(() => mapStripeSubscription(base, stripePriceMapFromEnv(env))).toThrow(/organizationId/);
     expect(() => mapStripeSubscription({ ...base, metadata: { organizationId: 'org_123' } }, stripePriceMapFromEnv(env))).toThrow(/price/);
+  });
+});
+
+describe('resolveSubscriptionGrace', () => {
+  const now = new Date('2026-10-01T12:00:00Z');
+  const day = 24 * 60 * 60 * 1000;
+  const mapped = (status: string) => ({ status, plan: 'pro' as const, effectivePlan: status === 'active' ? 'pro' as const : 'free' as const });
+
+  it('keeps the paid plan and starts the 7-day clock on the first past_due signal', () => {
+    const decision = resolveSubscriptionGrace(mapped('past_due'), { paymentFailedAt: null, gracePeriodEndsAt: null }, now);
+    expect(decision.effectivePlan).toBe('pro');
+    expect(decision.grace.paymentFailedAt).toEqual(now);
+    expect(decision.grace.gracePeriodEndsAt!.getTime() - now.getTime()).toBe(7 * day);
+  });
+
+  it('keeps the paid plan during a running grace period without extending it', () => {
+    const decision = resolveSubscriptionGrace(mapped('past_due'), {
+      paymentFailedAt: new Date(now.getTime() - 2 * day),
+      gracePeriodEndsAt: new Date(now.getTime() + 5 * day),
+    }, now);
+    expect(decision).toEqual({ effectivePlan: 'pro', grace: {} });
+  });
+
+  it('agrees with the grace-period job once the period has expired', () => {
+    // Expired but the hourly job has not run yet
+    expect(resolveSubscriptionGrace(mapped('past_due'), {
+      paymentFailedAt: new Date(now.getTime() - 8 * day),
+      gracePeriodEndsAt: new Date(now.getTime() - day),
+    }, now)).toEqual({ effectivePlan: 'free', grace: {} });
+    // The job cleared gracePeriodEndsAt after downgrading
+    expect(resolveSubscriptionGrace(mapped('past_due'), {
+      paymentFailedAt: new Date(now.getTime() - 8 * day),
+      gracePeriodEndsAt: null,
+    }, now)).toEqual({ effectivePlan: 'free', grace: {} });
+  });
+
+  it('clears the grace period when the subscription recovers', () => {
+    expect(resolveSubscriptionGrace(mapped('active'), {
+      paymentFailedAt: new Date(now.getTime() - day),
+      gracePeriodEndsAt: new Date(now.getTime() + 6 * day),
+    }, now)).toEqual({
+      effectivePlan: 'pro',
+      grace: { paymentFailedAt: null, gracePeriodEndsAt: null, lastPaymentFailureReason: null },
+    });
+    expect(resolveSubscriptionGrace(mapped('active'), null, now)).toEqual({ effectivePlan: 'pro', grace: {} });
+  });
+
+  it('drops to free and clears the grace period for final statuses', () => {
+    for (const status of ['canceled', 'unpaid', 'incomplete_expired']) {
+      expect(resolveSubscriptionGrace(mapped(status), {
+        paymentFailedAt: new Date(now.getTime() - day),
+        gracePeriodEndsAt: new Date(now.getTime() + 6 * day),
+      }, now)).toEqual({ effectivePlan: 'free', grace: { paymentFailedAt: null, gracePeriodEndsAt: null } });
+    }
+  });
+
+  it('gives incomplete subscriptions no plan and no grace period', () => {
+    expect(resolveSubscriptionGrace(mapped('incomplete'), null, now)).toEqual({ effectivePlan: 'free', grace: {} });
   });
 });

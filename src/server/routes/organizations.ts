@@ -227,6 +227,7 @@ router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Respo
     confirmation: req.body?.confirmation,
     exportAcknowledged: req.body?.exportAcknowledged,
     billingStatus: organization.billingSubscription?.status ?? null,
+    providerSubscriptionId: organization.billingSubscription?.providerSubscriptionId ?? null,
   });
   if (!deletion.ok) return res.status(deletion.status).json({ error: deletion.error });
 

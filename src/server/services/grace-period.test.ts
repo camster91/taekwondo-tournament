@@ -126,6 +126,56 @@ describe('processExpiredGracePeriods concurrency', () => {
   });
 });
 
+describe('processExpiredGracePeriods leaves final statuses alone', () => {
+  it('only selects and claims subscriptions Stripe still bills, never rewriting a canceled status', async () => {
+    const mockPrisma = createMockPrisma();
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    vi.spyOn(mockPrisma.organizationBillingSubscription, 'findMany').mockResolvedValue([{
+      id: 'sub-1', organizationId: 'org-1', gracePeriodEndsAt: yesterday, paymentFailedAt: yesterday,
+      status: 'past_due', organization: { id: 'org-1', name: 'Org', plan: 'pro' },
+    }] as any);
+
+    await processExpiredGracePeriods(mockPrisma);
+
+    const statusFilter = { in: ['active', 'trialing', 'past_due'] };
+    expect(vi.mocked(mockPrisma.organizationBillingSubscription.findMany).mock.calls[0][0])
+      .toMatchObject({ where: { status: statusFilter } });
+    const claim = vi.mocked(mockPrisma.organizationBillingSubscription.updateMany).mock.calls[0][0] as any;
+    expect(claim.where).toMatchObject({ id: 'sub-1', status: statusFilter });
+    expect(statusFilter.in).not.toContain('canceled');
+  });
+
+  it('does nothing when the row became canceled between selection and claim', async () => {
+    const mockPrisma = createMockPrisma();
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    vi.spyOn(mockPrisma.organizationBillingSubscription, 'findMany').mockResolvedValue([{
+      id: 'sub-1', organizationId: 'org-1', gracePeriodEndsAt: yesterday, paymentFailedAt: yesterday,
+      status: 'past_due', organization: { id: 'org-1', name: 'Org', plan: 'pro' },
+    }] as any);
+    // The status filter makes the claim miss the (now canceled) row.
+    vi.mocked(mockPrisma.organizationBillingSubscription.updateMany).mockResolvedValue({ count: 0 } as any);
+
+    const result = await processExpiredGracePeriods(mockPrisma);
+
+    expect(result.downgraded).toBe(0);
+    expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+  });
+
+  it('does not record a plan change when the org is already on free', async () => {
+    const mockPrisma = createMockPrisma();
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    vi.spyOn(mockPrisma.organizationBillingSubscription, 'findMany').mockResolvedValue([{
+      id: 'sub-1', organizationId: 'org-1', gracePeriodEndsAt: yesterday, paymentFailedAt: yesterday,
+      status: 'past_due', organization: { id: 'org-1', name: 'Org', plan: 'free' },
+    }] as any);
+
+    const result = await processExpiredGracePeriods(mockPrisma);
+
+    expect(result.downgraded).toBe(1);
+    expect(mockPrisma.organizationPlanChange.create).not.toHaveBeenCalled();
+  });
+});
+
 describe('startGracePeriodJob', () => {
   it('runs once at startup and schedules an unref\'d repeat', async () => {
     const mockPrisma = createMockPrisma();

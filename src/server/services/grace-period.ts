@@ -1,6 +1,13 @@
 import type { PrismaClient } from '@prisma/client';
 
 /**
+ * Only a subscription Stripe still bills can be in a payment grace period.
+ * A final status (canceled, unpaid, incomplete_expired) set by the webhook
+ * must never be overwritten by the downgrade job.
+ */
+export const GRACE_PERIOD_STATUSES = ['active', 'trialing', 'past_due'];
+
+/**
  * Check for expired grace periods and downgrade organizations.
  * Should be run periodically (e.g., daily cron job).
  */
@@ -20,6 +27,7 @@ export async function processExpiredGracePeriods(
       paymentFailedAt: {
         not: null,
       },
+      status: { in: GRACE_PERIOD_STATUSES },
     },
     include: {
       organization: true,
@@ -32,7 +40,12 @@ export async function processExpiredGracePeriods(
         // Claim the expired grace period first so two containers (or an
         // overlapping run) downgrade and record the plan change only once.
         const claim = await tx.organizationBillingSubscription.updateMany({
-          where: { id: subscription.id, gracePeriodEndsAt: { lte: now }, paymentFailedAt: { not: null } },
+          where: {
+            id: subscription.id,
+            gracePeriodEndsAt: { lte: now },
+            paymentFailedAt: { not: null },
+            status: { in: GRACE_PERIOD_STATUSES },
+          },
           data: {
             status: 'past_due',
             gracePeriodEndsAt: null,
@@ -47,7 +60,9 @@ export async function processExpiredGracePeriods(
           data: { plan: 'free' },
         });
 
-        // Record plan change
+        // Record plan change (a past_due webhook after expiry may already
+        // have moved the org to free)
+        if (subscription.organization.plan === 'free') return true;
         await tx.organizationPlanChange.create({
           data: {
             organizationId: subscription.organizationId,

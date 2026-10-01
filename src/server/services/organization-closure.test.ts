@@ -29,7 +29,7 @@ describe('organization deletion policy', () => {
   });
 
   it('allows confirmed deletion without billing or after provider cancellation', () => {
-    for (const billingStatus of [null, 'inactive', 'canceled']) {
+    for (const billingStatus of [null, 'inactive', 'canceled', 'incomplete_expired']) {
       expect(validateOrganizationDeletion({
         slug: 'northside-tkd',
         confirmation: 'northside-tkd',
@@ -37,5 +37,18 @@ describe('organization deletion policy', () => {
         billingStatus,
       })).toEqual({ ok: true });
     }
+  });
+
+  it('allows deleting after an abandoned checkout but not with a live incomplete subscription', () => {
+    const base = { slug: 'northside-tkd', confirmation: 'northside-tkd', exportAcknowledged: true };
+    // Legacy rows: checkout stored 'incomplete' before any subscription existed.
+    expect(validateOrganizationDeletion({ ...base, billingStatus: 'incomplete', providerSubscriptionId: null }))
+      .toEqual({ ok: true });
+    expect(validateOrganizationDeletion({ ...base, billingStatus: 'incomplete' })).toEqual({ ok: true });
+    // A real Stripe subscription awaiting payment confirmation still blocks.
+    expect(validateOrganizationDeletion({ ...base, billingStatus: 'incomplete', providerSubscriptionId: 'sub_1' }))
+      .toMatchObject({ ok: false, status: 409 });
+    expect(validateOrganizationDeletion({ ...base, billingStatus: 'past_due', providerSubscriptionId: null }))
+      .toMatchObject({ ok: false, status: 409 });
   });
 });

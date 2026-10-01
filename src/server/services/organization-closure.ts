@@ -3,7 +3,18 @@ type OrganizationDeletionInput = {
   confirmation: unknown;
   exportAcknowledged: unknown;
   billingStatus: string | null;
+  /** Stripe subscription id on the billing row, when one exists. */
+  providerSubscriptionId?: string | null;
 };
+
+const DELETABLE_BILLING_STATUSES = ['inactive', 'canceled', 'incomplete_expired'];
+
+function billingAllowsDeletion(status: string | null, providerSubscriptionId: string | null | undefined): boolean {
+  if (!status || DELETABLE_BILLING_STATUSES.includes(status)) return true;
+  // Rows written by an abandoned checkout before the webhook ever saw a
+  // subscription (older builds stored 'incomplete' at checkout creation).
+  return status === 'incomplete' && !providerSubscriptionId;
+}
 
 type OrganizationDeletionResult =
   | { ok: true }
@@ -19,7 +30,7 @@ export function validateOrganizationDeletion(
       error: 'Confirm the organization URL and acknowledge the data export before permanent deletion.',
     };
   }
-  if (input.billingStatus && !['inactive', 'canceled'].includes(input.billingStatus)) {
+  if (!billingAllowsDeletion(input.billingStatus, input.providerSubscriptionId)) {
     return {
       ok: false,
       status: 409,
