@@ -8,7 +8,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
-import { authenticate, requireRole, type AuthenticatedRequest } from '../middleware/auth.js';
+import { authenticate, requireRole, isOrgAdminMembershipRole, type AuthenticatedRequest } from '../middleware/auth.js';
 import {
   generateVerificationToken,
   getTxtVerificationRecord,
@@ -25,7 +25,7 @@ const router = Router();
  * GET /api/custom-domains/organization/:orgId
  * 
  * List all custom domains for an organization
- * Requires: admin or director role + org membership
+ * Requires: admin or director role + owner/admin org membership
  */
 router.get(
   '/organization/:orgId',
@@ -35,7 +35,8 @@ router.get(
     const prisma: PrismaClient = req.app.locals.prisma;
     const { orgId } = req.params;
 
-    // Verify org membership (admins can access any org)
+    // Verify owner/admin org membership (admins can access any org);
+    // viewer/scorekeeper/member memberships cannot manage domains.
     if (req.user!.role !== 'admin') {
       const member = await prisma.organizationMember.findUnique({
         where: {
@@ -46,7 +47,7 @@ router.get(
         },
       });
 
-      if (!member) {
+      if (!member || !isOrgAdminMembershipRole(member.role)) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
@@ -64,7 +65,7 @@ router.get(
  * POST /api/custom-domains/organization/:orgId/attach
  * 
  * Attach a new custom domain to an organization
- * Requires: admin or director role + org membership
+ * Requires: admin or director role + owner/admin org membership
  * 
  * Body: { hostname: string, verificationMethod?: 'txt' | 'cname' }
  */
@@ -77,7 +78,8 @@ router.post(
     const { orgId } = req.params;
     const { hostname: rawHostname, verificationMethod = 'txt' } = req.body;
 
-    // Verify org membership (admins can access any org)
+    // Verify owner/admin org membership (admins can access any org);
+    // viewer/scorekeeper/member memberships cannot manage domains.
     if (req.user!.role !== 'admin') {
       const member = await prisma.organizationMember.findUnique({
         where: {
@@ -88,7 +90,7 @@ router.post(
         },
       });
 
-      if (!member) {
+      if (!member || !isOrgAdminMembershipRole(member.role)) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
@@ -201,7 +203,7 @@ router.post(
  * POST /api/custom-domains/:domainId/verify
  * 
  * Verify domain ownership via DNS
- * Requires: admin or director role + org membership
+ * Requires: admin or director role + owner/admin org membership
  */
 router.post(
   '/:domainId/verify',
@@ -219,7 +221,8 @@ router.post(
       return res.status(404).json({ error: 'Domain not found' });
     }
 
-    // Verify org membership (admins can access any org)
+    // Verify owner/admin org membership (admins can access any org);
+    // viewer/scorekeeper/member memberships cannot manage domains.
     if (req.user!.role !== 'admin') {
       const member = await prisma.organizationMember.findUnique({
         where: {
@@ -230,7 +233,7 @@ router.post(
         },
       });
 
-      if (!member) {
+      if (!member || !isOrgAdminMembershipRole(member.role)) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
@@ -285,7 +288,7 @@ router.post(
  * POST /api/custom-domains/:domainId/activate
  * 
  * Activate a verified domain (start serving traffic)
- * Requires: admin or director role + org membership
+ * Requires: admin or director role + owner/admin org membership
  */
 router.post(
   '/:domainId/activate',
@@ -303,7 +306,8 @@ router.post(
       return res.status(404).json({ error: 'Domain not found' });
     }
 
-    // Verify org membership (admins can access any org)
+    // Verify owner/admin org membership (admins can access any org);
+    // viewer/scorekeeper/member memberships cannot manage domains.
     if (req.user!.role !== 'admin') {
       const member = await prisma.organizationMember.findUnique({
         where: {
@@ -314,7 +318,7 @@ router.post(
         },
       });
 
-      if (!member) {
+      if (!member || !isOrgAdminMembershipRole(member.role)) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
@@ -363,7 +367,7 @@ router.post(
  * POST /api/custom-domains/:domainId/disable
  * 
  * Disable an active domain (soft-disable, can be re-enabled)
- * Requires: admin or director role + org membership
+ * Requires: admin or director role + owner/admin org membership
  */
 router.post(
   '/:domainId/disable',
@@ -381,7 +385,8 @@ router.post(
       return res.status(404).json({ error: 'Domain not found' });
     }
 
-    // Verify org membership (admins can access any org)
+    // Verify owner/admin org membership (admins can access any org);
+    // viewer/scorekeeper/member memberships cannot manage domains.
     if (req.user!.role !== 'admin') {
       const member = await prisma.organizationMember.findUnique({
         where: {
@@ -392,7 +397,7 @@ router.post(
         },
       });
 
-      if (!member) {
+      if (!member || !isOrgAdminMembershipRole(member.role)) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
@@ -431,7 +436,7 @@ router.post(
  * POST /api/custom-domains/:domainId/revoke
  * 
  * Permanently revoke a domain (cannot be reactivated)
- * Requires: admin or director role + org membership
+ * Requires: admin or director role + owner/admin org membership
  * 
  * Body: { reason: string }
  */
@@ -456,7 +461,8 @@ router.post(
       return res.status(404).json({ error: 'Domain not found' });
     }
 
-    // Verify org membership (admins can access any org)
+    // Verify owner/admin org membership (admins can access any org);
+    // viewer/scorekeeper/member memberships cannot manage domains.
     if (req.user!.role !== 'admin') {
       const member = await prisma.organizationMember.findUnique({
         where: {
@@ -467,7 +473,7 @@ router.post(
         },
       });
 
-      if (!member) {
+      if (!member || !isOrgAdminMembershipRole(member.role)) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }

@@ -12,6 +12,7 @@ import {
   authenticate,
   requireRole,
   resolveTournamentScope,
+  buildTournamentAccessFilter,
   buildCompetitorAccessFilter,
   buildCompetitorWriteFilter,
   type AuthenticatedRequest,
@@ -312,8 +313,10 @@ router.get('/meta/schools', authenticate, async (req: Request, res: Response) =>
 // NOTE: Must be defined BEFORE /:id route to avoid being matched as an ID
 router.get('/meta/belts', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  // Scoped like /meta/schools: only belts of accessible competitors.
+  const competitorFilter = await buildCompetitorAccessFilter(req as AuthenticatedRequest, prisma);
   const belts = await prisma.competitor.findMany({
-    where: { deletedAt: null },
+    where: competitorFilter ? { deletedAt: null, AND: [competitorFilter] } : { deletedAt: null },
     select: { belt: true },
     distinct: ['belt'],
     orderBy: { belt: 'asc' },
@@ -365,9 +368,16 @@ router.get('/:id/history', authenticate, async (req: Request, res: Response) => 
     return res.status(404).json({ error: 'Competitor not found' });
   }
 
-  // Get tournament history with placements
+  // Tournament history with placements, limited to tournaments the
+  // caller can open (a competitor shared across tenants must not reveal
+  // another tenant's events or results). Soft-deleted tournaments are
+  // hidden for everyone.
+  const tournamentFilter = await buildTournamentAccessFilter(req as AuthenticatedRequest, prisma);
   const history = await prisma.competitorHistory.findMany({
-    where: { competitorId },
+    where: {
+      competitorId,
+      tournament: tournamentFilter ? { deletedAt: null, AND: [tournamentFilter] } : { deletedAt: null },
+    },
     include: {
       tournament: {
         select: {
@@ -381,10 +391,15 @@ router.get('/:id/history', authenticate, async (req: Request, res: Response) => 
     orderBy: { createdAt: 'desc' },
   });
 
-  // Get current ratings (patterns and sparring)
-  const ratings = await prisma.competitorRating.findMany({
-    where: { competitorId },
-  });
+  // Ratings aggregate results from every tournament the competitor
+  // entered. Only return them when the caller can see all of that
+  // history; otherwise they would leak other tenants' results.
+  const totalHistoryCount = tournamentFilter
+    ? await prisma.competitorHistory.count({ where: { competitorId } })
+    : history.length;
+  const ratings = totalHistoryCount === history.length
+    ? await prisma.competitorRating.findMany({ where: { competitorId } })
+    : [];
 
   // Calculate aggregate stats
   const totalMatches = history.reduce((sum, h) => sum + h.matchesWon + h.matchesLost, 0);
@@ -487,7 +502,8 @@ function resolveOwnerOrganizationId(
 }
 
 async function importOwnerOrganizationId(req: AuthenticatedRequest, prisma: PrismaClient): Promise<string | null> {
-  const scope = await resolveTournamentScope(req, prisma);
+  // Owning a new competitor is a write: only director-level memberships count.
+  const scope = await resolveTournamentScope(req, prisma, 'director');
   return resolveOwnerOrganizationId(scope, undefined) ?? null;
 }
 
@@ -499,7 +515,9 @@ async function importOwnerOrganizationId(req: AuthenticatedRequest, prisma: Pris
 router.post('/', authenticate, requireRole('admin', 'director'), validateRequest(competitorCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const authReq = req as AuthenticatedRequest;
-  const scope = await resolveTournamentScope(authReq, prisma);
+  // Director-level scope: a viewer/scorekeeper membership must not let a
+  // global director create competitors owned by that organization.
+  const scope = await resolveTournamentScope(authReq, prisma, 'director');
   // Tenant users must belong to at least one tournament — creating
   // floating competitors that no scoped list would show (and that
   // later IDOR-scoped updates couldn't touch) is disallowed.

@@ -354,6 +354,34 @@ export function orgMembershipRoleLevel(role: string | null | undefined): number 
   return ORG_MEMBERSHIP_ROLE_LEVEL[role] ?? 0;
 }
 
+/**
+ * The caller's oldest organization membership whose role meets
+ * `minRole` (director by default), plus whether they belong to any
+ * organization at all. Use for org-level writes (templates, new
+ * tournaments): a viewer/scorekeeper membership never grants them,
+ * whatever the user's global role.
+ */
+export async function findOrgMembershipAtLevel(
+  prisma: PrismaClient,
+  userId: string,
+  minRole: TournamentRole = 'director',
+): Promise<{ membership: { organizationId: string; role: string } | null; hasMemberships: boolean }> {
+  const memberships = await prisma.organizationMember.findMany({
+    where: { userId },
+    select: { organizationId: true, role: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  return {
+    membership: memberships.find((m) => orgMembershipRoleLevel(m.role) >= ROLE_HIERARCHY[minRole]) ?? null,
+    hasMemberships: memberships.length > 0,
+  };
+}
+
+/** Membership roles that administer the organization itself (e.g. custom domains). */
+export function isOrgAdminMembershipRole(role: string | null | undefined): boolean {
+  return role === 'owner' || role === 'admin';
+}
+
 export interface TournamentAccessResult {
   ok: boolean;
   status?: number;
@@ -522,17 +550,28 @@ export interface TournamentScope {
   filter: Prisma.TournamentWhereInput | null;
   /** True when the user has no org memberships (legacy single-tenant pool). */
   legacyPool: boolean;
-  /** Organizations the user belongs to (viewer level or above). */
+  /** Organizations whose membership role meets the requested minimum level. */
   orgIds: string[];
 }
 
+/**
+ * Resolve which tournaments the caller can reach at `minRole` or above
+ * (viewer by default). Mirrors checkTournamentAccess: the global role
+ * must meet `minRole`, explicit grants and org memberships only count
+ * when their own level does, and the legacy pool is reachable only by
+ * users without any org membership.
+ */
 export async function resolveTournamentScope(
   req: AuthenticatedRequest,
-  prisma: PrismaClient
+  prisma: PrismaClient,
+  minRole: TournamentRole = 'viewer'
 ): Promise<TournamentScope> {
+  const noAccess: TournamentScope = { filter: { id: { in: [] } }, legacyPool: false, orgIds: [] };
   // Unauthenticated callers match nothing (fail closed).
-  if (!req.user) return { filter: { id: { in: [] } }, legacyPool: false, orgIds: [] };
+  if (!req.user) return noAccess;
   if (req.user.role === 'admin') return { filter: null, legacyPool: false, orgIds: [] };
+  const requiredLevel = ROLE_HIERARCHY[minRole];
+  if (tournamentRoleLevel(req.user.role) < requiredLevel) return noAccess;
 
   const [orgMemberships, explicitAccess] = await Promise.all([
     prisma.organizationMember.findMany({
@@ -546,7 +585,7 @@ export async function resolveTournamentScope(
   ]);
 
   const explicitTournamentIds = explicitAccess
-    .filter((a) => (ROLE_HIERARCHY[a.role as TournamentRole] || 0) >= ROLE_HIERARCHY.viewer)
+    .filter((a) => tournamentRoleLevel(a.role) >= requiredLevel)
     .map((a) => a.tournamentId);
 
   if (orgMemberships.length === 0) {
@@ -565,7 +604,7 @@ export async function resolveTournamentScope(
   }
 
   const orgIds = orgMemberships
-    .filter((m) => orgMembershipRoleLevel(m.role) >= ROLE_HIERARCHY.viewer)
+    .filter((m) => orgMembershipRoleLevel(m.role) >= requiredLevel)
     .map((m) => m.organizationId);
 
   // Tenant user: own orgs + explicit grants. Never orphan tournaments.
@@ -653,15 +692,18 @@ function unregisteredOwnerFilter(legacyPool: boolean, orgIds: string[]): Prisma.
  * Returns `null` only for admins.
  *
  * Stricter than the read filter: EVERY tournament the competitor is
- * registered in must be accessible. Otherwise registering a shared
- * competitor into one of your own tournaments would let you overwrite
- * a record another tenant also relies on.
+ * registered in must be accessible AT DIRECTOR LEVEL (viewer or
+ * scorekeeper grants/memberships do not allow editing the shared
+ * record). Otherwise registering a shared competitor into one of your
+ * own tournaments would let you overwrite a record another tenant also
+ * relies on. Unregistered competitors need a director-level
+ * membership of their owning org.
  */
 export async function buildCompetitorWriteFilter(
   req: AuthenticatedRequest,
   prisma: PrismaClient
 ): Promise<Prisma.CompetitorWhereInput | null> {
-  const { filter, legacyPool, orgIds } = await resolveTournamentScope(req, prisma);
+  const { filter, legacyPool, orgIds } = await resolveTournamentScope(req, prisma, 'director');
   if (filter === null) return null;
   const allRegistrationsAccessible: Prisma.CompetitorWhereInput = {
     registrations: { every: { tournament: filter } },

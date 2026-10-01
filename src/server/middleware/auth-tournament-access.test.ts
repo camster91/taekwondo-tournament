@@ -552,6 +552,59 @@ describe('buildCompetitorAccessFilter / buildCompetitorWriteFilter', () => {
     });
   });
 
+  it('write filter ignores viewer/scorekeeper grants and memberships (director level required)', async () => {
+    const req = mockReq({ user: { id: 'u', role: 'director' } });
+    const prisma = {
+      organizationMember: {
+        findMany: vi.fn().mockResolvedValue([
+          { organizationId: 'org-own', role: 'owner' },
+          { organizationId: 'org-y', role: 'viewer' },
+          { organizationId: 'org-z', role: 'scorekeeper' },
+        ]),
+      },
+      userTournamentAccess: {
+        findMany: vi.fn().mockResolvedValue([
+          { tournamentId: 't-view', role: 'viewer' },
+          { tournamentId: 't-score', role: 'scorekeeper' },
+          { tournamentId: 't-dir', role: 'director' },
+        ]),
+      },
+    };
+    const writable = { OR: [{ id: { in: ['t-dir'] } }, { organizationId: { in: ['org-own'] } }] };
+    expect(await buildCompetitorWriteFilter(req, prisma as any)).toEqual({
+      AND: [
+        { registrations: { every: { tournament: writable } } },
+        {
+          OR: [
+            { registrations: { some: { tournament: writable } } },
+            { registrations: { none: {} }, organizationId: { in: ['org-own'] } },
+          ],
+        },
+      ],
+    });
+    // Reads still include the viewer-level grant and memberships.
+    const readable = JSON.stringify(await buildCompetitorAccessFilter(req, prisma as any));
+    expect(readable).toContain('org-y');
+    expect(readable).toContain('t-view');
+  });
+
+  it('write filter matches nothing for a user whose global role is below director', async () => {
+    const req = mockReq({ user: { id: 'u', role: 'scorekeeper' } });
+    const filter = await buildCompetitorWriteFilter(req, scopePrisma([{ organizationId: 'org-1', role: 'owner' }]) as any);
+    expect(JSON.stringify(filter)).not.toContain('org-1');
+    expect(filter).toEqual({
+      AND: [
+        { registrations: { every: { tournament: { id: { in: [] } } } } },
+        {
+          OR: [
+            { registrations: { some: { tournament: { id: { in: [] } } } } },
+            { registrations: { none: {} }, organizationId: { in: [] } },
+          ],
+        },
+      ],
+    });
+  });
+
   it('legacy user may write when every registration is in the legacy pool (incl. unowned unregistered)', async () => {
     const req = mockReq({ user: { id: 'u', role: 'director' } });
     expect(await buildCompetitorWriteFilter(req, scopePrisma([]) as any)).toEqual({
