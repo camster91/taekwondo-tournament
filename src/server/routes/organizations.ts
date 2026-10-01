@@ -8,6 +8,8 @@ import {
 } from '../middleware/auth.js';
 import { getPlanEntitlements } from '../services/entitlements.js';
 import { validateOrganizationDeletion } from '../services/organization-closure.js';
+import { expireOpenCheckoutSessions, stripeRuntimeConfigFromEnv } from '../services/stripe-billing.js';
+import Stripe from 'stripe';
 import {
   normalizeOrganizationCreateInput,
   normalizePlanChangeInput,
@@ -241,6 +243,29 @@ router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Respo
     return res.status(409).json({
       error: 'Records in this organization are under legal hold. An administrator must release the hold before it can be deleted.',
     });
+  }
+
+  // A Stripe customer without a subscription may still have an open
+  // Checkout session; paying it after deletion would bill an organization
+  // that no longer exists. Close those sessions first, or refuse.
+  const customerId = organization.billingSubscription?.providerCustomerId;
+  if (customerId && !organization.billingSubscription?.providerSubscriptionId) {
+    let secretKey: string | null = null;
+    try {
+      secretKey = stripeRuntimeConfigFromEnv(process.env).secretKey;
+    } catch {
+      secretKey = null; // Billing not configured: no session could be paid.
+    }
+    if (secretKey) {
+      try {
+        await expireOpenCheckoutSessions(new Stripe(secretKey), customerId);
+      } catch (error) {
+        console.error('[organizations] could not expire open checkout sessions', error);
+        return res.status(503).json({
+          error: 'Could not close the open Stripe checkout for this organization. Try again in a moment.',
+        });
+      }
+    }
   }
 
   const closedAccounts = await prisma.$transaction(async (tx) => {

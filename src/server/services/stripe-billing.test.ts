@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   checkoutPlanFromInput,
   mapStripeSubscription,
@@ -6,6 +6,7 @@ import {
   stripeRuntimeConfigFromEnv,
   stripePriceMapFromEnv,
 } from './stripe-billing.js';
+import { expireOpenCheckoutSessions } from './stripe-billing.js';
 
 describe('checkoutPlanFromInput', () => {
   it('accepts purchasable self-service plans including per-event tiers', () => {
@@ -175,5 +176,20 @@ describe('resolveSubscriptionGrace', () => {
 
   it('gives incomplete subscriptions no plan and no grace period', () => {
     expect(resolveSubscriptionGrace(mapped('incomplete'), null, now)).toEqual({ effectivePlan: 'free', grace: {} });
+  });
+});
+
+describe('expireOpenCheckoutSessions', () => {
+  it('expires every open session for the customer', async () => {
+    const expire = vi.fn().mockResolvedValue({});
+    const list = vi.fn().mockResolvedValue({ data: [{ id: 'cs_1' }, { id: 'cs_2' }] });
+    await expect(expireOpenCheckoutSessions({ checkout: { sessions: { list, expire } } }, 'cus_1')).resolves.toBe(2);
+    expect(list).toHaveBeenCalledWith({ customer: 'cus_1', status: 'open', limit: 100 });
+    expect(expire.mock.calls.map(([id]) => id)).toEqual(['cs_1', 'cs_2']);
+  });
+
+  it('propagates a Stripe failure so the caller can refuse', async () => {
+    const list = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+    await expect(expireOpenCheckoutSessions({ checkout: { sessions: { list, expire: vi.fn() } } }, 'cus_1')).rejects.toThrow();
   });
 });

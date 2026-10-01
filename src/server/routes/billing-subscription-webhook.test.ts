@@ -9,6 +9,7 @@ import express from 'express';
 import request from 'supertest';
 
 const retrieve = vi.hoisted(() => vi.fn());
+const cancel = vi.hoisted(() => vi.fn());
 
 vi.mock('stripe', async (importOriginal) => {
   const actual = await importOriginal<typeof import('stripe')>();
@@ -16,7 +17,7 @@ vi.mock('stripe', async (importOriginal) => {
   class MockedStripe extends RealStripe {
     constructor(...args: unknown[]) {
       super(...args);
-      this.subscriptions = { retrieve };
+      this.subscriptions = { retrieve, cancel };
     }
   }
   return { default: MockedStripe };
@@ -67,8 +68,10 @@ describe('subscription webhooks apply Stripe’s current state', () => {
       organizationMember: { findFirst: vi.fn().mockResolvedValue(null) },
     };
     app = express();
+    cancel.mockReset();
     app.locals.prisma = {
-      billingWebhookEvent: { findUnique: vi.fn().mockResolvedValue(null) },
+      organization: { findUnique: vi.fn().mockResolvedValue({ id: ORG_ID }) },
+      billingWebhookEvent: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
       organizationBillingSubscription: { findUnique: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
     };
@@ -127,6 +130,16 @@ describe('subscription webhooks apply Stripe’s current state', () => {
     const res = await send('customer.subscription.deleted', subscription('canceled'));
     expect(res.status).toBe(200);
     expect(tx.organization.update).toHaveBeenCalledWith({ where: { id: ORG_ID }, data: { plan: 'free' } });
+  });
+
+  it('cancels an active subscription whose organization was deleted', async () => {
+    (app.locals.prisma as { organization: { findUnique: ReturnType<typeof vi.fn> } }).organization.findUnique.mockResolvedValue(null);
+    retrieve.mockResolvedValue(subscription('active'));
+    cancel.mockResolvedValue({});
+    const res = await send('customer.subscription.created', subscription('active'));
+    expect(res.status).toBe(200);
+    expect(cancel).toHaveBeenCalledWith('sub_1');
+    expect(tx.organization.update).not.toHaveBeenCalled();
   });
 
   it('only trusts the raw payload behind the non-production test switch', () => {

@@ -86,6 +86,7 @@ describe('subscription checkout leaves billing state to the webhook', () => {
         })),
       },
       organizationBillingSubscription: { upsert },
+      organization: { findUnique: vi.fn().mockResolvedValue({ id: ORG_ID }) },
       billingWebhookEvent: { findUnique: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
     };

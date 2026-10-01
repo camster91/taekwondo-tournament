@@ -244,3 +244,29 @@ export async function expireCheckoutSessionBestEffort(
     return false;
   }
 }
+
+type CheckoutSessionLister = {
+  checkout: {
+    sessions: {
+      list: (params: { customer: string; status: 'open'; limit: number }) => Promise<{ data: Array<{ id: string }> }>;
+      expire: (id: string) => Promise<unknown>;
+    };
+  };
+};
+
+/**
+ * Expire every open Checkout session for a Stripe customer. Used before an
+ * organization is deleted: a session left open could otherwise be paid
+ * later and create a subscription for an organization that no longer
+ * exists. Throws when Stripe cannot be reached so the caller can refuse.
+ */
+export async function expireOpenCheckoutSessions(
+  stripe: CheckoutSessionLister,
+  customerId: string,
+): Promise<number> {
+  const open = await stripe.checkout.sessions.list({ customer: customerId, status: 'open', limit: 100 });
+  for (const session of open.data) {
+    await stripe.checkout.sessions.expire(session.id);
+  }
+  return open.data.length;
+}

@@ -355,6 +355,24 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
     config.prices,
   );
 
+  // The organization was deleted (e.g. a checkout session paid afterwards).
+  // Nothing can be granted, so stop Stripe billing the subscription rather
+  // than failing this webhook until Stripe gives up.
+  const knownOrganization = await prisma.organization.findUnique({
+    where: { id: mapped.organizationId },
+    select: { id: true },
+  });
+  if (!knownOrganization) {
+    if (['active', 'trialing', 'past_due', 'incomplete', 'unpaid'].includes(mapped.status)) {
+      await stripe.subscriptions.cancel(mapped.providerSubscriptionId);
+      console.warn(`[billing] canceled subscription ${mapped.providerSubscriptionId} for deleted organization ${mapped.organizationId}`);
+    }
+    await prisma.billingWebhookEvent.create({
+      data: { providerEventId: event.id, type: event.type, payloadHash },
+    }).catch(() => undefined);
+    return res.json({ processed: true, orphanSubscription: true });
+  }
+
   try {
     await prisma.$transaction(async (tx) => {
       await tx.billingWebhookEvent.create({
