@@ -8,6 +8,18 @@ this page says what is finished and what is left before real events.
 
 ## Product
 
+### Requested discard and rebuild
+
+The replacement under `replacement/` is new code with a separate migration history
+and isolated `bowin_rebuild_` database. Its implemented API slices and remaining
+browser/product work are described in [the replacement README](../replacement/README.md).
+The replacement is incomplete and has not replaced production. Its checked-image
+pipeline is separate from the root application's legacy CI/build/deploy path.
+
+The feature table below describes the existing root application, retained as a
+recovery reference; it does not establish that the requested replacement contains
+all those features or has passed its launch checklist.
+
 Everything needed to run a Taekwondo tournament is built and covered by
 automated tests (unit, Postgres integration, and Playwright on Chromium,
 Firefox, WebKit and mobile Chrome):

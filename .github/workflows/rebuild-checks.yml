@@ -1,0 +1,213 @@
+name: Rebuild checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, codex/fresh-rebuild]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bowin-rebuild-checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  foundation:
+    name: Fresh database and tenant/auth boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: QaDatabaseOnly-123456
+          POSTGRES_DB: bowin_rebuild_qa_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d bowin_rebuild_qa_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: replacement
+    env:
+      DATABASE_URL: postgres://postgres:QaDatabaseOnly-123456@localhost:5432/bowin_rebuild_qa_ci
+      REBUILD_DATABASE_NAME: bowin_rebuild_qa_ci
+      RELEASE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: replacement/package-lock.json
+      - run: npm ci --ignore-scripts
+      - name: Fresh and idempotent migrations
+        run: |
+          npm run migrate
+          npm run migrate
+      - name: Authentication, tenant, role and input checks
+        run: npm test
+      - name: Checked-image transport tamper checks
+        working-directory: .
+        run: python3 .github/scripts/test_checked_image.py
+      - name: Durable receipt checks
+        working-directory: .
+        run: node --test .github/scripts/test_preserve_image_receipt.mjs
+      - name: Build replacement runtime image
+        run: docker build --target runtime --build-arg SOURCE_COMMIT="$GITHUB_SHA" -t bowin-rebuild:candidate .
+      - name: Export the checked runtime image
+        working-directory: .
+        run: python3 .github/scripts/checked-image.py export --image bowin-rebuild:candidate --directory "$RUNNER_TEMP/bowin-checked-image"
+      - name: Preserve runtime archive and receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: bowin-checked-image-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bowin-checked-image/
+          if-no-files-found: error
+          retention-days: 7
+  checked-image:
+    name: Imported runtime API and recovery checks
+    needs: foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RELEASE_SHA: ${{ github.sha }}
+      BOWIN_CHECKED_IMAGE: bowin-rebuild-checked-runtime:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: replacement/package-lock.json
+      - name: Install API test client dependencies
+        working-directory: replacement
+        run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: bowin-checked-image-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bowin-checked-image/
+      - name: Verify and load the saved image without rebuilding
+        run: python3 .github/scripts/checked-image.py load --directory "$RUNNER_TEMP/bowin-checked-image"
+      - name: Test the imported runtime against a disposable database
+        run: bash .github/scripts/test-checked-runtime.sh
+  browser:
+    name: Imported runtime browser journeys
+    needs: foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RELEASE_SHA: ${{ github.sha }}
+      BOWIN_CHECKED_IMAGE: bowin-rebuild-checked-runtime:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: replacement/package-lock.json
+      - name: Install browser client
+        working-directory: replacement
+        run: npm ci --ignore-scripts
+      - name: Install Chromium
+        working-directory: replacement
+        run: npx playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: bowin-checked-image-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bowin-checked-image/
+      - name: Verify and import the saved runtime
+        run: python3 .github/scripts/checked-image.py load --directory "$RUNNER_TEMP/bowin-checked-image"
+      - name: Exercise browser workflows against the imported runtime
+        run: bash .github/scripts/test-browser-runtime.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bowin-browser-qa-attempt-${{ github.run_attempt }}
+          path: |
+            bowin-browser-verification.json
+            bowin-browser-desktop.png
+            bowin-browser-mobile.png
+            bowin-browser-failure.png
+          retention-days: 14
+  tls:
+    name: Imported runtime HTTPS and session recovery
+    needs: foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RELEASE_SHA: ${{ github.sha }}
+      BOWIN_CHECKED_IMAGE: bowin-rebuild-checked-runtime:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: replacement/package-lock.json
+      - name: Install browser client
+        working-directory: replacement
+        run: npm ci --ignore-scripts
+      - name: Install Chromium
+        working-directory: replacement
+        run: npx playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: bowin-checked-image-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bowin-checked-image/
+      - name: Verify and import the saved runtime
+        run: python3 .github/scripts/checked-image.py load --directory "$RUNNER_TEMP/bowin-checked-image"
+      - name: Exercise browser workflows against the imported runtime
+        run: bash .github/scripts/test-tls-runtime.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bowin-tls-qa-attempt-${{ github.run_attempt }}
+          path: |
+            bowin-tls-verification.json
+            bowin-tls-desktop.png
+            bowin-tls-mobile.png
+            bowin-tls-failure.png
+          retention-days: 14
+  publish:
+    name: Publish checked rebuild image
+    needs: [foundation, checked-image, browser, tls]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.BOWIN_IMMUTABLE_RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    env:
+      RELEASE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: bowin-checked-image-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bowin-checked-image/
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the verified saved image without rebuilding
+        run: python3 .github/scripts/checked-image.py publish --directory "$RUNNER_TEMP/bowin-checked-image"
+      - name: Preserve and refetch the durable release receipt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHECKED_IMAGE_DIRECTORY: ${{ runner.temp }}/bowin-checked-image
+        run: node .github/scripts/preserve-image-receipt.mjs
+      - name: Preserve temporary publication metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: bowin-release-receipt-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bowin-checked-image/release-receipt.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Clear registry authentication
+        if: always()
+        run: docker logout ghcr.io
