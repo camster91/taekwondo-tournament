@@ -20,7 +20,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import { DataTable, TableHead, TableBody, TableRow, TableCell, IconButton } from '../components/ui';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
@@ -103,6 +103,10 @@ const emptyForm = {
 export default function Competitors() {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
+  const { hasRole } = useAuth();
+  // Competitor writes (add, edit, import, delete) are admin/director only;
+  // other roles would just hit 403s.
+  const canEditCompetitors = hasRole(['admin', 'director']);
   const [search, setSearch] = useState('');
   const [beltFilter, setBeltFilter] = useState<string[]>([]);
   const [genderFilter, setGenderFilter] = useState<string>('');
@@ -571,19 +575,23 @@ export default function Competitors() {
         count={filteredCompetitors?.length ?? data?.competitors?.length ?? 0}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
-              <Upload className="h-4 w-4 mr-2" /> Import
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.xlsm"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <Button variant="primary" size="sm" onClick={() => { setEditingCompetitor(null); setFormData(emptyForm); setShowFormModal(true); }}>
-              <Plus className="h-4 w-4 mr-2" /> Add
-            </Button>
+            {canEditCompetitors && (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="h-4 w-4 mr-2" /> Import
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.xlsm"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <Button variant="primary" size="sm" onClick={() => { setEditingCompetitor(null); setFormData(emptyForm); setShowFormModal(true); }}>
+                  <Plus className="h-4 w-4 mr-2" /> Add
+                </Button>
+              </>
+            )}
             <div className="relative">
               <Button
                 variant="secondary"
@@ -612,13 +620,15 @@ export default function Competitors() {
                     >
                       <Download className="h-4 w-4" /> Template
                     </button>
-                    <Link
-                      to="/competitors/duplicates"
-                      onClick={() => setMoreMenuOpen(false)}
-                      className="w-full text-left px-4 py-2 text-sm text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-2"
-                    >
-                      <UserPlus className="h-4 w-4" /> Find Duplicates
-                    </Link>
+                    {canEditCompetitors && (
+                      <Link
+                        to="/competitors/duplicates"
+                        onClick={() => setMoreMenuOpen(false)}
+                        className="w-full text-left px-4 py-2 text-sm text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-2"
+                      >
+                        <UserPlus className="h-4 w-4" /> Find Duplicates
+                      </Link>
+                    )}
                   </div>
                 </>
               )}
@@ -669,9 +679,11 @@ export default function Competitors() {
               <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
                 Clear
               </Button>
-              <Button variant="danger" size="sm" onClick={() => setBulkDeleteOpen(true)}>
-                <Trash2 className="h-3.5 w-3.5" /> Delete {selectedIds.size}
-              </Button>
+              {canEditCompetitors && (
+                <Button variant="danger" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="h-3.5 w-3.5" /> Delete {selectedIds.size}
+                </Button>
+              )}
             </div>
           </div>
         </Toolbar>
@@ -810,7 +822,7 @@ export default function Competitors() {
                           {c.danRank && ` ${c.danRank}D`}
                         </span>
                       </div>
-                      <div className="flex gap-2">
+                      {canEditCompetitors && <div className="flex gap-2">
                         <button
                           onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
                           aria-label={`Edit ${c.firstName} ${c.lastName}`}
@@ -825,7 +837,7 @@ export default function Competitors() {
                         >
                           <Trash2 className="h-5 w-5" />
                         </button>
-                      </div>
+                      </div>}
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm mt-3">
                       <div className="flex justify-between">
@@ -885,8 +897,8 @@ export default function Competitors() {
                     {filteredCompetitors.map((c: Competitor) => (
                       <TableRow
                         key={c.id}
-                        onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
-                        className={`border-b border-surface-100 dark:border-surface-800/60 cursor-pointer ${selectedIds.has(c.id) ? 'row-selected' : ''}`}
+                        onClick={canEditCompetitors ? () => { setEditingCompetitor(c); setShowFormModal(true); } : undefined}
+                        className={`border-b border-surface-100 dark:border-surface-800/60 ${canEditCompetitors ? 'cursor-pointer' : ''} ${selectedIds.has(c.id) ? 'row-selected' : ''}`}
                       >
                         <TableCell className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
                           <input
@@ -943,20 +955,24 @@ export default function Competitors() {
                                 size="sm"
                               />
                             </Link>
-                            <IconButton
-                              icon={<Edit className="h-3.5 w-3.5" />}
-                              label={`Edit ${c.firstName} ${c.lastName}`}
-                              variant="primary"
-                              size="sm"
-                              onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
-                            />
-                            <IconButton
-                              icon={<Trash2 className="h-3.5 w-3.5" />}
-                              label={`Delete ${c.firstName} ${c.lastName}`}
-                              variant="danger"
-                              size="sm"
-                              onClick={() => setDeleteTarget(c)}
-                            />
+                            {canEditCompetitors && (
+                              <>
+                                <IconButton
+                                  icon={<Edit className="h-3.5 w-3.5" />}
+                                  label={`Edit ${c.firstName} ${c.lastName}`}
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
+                                />
+                                <IconButton
+                                  icon={<Trash2 className="h-3.5 w-3.5" />}
+                                  label={`Delete ${c.firstName} ${c.lastName}`}
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={() => setDeleteTarget(c)}
+                                />
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -976,9 +992,9 @@ export default function Competitors() {
             <EmptyState
               icon={Users}
               title="No competitors yet"
-              description="Import competitors from an Excel file or add them manually."
-              action={{ label: 'Import from Excel', onClick: () => fileInputRef.current?.click() }}
-              secondaryAction={{ label: 'Add Manually', onClick: () => { setEditingCompetitor(null); setFormData(emptyForm); setShowFormModal(true); } }}
+              description={canEditCompetitors ? 'Import competitors from an Excel file or add them manually.' : 'No competitors are registered in tournaments you can access yet.'}
+              action={canEditCompetitors ? { label: 'Import from Excel', onClick: () => fileInputRef.current?.click() } : undefined}
+              secondaryAction={canEditCompetitors ? { label: 'Add Manually', onClick: () => { setEditingCompetitor(null); setFormData(emptyForm); setShowFormModal(true); } } : undefined}
             />
           )}
         </CardBody>
