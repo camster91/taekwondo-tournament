@@ -1339,75 +1339,62 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
   }
 
   if (registration.waitlistStatus !== 'waitlisted') {
-    return res.status(400).json({ error: 'Registration is not waitlisted' });
-  }
-
-  // Check if tournament has available capacity
-  const { getTournamentCapacityStatus } = await import('../services/waitlist.js');
-  const capacityStatus = await getTournamentCapacityStatus(prisma, tournamentId);
-
-  if (capacityStatus && capacityStatus.maxCapacity && capacityStatus.spotsRemaining === 0) {
-    return res.status(400).json({
-      error: 'Tournament is at full capacity. Cannot promote from waitlist.',
-      capacity: capacityStatus,
-    });
+    return res.status(409).json({ error: 'Registration is not waitlisted', code: 'NOT_WAITLISTED' });
   }
 
   // Generate a new management token for the promoted registration
   const newManagementToken = generateManagementToken();
   const newExpiry = getManagementTokenExpiry(); // 30 days
 
-  // Promote in transaction to ensure atomicity
-  await prisma.$transaction(async (tx) => {
-    // Promote the registration
-    await tx.registration.update({
-      where: { id: registrationId },
-      data: {
-        waitlistStatus: 'promoted',
-        waitlistPromotedAt: new Date(),
-        waitlistPosition: null,
-        managementTokenHash: hashManagementToken(newManagementToken),
-        managementTokenExpiresAt: newExpiry,
-        managementTokenRevokedAt: null,
-      },
-    });
-
-    // Renumber remaining waitlist
-    const remaining = await tx.registration.findMany({
-      where: {
-        tournamentId,
-        waitlistStatus: 'waitlisted',
-      },
-      orderBy: { waitlistPosition: 'asc' },
-    });
-
-    for (let i = 0; i < remaining.length; i++) {
-      await tx.registration.update({
-        where: { id: remaining[i].id },
-        data: { waitlistPosition: i + 1 },
-      });
-    }
-
-    // Audit log
-    if (authReq.user) {
-      await createAuditLog(tx as unknown as PrismaClient, {
-        userId: authReq.user.id,
-        action: 'waitlist_promoted',
-        details: {
-          registrationId,
-          competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+  // The capacity count and the "still waitlisted" check are re-done inside
+  // one transaction holding the tournament lock that public registration
+  // uses, so concurrent promotes cannot overfill the tournament and a
+  // double-click cannot promote twice (or rotate the emailed token).
+  const { promoteWaitlistedRegistration } = await import('../services/waitlist.js');
+  const outcome = await promoteWaitlistedRegistration(
+    prisma,
+    tournamentId,
+    registrationId,
+    { managementTokenHash: hashManagementToken(newManagementToken), managementTokenExpiresAt: newExpiry },
+    async (tx) => {
+      // Audit log
+      if (authReq.user) {
+        await createAuditLog(tx as unknown as PrismaClient, {
+          userId: authReq.user.id,
+          action: 'waitlist_promoted',
+          details: {
+            registrationId,
+            competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+            tournamentId,
+            tournamentName: registration.tournament.name,
+          },
+          ipAddress: getClientIp(authReq),
+          userAgent: getUserAgent(authReq),
+          organizationId: registration.tournament.organizationId || undefined,
           tournamentId,
-          tournamentName: registration.tournament.name,
+        }).catch((err) => {
+          console.error('[audit-log] waitlist_promoted event failed:', err);
+        });
+      }
+    },
+  );
+
+  if (!outcome.ok) {
+    if (outcome.code === 'TOURNAMENT_FULL') {
+      return res.status(400).json({
+        error: 'Tournament is at full capacity. Cannot promote from waitlist.',
+        capacity: {
+          maxCapacity: outcome.maxCapacity,
+          activeCount: outcome.activeCount,
+          spotsRemaining: Math.max(0, outcome.maxCapacity - outcome.activeCount),
         },
-        ipAddress: getClientIp(authReq),
-        userAgent: getUserAgent(authReq),
-        organizationId: registration.tournament.organizationId || undefined,
-        tournamentId,
-      }).catch((err) => {
-        console.error('[audit-log] waitlist_promoted event failed:', err);
       });
     }
-  });
+    if (outcome.code === 'NOT_WAITLISTED') {
+      return res.status(409).json({ error: 'Registration is not waitlisted (it may already have been promoted)', code: 'NOT_WAITLISTED' });
+    }
+    return res.status(404).json({ error: 'Registration not found' });
+  }
 
   // Send promotion email
   if (registration.parentEmail && isEmailConfigured()) {

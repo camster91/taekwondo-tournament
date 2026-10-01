@@ -215,6 +215,67 @@ export async function promoteNextWaitlisted(
   });
 }
 
+export type ManualPromotionResult =
+  | { ok: true }
+  | { ok: false; status: 404 | 409; code: 'NOT_FOUND' | 'NOT_WAITLISTED' }
+  | { ok: false; status: 400; code: 'TOURNAMENT_FULL'; activeCount: number; maxCapacity: number };
+
+/**
+ * Director-initiated promotion of one specific waitlisted registration.
+ * Runs in its own transaction holding the tournament row lock (the same lock
+ * public registration takes), and re-reads both the registration and the
+ * capacity count under it — so concurrent promotes cannot overfill the
+ * tournament, and a double-click cannot promote twice (the second sees
+ * NOT_WAITLISTED, and its management token never replaces the first's).
+ *
+ * `onPromoted` runs inside the transaction after the update (audit logging).
+ */
+export async function promoteWaitlistedRegistration(
+  prisma: PrismaClient,
+  tournamentId: string,
+  registrationId: string,
+  data: { managementTokenHash: string; managementTokenExpiresAt: Date },
+  onPromoted?: (tx: Prisma.TransactionClient) => Promise<void>,
+): Promise<ManualPromotionResult> {
+  return prisma.$transaction(async (tx) => {
+    const tournament = await lockTournamentForCapacity(tx, tournamentId);
+    if (!tournament) return { ok: false, status: 404, code: 'NOT_FOUND' } as const;
+
+    const current = await tx.registration.findUnique({
+      where: { id: registrationId },
+      select: { tournamentId: true, waitlistStatus: true },
+    });
+    if (!current || current.tournamentId !== tournamentId) {
+      return { ok: false, status: 404, code: 'NOT_FOUND' } as const;
+    }
+    if (current.waitlistStatus !== 'waitlisted') {
+      return { ok: false, status: 409, code: 'NOT_WAITLISTED' } as const;
+    }
+
+    if (tournament.maxCapacity && tournament.maxCapacity > 0) {
+      const activeCount = await countCapacityHolders(tx, tournamentId);
+      if (activeCount >= tournament.maxCapacity) {
+        return { ok: false, status: 400, code: 'TOURNAMENT_FULL', activeCount, maxCapacity: tournament.maxCapacity } as const;
+      }
+    }
+
+    await tx.registration.update({
+      where: { id: registrationId },
+      data: {
+        waitlistStatus: 'promoted',
+        waitlistPromotedAt: new Date(),
+        waitlistPosition: null,
+        managementTokenHash: data.managementTokenHash,
+        managementTokenExpiresAt: data.managementTokenExpiresAt,
+        managementTokenRevokedAt: null,
+      },
+    });
+    await renumberWaitlist(tx, tournamentId);
+    if (onPromoted) await onPromoted(tx);
+    return { ok: true } as const;
+  });
+}
+
 /**
  * Get capacity status for a tournament (for display in organizer UI and public pages).
  */
