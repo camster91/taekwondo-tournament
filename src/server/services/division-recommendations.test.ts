@@ -208,6 +208,28 @@ describe('buildDivisionRecommendation', () => {
     expect(buildDivisionRecommendation(loaded).proposedDiff.divisions).toEqual([]);
   });
 
+  it('keeps a registration pinned to a sparring division categorized for patterns', async () => {
+    const pinned = { ...registration({ sparring: true, manualDivisionId: 'sparring-pin' }), assignments: [] };
+    const division = {
+      id: 'sparring-pin', name: 'Pinned sparring', eventType: 'sparring', bracket: null, deletedAt: null,
+      assignments: [{ id: 'pin-a1', registrationId: 'registration-1', seedPosition: 1, manualOverride: true }],
+    };
+    const db = {
+      $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+      tournament: { findUnique: async () => ({ id: 'tournament-1', settings: null, sportProfileSlug: 'taekwondo' }) },
+      registration: { findMany: async () => [pinned] },
+      weightClass: { findMany: async () => [] },
+      division: { findMany: async () => [division] },
+    };
+
+    const loaded = await loadDivisionRecommendationInput(db as never, 'tournament-1');
+    expect(loaded.config.pinnedDivisionEventTypes).toEqual({ 'sparring-pin': 'sparring' });
+    const { divisions } = buildDivisionRecommendation(loaded).proposedDiff;
+    expect(divisions).toHaveLength(1);
+    expect(divisions[0].eventType).toBe('patterns');
+    expect(divisions[0].registrations.map((entry) => entry.registrationId)).toEqual(['registration-1']);
+  });
+
   it('refuses recategorization when an existing bracket would be destroyed', () => {
     expect(() => assertDivisionRecommendationCanApply([
       { name: 'Girls Patterns', bracket: { id: 'bracket-1' } },

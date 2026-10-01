@@ -246,24 +246,29 @@ export async function loadDivisionRecommendationInput(
   }
   const rules = parseTournamentRules(tournament.settings);
   const sportProfile = getSportProfile(tournament.sportProfileSlug || 'taekwondo');
+  const pinnedDivisionEventTypes: Record<string, string> = {};
+  const inputRegistrations = registrations.map(({ assignments, ...registration }) => {
+    const pinCandidates = new Set([
+      registration.manualDivisionId,
+      ...assignments.map((assignment) => assignment.divisionId),
+      preservedDivisionByRegistration.get(registration.id),
+    ].filter((divisionId): divisionId is string => Boolean(divisionId)));
+    if (pinCandidates.size > 1) {
+      throw new Error(`Registration ${registration.id} has conflicting manual division assignments`);
+    }
+    const manualDivisionId = [...pinCandidates][0] ?? null;
+    const pinnedEvent = manualDivisionId ? existingDivisionById.get(manualDivisionId)?.eventType : undefined;
+    if (manualDivisionId && pinnedEvent) pinnedDivisionEventTypes[manualDivisionId] = pinnedEvent;
+    return {
+      ...registration,
+      // ISO string so the stored snapshot hashes the same after a JSON round-trip.
+      competitor: { ...registration.competitor, dateOfBirth: toIsoDate(registration.competitor.dateOfBirth) },
+      manualDivisionId,
+    };
+  });
   return {
     tournamentId,
-    registrations: registrations.map(({ assignments, ...registration }) => {
-      const pinCandidates = new Set([
-        registration.manualDivisionId,
-        ...assignments.map((assignment) => assignment.divisionId),
-        preservedDivisionByRegistration.get(registration.id),
-      ].filter((divisionId): divisionId is string => Boolean(divisionId)));
-      if (pinCandidates.size > 1) {
-        throw new Error(`Registration ${registration.id} has conflicting manual division assignments`);
-      }
-      return {
-        ...registration,
-        // ISO string so the stored snapshot hashes the same after a JSON round-trip.
-        competitor: { ...registration.competitor, dateOfBirth: toIsoDate(registration.competitor.dateOfBirth) },
-        manualDivisionId: [...pinCandidates][0] ?? null,
-      };
-    }),
+    registrations: inputRegistrations,
     existingDivisions: existingDivisions.map(({ bracket, ...division }) => ({
       ...division,
       deletedAt: division.deletedAt?.toISOString() ?? null,
@@ -281,6 +286,10 @@ export async function loadDivisionRecommendationInput(
       customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
       rules,
       tournamentDate: toIsoDate(tournament.date) ?? undefined,
+      // A pinned registration stays categorized for its other event.
+      ...(Object.keys(pinnedDivisionEventTypes).length > 0
+        ? { pinnedDivisionEventTypes: Object.fromEntries(Object.entries(pinnedDivisionEventTypes).sort(([a], [b]) => a.localeCompare(b))) }
+        : {}),
     },
   };
 }
