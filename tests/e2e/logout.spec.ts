@@ -14,6 +14,10 @@ test('sign out revokes the session on the server', async ({ page, browser }) => 
     expect(sessionCookies).toHaveLength(1);
 
     const signOut = page.waitForResponse((r) => r.url().endsWith('/api/auth/logout'));
+    // On narrow viewports the account menu lives in the off-canvas sidebar.
+    if ((page.viewportSize()?.width ?? 1280) < 1024) {
+      await page.getByRole('button', { name: 'Open menu' }).click();
+    }
     await page.getByRole('button', { name: /Account menu for/ }).click();
     await page.getByRole('button', { name: 'Sign out of organizer account' }).click();
     expect((await signOut).status()).toBe(200);
