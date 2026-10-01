@@ -18,6 +18,7 @@ case ${1:-} in
   done
   [[ $(docker inspect "$runtime" --format '{{.State.StartedAt}}') == "$started" ]]
   [[ $(docker inspect "$runtime" --format '{{.State.Running}}') == true ]]
+  [[ $(docker exec "$database" psql -U postgres -d bowin_rebuild_qa_tls_ci -Atc 'SELECT count(*) FROM public.bowin_rebuild_migrations') == 6 ]]
   ;;
  runtime) docker restart "$runtime" >/dev/null ;;
  *) exit 1 ;;

@@ -3,13 +3,15 @@ set -euo pipefail
 [[ ${GITHUB_ACTIONS:-} == true && ${RELEASE_SHA:-} =~ ^[a-f0-9]{40}$ ]]
 [[ ${BOWIN_CHECKED_IMAGE:-} == "bowin-rebuild-checked-runtime:$RELEASE_SHA" ]]
 prefix="bowin-tls-${GITHUB_RUN_ID:?}-${GITHUB_RUN_ATTEMPT:?}"
-network="$prefix-network"; database="$prefix-database"; runtime="$prefix-runtime"; proxy="$prefix-proxy"
+network="$prefix-network"; database="$prefix-database"; runtime="$prefix-runtime"; proxy="$prefix-proxy"; volume="$prefix-data"
 for name in "$database" "$runtime" "$proxy"; do ! docker inspect "$name" >/dev/null 2>&1; done
 ! docker network inspect "$network" >/dev/null 2>&1
+! docker volume inspect "$volume" >/dev/null 2>&1
 fixture=$(mktemp -d)
 cleanup() {
  docker rm -f "$proxy" "$runtime" "$database" >/dev/null 2>&1 || true
  docker network rm "$network" >/dev/null 2>&1 || true
+ docker volume rm "$volume" >/dev/null 2>&1 || true
  rm -rf -- "$fixture"
 }
 trap cleanup EXIT
@@ -30,10 +32,11 @@ server {
 }
 EOF
 docker network create "$network" >/dev/null
+docker volume create --label "bowin.qa.fixture=$prefix" "$volume" >/dev/null
 database_name=bowin_rebuild_qa_tls_ci
 internal_url="postgres://postgres:QaDatabaseOnly-123456@$database:5432/$database_name"
 docker run -d --name "$database" --network "$network" --label "bowin.qa.fixture=$prefix" \
- --tmpfs /var/lib/postgresql/data -e POSTGRES_PASSWORD=QaDatabaseOnly-123456 \
+ -v "$volume:/var/lib/postgresql/data" -e POSTGRES_PASSWORD=QaDatabaseOnly-123456 \
  -e POSTGRES_DB="$database_name" postgres:16-alpine >/dev/null
 for attempt in $(seq 1 60); do
  if docker exec "$database" pg_isready -U postgres -d "$database_name" >/dev/null 2>&1; then break; fi
@@ -62,6 +65,8 @@ export BROWSER_QA_REVISION="$RELEASE_SHA" BROWSER_QA_ORIGIN=https://127.0.0.1:19
 node replacement/test/browser-qa.cjs
 docker rm -f "$proxy" "$runtime" "$database" >/dev/null
 docker network rm "$network" >/dev/null
+docker volume rm "$volume" >/dev/null
+! docker volume inspect "$volume" >/dev/null 2>&1
 for name in "$database" "$runtime" "$proxy"; do ! docker inspect "$name" >/dev/null 2>&1; done
 ! docker network inspect "$network" >/dev/null 2>&1
 echo 'Imported production-mode TLS browser, secure session and restart checks passed; disposable fixtures removed'
