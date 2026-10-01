@@ -756,7 +756,7 @@ Known limits:
 | `OPENAI_API_KEY` | no | support assistant answers; without it support tickets still work |
 | `BUILD_SHA` | no (build arg) | commit reported by `/api/health` |
 | `ENABLE_DEMO_LOGIN` + `DEMO_ISOLATED_DATA` | no | isolated demo environments only |
-| `ENABLE_DEV_AUTH`, `ENABLE_E2E_AUTH_BYPASS`, `RATE_LIMIT_DISABLED` | never in prod | dev/test switches |
+| `ENABLE_DEV_AUTH`, `ENABLE_E2E_AUTH_BYPASS`, `RATE_LIMIT_DISABLED`, `STRIPE_WEBHOOK_TRUST_EVENT_PAYLOAD` | never in prod | dev/test switches (the last makes subscription webhooks skip re-fetching from Stripe; ignored in production) |
 
 ---
 
