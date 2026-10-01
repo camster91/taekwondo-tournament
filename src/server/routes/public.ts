@@ -1214,7 +1214,9 @@ router.get(
   schoolPortalLimiter,
   async (req: Request, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
-    const schoolName = decodeURIComponent(req.params.schoolName);
+    // Express has already percent-decoded route params; decoding again
+    // throws URIError on names like "100% TKD" (and mangles "%41").
+    const schoolName = req.params.schoolName;
     const shareSlug = typeof req.query.slug === 'string' ? req.query.slug : '';
 
     const tournament = await prisma.tournament.findUnique({
