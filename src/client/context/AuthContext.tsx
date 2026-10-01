@@ -263,9 +263,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // request fails, the next API call would 401 anyway — but we
     // optimistically clear local state too.
     try {
+      // The CSRF header is required: without it the server answers 403
+      // and the session cookie stays valid.
       await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'same-origin',
+        headers: getAuthHeaders(),
       });
     } catch {
       // Ignore network errors — local clear below is enough to stop

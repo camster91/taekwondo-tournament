@@ -39,7 +39,6 @@ vi.mock('../middleware/auth.js', () => ({
   SESSION_COOKIE: 'bowin_session',
   SESSION_COOKIE_OPTIONS: {},
   setCsrfCookie: vi.fn(),
-  invalidateAuthCache: vi.fn(),
 }));
 
 vi.mock('../services/email.js', () => ({

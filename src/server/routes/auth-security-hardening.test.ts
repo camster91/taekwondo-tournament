@@ -14,7 +14,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { hashSecret } from '../utils/token-hash.js';
 
-const invalidateAuthCache = vi.fn();
 
 type CapturedHandler = { method: string; path: string; handler: any };
 function getCaptured(): CapturedHandler[] {
@@ -30,7 +29,6 @@ vi.mock('../middleware/auth.js', () => ({
   SESSION_COOKIE: 'bowin_session',
   SESSION_COOKIE_OPTIONS: {},
   setCsrfCookie: vi.fn(),
-  invalidateAuthCache: (...args: any[]) => invalidateAuthCache(...args),
 }));
 vi.mock('../services/email.js', () => ({
   sendEmail: vi.fn().mockResolvedValue({ success: true }),
@@ -175,7 +173,6 @@ const activeUser = {
 const verifyReq = (prisma: any, body: any) => ({ body, app: { locals: { prisma } }, headers: {} });
 
 beforeEach(() => {
-  invalidateAuthCache.mockReset();
 });
 
 describe('POST /verify-magic-link — atomic attempt budget', () => {
@@ -375,7 +372,6 @@ describe('PUT /users/:userId/status — auth cache invalidation', () => {
     );
 
     expect(prisma.user.update.mock.calls[0][0].data.tokenVersion).toEqual({ increment: 1 });
-    expect(invalidateAuthCache).toHaveBeenCalledWith('target');
   });
 });
 
@@ -436,7 +432,6 @@ describe('DELETE /gdpr/delete-account — same safeguards as DELETE /account', (
     expect(res.statusCode).toBe(200);
     expect(prisma.tx.user.delete).toHaveBeenCalledWith({ where: { id: 'u-1' } });
     expect(prisma.tx.magicLink.deleteMany).toHaveBeenCalledWith({ where: { email: 'u@x.com' } });
-    expect(invalidateAuthCache).toHaveBeenCalledWith('u-1');
     expect(res.clearCookie).toHaveBeenCalledWith('bowin_session', { path: '/' });
   });
 });

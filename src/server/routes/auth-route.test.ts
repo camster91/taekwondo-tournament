@@ -23,7 +23,6 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const invalidateAuthCache = vi.fn();
 
 // Storage for handlers captured by the vi.mock('express', ...)
 // factory. We can't use a top-level `const` here — vi.mock
@@ -63,7 +62,6 @@ vi.mock('../middleware/auth.js', () => ({
     },
   SESSION_COOKIE: 'bowin_session',
   SESSION_COOKIE_OPTIONS: {},
-  invalidateAuthCache: (...args: any[]) => invalidateAuthCache(...args),
 }));
 
 vi.mock('../services/email.js', () => ({
@@ -168,9 +166,8 @@ const buildPrismaMock = (overrides: any = {}) => {
 
 // Cross-test clean state. Don't reset the captured-handler
 // array — the route file's handlers register once per import
-// (ESM-cached). Only reset the invalidateAuthCache spy.
+// (ESM-cached).
 beforeEach(() => {
-  invalidateAuthCache.mockReset();
 });
 
 describe('POST /tournaments/:tournamentId/access — tokenVersion bump', () => {
@@ -207,7 +204,6 @@ describe('POST /tournaments/:tournamentId/access — tokenVersion bump', () => {
       data: { tokenVersion: { increment: 1 } },
       select: { id: true },
     });
-    expect(invalidateAuthCache).toHaveBeenCalledWith('target-user');
   });
 
   it('does NOT bump tokenVersion when granting the same role (no-op upsert)', async () => {
@@ -238,7 +234,6 @@ describe('POST /tournaments/:tournamentId/access — tokenVersion bump', () => {
     await handler(req, res);
 
     expect(prisma.user.update).not.toHaveBeenCalled();
-    expect(invalidateAuthCache).not.toHaveBeenCalled();
   });
 
   it('bumps tokenVersion when creating a NEW access row (existing is null)', async () => {
@@ -265,7 +260,6 @@ describe('POST /tournaments/:tournamentId/access — tokenVersion bump', () => {
     await handler(req, res);
 
     expect(prisma.user.update).toHaveBeenCalledOnce();
-    expect(invalidateAuthCache).toHaveBeenCalledWith('target-user');
   });
 });
 
@@ -290,7 +284,6 @@ describe('DELETE /tournaments/:tournamentId/access/:userId — tokenVersion bump
 
     expect(prisma.userTournamentAccess.delete).toHaveBeenCalledOnce();
     expect(prisma.user.update).toHaveBeenCalledOnce();
-    expect(invalidateAuthCache).toHaveBeenCalledWith('target-user');
     expect(res.statusCode).toBe(204);
   });
 
@@ -315,7 +308,6 @@ describe('DELETE /tournaments/:tournamentId/access/:userId — tokenVersion bump
     expect(res.statusCode).toBe(404);
     expect(prisma.userTournamentAccess.delete).not.toHaveBeenCalled();
     expect(prisma.user.update).not.toHaveBeenCalled();
-    expect(invalidateAuthCache).not.toHaveBeenCalled();
   });
 });
 

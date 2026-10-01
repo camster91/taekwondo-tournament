@@ -4,7 +4,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { type RateLimitExceededEventHandler } from 'express-rate-limit';
-import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, setCsrfCookie, type AuthenticatedRequest, invalidateAuthCache } from '../middleware/auth.js';
+import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, setCsrfCookie, type AuthenticatedRequest } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
@@ -566,7 +566,6 @@ router.post('/logout', authenticate, async (req: AuthenticatedRequest, res: Resp
       where: { id: req.user!.id },
       data: { tokenVersion: { increment: 1 } },
     });
-    invalidateAuthCache(req.user!.id);
   } catch (error) {
     console.error('Logout tokenVersion bump failed:', error);
     // Fall through — clearing the cookie still ends the current session.
@@ -631,7 +630,6 @@ router.delete('/account', authenticate, async (req: AuthenticatedRequest, res: R
     prisma.magicLink.deleteMany({ where: { email: user.email } }),
     prisma.user.delete({ where: { id: user.id } }),
   ]);
-  invalidateAuthCache(user.id);
   res.clearCookie(SESSION_COOKIE, { path: '/' });
   res.clearCookie('bowin_csrf', { path: '/' });
   return res.status(204).send();
@@ -788,7 +786,6 @@ router.put('/users/:userId/role', authenticate, requireRole('admin'), validateRe
         isActive: true,
       },
     });
-    invalidateAuthCache(userId);
 
     // Audit log: role change (P1-3)
     await createAuditLog(prisma, {
@@ -838,7 +835,6 @@ router.put('/users/:userId/status', authenticate, requireRole('admin'), validate
     });
     // Drop the cached auth entry so the deactivation / version bump
     // takes effect on the very next request, not after the cache TTL.
-    invalidateAuthCache(userId);
 
     // Audit log: user status change (P1-3)
     await createAuditLog(prisma, {
@@ -898,16 +894,13 @@ router.post('/tournaments/:tournamentId/access', authenticate, requireRole('admi
     // changes. Without this, a scorekeeper whose access was just
     // promoted / demoted on a tournament still rides the JWT issued
     // before the change until it expires (up to 7 days), seeing
-    // data with stale role claims. The invalidateAuthCache call
-    // also drops the in-process cache hit so the next request
-    // re-reads the DB row.
+    // data with stale role claims.
     if (existing?.role !== role) {
       await prisma.user.update({
         where: { id: userId },
         data: { tokenVersion: { increment: 1 } },
         select: { id: true },
       });
-      invalidateAuthCache(userId);
     }
 
     res.json(access);
@@ -953,7 +946,6 @@ router.delete('/tournaments/:tournamentId/access/:userId', authenticate, require
       data: { tokenVersion: { increment: 1 } },
       select: { id: true },
     });
-    invalidateAuthCache(userId);
 
     res.status(204).send();
   } catch (error) {
@@ -1405,7 +1397,6 @@ router.delete('/gdpr/delete-account', authenticate, async (req: AuthenticatedReq
       // Finally, delete the user account
       await tx.user.delete({ where: { id: userId } });
     });
-    invalidateAuthCache(userId);
     res.clearCookie(SESSION_COOKIE, { path: '/' });
     res.clearCookie('bowin_csrf', { path: '/' });
 

@@ -43,7 +43,9 @@ test('an owner exports and permanently deletes a free organization', async ({ re
     headers,
     data: { confirmation: organization.slug, exportAcknowledged: true },
   });
-  expect(deleted.status()).toBe(204);
+  expect(deleted.status()).toBe(200);
+  // An admin keeps global access, so their account stays open.
+  await expect(deleted.json()).resolves.toMatchObject({ deleted: true, signedOut: false });
 
   const current = await request.get('/api/organizations/current', { headers });
   expect(current.ok()).toBeTruthy();
@@ -53,3 +55,45 @@ test('an owner exports and permanently deletes a free organization', async ({ re
   const removedTournament = await request.get(`/api/tournaments/${tournament.id}`, { headers });
   expect(removedTournament.status()).toBe(404);
 });
+
+test('a director who deletes their only organization has their account closed', async ({ request }) => {
+  const suffix = Date.now();
+  const email = `organization-closure-director-${suffix}@example.com`;
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+  await prisma.user.create({ data: { email, firstName: 'Director', lastName: 'Owner', role: 'director', isActive: true } });
+  const headers = await loginRequestAsEmail(request, email);
+
+  try {
+    const created = await request.post('/api/organizations', {
+      headers,
+      data: { name: `E2E Closure Director ${suffix}` },
+    });
+    expect(created.status()).toBe(201);
+    const { organization } = await created.json() as { organization: { id: string; slug: string } };
+    // An org-owned competitor that was never registered must not survive
+    // without an owner (it would become visible to every org-less user).
+    const competitor = await prisma.competitor.create({
+      data: {
+        firstName: 'E2E', lastName: `Unregistered ${suffix}`, gender: 'F', belt: 'White',
+        dateOfBirth: new Date('2015-01-01'), organizationId: organization.id,
+      },
+    });
+
+    const deleted = await request.delete(`/api/organizations/${organization.id}`, {
+      headers,
+      data: { confirmation: organization.slug, exportAcknowledged: true },
+    });
+    expect(deleted.status()).toBe(200);
+    await expect(deleted.json()).resolves.toMatchObject({ deleted: true, signedOut: true, closedAccounts: 1 });
+
+    // The session is revoked and the account cannot sign back in.
+    expect((await request.get('/api/auth/me', { headers })).status()).toBe(401);
+    expect(await prisma.user.findUnique({ where: { email }, select: { isActive: true } }))
+      .toEqual({ isActive: false });
+    expect(await prisma.competitor.findUnique({ where: { id: competitor.id } })).toBeNull();
+  } finally {
+    await prisma.user.deleteMany({ where: { email } });
+    await prisma.$disconnect();
+  }
+});
+
