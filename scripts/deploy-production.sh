@@ -75,6 +75,9 @@ set -Eeuo pipefail
 LIVE=taekwondo-tournament
 CANDIDATE=taekwondo-tournament-candidate
 ROLLBACK=taekwondo-tournament-rollback
+# Persistent named volume for uploads (organization logos under
+# /app/data/logos, LOGO_STORAGE_PATH). Survives container replacement.
+DATA_VOLUME=bowin-production-data
 IMAGE="bowin-release:${RELEASE_SHA}"
 RELEASE_ROOT=/opt/bowin-production-releases
 ARCHIVE="$RELEASE_ROOT/${RELEASE_SHA}.tar.gz"
@@ -180,7 +183,7 @@ test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.open
 
 ENV_FILE=$(mktemp /tmp/bowin-production-env.XXXXXX)
 chmod 600 "$ENV_FILE"
-ALLOWED_ENV='^(DATABASE_URL|JWT_SECRET|METRICS_TOKEN|ADMIN_SETUP_KEY|MAILGUN_API_KEY|MAILGUN_DOMAIN|MAILGUN_BASE_URL|EMAIL_FROM_NAME|EMAIL_FROM_ADDRESS|RETENTION_PURGE_ENABLED|SOFT_DELETE_RETENTION_DAYS|REGISTRATION_CONSENT_VERSION|PRIVACY_NOTICE_URL|TOURNAMENT_TERMS_URL|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_STARTER_PRICE_ID|STRIPE_PRO_PRICE_ID|DEBUG|ENABLE_DEMO_LOGIN|DEMO_ISOLATED_DATA|DEMO_RATE_LIMIT_MAX|PUBLIC_APP_URL|ALLOWED_ORIGINS|OPENAI_API_KEY|OPENAI_MODEL|OPENAI_BASE_URL|SUPPORT_ALERT_EMAIL)='
+ALLOWED_ENV='^(DATABASE_URL|JWT_SECRET|METRICS_TOKEN|ADMIN_SETUP_KEY|MAILGUN_API_KEY|MAILGUN_DOMAIN|MAILGUN_BASE_URL|EMAIL_FROM_NAME|EMAIL_FROM_ADDRESS|RETENTION_PURGE_ENABLED|SOFT_DELETE_RETENTION_DAYS|REGISTRATION_CONSENT_VERSION|PRIVACY_NOTICE_URL|TOURNAMENT_TERMS_URL|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_STARTER_PRICE_ID|STRIPE_PRO_PRICE_ID|DEBUG|ENABLE_DEMO_LOGIN|DEMO_ISOLATED_DATA|DEMO_RATE_LIMIT_MAX|PUBLIC_APP_URL|ALLOWED_ORIGINS|OPENAI_API_KEY|OPENAI_MODEL|OPENAI_BASE_URL|SUPPORT_ALERT_EMAIL|RETENTION_PURGE_DRY_RUN|SENTRY_DSN|SENTRY_ENVIRONMENT|STRIPE_PER_EVENT_SMALL_PRICE_ID|STRIPE_PER_EVENT_MEDIUM_PRICE_ID|STRIPE_PER_EVENT_LARGE_PRICE_ID|LOGO_STORAGE_PATH)='
 docker inspect "$LIVE" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E "$ALLOWED_ENV" > "$ENV_FILE"
 replace_env() {
   local key=$1 value=$2 next="${ENV_FILE}.next"
@@ -196,7 +199,7 @@ grep -q '^DATABASE_URL=' "$ENV_FILE"; grep -q '^JWT_SECRET=' "$ENV_FILE"; grep -
 grep -q '^REGISTRATION_CONSENT_VERSION=' "$ENV_FILE"; grep -q '^PRIVACY_NOTICE_URL=' "$ENV_FILE"; grep -q '^TOURNAMENT_TERMS_URL=' "$ENV_FILE"
 
 echo "==> Starting private candidate while production remains live"
-docker run -d --name "$CANDIDATE" --network markup-net --env-file "$ENV_FILE" "$IMAGE" node server.js >/dev/null
+docker run -d --name "$CANDIDATE" --network markup-net -v "${DATA_VOLUME}:/app/data" --env-file "$ENV_FILE" "$IMAGE" node server.js >/dev/null
 echo "Waiting for candidate health check..."
 CANDIDATE_HEALTHY=0
 for attempt in $(seq 1 45); do 
@@ -238,7 +241,7 @@ else
 fi
 
 echo "==> Publishing new release on port ${LIVE_PORT}"
-docker run -d --name "$LIVE" --restart unless-stopped --network markup-net -p "127.0.0.1:${LIVE_PORT}:3001" --env-file "$ENV_FILE" "$IMAGE" >/dev/null
+docker run -d --name "$LIVE" --restart unless-stopped --network markup-net -p "127.0.0.1:${LIVE_PORT}:3001" -v "${DATA_VOLUME}:/app/data" --env-file "$ENV_FILE" "$IMAGE" >/dev/null
 wait_for_health "http://127.0.0.1:${LIVE_PORT}/api/health/ready" "new release internal" || {
   echo "FAIL-CLOSED: New release failed internal health check; initiating automatic rollback" >&2
   exit 1

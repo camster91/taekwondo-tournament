@@ -7,6 +7,7 @@ import { normalizeBelt } from '../../shared/constants/belts.js';
 import {
   buildRegistrationPatch,
   buildRegistrationConsent,
+  parseRegistrationMeasurements,
   registrationLegalConfigFromEnv,
   validateLookupParams,
   validateMergedRegistration,
@@ -276,27 +277,13 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
   if (parentEmail && parentEmail.length > 200) errors.push('Parent email must be 200 characters or fewer');
   if (parentPhone && parentPhone.length > 50) errors.push('Parent phone must be 50 characters or fewer');
 
-  if (sparring && !weightLbs) {
+  // Coerce dan rank / height / weight to numbers: a form may send them as
+  // strings, and writing a string into the Int/Float columns is a 500.
+  const measurements = parseRegistrationMeasurements({ danRank, heightInches, weightLbs });
+  if (sparring && !measurements.values.weightLbs && !measurements.errors.some((e) => e.startsWith('Weight'))) {
     errors.push('Weight is required for sparring registration');
   }
-  if (weightLbs != null) {
-    const w = Number(weightLbs);
-    if (!Number.isFinite(w) || w < 0 || w > 500) {
-      errors.push('Weight must be a number between 0 and 500');
-    }
-  }
-  if (heightInches != null) {
-    const h = Number(heightInches);
-    if (!Number.isFinite(h) || h < 0 || h > 108) {
-      errors.push('Height must be a number between 0 and 108 inches');
-    }
-  }
-  if (danRank != null) {
-    const d = Number(danRank);
-    if (!Number.isInteger(d) || d < 0 || d > 9) {
-      errors.push('Dan rank must be an integer between 0 and 9');
-    }
-  }
+  errors.push(...measurements.errors);
 
   if (errors.length > 0) {
     return res.status(400).json({ error: 'Validation failed', details: errors });
@@ -375,16 +362,16 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
           gender,
           dateOfBirth: dob,
           belt: normalizedBelt,
-          danRank: normalizedBelt === 'Black' ? (danRank || 1) : null,
-          heightInches: heightInches || null,
-          weightLbs: weightLbs || null,
+          danRank: normalizedBelt === 'Black' ? (measurements.values.danRank ?? 1) : null,
+          heightInches: measurements.values.heightInches,
+          weightLbs: measurements.values.weightLbs,
           schoolDojang: schoolDojang?.trim() || null,
           specialNeeds: specialNeeds?.trim() || null,
         },
         registration: {
           patterns: patterns || false,
           sparring: sparring || false,
-          weightAtRegistration: weightLbs || null,
+          weightAtRegistration: measurements.values.weightLbs,
           ageAtTournament,
           parentName: parentName?.trim() || null,
           parentEmail: parentEmail?.trim() || null,
@@ -1112,9 +1099,27 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
   // withdrawn registration was itself waitlisted).
   if (registration.tournament.status === 'registration') {
     try {
-      const { promotedRegistrationId } = await promoteNextWaitlisted(prisma, registration.tournamentId);
+      const { promotedRegistrationId, promotion } = await promoteNextWaitlisted(prisma, registration.tournamentId);
       if (promotedRegistrationId) {
         console.log(`[registration-manage-withdraw] Promoted waitlisted registration ${promotedRegistrationId.slice(0, 8)}`);
+      }
+      // Tell the promoted family (same email as a director's manual promote):
+      // their spot, the rotated management link, and any entry fee now due.
+      if (promotion?.parentEmail && isEmailConfigured()) {
+        const { waitlistPromotionEmail } = await import('../services/email-templates.js');
+        const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(promotion.managementToken)}`;
+        const { subject, html } = waitlistPromotionEmail({
+          competitorName: promotion.competitorName,
+          tournamentName: promotion.tournamentName,
+          tournamentDate: promotion.tournamentDate,
+          confirmationCode: promotion.registrationId.slice(0, 8),
+          managementUrl,
+          organizerBrandName: promotion.organizerBrandName || undefined,
+          paymentDueCents: promotion.paymentDueCents,
+        });
+        sendEmail(promotion.parentEmail, subject, html).catch((err) => {
+          console.error('[registration-manage-withdraw] promotion email failed:', err);
+        });
       }
     } catch (err) {
       console.error('[registration-manage-withdraw] waitlist promotion failed:', err);

@@ -13,7 +13,7 @@ vi.mock('../middleware/auth.js', async (importOriginal) => ({
   },
 }));
 
-import tournamentsRouter, { isCheckInOnlyUpdate } from './tournaments.js';
+import tournamentsRouter, { isCheckInOnlyUpdate, normalizeTournamentDate } from './tournaments.js';
 
 const prisma = {
   tournament: { findUnique: vi.fn(), create: vi.fn() },
@@ -145,5 +145,14 @@ describe('tournament creation requires a director-level membership (T2)', () => 
     const res = await request(makeApp()).post('/api/tournaments/from-template/tpl-1').send({ name: 'Cup', date: '2026-11-01' });
     expect(res.status).toBe(403);
     expect(prisma.tournamentTemplate.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('normalizeTournamentDate', () => {
+  it('stores create and update dates at noon UTC on the picked calendar day', () => {
+    expect(normalizeTournamentDate('2026-08-15').toISOString()).toBe('2026-08-15T12:00:00.000Z');
+    // A full ISO timestamp (as an edit form may send) keeps its calendar
+    // day instead of being stored at UTC midnight.
+    expect(normalizeTournamentDate('2026-08-15T00:00:00.000Z').toISOString()).toBe('2026-08-15T12:00:00.000Z');
   });
 });

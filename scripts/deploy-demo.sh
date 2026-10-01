@@ -31,6 +31,8 @@ set -euo pipefail
 LIVE=bowin-demo
 ROLLBACK=bowin-demo-rollback
 CANDIDATE=bowin-demo-candidate
+# Persistent named volume for uploads (organization logos, LOGO_STORAGE_PATH).
+DATA_VOLUME=bowin-demo-data
 IMAGE="bowin-demo-release:${RELEASE_SHA}"
 RELEASE_ROOT=/opt/bowin-demo-releases
 ARCHIVE="$RELEASE_ROOT/${RELEASE_SHA}.tar.gz"
@@ -69,7 +71,7 @@ test "$(docker inspect "$LIVE" --format '{{(index (index .NetworkSettings.Ports 
 
 ENV_FILE=$(mktemp /tmp/bowin-demo-env.XXXXXX)
 chmod 600 "$ENV_FILE"
-ALLOWED_ENV='^(DATABASE_URL|JWT_SECRET|METRICS_TOKEN|ADMIN_SETUP_KEY|MAILGUN_API_KEY|MAILGUN_DOMAIN|MAILGUN_BASE_URL|EMAIL_FROM_NAME|EMAIL_FROM_ADDRESS|OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64|RETENTION_PURGE_ENABLED|SOFT_DELETE_RETENTION_DAYS|REGISTRATION_CONSENT_VERSION|PRIVACY_NOTICE_URL|TOURNAMENT_TERMS_URL|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_STARTER_PRICE_ID|STRIPE_PRO_PRICE_ID|DEBUG|ENABLE_DEMO_LOGIN|DEMO_ISOLATED_DATA|DEMO_RATE_LIMIT_MAX|PUBLIC_APP_URL|ALLOWED_ORIGINS|OPENAI_API_KEY|OPENAI_MODEL|OPENAI_BASE_URL|SUPPORT_ALERT_EMAIL)='
+ALLOWED_ENV='^(DATABASE_URL|JWT_SECRET|METRICS_TOKEN|ADMIN_SETUP_KEY|MAILGUN_API_KEY|MAILGUN_DOMAIN|MAILGUN_BASE_URL|EMAIL_FROM_NAME|EMAIL_FROM_ADDRESS|OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64|RETENTION_PURGE_ENABLED|SOFT_DELETE_RETENTION_DAYS|REGISTRATION_CONSENT_VERSION|PRIVACY_NOTICE_URL|TOURNAMENT_TERMS_URL|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET|STRIPE_STARTER_PRICE_ID|STRIPE_PRO_PRICE_ID|DEBUG|ENABLE_DEMO_LOGIN|DEMO_ISOLATED_DATA|DEMO_RATE_LIMIT_MAX|PUBLIC_APP_URL|ALLOWED_ORIGINS|OPENAI_API_KEY|OPENAI_MODEL|OPENAI_BASE_URL|SUPPORT_ALERT_EMAIL|RETENTION_PURGE_DRY_RUN|SENTRY_DSN|SENTRY_ENVIRONMENT|STRIPE_PER_EVENT_SMALL_PRICE_ID|STRIPE_PER_EVENT_MEDIUM_PRICE_ID|STRIPE_PER_EVENT_LARGE_PRICE_ID|LOGO_STORAGE_PATH)='
 docker inspect "$LIVE" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E "$ALLOWED_ENV" > "$ENV_FILE"
 
 grep -q '^ENABLE_DEMO_LOGIN=1$' "$ENV_FILE"
@@ -98,7 +100,7 @@ docker build \
 test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"
 
 docker rm -f "$CANDIDATE" >/dev/null 2>&1 || true
-docker run -d --name "$CANDIDATE" --network markup-net --env-file "$ENV_FILE" "$IMAGE" >/dev/null
+docker run -d --name "$CANDIDATE" --network markup-net -v "${DATA_VOLUME}:/app/data" --env-file "$ENV_FILE" "$IMAGE" >/dev/null
 wait_for_ready "http://$(docker inspect "$CANDIDATE" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'):3001/api/health/ready"
 docker rm -f "$CANDIDATE" >/dev/null
 
@@ -108,7 +110,7 @@ docker stop "$LIVE" >/dev/null
 docker rename "$LIVE" "$ROLLBACK"
 PREVIOUS_RENAMED=1
 CUTOVER_STARTED=1
-docker run -d --name "$LIVE" --restart unless-stopped --network markup-net -p 127.0.0.1:18305:3001 --env-file "$ENV_FILE" "$IMAGE" >/dev/null
+docker run -d --name "$LIVE" --restart unless-stopped --network markup-net -p 127.0.0.1:18305:3001 -v "${DATA_VOLUME}:/app/data" --env-file "$ENV_FILE" "$IMAGE" >/dev/null
 wait_for_ready http://127.0.0.1:18305/api/health/ready
 wait_for_ready "$DEMO_URL/api/health/ready"
 test "$(docker inspect "$LIVE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"

@@ -94,7 +94,8 @@ export function registrationLegalConfigFromEnv(
 
 const MAX_WEIGHT_LBS = 500;
 const MIN_DAN_RANK = 1;
-const MAX_DAN_RANK = 9;
+const MAX_DAN_RANK = 10;
+const MAX_HEIGHT_INCHES = 108;
 const MAX_FIRST_NAME = 100;
 const MAX_LAST_NAME = 100;
 const MAX_SCHOOL = 200;
@@ -102,6 +103,64 @@ const MAX_SPECIAL_NEEDS = 2000;
 const MAX_PARENT_NAME = 200;
 const MAX_PARENT_EMAIL = 200;
 const MAX_PARENT_PHONE = 50;
+
+export interface RegistrationMeasurements {
+  danRank: number | null;
+  heightInches: number | null;
+  weightLbs: number | null;
+}
+
+/**
+ * Coerce the numeric fields of a POST /register body (dan rank, height,
+ * weight) into numbers. The client may send them as JSON numbers or as
+ * strings (form values), and Prisma rejects a string for an Int/Float
+ * column with a 500, so the route must never write the raw value.
+ *
+ * Missing values (undefined, null, empty string) become null. Anything
+ * else must be numeric and in range, otherwise an error is returned for
+ * the 400 response. Zero weight/height is treated as "not supplied".
+ */
+export function parseRegistrationMeasurements(body: {
+  danRank?: unknown;
+  heightInches?: unknown;
+  weightLbs?: unknown;
+}): { errors: string[]; values: RegistrationMeasurements } {
+  const errors: string[] = [];
+  const toNumber = (raw: unknown): number | null | undefined => {
+    if (raw === undefined || raw === null) return null;
+    if (typeof raw === 'string') {
+      if (!raw.trim()) return null;
+      return Number(raw);
+    }
+    if (typeof raw === 'number') return raw;
+    return undefined; // wrong type: invalid
+  };
+
+  const values: RegistrationMeasurements = { danRank: null, heightInches: null, weightLbs: null };
+
+  const w = toNumber(body.weightLbs);
+  if (w === undefined || (w !== null && (!Number.isFinite(w) || w < 0 || w > MAX_WEIGHT_LBS))) {
+    errors.push(`Weight must be a number between 0 and ${MAX_WEIGHT_LBS}`);
+  } else {
+    values.weightLbs = w ? w : null;
+  }
+
+  const h = toNumber(body.heightInches);
+  if (h === undefined || (h !== null && (!Number.isFinite(h) || h < 0 || h > MAX_HEIGHT_INCHES))) {
+    errors.push(`Height must be a number between 0 and ${MAX_HEIGHT_INCHES} inches`);
+  } else {
+    values.heightInches = h ? h : null;
+  }
+
+  const d = toNumber(body.danRank);
+  if (d === undefined || (d !== null && (!Number.isInteger(d) || d < MIN_DAN_RANK || d > MAX_DAN_RANK))) {
+    errors.push(`Dan rank must be an integer between ${MIN_DAN_RANK} and ${MAX_DAN_RANK}`);
+  } else {
+    values.danRank = d;
+  }
+
+  return { errors, values };
+}
 
 /**
  * Build a normalized patch from a request body for the PATCH
@@ -227,6 +286,7 @@ export const PUBLIC_REGISTRATION_LIMITS = {
   MAX_WEIGHT_LBS,
   MIN_DAN_RANK,
   MAX_DAN_RANK,
+  MAX_HEIGHT_INCHES,
   MAX_FIRST_NAME,
   MAX_LAST_NAME,
   MAX_SCHOOL,

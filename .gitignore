@@ -22,3 +22,6 @@ _p*-*.cjs
 _screenshot*.cjs
 _scorekeeper-check.cjs
 _walk*.cjs
+
+# Local organization logo uploads (LOGO_STORAGE_PATH dev default)
+/data/

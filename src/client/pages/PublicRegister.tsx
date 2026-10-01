@@ -479,7 +479,7 @@ export default function PublicRegister() {
           ...formData,
           heightInches: formData.heightInches ? parseFloat(formData.heightInches) : null,
           weightLbs: formData.weightLbs ? parseFloat(formData.weightLbs) : null,
-          danRank: formData.belt === topLevelBeltName && sportProfile.beltConfig.hasDanRank ? formData.danRank : null,
+          danRank: formData.belt === topLevelBeltName && sportProfile.beltConfig.hasDanRank ? Number(formData.danRank) : null,
           // The public register endpoint creates a Registration with these fields
           competeWithOlder: formData.competeWithOlder,
         }),

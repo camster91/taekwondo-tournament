@@ -35,6 +35,17 @@ export interface CategorizationConfig {
   // Tournament date; with each competitor's dateOfBirth it gives the
   // exact age in months used by the "compete with older" allowance.
   tournamentDate?: Date | string;
+  // Smallest division smart merging tries to avoid (the rules'
+  // minDivisionSize). Falls back to rules, then DIVISION_SIZE_CONFIG.
+  minDivisionSize?: number;
+  // Event type of each division a registration is pinned to
+  // (manualDivisionId -> eventType). A pinned registration is excluded
+  // only from that event; an unknown pin excludes it from both.
+  pinnedDivisionEventTypes?: Record<string, string>;
+  // Events each registration already holds through an assignment in a
+  // kept (pinned) division (registrationId -> eventTypes). Kept divisions
+  // keep all their members, so those events are not categorized again.
+  heldPinnedEvents?: Record<string, string[]>;
 }
 
 // Source-internal type. Mirrors `Registration & { competitor: Competitor }` from
@@ -62,7 +73,7 @@ export interface RegistrationWithCompetitor {
   };
 }
 
-interface DivisionGroup {
+export interface DivisionGroup {
   key: string;
   name: string;
   beltLevel: 'BB' | 'CB';
@@ -99,6 +110,85 @@ export interface PreviewResult {
   divisions: PreviewDivision[];
   totalCompetitors: number;
   warnings: string[];
+}
+
+/**
+ * Registrations that reached categorization but fit no division,
+ * collected across both events so each is counted once.
+ */
+interface DroppedRegistrations {
+  noGender: Set<string>;
+  noAgeBand: Set<string>;
+  noDanGroup: Set<string>;
+}
+
+function createDroppedCollector(): DroppedRegistrations {
+  return { noGender: new Set(), noAgeBand: new Set(), noDanGroup: new Set() };
+}
+
+function droppedWarnings(dropped: DroppedRegistrations): string[] {
+  const warnings: string[] = [];
+  if (dropped.noGender.size > 0) {
+    warnings.push(`${dropped.noGender.size} registration(s) were not categorized: gender is not male or female.`);
+  }
+  if (dropped.noAgeBand.size > 0) {
+    warnings.push(`${dropped.noAgeBand.size} registration(s) fit no age band and were not categorized.`);
+  }
+  if (dropped.noDanGroup.size > 0) {
+    warnings.push(`${dropped.noDanGroup.size} black belt registration(s) have a dan rank outside every dan group and were not categorized.`);
+  }
+  return warnings;
+}
+
+/**
+ * Remove each pinned registration from the event of the division it is
+ * pinned to, keeping it in its other event. A pin whose division event
+ * is unknown excludes the registration entirely (the old behaviour).
+ */
+export function excludePinnedEvents(
+  registrations: RegistrationWithCompetitor[],
+  pinnedDivisionEventTypes: Record<string, string> | undefined,
+  heldPinnedEvents?: Record<string, string[]>,
+): { registrations: RegistrationWithCompetitor[]; pinnedCount: number } {
+  const result: RegistrationWithCompetitor[] = [];
+  let pinnedCount = 0;
+  for (const registration of registrations) {
+    const held = new Set(heldPinnedEvents?.[registration.id] ?? []);
+    if (registration.manualDivisionId) {
+      pinnedCount++;
+      const pinnedEvent = pinnedDivisionEventTypes?.[registration.manualDivisionId];
+      if (pinnedEvent !== 'patterns' && pinnedEvent !== 'sparring') continue;
+      held.add(pinnedEvent);
+    }
+    if (held.size === 0) {
+      result.push(registration);
+      continue;
+    }
+    const remaining = {
+      ...registration,
+      patterns: registration.patterns && !held.has('patterns'),
+      sparring: registration.sparring && !held.has('sparring'),
+    };
+    if (remaining.patterns || remaining.sparring) result.push(remaining);
+  }
+  return { registrations: result, pinnedCount };
+}
+
+/** registrationId -> event types held via assignments in the given divisions. */
+export async function loadHeldPinnedEvents(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  pinnedDivisionIds: string[],
+): Promise<Record<string, string[]>> {
+  if (pinnedDivisionIds.length === 0) return {};
+  const assignments = await prisma.divisionAssignment.findMany({
+    where: { divisionId: { in: pinnedDivisionIds } },
+    select: { registrationId: true, division: { select: { eventType: true } } },
+  });
+  const held: Record<string, string[]> = {};
+  for (const { registrationId, division } of assignments) {
+    (held[registrationId] ??= []).push(division.eventType);
+  }
+  return held;
 }
 
 function partitionRegistrationsForCategorization(
@@ -148,12 +238,16 @@ export function previewCategorization(
 ): PreviewResult {
   const warnings: string[] = [];
 
-  // v2: skip registrations manually pinned to a specific division —
-  // they are managed via the move endpoint, not auto-categorization
-  const unpinned = registrations.filter((r) => !r.manualDivisionId);
-  const pinnedCount = registrations.length - unpinned.length;
+  // v2: a registration manually pinned to a specific division is
+  // managed via the move endpoint for that division's event; it is
+  // still auto-categorized for its other event.
+  const { registrations: unpinned, pinnedCount } = excludePinnedEvents(
+    registrations,
+    config.pinnedDivisionEventTypes,
+    config.heldPinnedEvents,
+  );
   if (pinnedCount > 0) {
-    warnings.push(`${pinnedCount} registration(s) are pinned to specific divisions and will be excluded from auto-categorization. Run "Restore pinned" to re-include them.`);
+    warnings.push(`${pinnedCount} registration(s) are pinned to specific divisions; their pinned event will be excluded from auto-categorization. Run "Restore pinned" to re-include them.`);
   }
 
   const partitioned = partitionRegistrationsForCategorization(unpinned);
@@ -161,14 +255,16 @@ export function previewCategorization(
   warnings.push(...partitioned.warnings);
 
   const allGroups: DivisionGroup[] = [];
+  const dropped = createDroppedCollector();
 
   // Process patterns registrations
-  const patternsGroups = categorizeByEvent(patternsRegs, 'patterns', config);
+  const patternsGroups = categorizeByEvent(patternsRegs, 'patterns', config, dropped);
   allGroups.push(...patternsGroups);
 
   // Process sparring registrations (includes weight class)
-  const sparringGroups = categorizeByEvent(sparringRegs, 'sparring', config);
+  const sparringGroups = categorizeByEvent(sparringRegs, 'sparring', config, dropped);
   allGroups.push(...sparringGroups);
+  warnings.push(...droppedWarnings(dropped));
 
   // Split large divisions
   let finalGroups: DivisionGroup[] = [];
@@ -249,8 +345,8 @@ export async function autoCategorize(
 ): Promise<CategorizationResult> {
   const warnings: string[] = [];
 
-  // v2: skip registrations manually pinned to a specific division
-  const unpinned = registrations.filter((r) => !r.manualDivisionId);
+  // v2: a registration pinned to a specific division is excluded from
+  // that division's event only. Pinned divisions are kept as-is.
   const pinnedDivisionIds = Array.from(
     new Set(
       registrations
@@ -258,9 +354,24 @@ export async function autoCategorize(
         .filter((divisionId): divisionId is string => Boolean(divisionId))
     )
   );
-  const pinnedCount = registrations.length - unpinned.length;
+  let pinnedDivisionEventTypes = config.pinnedDivisionEventTypes;
+  if (!pinnedDivisionEventTypes && pinnedDivisionIds.length > 0) {
+    const pinnedDivisions = await prisma.division.findMany({
+      where: { tournamentId, id: { in: pinnedDivisionIds } },
+      select: { id: true, eventType: true },
+    });
+    pinnedDivisionEventTypes = Object.fromEntries(
+      pinnedDivisions.map((division) => [division.id, division.eventType])
+    );
+  }
+  const heldPinnedEvents = config.heldPinnedEvents ?? await loadHeldPinnedEvents(prisma, pinnedDivisionIds);
+  const { registrations: unpinned, pinnedCount } = excludePinnedEvents(
+    registrations,
+    pinnedDivisionEventTypes,
+    heldPinnedEvents,
+  );
   if (pinnedCount > 0) {
-    warnings.push(`${pinnedCount} registration(s) are pinned to specific divisions and were excluded from auto-categorization.`);
+    warnings.push(`${pinnedCount} registration(s) are pinned to specific divisions; their pinned event was excluded from auto-categorization.`);
   }
 
   const partitioned = partitionRegistrationsForCategorization(unpinned);
@@ -268,14 +379,16 @@ export async function autoCategorize(
   warnings.push(...partitioned.warnings);
 
   const allGroups: DivisionGroup[] = [];
+  const dropped = createDroppedCollector();
 
   // Process patterns registrations
-  const patternsGroups = categorizeByEvent(patternsRegs, 'patterns', config);
+  const patternsGroups = categorizeByEvent(patternsRegs, 'patterns', config, dropped);
   allGroups.push(...patternsGroups);
 
   // Process sparring registrations (includes weight class)
-  const sparringGroups = categorizeByEvent(sparringRegs, 'sparring', config);
+  const sparringGroups = categorizeByEvent(sparringRegs, 'sparring', config, dropped);
   allGroups.push(...sparringGroups);
+  warnings.push(...droppedWarnings(dropped));
 
   // Split large divisions
   let finalGroups: DivisionGroup[] = [];
@@ -369,7 +482,8 @@ export async function autoCategorize(
 function categorizeByEvent(
   registrations: RegistrationWithCompetitor[],
   eventType: 'patterns' | 'sparring',
-  config: CategorizationConfig
+  config: CategorizationConfig,
+  dropped: DroppedRegistrations = createDroppedCollector()
 ): DivisionGroup[] {
   const groups: DivisionGroup[] = [];
 
@@ -379,13 +493,13 @@ function categorizeByEvent(
 
   // Process Black Belt
   if (bbRegs.length > 0) {
-    const bbGroups = categorizeBeltLevel(bbRegs, 'BB', eventType, config, config.eventTypeLabels);
+    const bbGroups = categorizeBeltLevel(bbRegs, 'BB', eventType, config, config.eventTypeLabels, dropped);
     groups.push(...bbGroups);
   }
 
   // Process Colored Belt
   if (cbRegs.length > 0) {
-    const cbGroups = categorizeBeltLevel(cbRegs, 'CB', eventType, config, config.eventTypeLabels);
+    const cbGroups = categorizeBeltLevel(cbRegs, 'CB', eventType, config, config.eventTypeLabels, dropped);
     groups.push(...cbGroups);
   }
 
@@ -397,7 +511,8 @@ function categorizeBeltLevel(
   beltLevel: 'BB' | 'CB',
   eventType: 'patterns' | 'sparring',
   config: CategorizationConfig,
-  eventTypeLabels?: { patterns: string; sparring: string }
+  eventTypeLabels: { patterns: string; sparring: string } | undefined,
+  dropped: DroppedRegistrations
 ): DivisionGroup[] {
   const groups: DivisionGroup[] = [];
   const rules = config.rules ?? DEFAULT_TOURNAMENT_RULES;
@@ -405,6 +520,11 @@ function categorizeBeltLevel(
   // Split by gender (support both 'M'/'F' and 'male'/'female' formats)
   const males = registrations.filter((r) => r.competitor.gender === 'male' || r.competitor.gender === 'M');
   const females = registrations.filter((r) => r.competitor.gender === 'female' || r.competitor.gender === 'F');
+  for (const registration of registrations) {
+    if (!males.includes(registration) && !females.includes(registration)) {
+      dropped.noGender.add(registration.id);
+    }
+  }
 
   for (const [gender, genderRegs] of [
     ['M', males],
@@ -425,6 +545,9 @@ function categorizeBeltLevel(
     const bandByRegistration = new Map(
       genderRegs.map((r) => [r.id, resolveAgeBand(r, ageGroups, config)] as const)
     );
+    for (const [registrationId, band] of bandByRegistration) {
+      if (!band) dropped.noAgeBand.add(registrationId);
+    }
 
     for (const ageGroup of ageGroups) {
       const ageRegs = genderRegs.filter((r) => bandByRegistration.get(r.id) === ageGroup);
@@ -434,7 +557,7 @@ function categorizeBeltLevel(
       if (beltLevel === 'BB') {
         // For BB, split by dan rank for patterns
         if (eventType === 'patterns') {
-          const danGroups = groupByDanRank(ageRegs);
+          const danGroups = groupByDanRank(ageRegs, dropped);
           for (const danGroup of danGroups) {
             groups.push(
               createDivisionGroup(
@@ -569,30 +692,42 @@ export function resolveAgeBand(
   return standard;
 }
 
-function groupByDanRank(
-  registrations: RegistrationWithCompetitor[]
+export function groupByDanRank(
+  registrations: RegistrationWithCompetitor[],
+  dropped: DroppedRegistrations = createDroppedCollector()
 ): Array<{ danMin: number; danMax: number; registrations: RegistrationWithCompetitor[] }> {
   const groups: Array<{ danMin: number; danMax: number; registrations: RegistrationWithCompetitor[] }> = [];
+  const danOf = (r: RegistrationWithCompetitor) => r.competitor.danRank || 1;
 
-  // Common dan groupings
-  const danGroupings = [
+  // Common dan groupings. The top group is open-ended so 7th dan and
+  // above (competitors allow up to 10) are not silently dropped; it is
+  // still labelled "4th-6th" unless a higher dan is actually present.
+  const danGroupings: Array<{ min: number; max: number; labelMax?: number }> = [
     { min: 1, max: 2 },
     { min: 3, max: 3 },
-    { min: 4, max: 6 },
+    { min: 4, max: Number.POSITIVE_INFINITY, labelMax: 6 },
   ];
 
   for (const danGroup of danGroupings) {
     const regs = registrations.filter((r) => {
-      const dan = r.competitor.danRank || 1;
+      const dan = danOf(r);
       return dan >= danGroup.min && dan <= danGroup.max;
     });
 
     if (regs.length > 0) {
       groups.push({
         danMin: danGroup.min,
-        danMax: danGroup.max,
+        danMax: Number.isFinite(danGroup.max)
+          ? danGroup.max
+          : Math.max(danGroup.labelMax ?? danGroup.min, ...regs.map(danOf)),
         registrations: regs,
       });
+    }
+  }
+
+  for (const registration of registrations) {
+    if (!groups.some((group) => group.registrations.includes(registration))) {
+      dropped.noDanGroup.add(registration.id);
     }
   }
 
@@ -780,6 +915,8 @@ function splitDivision(
   config?: CategorizationConfig
 ): DivisionGroup[] {
   const count = group.registrations.length;
+  // A non-positive threshold would make numDivisions negative or infinite.
+  if (!(threshold >= 1) || count === 0) return [group];
   const numDivisions = Math.ceil(count / threshold);
   const perDivision = Math.ceil(count / numDivisions);
 
@@ -944,13 +1081,14 @@ function smartSplitDivision(
 /**
  * Smart merging of small adjacent divisions
  */
-function smartMergeDivisions(
+export function smartMergeDivisions(
   groups: DivisionGroup[],
   config: CategorizationConfig
 ): DivisionGroup[] {
   if (!config.enableSmartMerging) return groups;
 
-  const minSize = DIVISION_SIZE_CONFIG.minSize;
+  const minSize =
+    config.minDivisionSize ?? config.rules?.divisions.minDivisionSize ?? DIVISION_SIZE_CONFIG.minSize;
   const merged: DivisionGroup[] = [];
   const processed = new Set<number>();
 
@@ -982,13 +1120,18 @@ function smartMergeDivisions(
         }
       }
 
-      // Check previous group if no next candidate
-      if (!mergeCandidate && i > 0 && !processed.has(i - 1)) {
-        const prev = sorted[i - 1];
-        // Only merge with previous if it's also small
-        if (prev.registrations.length < minSize && canMerge(prev, current)) {
-          mergeCandidate = prev;
-          mergeIndex = i - 1;
+      // No next candidate (e.g. the trailing division of its event):
+      // fold it into the previous output division. Index i - 1 is
+      // always processed by now, so merge into its output entry
+      // (possibly itself a merge) in place.
+      if (!mergeCandidate && merged.length > 0) {
+        const prev = merged[merged.length - 1];
+        // Don't undo a split: stay within the division threshold.
+        const combined = prev.registrations.length + current.registrations.length;
+        if (combined <= config.divisionThreshold && canMerge(prev, current)) {
+          merged[merged.length - 1] = mergeTwoDivisions(prev, current, config.eventTypeLabels);
+          processed.add(i);
+          continue;
         }
       }
 

@@ -10,8 +10,22 @@ import { decodeStrictBase64, sniffRasterImageType, SAFE_RASTER_EXTENSIONS } from
 
 const router = Router();
 
+/**
+ * Where uploaded logos are written and served from. `LOGO_STORAGE_PATH`
+ * overrides it; otherwise production uses `/app/data/logos` (created
+ * node-owned and declared a VOLUME in the Dockerfile — mount persistent
+ * storage there or logos are lost on redeploy) and development uses
+ * `./data/logos` under the working directory.
+ */
+export function resolveLogoStoragePath(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = env.LOGO_STORAGE_PATH?.trim();
+  if (configured) return path.resolve(configured);
+  if (env.NODE_ENV === 'production') return '/app/data/logos';
+  return path.resolve(process.cwd(), 'data', 'logos');
+}
+
 // Logo storage configuration
-const LOGO_STORAGE_PATH = '/opt/cursor/logos';
+export const LOGO_STORAGE_PATH = resolveLogoStoragePath();
 // Raster formats only. SVG is refused: it is an active document that can
 // run script / navigate when opened directly from /logos on the app
 // origin. The stored type is always the one sniffed from the bytes.

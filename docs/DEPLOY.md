@@ -28,6 +28,14 @@ Every purge run, real or dry, is recorded in the `RetentionPurgeRun` table (cuto
 - `PRIVACY_NOTICE_URL`, `TOURNAMENT_TERMS_URL`: links shown on the registration form; default to the in-app `/legal/privacy` and `/legal/terms`. Production refuses to start if either is set to a non-HTTPS absolute URL
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_STARTER_PRICE_ID`, `STRIPE_PRO_PRICE_ID`: configure all four to enable self-service billing; omit them for a managed-invoice pilot
 
+- `LOGO_STORAGE_PATH`: directory for uploaded organization logos (default `/app/data/logos` in the image). The image runs as `node` with `/app/data` created node-owned and declared a `VOLUME`; mount persistent storage there (the VPS scripts mount the named volumes `bowin-production-data` / `bowin-staging-data` / `bowin-demo-data`, `docker-compose.yml` mounts `app_data`). Without a persistent mount, logos disappear on every redeploy.
+- `SENTRY_DSN`, `SENTRY_ENVIRONMENT`: optional server error tracking (Sentry/GlitchTip)
+- `STRIPE_PER_EVENT_SMALL_PRICE_ID`, `STRIPE_PER_EVENT_MEDIUM_PRICE_ID`, `STRIPE_PER_EVENT_LARGE_PRICE_ID`: optional one-time per-event price IDs
+
+The VPS scripts rebuild the container env from an allowlist (`ALLOWED_ENV` in each `scripts/deploy-*.sh`) of the previous container's variables; a runtime variable missing from that list is silently dropped on the next deploy, so add new ones there too.
+
+**Build-time (client) variables.** Vite inlines `VITE_*` values into the bundle during `docker build`, so they are Docker build arguments, not runtime variables: `VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64`, `VITE_SENTRY_DSN`, `VITE_SENTRY_ENVIRONMENT`, `VITE_CRISP_WEBSITE_ID`, `VITE_POSTHOG_KEY`, `VITE_TUTORIAL_QUICKSTART_URL`, `VITE_TUTORIAL_IMPORT_URL`, `VITE_TUTORIAL_RUN_EVENT_URL`. Setting them only at container runtime has no effect; changing one requires a rebuild.
+
 Keep `ENABLE_DEV_AUTH`, `ENABLE_DEMO_LOGIN`, `ENABLE_E2E_AUTH_BYPASS`, and `RATE_LIMIT_DISABLED` unset in production. `POSTGRES_PASSWORD` is mandatory when using `docker-compose.yml`.
 
 ### Isolated public showcase
@@ -172,8 +180,9 @@ The image is self-contained: it serves the SPA and `/api` from one Node process,
 - Build pack: **Dockerfile** (repository root). Port: **3001** (or set `PORT` and use that).
 - Branch: `main`. Enable automatic deploys only after branch protection requires the `Build` check, so a red commit can never reach production.
 - Health check path: `/api/health/ready` (returns 503 until the database answers).
-- Build variable: `VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64` (public half of the offline key pair; baked into the client bundle). Enable Coolify's "Include source commit in build" so `SOURCE_COMMIT` reaches the build; `/api/health` then reports the running revision (or pass `BUILD_SHA` yourself).
+- Build variables (Coolify: tick "Build Variable" so they reach `docker build`): `VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64` (public half of the offline key pair; baked into the client bundle), and optionally `VITE_SENTRY_DSN`, `VITE_SENTRY_ENVIRONMENT`, `VITE_CRISP_WEBSITE_ID`, `VITE_TUTORIAL_QUICKSTART_URL`, `VITE_TUTORIAL_IMPORT_URL`, `VITE_TUTORIAL_RUN_EVENT_URL` (see [build-time variables](#required-configuration)). Enable Coolify's "Include source commit in build" so `SOURCE_COMMIT` reaches the build; `/api/health` then reports the running revision (or pass `BUILD_SHA` yourself).
 - Runtime variables: everything under [Required configuration](#required-configuration), plus `OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64`. Mark secrets as secret; never commit them.
+- Persistent storage: add a volume mount with destination **`/app/data`** (uploaded organization logos live in `/app/data/logos`, `LOGO_STORAGE_PATH`). Without it the upload directory is ephemeral and every redeploy loses the logos.
 
 **Database**
 - A Coolify PostgreSQL 16 resource on the same network. Set `DATABASE_URL` to its internal connection string.

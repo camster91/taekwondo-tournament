@@ -21,7 +21,8 @@ vi.mock('../middleware/auth.js', async (importOriginal) => ({
   requireRole: () => (_req: Request, _res: Response, next: NextFunction) => next(),
 }));
 
-import logoRouter, { LOGO_RESPONSE_HEADERS, setLogoResponseHeaders } from './organization-logo.js';
+import path from 'path';
+import logoRouter, { LOGO_RESPONSE_HEADERS, LOGO_STORAGE_PATH, resolveLogoStoragePath, setLogoResponseHeaders } from './organization-logo.js';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52]);
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
@@ -136,5 +137,24 @@ describe('setLogoResponseHeaders', () => {
     expect(csp).toContain('sandbox');
     expect(csp).not.toMatch(/script-src/);
     expect(Object.keys(LOGO_RESPONSE_HEADERS)).toHaveLength(2);
+  });
+});
+
+describe('resolveLogoStoragePath', () => {
+  it('honours LOGO_STORAGE_PATH', () => {
+    expect(resolveLogoStoragePath({ LOGO_STORAGE_PATH: '/srv/bowin/logos', NODE_ENV: 'production' })).toBe('/srv/bowin/logos');
+  });
+
+  it('defaults to the node-owned image volume in production', () => {
+    expect(resolveLogoStoragePath({ NODE_ENV: 'production' })).toBe('/app/data/logos');
+    expect(resolveLogoStoragePath({ NODE_ENV: 'production', LOGO_STORAGE_PATH: '  ' })).toBe('/app/data/logos');
+  });
+
+  it('defaults to a local data directory in development', () => {
+    expect(resolveLogoStoragePath({ NODE_ENV: 'development' })).toBe(path.resolve(process.cwd(), 'data', 'logos'));
+  });
+
+  it('never uses the old hard-coded /opt/cursor path', () => {
+    expect(LOGO_STORAGE_PATH).not.toContain('/opt/cursor');
   });
 });

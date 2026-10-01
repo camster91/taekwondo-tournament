@@ -747,12 +747,13 @@ Known limits:
 | `PUBLIC_APP_URL` | yes in prod | base URL for links in emails |
 | `METRICS_TOKEN` | yes in prod | bearer token for `/api/internal/metrics` |
 | `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `EMAIL_FROM_ADDRESS` | yes for email | without the key, auth runs in dev mode |
+| `LOGO_STORAGE_PATH` | no | uploaded org logos; default `/app/data/logos` in prod (image `VOLUME /app/data`, mount persistent storage), `./data/logos` in dev |
 | `OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64` + build arg `VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64` | for offline scorekeeping | Ed25519 pair; see DEPLOY.md |
 | `ADMIN_SETUP_KEY` | first run only | enables `setup-admin`; remove afterwards |
 | `REGISTRATION_CONSENT_VERSION`, `PRIVACY_NOTICE_URL`, `TOURNAMENT_TERMS_URL` | no | consent stamp and legal links (default to `/legal/*`) |
 | `RETENTION_PURGE_ENABLED`, `RETENTION_PURGE_DRY_RUN`, `SOFT_DELETE_RETENTION_DAYS` | no | soft-delete purge, off by default |
 | `STRIPE_*` | no | self-service billing; omit for manual plans |
-| `SENTRY_DSN`, `VITE_SENTRY_DSN` | no | error tracking (Sentry/GlitchTip) |
+| `SENTRY_DSN`, `VITE_SENTRY_DSN` | no | error tracking (Sentry/GlitchTip). Every `VITE_*` var is a Docker build arg (baked into the bundle), not a runtime var |
 | `OPENAI_API_KEY` | no | support assistant answers; without it support tickets still work |
 | `BUILD_SHA` | no (build arg) | commit reported by `/api/health` |
 | `ENABLE_DEMO_LOGIN` + `DEMO_ISOLATED_DATA` | no | isolated demo environments only |

@@ -14,7 +14,7 @@ name: Build and Push Image
 #   - version tags (v*): :<version> and :<version>-<sha>.
 #   - Image: ghcr.io/camster91/<repo>
 #   - Multi-arch: linux/amd64 + linux/arm64 (Raspberry Pi, Apple Silicon hosts)
-#   - Buildx cache pushed to GHCR type=cache (saves ~3min per build)
+#   - Buildx layer cache in the GitHub Actions cache (type=gha)
 #   - SBOM + provenance attestations enabled (for supply-chain trust)
 #
 # IMPORTANT: VPS production deployment (scripts/deploy-production.sh) builds
@@ -66,8 +66,12 @@ permissions:
   id-token: write
   attestations: write
 
+# A workflow_run always has github.ref = main, so keying on the ref alone let
+# a newer CI success cancel the publish of an earlier, different commit
+# (leaving that commit with no image). Key on the commit being built: only
+# a duplicate run for the same commit is cancelled.
 concurrency:
-  group: build-${{ github.ref }}
+  group: build-${{ github.ref }}-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -121,15 +125,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.ref_name }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-main
-            ${{ runner.os }}-buildx-
-
       - name: Build and push
         uses: docker/build-push-action@v6
         id: build
@@ -138,6 +133,9 @@ jobs:
           file: ${{ inputs.dockerfile || 'Dockerfile' }}
           build-args: |
             VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64=${{ vars.OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64 }}
+            VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
+            VITE_SENTRY_ENVIRONMENT=${{ vars.VITE_SENTRY_ENVIRONMENT }}
+            VITE_CRISP_WEBSITE_ID=${{ vars.VITE_CRISP_WEBSITE_ID }}
             BUILD_SHA=${{ env.SOURCE_SHA }}
           platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
           push: true
@@ -146,8 +144,11 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}-${{ steps.meta.outputs.sha }}
             ${{ startsWith(github.ref, 'refs/tags/') && format('{0}:{1}', steps.meta.outputs.image, steps.meta.outputs.tag) || '' }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          # GitHub Actions cache backend: buildx manages and rotates it, so
+          # the cache cannot grow unbounded or go stale like a local
+          # cache-to directory that is never moved back into place.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           provenance: true
           sbom: true
           outputs: type=image,name=${{ steps.meta.outputs.image }},push=true

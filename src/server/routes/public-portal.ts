@@ -16,6 +16,7 @@ import { normalizeBelt } from '../../shared/constants/belts.js';
 import {
   buildRegistrationPatch,
   buildRegistrationConsent,
+  parseRegistrationMeasurements,
   registrationLegalConfigFromEnv,
   type RegistrationConsentResult,
 } from './public-validation.js';
@@ -370,27 +371,13 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
   if (parentEmail && parentEmail.length > 200) errors.push('Parent email must be 200 characters or fewer');
   if (parentPhone && parentPhone.length > 50) errors.push('Parent phone must be 50 characters or fewer');
 
-  if (sparring && !weightLbs) {
+  // Coerce dan rank / height / weight to numbers: a form may send them as
+  // strings, and writing a string into the Int/Float columns is a 500.
+  const measurements = parseRegistrationMeasurements({ danRank, heightInches, weightLbs });
+  if (sparring && !measurements.values.weightLbs && !measurements.errors.some((e) => e.startsWith('Weight'))) {
     errors.push('Weight is required for sparring registration');
   }
-  if (weightLbs != null) {
-    const w = Number(weightLbs);
-    if (!Number.isFinite(w) || w < 0 || w > 500) {
-      errors.push('Weight must be a number between 0 and 500');
-    }
-  }
-  if (heightInches != null) {
-    const h = Number(heightInches);
-    if (!Number.isFinite(h) || h < 0 || h > 108) {
-      errors.push('Height must be a number between 0 and 108 inches');
-    }
-  }
-  if (danRank != null) {
-    const d = Number(danRank);
-    if (!Number.isInteger(d) || d < 0 || d > 9) {
-      errors.push('Dan rank must be an integer between 0 and 9');
-    }
-  }
+  errors.push(...measurements.errors);
 
   if (errors.length > 0) {
     return res.status(400).json({ error: 'Validation failed', details: errors });
@@ -452,16 +439,16 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
           gender,
           dateOfBirth: dob,
           belt: normalizedBelt,
-          danRank: normalizedBelt === 'Black' ? (danRank || 1) : null,
-          heightInches: heightInches || null,
-          weightLbs: weightLbs || null,
+          danRank: normalizedBelt === 'Black' ? (measurements.values.danRank ?? 1) : null,
+          heightInches: measurements.values.heightInches,
+          weightLbs: measurements.values.weightLbs,
           schoolDojang: schoolDojang?.trim() || null,
           specialNeeds: specialNeeds?.trim() || null,
         },
         registration: {
           patterns: patterns || false,
           sparring: sparring || false,
-          weightAtRegistration: weightLbs || null,
+          weightAtRegistration: measurements.values.weightLbs,
           ageAtTournament,
           parentName: parentName?.trim() || null,
           parentEmail: parentEmail?.trim() || null,

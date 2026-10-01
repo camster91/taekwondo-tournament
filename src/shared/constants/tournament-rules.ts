@@ -212,6 +212,23 @@ export const DEFAULT_TOURNAMENT_RULES: TournamentRules = {
 };
 
 // ─── Type-safe accessors ────────────────────────────────────────────────
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+/**
+ * Division sizes drive the split/merge loops; a stored 0 or negative value
+ * would hang or crash categorization. Clamp to the rules editor's ranges.
+ */
+function sanitizeDivisionRules(divisions: DivisionRules): DivisionRules {
+  return {
+    ...divisions,
+    minDivisionSize: clampInt(divisions.minDivisionSize, 1, 10, DEFAULT_DIVISION_RULES.minDivisionSize),
+    maxDivisionSize: clampInt(divisions.maxDivisionSize, 4, 64, DEFAULT_DIVISION_RULES.maxDivisionSize),
+  };
+}
+
 export function parseTournamentRules(json: string | null | undefined): TournamentRules {
   if (!json) return DEFAULT_TOURNAMENT_RULES;
   try {
@@ -223,7 +240,7 @@ export function parseTournamentRules(json: string | null | undefined): Tournamen
       beltGroups: parsed.beltGroups ?? DEFAULT_BELT_GROUPS,
       ageBands: { ...DEFAULT_AGE_BAND_CONFIG, ...parsed.ageBands },
       weights: { ...DEFAULT_WEIGHT_CONFIG, ...parsed.weights },
-      divisions: { ...DEFAULT_DIVISION_RULES, ...parsed.divisions },
+      divisions: sanitizeDivisionRules({ ...DEFAULT_DIVISION_RULES, ...parsed.divisions }),
       brackets: { ...DEFAULT_BRACKET_RULES, ...parsed.brackets },
       events: {
         patterns: { ...DEFAULT_EVENT_RULES.patterns, ...parsed.events?.patterns },
