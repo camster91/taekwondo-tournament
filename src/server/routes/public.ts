@@ -1099,9 +1099,27 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
   // withdrawn registration was itself waitlisted).
   if (registration.tournament.status === 'registration') {
     try {
-      const { promotedRegistrationId } = await promoteNextWaitlisted(prisma, registration.tournamentId);
+      const { promotedRegistrationId, promotion } = await promoteNextWaitlisted(prisma, registration.tournamentId);
       if (promotedRegistrationId) {
         console.log(`[registration-manage-withdraw] Promoted waitlisted registration ${promotedRegistrationId.slice(0, 8)}`);
+      }
+      // Tell the promoted family (same email as a director's manual promote):
+      // their spot, the rotated management link, and any entry fee now due.
+      if (promotion?.parentEmail && isEmailConfigured()) {
+        const { waitlistPromotionEmail } = await import('../services/email-templates.js');
+        const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(promotion.managementToken)}`;
+        const { subject, html } = waitlistPromotionEmail({
+          competitorName: promotion.competitorName,
+          tournamentName: promotion.tournamentName,
+          tournamentDate: promotion.tournamentDate,
+          confirmationCode: promotion.registrationId.slice(0, 8),
+          managementUrl,
+          organizerBrandName: promotion.organizerBrandName || undefined,
+          paymentDueCents: promotion.paymentDueCents,
+        });
+        sendEmail(promotion.parentEmail, subject, html).catch((err) => {
+          console.error('[registration-manage-withdraw] promotion email failed:', err);
+        });
       }
     } catch (err) {
       console.error('[registration-manage-withdraw] waitlist promotion failed:', err);

@@ -101,13 +101,23 @@ describe('waitlisted registrations owe nothing', () => {
       $queryRaw: vi.fn(async () => [{ id: 't-1', maxCapacity: 2, waitlistEnabled: true }]),
       registration: {
         count: vi.fn(async () => 1),
-        findFirst: vi.fn(async () => ({ id: 'r-9', paymentStatus: 'not_required', tournament: { settings: FEE_SETTINGS } })),
+        findFirst: vi.fn(async () => ({
+          id: 'r-9',
+          paymentStatus: 'not_required',
+          paymentAmountCents: null,
+          parentEmail: null,
+          competitor: { firstName: 'Kim', lastName: 'Lee' },
+          tournament: { settings: FEE_SETTINGS, name: 'Open', date: new Date('2027-01-01'), brandName: null, organization: null },
+        })),
         findMany: vi.fn(async () => []),
         update,
       },
     };
     const prisma = { $transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) } as unknown as PrismaClient;
-    await expect(promoteNextWaitlisted(prisma, 't-1')).resolves.toEqual({ promotedRegistrationId: 'r-9' });
+    await expect(promoteNextWaitlisted(prisma, 't-1')).resolves.toMatchObject({
+      promotedRegistrationId: 'r-9',
+      promotion: { registrationId: 'r-9', paymentDueCents: 2500 },
+    });
     expect(update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ waitlistStatus: 'promoted', paymentStatus: 'pending', paymentAmountCents: 2500 }),
     }));

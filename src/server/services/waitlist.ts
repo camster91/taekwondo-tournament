@@ -1,5 +1,10 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { promotedRegistrationPaymentData } from './public-registration.js';
+import {
+  generateManagementToken,
+  getManagementTokenExpiry,
+  hashManagementToken,
+} from '../utils/registration-management-token.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -172,23 +177,43 @@ export async function renumberWaitlist(
   }
 }
 
+/** What the caller needs to email a family whose entry was auto-promoted. */
+export interface WaitlistPromotionNotice {
+  registrationId: string;
+  /** Raw management token; never persisted, only emailed. */
+  managementToken: string;
+  parentEmail: string | null;
+  competitorName: string;
+  tournamentName: string;
+  tournamentDate: Date;
+  organizerBrandName: string | null;
+  /** Entry fee now due (cents), or null when nothing is owed. */
+  paymentDueCents: number | null;
+}
+
 /**
  * Promote the lowest-positioned waitlisted registration if a capacity slot is
  * free, then renumber the remaining waitlist. Runs in its own transaction
  * holding the tournament row lock so it cannot race new registrations.
  *
+ * The promoted registration's management token is rotated in the same
+ * update (only its digest is stored), exactly like a director's manual
+ * promotion, so the family can be emailed a working management link.
+ *
  * Returns the promoted registration id, or null when nothing was promoted
- * (no waitlist, or still at capacity).
+ * (no waitlist, or still at capacity), plus what the caller needs to send
+ * the promotion email after the transaction commits.
  */
 export async function promoteNextWaitlisted(
   prisma: PrismaClient,
   tournamentId: string,
-): Promise<{ promotedRegistrationId: string | null }> {
+): Promise<{ promotedRegistrationId: string | null; promotion: WaitlistPromotionNotice | null }> {
   return prisma.$transaction(async (tx) => {
     const tournament = await lockTournamentForCapacity(tx, tournamentId);
-    if (!tournament) return { promotedRegistrationId: null };
+    if (!tournament) return { promotedRegistrationId: null, promotion: null };
 
     let promotedRegistrationId: string | null = null;
+    let promotion: WaitlistPromotionNotice | null = null;
     const activeCount = await countCapacityHolders(tx, tournamentId);
     const hasFreeSlot = !tournament.maxCapacity || activeCount < tournament.maxCapacity;
 
@@ -196,25 +221,59 @@ export async function promoteNextWaitlisted(
       const next = await tx.registration.findFirst({
         where: { tournamentId, waitlistStatus: 'waitlisted' },
         orderBy: [{ waitlistPosition: 'asc' }, { createdAt: 'asc' }],
-        select: { id: true, paymentStatus: true, tournament: { select: { settings: true } } },
+        select: {
+          id: true,
+          paymentStatus: true,
+          paymentAmountCents: true,
+          parentEmail: true,
+          competitor: { select: { firstName: true, lastName: true } },
+          tournament: {
+            select: {
+              settings: true,
+              name: true,
+              date: true,
+              brandName: true,
+              organization: { select: { brandName: true } },
+            },
+          },
+        },
       });
       if (next) {
+        // The entry fee becomes due now that the registrant holds a spot.
+        const payment = promotedRegistrationPaymentData(next.tournament.settings, next.paymentStatus);
+        const managementToken = generateManagementToken();
         await tx.registration.update({
           where: { id: next.id },
           data: {
             waitlistStatus: 'promoted',
             waitlistPosition: null,
             waitlistPromotedAt: new Date(),
-            // The entry fee becomes due now that the registrant holds a spot.
-            ...promotedRegistrationPaymentData(next.tournament.settings, next.paymentStatus),
+            managementTokenHash: hashManagementToken(managementToken),
+            managementTokenExpiresAt: getManagementTokenExpiry(),
+            managementTokenRevokedAt: null,
+            ...payment,
           },
         });
         promotedRegistrationId = next.id;
+        promotion = {
+          registrationId: next.id,
+          managementToken,
+          parentEmail: next.parentEmail,
+          competitorName: `${next.competitor.firstName} ${next.competitor.lastName}`,
+          tournamentName: next.tournament.name,
+          tournamentDate: next.tournament.date,
+          organizerBrandName: next.tournament.brandName || next.tournament.organization?.brandName || null,
+          paymentDueCents: 'paymentAmountCents' in payment
+            ? payment.paymentAmountCents
+            : next.paymentStatus === 'pending' || next.paymentStatus === 'failed'
+              ? next.paymentAmountCents
+              : null,
+        };
       }
     }
 
     await renumberWaitlist(tx, tournamentId);
-    return { promotedRegistrationId };
+    return { promotedRegistrationId, promotion };
   });
 }
 
