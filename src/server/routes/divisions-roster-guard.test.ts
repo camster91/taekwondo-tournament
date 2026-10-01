@@ -18,6 +18,7 @@ const prisma = {
   division: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   divisionAssignment: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
   registration: { findUnique: vi.fn() },
+  bracket: { deleteMany: vi.fn() },
   $transaction: vi.fn(),
 };
 
@@ -37,6 +38,7 @@ const drawn = [{ id: 'd-src', name: 'Cadet Sparring', bracket: { _count: { match
 beforeEach(() => {
   vi.clearAllMocks();
   prisma.division.findMany.mockResolvedValue([]);
+  prisma.bracket.deleteMany.mockResolvedValue({ count: 0 });
   prisma.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => unknown) => fn(prisma));
 });
 
@@ -59,6 +61,19 @@ describe('roster changes under a drawn bracket (S6)', () => {
     const res = await request(makeApp()).delete('/api/divisions/d-src/assign/a-1');
     expect(res.status).toBe(204);
     expect(prisma.divisionAssignment.delete).toHaveBeenCalledWith({ where: { id: 'a-1' } });
+    // An unplayed bracket (no started match) is cleared with the change.
+    expect(prisma.bracket.deleteMany).toHaveBeenCalledWith({ where: { divisionId: { in: ['d-src'] } } });
+  });
+
+  it('only a started bracket (a real match in progress or completed) blocks the change', async () => {
+    prisma.divisionAssignment.findUnique.mockResolvedValue({ divisionId: 'd-src', division: { tournamentId: 't-1' } });
+    await request(makeApp()).delete('/api/divisions/d-src/assign/a-1');
+    const where = prisma.division.findMany.mock.calls[0][0].where;
+    expect(where.bracket.is.matches.some).toEqual({
+      status: { in: ['in_progress', 'completed'] },
+      competitor1Id: { not: null },
+      competitor2Id: { not: null },
+    });
   });
 
   it('POST /:id/move checks both source and target divisions for brackets', async () => {
@@ -79,6 +94,7 @@ describe('roster changes under a drawn bracket (S6)', () => {
     const res = await request(makeApp()).post('/api/divisions/d-src/move').send({ assignmentId: 'a-1', toDivisionId: 'd-dst' });
     expect(res.status).toBe(200);
     expect(prisma.divisionAssignment.update).toHaveBeenCalled();
+    expect(prisma.bracket.deleteMany).toHaveBeenCalledWith({ where: { divisionId: { in: ['d-src', 'd-dst'] } } });
   });
 
   it('POST /:id/split refuses a division with a bracket', async () => {

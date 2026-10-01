@@ -436,7 +436,7 @@ export default function BracketEditor() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
       queryClient.invalidateQueries({ queryKey: ['unassigned-registrations', tournamentId, divisionId] });
-      addToast?.('Removed from division. Regenerate bracket if needed.', 'success');
+      addToast?.('Removed from division. Any unplayed bracket was cleared; generate it again.', 'success');
     },
     onError: (error: Error) => {
       addToast(error.message || 'Remove failed', 'error');
@@ -790,7 +790,7 @@ export default function BracketEditor() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm(`Remove ${a.registration.competitor.firstName} ${a.registration.competitor.lastName} from this division? Their bracket slot will be freed; regenerate the bracket to refill.`)) {
+                    if (confirm(`Remove ${a.registration.competitor.firstName} ${a.registration.competitor.lastName} from this division? If no match has been played yet, the drawn bracket is cleared and must be generated again.`)) {
                       removeCompetitorMutation.mutate(a.id);
                     }
                   }}
