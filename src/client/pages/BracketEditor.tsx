@@ -377,18 +377,20 @@ export default function BracketEditor() {
     },
   });
 
-  // Pull all the tournament's registrations that AREN'T already
-  // assigned to this division, so the director can drop late entries
-  // into the bracket via the "+ Add" picker.
-  const { data: unassignedData } = useQuery<{ registrations: Array<{ id: string; competitor: Competitor }> }>({
+  // Pull the tournament's registrations that can still be assigned to
+  // this division (entered in its event, not yet in any division of its
+  // event type), so the director can drop late entries into the bracket
+  // via the "+ Add" picker. The endpoint answers with a bare array.
+  const { data: unassignedRegistrations } = useQuery<Array<{ id: string; competitor: Competitor }>>({
     queryKey: ['unassigned-registrations', tournamentId, divisionId],
     queryFn: async () => {
       const r = await fetch(
-        `/api/tournaments/${tournamentId}/registrations?notInDivision=${divisionId}`,
+        `/api/tournaments/${tournamentId}/registrations?notInDivision=${encodeURIComponent(divisionId ?? '')}`,
         { headers: getAuthHeaders() },
       );
-      if (!r.ok) return { registrations: [] };
-      return r.json();
+      if (!r.ok) return [];
+      const body: unknown = await r.json();
+      return Array.isArray(body) ? body : [];
     },
     enabled: !!division && !!tournamentId,
   });
@@ -427,6 +429,8 @@ export default function BracketEditor() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Remove failed (${res.status})`);
       }
+      // DELETE answers 204 No Content: there is no body to parse.
+      if (res.status === 204) return null;
       return res.json();
     },
     onSuccess: () => {
@@ -747,9 +751,9 @@ export default function BracketEditor() {
               <div className="text-xs font-semibold uppercase tracking-wider text-primary-700 dark:text-primary-300 mb-2">
                 Add from this tournament
               </div>
-              {unassignedData?.registrations && unassignedData.registrations.length > 0 ? (
+              {unassignedRegistrations && unassignedRegistrations.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {unassignedData.registrations.map((r) => (
+                  {unassignedRegistrations.map((r) => (
                     <Button
                       key={r.id}
                       size="sm"
@@ -764,7 +768,7 @@ export default function BracketEditor() {
                 </div>
               ) : (
                 <p className="text-xs text-surface-600 dark:text-surface-400">
-                  Every registered competitor is already assigned to a division.
+                  Every competitor entered in this event is already assigned to a division of it.
                 </p>
               )}
             </div>

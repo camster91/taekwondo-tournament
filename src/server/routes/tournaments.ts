@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { recomputeRegistrationAges } from '../services/registration-age.js';
+import { sameEventAssignmentWhere } from '../services/division-assignment-rules.js';
 import { generateSchedule, validateScheduleConfig, DEFAULT_CONFIG, type ScheduleConfig } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
 import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, buildCompetitorAccessFilter, findOrgMembershipAtLevel, checkTournamentAccess, type TournamentRole, type AuthenticatedRequest } from '../middleware/auth.js';
@@ -1225,11 +1226,23 @@ router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer')
     // Ensures check-in sees all completed public registrations (#187).
     waitlistStatus: { in: ['active', 'promoted'] },
   };
-  // `?notInDivision=<id>` returns only registrations that have no
-  // DivisionAssignment for this specific division. Used by the
-  // BracketEditor "Add competitor" picker. Closes H2 from the UI audit.
+  // `?notInDivision=<id>` returns only registrations POST
+  // /api/divisions/:id/assign would accept for that division: entered in
+  // its event and with no assignment in any division of its event type
+  // (same rule as the assign route's 409). Used by the BracketEditor
+  // "Add competitor" picker. Closes H2 from the UI audit.
   if (notInDivision && typeof notInDivision === 'string') {
-    where.assignments = { none: { divisionId: notInDivision } };
+    const target = await prisma.division.findFirst({
+      where: { id: notInDivision, tournamentId: getParam(req.params.id) },
+      select: { eventType: true },
+    });
+    if (!target) {
+      return res.status(404).json({ error: 'Division not found' });
+    }
+    where.assignments = { none: sameEventAssignmentWhere(target.eventType) };
+    if (target.eventType === 'patterns' || target.eventType === 'sparring') {
+      where[target.eventType] = true;
+    }
   }
 
   const registrations = await prisma.registration.findMany({

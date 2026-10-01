@@ -22,6 +22,7 @@ import {
 } from '../middleware/auth.js';
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validate.js';
+import { sameEventAssignmentWhere } from '../services/division-assignment-rules.js';
 
 const router = Router();
 
@@ -646,7 +647,7 @@ router.post('/:id/assign', authenticate, async (req: AuthenticatedRequest, res: 
   // Resolve the parent tournament for the per-tournament check.
   const division = await prisma.division.findUnique({
     where: { id: divisionId },
-    select: { tournamentId: true },
+    select: { tournamentId: true, eventType: true },
   });
   if (!division) {
     return res.status(404).json({ error: 'Division not found' });
@@ -675,17 +676,20 @@ router.post('/:id/assign', authenticate, async (req: AuthenticatedRequest, res: 
   }
 
   // Idempotency check: a registration can only be assigned to ONE
-  // division at a time. Without this, calling POST /:id/assign for
-  // the same registration in different divisions would silently
-  // land the kid in two divisions — the auto-categorization engine
-  // would then count them twice, the bracket generator would create
-  // duplicate match slots, etc.
+  // division per event type. Without this, calling POST /:id/assign
+  // for the same registration in different divisions would silently
+  // land the kid in two divisions of one event — the auto-categorization
+  // engine would then count them twice, the bracket generator would
+  // create duplicate match slots, etc. A registration entered in both
+  // events legitimately holds one patterns and one sparring assignment
+  // (auto-categorization creates exactly that), so only the same event
+  // type conflicts.
   //
   // The schema's @@unique([divisionId, registrationId]) only blocks
   // re-assignment to the SAME division, not different ones — that's
   // a logical constraint this route enforces.
   const existingAssignment = await prisma.divisionAssignment.findFirst({
-    where: { registrationId },
+    where: { registrationId, ...sameEventAssignmentWhere(division.eventType) },
     select: { id: true, divisionId: true, division: { select: { name: true } } },
   });
   if (existingAssignment) {
