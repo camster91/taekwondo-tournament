@@ -587,6 +587,15 @@ export async function resolveTournamentScope(
   const explicitTournamentIds = explicitAccess
     .filter((a) => tournamentRoleLevel(a.role) >= requiredLevel)
     .map((a) => a.tournamentId);
+  // An explicit grant always decides access to its tournament (as in
+  // checkTournamentAccess): one below `minRole` must not be widened back
+  // by the org-membership or legacy-pool branch.
+  const deniedTournamentIds = explicitAccess
+    .filter((a) => tournamentRoleLevel(a.role) < requiredLevel)
+    .map((a) => a.tournamentId);
+  const notDenied: Prisma.TournamentWhereInput = deniedTournamentIds.length > 0
+    ? { id: { notIn: deniedTournamentIds } }
+    : {};
 
   if (orgMemberships.length === 0) {
     // Legacy single-tenant pool: orphan tournaments + explicit grants.
@@ -595,7 +604,7 @@ export async function resolveTournamentScope(
       filter: {
         OR: [
           { id: { in: explicitTournamentIds } },
-          { organizationId: null },
+          { organizationId: null, ...notDenied },
         ],
       },
       legacyPool: true,
@@ -612,7 +621,7 @@ export async function resolveTournamentScope(
     filter: {
       OR: [
         { id: { in: explicitTournamentIds } },
-        { organizationId: { in: orgIds } },
+        { organizationId: { in: orgIds }, ...notDenied },
       ],
     },
     legacyPool: false,

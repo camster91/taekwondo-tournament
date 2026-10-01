@@ -21,6 +21,7 @@ import {
   requireTournamentAccess,
   checkTournamentAccess,
   buildTournamentAccessFilter,
+  resolveTournamentScope,
   buildCompetitorAccessFilter,
   buildCompetitorWriteFilter,
   orgMembershipRoleLevel,
@@ -493,8 +494,59 @@ describe('buildTournamentAccessFilter - no fail-open fallback', () => {
         [{ tournamentId: 't-granted', role: 'director' }, { tournamentId: 't-bad', role: 'godmode' }],
       ) as any,
     );
-    expect(filter).toEqual({ OR: [{ id: { in: ['t-granted'] } }, { organizationId: { in: ['org-1'] } }] });
+    // An unknown-role grant grants nothing and, like in
+    // checkTournamentAccess, still decides that tournament (excluded).
+    expect(filter).toEqual({
+      OR: [
+        { id: { in: ['t-granted'] } },
+        { organizationId: { in: ['org-1'] }, id: { notIn: ['t-bad'] } },
+      ],
+    });
     expect(JSON.stringify(filter)).not.toContain('"organizationId":null');
+  });
+
+  it('an explicit grant below minRole is not widened back by an org membership (mirrors checkTournamentAccess)', async () => {
+    const req = mockReq({ user: { id: 'u', role: 'director' } });
+    const prisma = scopePrisma(
+      [{ organizationId: 'org-1', role: 'owner' }],
+      [{ tournamentId: 't-view-only', role: 'viewer' }],
+    );
+
+    // Viewer level: the grant itself suffices.
+    expect(await resolveTournamentScope(req, prisma as any, 'viewer')).toMatchObject({
+      filter: { OR: [{ id: { in: ['t-view-only'] } }, { organizationId: { in: ['org-1'] } }] },
+    });
+
+    // Director level: checkTournamentAccess returns 403 for t-view-only
+    // (the explicit row wins over the owner membership), so the scope
+    // must exclude it from the org branch too.
+    const directorScope = await resolveTournamentScope(req, prisma as any, 'director');
+    expect(directorScope.filter).toEqual({
+      OR: [
+        { id: { in: [] } },
+        { organizationId: { in: ['org-1'] }, id: { notIn: ['t-view-only'] } },
+      ],
+    });
+
+    const checkPrisma = buildPrismaMock({
+      tournament: { organizationId: 'org-1', deletedAt: null },
+      access: { role: 'viewer' },
+      membership: { role: 'owner' },
+    });
+    const check = await checkTournamentAccess(req, checkPrisma as any, 't-view-only', 'director');
+    expect(check.ok).toBe(false);
+  });
+
+  it('an explicit grant below minRole also excludes a legacy orphan tournament', async () => {
+    const req = mockReq({ user: { id: 'u', role: 'director' } });
+    const scope = await resolveTournamentScope(
+      req,
+      scopePrisma([], [{ tournamentId: 't-orphan', role: 'scorekeeper' }]) as any,
+      'director',
+    );
+    expect(scope.filter).toEqual({
+      OR: [{ id: { in: [] } }, { organizationId: null, id: { notIn: ['t-orphan'] } }],
+    });
   });
 
   it('unauthenticated request matches nothing', async () => {
@@ -570,7 +622,12 @@ describe('buildCompetitorAccessFilter / buildCompetitorWriteFilter', () => {
         ]),
       },
     };
-    const writable = { OR: [{ id: { in: ['t-dir'] } }, { organizationId: { in: ['org-own'] } }] };
+    const writable = {
+      OR: [
+        { id: { in: ['t-dir'] } },
+        { organizationId: { in: ['org-own'] }, id: { notIn: ['t-view', 't-score'] } },
+      ],
+    };
     expect(await buildCompetitorWriteFilter(req, prisma as any)).toEqual({
       AND: [
         { registrations: { every: { tournament: writable } } },
