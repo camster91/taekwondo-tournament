@@ -802,46 +802,94 @@ router.post('/:id/clone', authenticate, requireTournamentAccess('director'), val
     if (limitError) return res.status(limitError.status).json(limitError.body);
   }
 
-  const cloned = await prisma.tournament.create({
-    data: {
-      name: newName,
-      date: new Date(newDate.toISOString().slice(0, 10) + 'T12:00:00.000Z'),
-      location: original.location,
-      status: 'draft',
-      settings: stripReservedOperationSettingsFromRaw(original.settings),
-      sportProfileSlug: original.sportProfileSlug,
-      sportProfileId: original.sportProfileId,
-      organizationId: original.organizationId,
-      createdById: (req as AuthenticatedRequest).user?.id ?? null,
-    },
-  });
+  // Everything is copied in one transaction: a failure part-way never
+  // leaves a clone without its weight classes or rules.
+  const cloned = await prisma.$transaction(async (tx) => {
+    const created = await tx.tournament.create({
+      data: {
+        name: newName,
+        date: new Date(newDate.toISOString().slice(0, 10) + 'T12:00:00.000Z'),
+        location: original.location,
+        status: 'draft',
+        settings: stripReservedOperationSettingsFromRaw(original.settings),
+        sportProfileSlug: original.sportProfileSlug,
+        sportProfileId: original.sportProfileId,
+        organizationId: original.organizationId,
+        createdById: (req as AuthenticatedRequest).user?.id ?? null,
+      },
+    });
 
-  // Optional: copy the competitor list over too. Off by default since most
-  // directors want a fresh roster for the new year. Toggle via the UI later.
-  if (body.includeRegistrations) {
-    const regs = await prisma.registration.findMany({ where: { tournamentId: original.id } });
-    if (regs.length > 0) {
-      await prisma.registration.createMany({
-        data: regs.map((r) => ({
-          competitorId: r.competitorId,
-          tournamentId: cloned.id,
-          patterns: r.patterns,
-          sparring: r.sparring,
-          weightAtRegistration: r.weightAtRegistration,
-          ageAtTournament: r.ageAtTournament,
-          parentName: r.parentName,
-          parentEmail: r.parentEmail,
-          parentPhone: r.parentPhone,
-          heightAtRegistration: r.heightAtRegistration,
-          reachAtRegistration: r.reachAtRegistration,
-          experienceScore: r.experienceScore,
-          skillEstimate: r.skillEstimate,
-          competeWithOlder: r.competeWithOlder,
-          specialNeeds: r.specialNeeds,
+    // Weight classes live in their own table (not settings).
+    const weightClasses = await tx.weightClass.findMany({ where: { tournamentId: original.id } });
+    if (weightClasses.length > 0) {
+      await tx.weightClass.createMany({
+        data: weightClasses.map((wc) => ({
+          tournamentId: created.id,
+          name: wc.name,
+          gender: wc.gender,
+          ageMin: wc.ageMin,
+          ageMax: wc.ageMax,
+          weightMinLbs: wc.weightMinLbs,
+          weightMaxLbs: wc.weightMaxLbs,
+          displayOrder: wc.displayOrder,
         })),
       });
     }
-  }
+
+    // Rule-engine rules (TournamentRule rows).
+    const rules = await tx.tournamentRule.findMany({ where: { tournamentId: original.id } });
+    if (rules.length > 0) {
+      await tx.tournamentRule.createMany({
+        data: rules.map((rule) => ({
+          tournamentId: created.id,
+          name: rule.name,
+          description: rule.description,
+          category: rule.category,
+          ruleType: rule.ruleType,
+          enforcement: rule.enforcement,
+          parameters: rule.parameters,
+          priority: rule.priority,
+          isActive: rule.isActive,
+          source: rule.source,
+          createdBy: rule.createdBy,
+        })),
+      });
+    }
+
+    // Optional: copy the competitor list over too. Off by default since
+    // most directors want a fresh roster for the new year. Only entries
+    // that were actually in the field are copied (not waitlisted or
+    // withdrawn ones), and ages are recomputed for the new date.
+    if (body.includeRegistrations) {
+      const regs = await tx.registration.findMany({
+        where: { tournamentId: original.id, waitlistStatus: { in: ['active', 'promoted'] } },
+      });
+      if (regs.length > 0) {
+        await tx.registration.createMany({
+          data: regs.map((r) => ({
+            competitorId: r.competitorId,
+            tournamentId: created.id,
+            patterns: r.patterns,
+            sparring: r.sparring,
+            weightAtRegistration: r.weightAtRegistration,
+            ageAtTournament: r.ageAtTournament,
+            parentName: r.parentName,
+            parentEmail: r.parentEmail,
+            parentPhone: r.parentPhone,
+            heightAtRegistration: r.heightAtRegistration,
+            reachAtRegistration: r.reachAtRegistration,
+            experienceScore: r.experienceScore,
+            skillEstimate: r.skillEstimate,
+            competeWithOlder: r.competeWithOlder,
+            specialNeeds: r.specialNeeds,
+          })),
+        });
+        await recomputeRegistrationAges(tx, { tournamentId: created.id });
+      }
+    }
+
+    return created;
+  });
 
   res.status(201).json(cloned);
 });
