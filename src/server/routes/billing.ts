@@ -8,6 +8,10 @@ import {
   mapStripeSubscription,
   stripeRuntimeConfigFromEnv,
   getPriceIdForTier,
+  gracePeriodEndFrom,
+  resolveSubscriptionGrace,
+  FINAL_SUBSCRIPTION_STATUSES,
+  PAYMENT_GRACE_PERIOD_DAYS,
   type PlanTier,
 } from '../services/stripe-billing.js';
 import { authenticate, type AuthenticatedRequest } from '../middleware/auth.js';
@@ -258,18 +262,26 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
             failureReason = invoice.payment_intent.last_payment_error.message;
           }
 
-          // Set 7-day grace period
-          const gracePeriodEndsAt = new Date();
-          gracePeriodEndsAt.setDate(gracePeriodEndsAt.getDate() + 7);
-
+          // The grace period starts at the first failure only: Stripe
+          // retries the invoice several times and each retry must not
+          // push the deadline out again. A canceled/unpaid subscription
+          // gets no grace period at all.
+          const now = new Date();
+          let gracePeriodEndsAt = subscription.gracePeriodEndsAt;
+          if (!subscription.paymentFailedAt && !FINAL_SUBSCRIPTION_STATUSES.includes(subscription.status)) {
+            gracePeriodEndsAt = gracePeriodEndFrom(now);
+            await tx.organizationBillingSubscription.updateMany({
+              where: { id: subscription.id, paymentFailedAt: null },
+              data: { paymentFailedAt: now, gracePeriodEndsAt },
+            });
+          }
           await tx.organizationBillingSubscription.update({
             where: { id: subscription.id },
-            data: {
-              paymentFailedAt: new Date(),
-              gracePeriodEndsAt,
-              lastPaymentFailureReason: failureReason,
-            },
+            data: { lastPaymentFailureReason: failureReason ?? null },
           });
+          const gracePeriodDays = gracePeriodEndsAt
+            ? Math.max(0, Math.ceil((gracePeriodEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
+            : 0;
 
           // Send email notification to organization owner
           const owner = await tx.organizationMember.findFirst({
@@ -289,7 +301,7 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
               const billingPortalUrl = `${publicAppUrlFromEnv(process.env)}/settings/billing`;
               const emailContent = paymentFailedEmail({
                 organizationName: subscription.organization.name,
-                gracePeriodDays: 7,
+                gracePeriodDays: Math.min(gracePeriodDays, PAYMENT_GRACE_PERIOD_DAYS),
                 billingPortalUrl,
                 failureReason,
               });
@@ -343,6 +355,24 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
     config.prices,
   );
 
+  // The organization was deleted (e.g. a checkout session paid afterwards).
+  // Nothing can be granted, so stop Stripe billing the subscription rather
+  // than failing this webhook until Stripe gives up.
+  const knownOrganization = await prisma.organization.findUnique({
+    where: { id: mapped.organizationId },
+    select: { id: true },
+  });
+  if (!knownOrganization) {
+    if (['active', 'trialing', 'past_due', 'incomplete', 'unpaid'].includes(mapped.status)) {
+      await stripe.subscriptions.cancel(mapped.providerSubscriptionId);
+      console.warn(`[billing] canceled subscription ${mapped.providerSubscriptionId} for deleted organization ${mapped.organizationId}`);
+    }
+    await prisma.billingWebhookEvent.create({
+      data: { providerEventId: event.id, type: event.type, payloadHash },
+    }).catch(() => undefined);
+    return res.json({ processed: true, orphanSubscription: true });
+  }
+
   try {
     await prisma.$transaction(async (tx) => {
       await tx.billingWebhookEvent.create({
@@ -353,6 +383,12 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
         select: { id: true, plan: true },
       });
       if (!organization) throw new Error('Stripe webhook references an unknown organization');
+
+      const existing = await tx.organizationBillingSubscription.findUnique({
+        where: { organizationId: organization.id },
+        select: { paymentFailedAt: true, gracePeriodEndsAt: true },
+      });
+      const { effectivePlan, grace } = resolveSubscriptionGrace(mapped, existing);
 
       await tx.organizationBillingSubscription.upsert({
         where: { organizationId: organization.id },
@@ -365,6 +401,7 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
           plan: mapped.plan,
           currentPeriodEnd: mapped.currentPeriodEnd,
           cancelAtPeriodEnd: mapped.cancelAtPeriodEnd,
+          ...grace,
         },
         update: {
           provider: 'stripe',
@@ -374,18 +411,19 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
           plan: mapped.plan,
           currentPeriodEnd: mapped.currentPeriodEnd,
           cancelAtPeriodEnd: mapped.cancelAtPeriodEnd,
+          ...grace,
         },
       });
       await tx.organization.update({
         where: { id: organization.id },
-        data: { plan: mapped.effectivePlan },
+        data: { plan: effectivePlan },
       });
-      if (organization.plan !== mapped.effectivePlan) {
+      if (organization.plan !== effectivePlan) {
         await tx.organizationPlanChange.create({
           data: {
             organizationId: organization.id,
             fromPlan: organization.plan,
-            toPlan: mapped.effectivePlan,
+            toPlan: effectivePlan,
             source: 'stripe',
             reason: `${event.type}:${event.id}`,
           },
@@ -462,7 +500,9 @@ router.post('/checkout', authenticate, async (req: AuthenticatedRequest, res: Re
         organizationId: organization.id,
         provider: 'stripe',
         providerCustomerId: customerId,
-        status: 'incomplete',
+        // No subscription exists until Stripe reports one through the
+        // webhook; an abandoned checkout must leave the org deletable.
+        status: 'inactive',
         plan,
       },
       update: { provider: 'stripe', providerCustomerId: customerId, plan },

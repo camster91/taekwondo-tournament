@@ -816,6 +816,7 @@ Production runs in a Docker container on the Ashbi VPS
 - `20260930_retention_legal_hold` (legal-hold columns on Tournament/Competitor, `RetentionPurgeRun` table)
 - `20261001_invitation_delivery_status` (Invitation delivery status + `cancelledAt`)
 - `20261001_staff_assignments` (StaffAssignment table, #192)
+- `20261002_usage_record_unique` (de-duplicates `OrganizationUsageRecord`, keeping the earliest per tournament, then adds a unique `(organizationId, tournamentId)` index)
 
 The deploy script runs `prisma migrate deploy` automatically
 during cutover. Do NOT use `npm run db:push` on production —

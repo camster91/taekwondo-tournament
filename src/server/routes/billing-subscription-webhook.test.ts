@@ -9,6 +9,7 @@ import express from 'express';
 import request from 'supertest';
 
 const retrieve = vi.hoisted(() => vi.fn());
+const cancel = vi.hoisted(() => vi.fn());
 
 vi.mock('stripe', async (importOriginal) => {
   const actual = await importOriginal<typeof import('stripe')>();
@@ -16,7 +17,7 @@ vi.mock('stripe', async (importOriginal) => {
   class MockedStripe extends RealStripe {
     constructor(...args: unknown[]) {
       super(...args);
-      this.subscriptions = { retrieve };
+      this.subscriptions = { retrieve, cancel };
     }
   }
   return { default: MockedStripe };
@@ -57,12 +58,21 @@ describe('subscription webhooks apply Stripe’s current state', () => {
         findUnique: vi.fn().mockResolvedValue({ id: ORG_ID, plan: 'free' }),
         update: vi.fn().mockResolvedValue({}),
       },
-      organizationBillingSubscription: { upsert: vi.fn().mockResolvedValue({}) },
+      organizationBillingSubscription: {
+        upsert: vi.fn().mockResolvedValue({}),
+        findUnique: vi.fn().mockResolvedValue(null),
+        update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
       organizationPlanChange: { create: vi.fn().mockResolvedValue({}) },
+      organizationMember: { findFirst: vi.fn().mockResolvedValue(null) },
     };
     app = express();
+    cancel.mockReset();
     app.locals.prisma = {
-      billingWebhookEvent: { findUnique: vi.fn().mockResolvedValue(null) },
+      organization: { findUnique: vi.fn().mockResolvedValue({ id: ORG_ID }) },
+      billingWebhookEvent: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
+      organizationBillingSubscription: { findUnique: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
     };
     app.post('/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
@@ -122,9 +132,120 @@ describe('subscription webhooks apply Stripe’s current state', () => {
     expect(tx.organization.update).toHaveBeenCalledWith({ where: { id: ORG_ID }, data: { plan: 'free' } });
   });
 
+  it('cancels an active subscription whose organization was deleted', async () => {
+    (app.locals.prisma as { organization: { findUnique: ReturnType<typeof vi.fn> } }).organization.findUnique.mockResolvedValue(null);
+    retrieve.mockResolvedValue(subscription('active'));
+    cancel.mockResolvedValue({});
+    const res = await send('customer.subscription.created', subscription('active'));
+    expect(res.status).toBe(200);
+    expect(cancel).toHaveBeenCalledWith('sub_1');
+    expect(tx.organization.update).not.toHaveBeenCalled();
+  });
+
   it('only trusts the raw payload behind the non-production test switch', () => {
     expect(trustSubscriptionEventPayload({ STRIPE_WEBHOOK_TRUST_EVENT_PAYLOAD: '1', NODE_ENV: 'test' })).toBe(true);
     expect(trustSubscriptionEventPayload({ STRIPE_WEBHOOK_TRUST_EVENT_PAYLOAD: '1', NODE_ENV: 'production' })).toBe(false);
     expect(trustSubscriptionEventPayload({})).toBe(false);
+  });
+
+  it('a canceled subscription clears the grace period so the hourly job never revives it', async () => {
+    tx.organization.findUnique.mockResolvedValue({ id: ORG_ID, plan: 'starter' });
+    tx.organizationBillingSubscription.findUnique.mockResolvedValue({
+      paymentFailedAt: new Date(Date.now() - 86_400_000),
+      gracePeriodEndsAt: new Date(Date.now() + 6 * 86_400_000),
+    });
+    retrieve.mockResolvedValue(subscription('canceled'));
+    const res = await send('customer.subscription.deleted', subscription('canceled'));
+    expect(res.status).toBe(200);
+    expect(tx.organizationBillingSubscription.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      update: expect.objectContaining({ status: 'canceled', paymentFailedAt: null, gracePeriodEndsAt: null }),
+    }));
+    expect(tx.organization.update).toHaveBeenCalledWith({ where: { id: ORG_ID }, data: { plan: 'free' } });
+  });
+
+  it('keeps the paid plan while past_due inside the grace period', async () => {
+    tx.organization.findUnique.mockResolvedValue({ id: ORG_ID, plan: 'starter' });
+    tx.organizationBillingSubscription.findUnique.mockResolvedValue({
+      paymentFailedAt: new Date(Date.now() - 86_400_000),
+      gracePeriodEndsAt: new Date(Date.now() + 6 * 86_400_000),
+    });
+    retrieve.mockResolvedValue(subscription('past_due'));
+    const res = await send('customer.subscription.updated', subscription('past_due'));
+    expect(res.status).toBe(200);
+    expect(tx.organization.update).toHaveBeenCalledWith({ where: { id: ORG_ID }, data: { plan: 'starter' } });
+    expect(tx.organizationPlanChange.create).not.toHaveBeenCalled();
+    const upsert = tx.organizationBillingSubscription.upsert.mock.calls[0][0];
+    expect(upsert.update).not.toHaveProperty('gracePeriodEndsAt');
+  });
+
+  it('starts the grace period when past_due arrives before invoice.payment_failed', async () => {
+    tx.organization.findUnique.mockResolvedValue({ id: ORG_ID, plan: 'starter' });
+    retrieve.mockResolvedValue(subscription('past_due'));
+    const res = await send('customer.subscription.updated', subscription('past_due'));
+    expect(res.status).toBe(200);
+    expect(tx.organization.update).toHaveBeenCalledWith({ where: { id: ORG_ID }, data: { plan: 'starter' } });
+    const upsert = tx.organizationBillingSubscription.upsert.mock.calls[0][0];
+    expect(upsert.update.paymentFailedAt).toBeInstanceOf(Date);
+    expect(upsert.update.gracePeriodEndsAt.getTime() - upsert.update.paymentFailedAt.getTime())
+      .toBe(7 * 86_400_000);
+  });
+
+  it('downgrades a past_due subscription whose grace period has expired', async () => {
+    tx.organization.findUnique.mockResolvedValue({ id: ORG_ID, plan: 'starter' });
+    tx.organizationBillingSubscription.findUnique.mockResolvedValue({
+      paymentFailedAt: new Date(Date.now() - 8 * 86_400_000),
+      gracePeriodEndsAt: null,
+    });
+    retrieve.mockResolvedValue(subscription('past_due'));
+    await send('customer.subscription.updated', subscription('past_due'));
+    expect(tx.organization.update).toHaveBeenCalledWith({ where: { id: ORG_ID }, data: { plan: 'free' } });
+  });
+
+  describe('invoice events', () => {
+    const invoice = () => ({ id: 'in_1', object: 'invoice', customer: 'cus_1', subscription: 'sub_1' });
+    const billingRow = (overrides: Record<string, unknown>) => ({
+      id: 'billing-1', organizationId: ORG_ID, status: 'past_due',
+      paymentFailedAt: null, gracePeriodEndsAt: null, organization: { name: 'Org' }, ...overrides,
+    });
+
+    it('starts the grace period on the first failure', async () => {
+      app.locals.prisma.organizationBillingSubscription.findUnique.mockResolvedValue(billingRow({}));
+      const res = await send('invoice.payment_failed', invoice());
+      expect(res.status).toBe(200);
+      const call = tx.organizationBillingSubscription.updateMany.mock.calls[0][0];
+      expect(call.where).toEqual({ id: 'billing-1', paymentFailedAt: null });
+      expect(call.data.gracePeriodEndsAt.getTime() - call.data.paymentFailedAt.getTime()).toBe(7 * 86_400_000);
+    });
+
+    it('does not push the deadline out on a Stripe retry', async () => {
+      app.locals.prisma.organizationBillingSubscription.findUnique.mockResolvedValue(billingRow({
+        paymentFailedAt: new Date(Date.now() - 3 * 86_400_000),
+        gracePeriodEndsAt: new Date(Date.now() + 4 * 86_400_000),
+      }));
+      const res = await send('invoice.payment_failed', invoice());
+      expect(res.status).toBe(200);
+      expect(tx.organizationBillingSubscription.updateMany).not.toHaveBeenCalled();
+      for (const [arg] of tx.organizationBillingSubscription.update.mock.calls) {
+        expect(arg.data).not.toHaveProperty('gracePeriodEndsAt');
+        expect(arg.data).not.toHaveProperty('paymentFailedAt');
+      }
+    });
+
+    it('gives a canceled subscription no grace period', async () => {
+      app.locals.prisma.organizationBillingSubscription.findUnique.mockResolvedValue(billingRow({ status: 'canceled' }));
+      await send('invoice.payment_failed', invoice());
+      expect(tx.organizationBillingSubscription.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('clears the grace period on a successful payment', async () => {
+      app.locals.prisma.organizationBillingSubscription.findUnique.mockResolvedValue(billingRow({
+        paymentFailedAt: new Date(), gracePeriodEndsAt: new Date(),
+      }));
+      await send('invoice.payment_succeeded', invoice());
+      expect(tx.organizationBillingSubscription.update).toHaveBeenCalledWith({
+        where: { id: 'billing-1' },
+        data: { paymentFailedAt: null, gracePeriodEndsAt: null, lastPaymentFailureReason: null },
+      });
+    });
   });
 });

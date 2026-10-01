@@ -29,12 +29,19 @@ vi.mock('../services/entitlements.js', () => ({
 vi.mock('../services/organization-closure.js', () => ({
   validateOrganizationDeletion: vi.fn(),
 }));
+vi.mock('../services/stripe-billing.js', () => ({
+  expireOpenCheckoutSessions: vi.fn(),
+  stripeRuntimeConfigFromEnv: vi.fn(() => ({ secretKey: 'sk_test', webhookSecret: 'whsec', prices: {} })),
+}));
+vi.mock('stripe', () => ({ default: class {} }));
 vi.mock('./organizations-validation.js', () => ({
   normalizeOrganizationCreateInput: vi.fn(),
   normalizePlanChangeInput: vi.fn(),
 }));
 
 import './organizations.js';
+import { validateOrganizationDeletion } from '../services/organization-closure.js';
+import { expireOpenCheckoutSessions } from '../services/stripe-billing.js';
 
 const handler = (method: string, path: string) => {
   const route = mocks.handlers.find((candidate) => candidate.method === method && candidate.path === path);
@@ -129,5 +136,55 @@ describe('organization creation adopts the creator\'s org-less tournaments', () 
     expect(res.statusCode).toBe(201);
     expect(tx.tournament.updateMany).not.toHaveBeenCalled();
     expect(res.body.adoptedTournamentCount).toBe(0);
+  });
+});
+
+describe('organization deletion closes open Stripe checkouts first', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const deletionRequest = () => {
+    const prisma: any = {
+      organizationMember: {
+        findUnique: vi.fn().mockResolvedValue({
+          role: 'owner',
+          organization: {
+            id: 'org-a',
+            slug: 'org-a',
+            billingSubscription: { status: 'inactive', providerCustomerId: 'cus_1', providerSubscriptionId: null },
+          },
+        }),
+      },
+      tournament: { count: vi.fn().mockResolvedValue(0) },
+      competitor: { count: vi.fn().mockResolvedValue(0) },
+      $transaction: vi.fn().mockResolvedValue([]),
+    };
+    const req: any = {
+      params: { id: 'org-a' },
+      body: { confirmation: 'org-a', exportAcknowledged: true },
+      user: { id: 'owner-a', role: 'director' },
+      app: { locals: { prisma } },
+    };
+    return { prisma, req };
+  };
+
+  it('expires the customer\'s open checkout sessions before deleting', async () => {
+    vi.mocked(validateOrganizationDeletion).mockReturnValue({ ok: true });
+    vi.mocked(expireOpenCheckoutSessions).mockResolvedValue(1);
+    const { prisma, req } = deletionRequest();
+    const res = response();
+    await handler('delete', '/:id')(req, res);
+    expect(expireOpenCheckoutSessions).toHaveBeenCalledWith(expect.anything(), 'cus_1');
+    expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
+  it('refuses with 503 and deletes nothing when Stripe cannot be reached', async () => {
+    vi.mocked(validateOrganizationDeletion).mockReturnValue({ ok: true });
+    vi.mocked(expireOpenCheckoutSessions).mockRejectedValue(new Error('ECONNREFUSED'));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { prisma, req } = deletionRequest();
+    const res = response();
+    await handler('delete', '/:id')(req, res);
+    expect(res.statusCode).toBe(503);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

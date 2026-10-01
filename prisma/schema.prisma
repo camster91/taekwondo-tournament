@@ -717,6 +717,7 @@ model OrganizationUsageRecord {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   tournament   Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
 
+  @@unique([organizationId, tournamentId])
   @@index([organizationId])
   @@index([tournamentId])
   @@index([recordedAt])
