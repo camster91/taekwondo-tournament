@@ -213,76 +213,62 @@ function drawWinnersBracket(
   doc.setFont('helvetica', 'bold');
   doc.text('Winners Bracket', x + width / 2, y - 8, { align: 'center' });
 
-  const round1 = matches.filter(m => m.round === 1);
-  const round2 = matches.filter(m => m.round === 2);
-  const round3 = matches.filter(m => m.round === 3);
+  // Rounds come from the data, so every size (including the winners
+  // final in round 4+ of a 9-64 person bracket) is laid out.
+  const roundNumbers = [...new Set(matches.map(m => m.round))].sort((a, b) => a - b);
+  if (roundNumbers.length === 0) return;
+  const rounds = roundNumbers.map(round =>
+    matches.filter(m => m.round === round).sort((a, b) => a.matchNumber - b.matchNumber),
+  );
 
-  const matchWidth = 105;   // Slightly wider for better readability
-  const matchHeight = 45;   // Taller for better spacing
-  const colSpacing = (width - matchWidth) / 3;
+  // Each round gets an equal column and each match an equal vertical slot
+  // in its round; boxes shrink (with their text) when the largest round
+  // has more matches than fit at full size, so nothing leaves the page.
+  const CONNECTOR_GAP = 14;
+  const SLOT_GAP = 4;
+  const colWidth = width / rounds.length;
+  const maxMatches = Math.max(...rounds.map(r => r.length));
+  const matchWidth = Math.min(105, colWidth - CONNECTOR_GAP);
+  const matchHeight = Math.min(45, height / maxMatches - SLOT_GAP);
+  const scale = Math.min(1, matchWidth / 105, matchHeight / 45);
 
-  // Round 1 - 4 matches with better spacing
-  const r1Spacing = height / 4;
-  round1.forEach((match, i) => {
-    drawMatchBox(doc, match, x, y + i * r1Spacing, matchWidth, matchHeight, showResults);
+  const centerY = (roundIndex: number, i: number) => y + (height / rounds[roundIndex].length) * (i + 0.5);
+
+  rounds.forEach((roundMatches, r) => {
+    roundMatches.forEach((match, i) => {
+      drawMatchBox(
+        doc,
+        match,
+        x + r * colWidth,
+        centerY(r, i) - matchHeight / 2,
+        matchWidth,
+        matchHeight,
+        showResults,
+        scale,
+      );
+    });
   });
 
-  // Round 2 - 2 matches
-  const r2Spacing = height / 2;
-  round2.forEach((match, i) => {
-    drawMatchBox(
-      doc,
-      match,
-      x + colSpacing,
-      y + r1Spacing / 2 + i * r2Spacing,
-      matchWidth,
-      matchHeight,
-      showResults
-    );
-  });
-
-  // Round 3 - 1 match (winners final)
-  if (round3.length > 0) {
-    drawMatchBox(
-      doc,
-      round3[0],
-      x + colSpacing * 2,
-      y + height / 2 - matchHeight / 2,
-      matchWidth,
-      matchHeight,
-      showResults
-    );
-  }
-
-  // Draw connecting lines (slightly thicker for print clarity)
+  // Draw connecting lines (slightly thicker for print clarity): each match
+  // feeds the next round's match at the same relative position.
   doc.setDrawColor(120);
   doc.setLineWidth(0.75);
-
-  // R1 to R2 connections
-  for (let i = 0; i < 2; i++) {
-    const y1Top = y + i * 2 * r1Spacing + matchHeight / 2;
-    const y1Bot = y + (i * 2 + 1) * r1Spacing + matchHeight / 2;
-    const yMid = (y1Top + y1Bot) / 2;
-    const x1 = x + matchWidth;
-    const x2 = x + colSpacing;
-
-    doc.line(x1, y1Top, x1 + 12, y1Top);
-    doc.line(x1, y1Bot, x1 + 12, y1Bot);
-    doc.line(x1 + 12, y1Top, x1 + 12, y1Bot);
-    doc.line(x1 + 12, yMid, x2, yMid);
+  for (let r = 0; r < rounds.length - 1; r++) {
+    const from = rounds[r];
+    const to = rounds[r + 1];
+    if (to.length === 0) continue;
+    const xFrom = x + r * colWidth + matchWidth;
+    const xTo = x + (r + 1) * colWidth;
+    const xMid = xFrom + (xTo - xFrom) / 2;
+    from.forEach((_, i) => {
+      const target = Math.min(to.length - 1, Math.floor((i * to.length) / from.length));
+      const yFrom = centerY(r, i);
+      const yTo = centerY(r + 1, target);
+      doc.line(xFrom, yFrom, xMid, yFrom);
+      doc.line(xMid, yFrom, xMid, yTo);
+      doc.line(xMid, yTo, xTo, yTo);
+    });
   }
-
-  // R2 to R3 connections
-  const y2Top = y + r1Spacing / 2 + matchHeight / 2;
-  const y2Bot = y + r1Spacing / 2 + r2Spacing + matchHeight / 2;
-  const yMid = (y2Top + y2Bot) / 2;
-  const x2End = x + colSpacing + matchWidth;
-  const x3Start = x + colSpacing * 2;
-
-  doc.line(x2End, y2Top, x2End + 12, y2Top);
-  doc.line(x2End, y2Bot, x2End + 12, y2Bot);
-  doc.line(x2End + 12, y2Top, x2End + 12, y2Bot);
-  doc.line(x2End + 12, yMid, x3Start, yMid);
 }
 
 function drawLosersBracket(
@@ -369,8 +355,11 @@ function drawMatchBox(
   y: number,
   width: number,
   height: number,
-  showResults: boolean
+  showResults: boolean,
+  /** Shrinks text and insets for boxes smaller than the 105x45 default. */
+  scale = 1
 ): void {
+  const k = scale;
   // Match box
   doc.setDrawColor(0);
   doc.setLineWidth(1);
@@ -381,23 +370,23 @@ function drawMatchBox(
   doc.line(x, y + height / 2, x + width, y + height / 2);
 
   // Match number (larger, bolder, more readable)
-  doc.setFontSize(9);
+  doc.setFontSize(9 * k);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(0);
-  doc.text(`Match #${match.matchNumber}`, x + 3, y + 10);
+  doc.text(`Match #${match.matchNumber}`, x + 3 * k, y + 10 * k);
 
   // Ring assignment if present
   if (match.ringNumber !== null && match.ringNumber !== undefined) {
-    doc.setFontSize(7);
+    doc.setFontSize(7 * k);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(80);
-    doc.text(`Ring ${match.ringNumber}`, x + width - 25, y + 8);
+    doc.text(`Ring ${match.ringNumber}`, x + width - 25 * k, y + 8 * k);
   }
   
   doc.setTextColor(0);
 
   // Competitor names (slightly larger for readability)
-  doc.setFontSize(9);
+  doc.setFontSize(9 * k);
   doc.setFont('helvetica', 'normal');
 
   const c1Name = match.competitor1?.name || '________';
@@ -408,12 +397,12 @@ function drawMatchBox(
   const name1 = c1Name.length > maxLen ? c1Name.substring(0, maxLen - 2) + '..' : c1Name;
   const name2 = c2Name.length > maxLen ? c2Name.substring(0, maxLen - 2) + '..' : c2Name;
 
-  doc.text(name1, x + 4, y + height / 4 + 5);
-  doc.text(name2, x + 4, y + height * 3 / 4 + 5);
+  doc.text(name1, x + 4 * k, y + height / 4 + 5 * k);
+  doc.text(name2, x + 4 * k, y + height * 3 / 4 + 5 * k);
 
   // Score boxes
   if (showResults && match.status === 'completed') {
-    doc.setFontSize(10);
+    doc.setFontSize(10 * k);
     doc.setFont('helvetica', 'bold');
 
     // Highlight winner
@@ -426,16 +415,16 @@ function drawMatchBox(
     }
 
     if (match.score1 !== null && match.score1 !== undefined) {
-      doc.text(String(match.score1), x + width - 15, y + height / 4 + 5);
+      doc.text(String(match.score1), x + width - 15 * k, y + height / 4 + 5 * k);
     }
     if (match.score2 !== null && match.score2 !== undefined) {
-      doc.text(String(match.score2), x + width - 15, y + height * 3 / 4 + 5);
+      doc.text(String(match.score2), x + width - 15 * k, y + height * 3 / 4 + 5 * k);
     }
   } else {
     // Empty score boxes for printing (slightly larger)
     doc.setDrawColor(180);
-    doc.rect(x + width - 28, y + 4, 24, height / 2 - 8);
-    doc.rect(x + width - 28, y + height / 2 + 4, 24, height / 2 - 8);
+    doc.rect(x + width - 28 * k, y + 4 * k, 24 * k, height / 2 - 8 * k);
+    doc.rect(x + width - 28 * k, y + height / 2 + 4 * k, 24 * k, height / 2 - 8 * k);
   }
 }
 
