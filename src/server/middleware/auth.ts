@@ -144,36 +144,6 @@ function extractToken(req: AuthenticatedRequest): { token: string; viaCookie: bo
   return null;
 }
 
-/**
- * Closes P1: LRU+TTL cache for the per-request user lookup. The
- * poll-heavy pages (PublicScoreboard at 3s, ParentScoreboard at 5s,
- * Scorekeeper at 10s, DirectorDashboard at 10s, TournamentDetail
- * day-of at 10s) all hit the auth middleware, so a single
- * tournament-day screen farm was producing 600+ `User` queries
- * per minute against Postgres.
- *
- * Trade-offs:
- *  - tokenVersion is checked on every read, but a cache hit is
- *    always within TTL of the DB. The grace window is bounded
- *    by AUTH_CACHE_TTL_MS, so a logout/role change can take up
- *    to that long to propagate (default 15 s).
- *  - Cache is per-process; with N containers the per-process
- *    cache hit rate is ~1/N. Move to Redis (rate-limit-redis
- *    style) in a future PR for a shared cache.
- *  - The cache key includes the requested userId, so concurrent
- *    requests for the same user share a single in-flight lookup.
- */
-type CachedUser = {
-  id: string;
-  email: string;
-  role: string;
-  firstName: string;
-  lastName: string;
-  isActive: boolean;
-  tokenVersion: number;
-  demoExpiresAt: Date | null;
-};
-
 const demoDeniedReadPrefixes = ['/api/auth/users', '/api/invites', '/api/billing', '/api/organizations', '/api/support', '/api/custom-domains'];
 
 export function isDemoRequestAllowed(method: string, originalUrl: string): boolean {
@@ -206,46 +176,6 @@ function enforceDemoCapability(req: AuthenticatedRequest, res: Response, next: N
   }
   next();
 }
-const AUTH_CACHE_TTL_MS = Number(process.env.AUTH_CACHE_TTL_MS) || 15_000;
-const AUTH_CACHE_MAX = Number(process.env.AUTH_CACHE_MAX) || 5_000;
-const authCache = new Map<string, { user: CachedUser; expires: number }>();
-
-function cacheGet(userId: string): CachedUser | null {
-  const entry = authCache.get(userId);
-  if (!entry) return null;
-  if (entry.expires < Date.now()) {
-    authCache.delete(userId);
-    return null;
-  }
-  // LRU bump: re-insert to move to the end.
-  authCache.delete(userId);
-  authCache.set(userId, entry);
-  return entry.user;
-}
-
-function cacheSet(user: CachedUser): void {
-  if (authCache.size >= AUTH_CACHE_MAX) {
-    // Drop oldest (Map iteration is insertion order).
-    const firstKey = authCache.keys().next().value;
-    if (firstKey !== undefined) authCache.delete(firstKey);
-  }
-  authCache.set(user.id, { user, expires: Date.now() + AUTH_CACHE_TTL_MS });
-}
-
-function cacheInvalidate(userId: string): void {
-  authCache.delete(userId);
-}
-
-/**
- * Invalidate the auth cache for a user. Called from the auth
- * route when a user's tokenVersion is bumped (logout, role
- * change, isActive flip) so the next request re-reads the DB
- * instead of serving the cached pre-bump state.
- */
-export function invalidateAuthCache(userId: string): void {
-  cacheInvalidate(userId);
-}
-
 /**
  * Middleware to authenticate requests
  * Adds user info to request if authenticated
@@ -280,36 +210,6 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
 
   // Attach user info to request
   const prisma: PrismaClient = req.app.locals.prisma;
-
-  // Fast path: cache hit. Skips the DB round-trip.
-  const cached = cacheGet(payload.userId);
-  if (cached) {
-    if (!cached.isActive) {
-      cacheInvalidate(payload.userId);
-      return res.status(401).json({ error: 'User not found or inactive' });
-    }
-    // Reject tokens whose embedded tokenVersion no longer matches
-    // the cached user's tokenVersion (triggered by logout/role
-    // change/isActive flip). Tokens issued before tokenVersion
-    // existed (i.e. payload.tokenVersion === undefined) are also
-    // rejected — those are legacy tokens from before the version
-    // mechanism shipped. Forcing a re-login is acceptable: the
-    // alternative (silently accepting pre-versioning tokens
-    // forever) defeats the entire invalidation scheme.
-    if (cached.tokenVersion !== (payload.tokenVersion ?? -1)) {
-      cacheInvalidate(payload.userId);
-      return res.status(401).json({ error: 'Session invalidated' });
-    }
-    req.user = {
-      id: cached.id,
-      email: cached.email,
-      role: cached.role as 'admin' | 'director' | 'scorekeeper' | 'viewer',
-      firstName: cached.firstName,
-      lastName: cached.lastName,
-      isDemo: cached.demoExpiresAt !== null,
-    };
-    return enforceDemoCapability(req, res, next);
-  }
 
   prisma.user
     .findUnique({
@@ -452,6 +352,34 @@ export function tournamentRoleLevel(role: string | null | undefined): number {
 export function orgMembershipRoleLevel(role: string | null | undefined): number {
   if (!role) return 0;
   return ORG_MEMBERSHIP_ROLE_LEVEL[role] ?? 0;
+}
+
+/**
+ * The caller's oldest organization membership whose role meets
+ * `minRole` (director by default), plus whether they belong to any
+ * organization at all. Use for org-level writes (templates, new
+ * tournaments): a viewer/scorekeeper membership never grants them,
+ * whatever the user's global role.
+ */
+export async function findOrgMembershipAtLevel(
+  prisma: PrismaClient,
+  userId: string,
+  minRole: TournamentRole = 'director',
+): Promise<{ membership: { organizationId: string; role: string } | null; hasMemberships: boolean }> {
+  const memberships = await prisma.organizationMember.findMany({
+    where: { userId },
+    select: { organizationId: true, role: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  return {
+    membership: memberships.find((m) => orgMembershipRoleLevel(m.role) >= ROLE_HIERARCHY[minRole]) ?? null,
+    hasMemberships: memberships.length > 0,
+  };
+}
+
+/** Membership roles that administer the organization itself (e.g. custom domains). */
+export function isOrgAdminMembershipRole(role: string | null | undefined): boolean {
+  return role === 'owner' || role === 'admin';
 }
 
 export interface TournamentAccessResult {
@@ -622,17 +550,28 @@ export interface TournamentScope {
   filter: Prisma.TournamentWhereInput | null;
   /** True when the user has no org memberships (legacy single-tenant pool). */
   legacyPool: boolean;
-  /** Organizations the user belongs to (viewer level or above). */
+  /** Organizations whose membership role meets the requested minimum level. */
   orgIds: string[];
 }
 
+/**
+ * Resolve which tournaments the caller can reach at `minRole` or above
+ * (viewer by default). Mirrors checkTournamentAccess: the global role
+ * must meet `minRole`, explicit grants and org memberships only count
+ * when their own level does, and the legacy pool is reachable only by
+ * users without any org membership.
+ */
 export async function resolveTournamentScope(
   req: AuthenticatedRequest,
-  prisma: PrismaClient
+  prisma: PrismaClient,
+  minRole: TournamentRole = 'viewer'
 ): Promise<TournamentScope> {
+  const noAccess: TournamentScope = { filter: { id: { in: [] } }, legacyPool: false, orgIds: [] };
   // Unauthenticated callers match nothing (fail closed).
-  if (!req.user) return { filter: { id: { in: [] } }, legacyPool: false, orgIds: [] };
+  if (!req.user) return noAccess;
   if (req.user.role === 'admin') return { filter: null, legacyPool: false, orgIds: [] };
+  const requiredLevel = ROLE_HIERARCHY[minRole];
+  if (tournamentRoleLevel(req.user.role) < requiredLevel) return noAccess;
 
   const [orgMemberships, explicitAccess] = await Promise.all([
     prisma.organizationMember.findMany({
@@ -646,7 +585,7 @@ export async function resolveTournamentScope(
   ]);
 
   const explicitTournamentIds = explicitAccess
-    .filter((a) => (ROLE_HIERARCHY[a.role as TournamentRole] || 0) >= ROLE_HIERARCHY.viewer)
+    .filter((a) => tournamentRoleLevel(a.role) >= requiredLevel)
     .map((a) => a.tournamentId);
 
   if (orgMemberships.length === 0) {
@@ -665,7 +604,7 @@ export async function resolveTournamentScope(
   }
 
   const orgIds = orgMemberships
-    .filter((m) => orgMembershipRoleLevel(m.role) >= ROLE_HIERARCHY.viewer)
+    .filter((m) => orgMembershipRoleLevel(m.role) >= requiredLevel)
     .map((m) => m.organizationId);
 
   // Tenant user: own orgs + explicit grants. Never orphan tournaments.
@@ -753,15 +692,18 @@ function unregisteredOwnerFilter(legacyPool: boolean, orgIds: string[]): Prisma.
  * Returns `null` only for admins.
  *
  * Stricter than the read filter: EVERY tournament the competitor is
- * registered in must be accessible. Otherwise registering a shared
- * competitor into one of your own tournaments would let you overwrite
- * a record another tenant also relies on.
+ * registered in must be accessible AT DIRECTOR LEVEL (viewer or
+ * scorekeeper grants/memberships do not allow editing the shared
+ * record). Otherwise registering a shared competitor into one of your
+ * own tournaments would let you overwrite a record another tenant also
+ * relies on. Unregistered competitors need a director-level
+ * membership of their owning org.
  */
 export async function buildCompetitorWriteFilter(
   req: AuthenticatedRequest,
   prisma: PrismaClient
 ): Promise<Prisma.CompetitorWhereInput | null> {
-  const { filter, legacyPool, orgIds } = await resolveTournamentScope(req, prisma);
+  const { filter, legacyPool, orgIds } = await resolveTournamentScope(req, prisma, 'director');
   if (filter === null) return null;
   const allRegistrationsAccessible: Prisma.CompetitorWhereInput = {
     registrations: { every: { tournament: filter } },

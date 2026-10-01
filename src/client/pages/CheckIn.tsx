@@ -29,7 +29,13 @@ import { buildDeliveryUncertainMessage, buildOfflineOperationStatuses, buildOffl
 import { reconcileBulkCheckInResult, runBulkCheckInRequests } from '../utils/bulk-check-in';
 import { browserVenueDataSnapshotStore, loadVenueData } from '../utils/venue-data-snapshot';
 import { isCheckInRegistrationData } from '../utils/venue-data-contracts';
-import { buildCheckInRequestPayload, shouldQueueOfflineMutation } from '../utils/offline-delivery';
+import {
+  buildCheckInRequestPayload,
+  buildUndoCheckInRequestPayload,
+  describeCheckInFailure,
+  shouldQueueOfflineMutation,
+} from '../utils/offline-delivery';
+import { readAdminOperationError } from '../utils/admin-operation-error';
 import {
   parseCheckInFilters,
   serializeCheckInFilters,
@@ -47,6 +53,8 @@ interface Registration {
   checkedIn: boolean;
   checkInTime: string | null;
   checkInWeight: number | null;
+  /** Minor self-registration whose parent has not confirmed the consent email. */
+  parentalConsentPending?: boolean;
   competitor: {
     id: string;
     firstName: string;
@@ -195,7 +203,7 @@ export default function CheckIn() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(buildCheckInRequestPayload(data.weight)),
       });
-      if (!res.ok) throw new Error('Failed to check in');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, `Check-in failed (${res.status})`));
       return res.json();
     },
     onSuccess: () => {
@@ -205,7 +213,7 @@ export default function CheckIn() {
     },
     onError: (error, data) => {
       if (error instanceof TypeError) stageCheckIn(data, true);
-      else toast.addToast('Check-in failed. Check the venue connection and try again.', 'error');
+      else toast.addToast(describeCheckInFailure(error, 'Check-in failed. Check the venue connection and try again.'), 'error');
     },
   });
 
@@ -219,19 +227,15 @@ export default function CheckIn() {
       const res = await fetch(`/api/tournaments/${tournamentId}/registrations/${registrationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({
-          checkedIn: false,
-          checkInTime: null,
-          checkInWeight: null,
-        }),
+        body: JSON.stringify(buildUndoCheckInRequestPayload()),
       });
-      if (!res.ok) throw new Error('Failed to undo check-in');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, `Could not undo check-in (${res.status})`));
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
     },
-    onError: () => toast.addToast('Could not undo check-in. Check the venue connection and try again.', 'error'),
+    onError: (error) => toast.addToast(describeCheckInFailure(error, 'Could not undo check-in. Check the venue connection and try again.'), 'error'),
   });
 
   const uniqueSchools = registrations
@@ -333,11 +337,7 @@ export default function CheckIn() {
       for (const registration of eligibleForBulk) {
         if (!tournamentId || !user) return;
         try {
-          offlineOperations.enqueue(makeCheckInOperation(user.id, tournamentId, registration.id, {
-            checkedIn: true,
-            checkInTime: new Date().toISOString(),
-            checkInWeight: null,
-          }));
+          offlineOperations.enqueue(makeCheckInOperation(user.id, tournamentId, registration.id, buildCheckInRequestPayload()));
           staged += 1;
         } catch {
           toast.error(`${staged} of ${eligibleForBulk.length} check-ins were saved on this device. Free device storage before retrying the rest.`);
@@ -356,11 +356,7 @@ export default function CheckIn() {
         async (registrationId) => fetch(`/api/tournaments/${tournamentId}/registrations/${registrationId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-            body: JSON.stringify({
-              checkedIn: true,
-              checkInTime: new Date().toISOString(),
-              checkInWeight: null,
-            }),
+            body: JSON.stringify(buildCheckInRequestPayload()),
           }),
       );
       await queryClient.invalidateQueries({ queryKey: ['checkin-registrations'] });
@@ -380,9 +376,9 @@ export default function CheckIn() {
       } else if (failCount === 0) {
         toast.success(`Checked in ${okCount} competitor${okCount === 1 ? '' : 's'}`);
       } else if (okCount === 0) {
-        toast.error('Bulk check-in failed. Please try again.');
+        toast.error(`Bulk check-in failed: ${rejected[0]?.error || 'rejected by server'}`);
       } else {
-        toast.warning(`Checked in ${okCount}; ${failCount} failed.`);
+        toast.warning(`Checked in ${okCount}; ${failCount} failed (${rejected[0]?.error || 'rejected by server'}).`);
       }
     } finally {
       setIsBulkCheckingIn(false);
@@ -684,6 +680,15 @@ export default function CheckIn() {
                       </span>
                       {isCheckedIn(registration) && (
                         <CheckCircle className="h-5 w-5 text-success ml-2" />
+                      )}
+                      {registration.parentalConsentPending && (
+                        <span
+                          data-testid="parental-consent-pending"
+                          title="The parent has not confirmed the emailed consent request. Check-in is still allowed; the director decides."
+                          className="ml-2 text-xs px-2 py-0.5 rounded bg-warning/10 text-warning border border-warning/30"
+                        >
+                          Parental consent not verified
+                        </span>
                       )}
                     </div>
                     <div className="text-sm text-surface-600 dark:text-surface-400 mt-1">

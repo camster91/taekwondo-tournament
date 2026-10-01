@@ -31,7 +31,7 @@ import {
   Shield,
   Building2,
 } from 'lucide-react';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import CloseButton from '../components/ui/CloseButton';
 import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -136,6 +136,9 @@ function getPlanLimits(plan: string): { competitors: number; name: string } {
 
 export default function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
+  const { hasRole } = useAuth();
+  // Check-in writes need scorekeeper+ access; viewers would only get 403s.
+  const canCheckIn = hasRole(['admin', 'director', 'scorekeeper']);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -577,7 +580,7 @@ export default function TournamentDetail() {
           <ArrowRight className="h-5 w-5 text-surface-600 group-hover:text-primary-600 transition-colors flex-shrink-0" />
         </Link>
 
-        <Link
+        {canCheckIn && <Link
           to={`/checkin/${id}`}
           className="group flex items-start gap-4 p-4 rounded-xl border border-surface-200 dark:border-surface-800 bg-white dark:bg-surface-950 shadow-sm transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
         >
@@ -589,7 +592,7 @@ export default function TournamentDetail() {
             <p className="text-sm text-surface-600 dark:text-surface-400 mt-0.5">Verify competitor attendance</p>
           </div>
           <ArrowRight className="h-5 w-5 text-surface-600 group-hover:text-info transition-colors flex-shrink-0" />
-        </Link>
+        </Link>}
 
         <Link
           to={`/scorekeeper/${id}`}

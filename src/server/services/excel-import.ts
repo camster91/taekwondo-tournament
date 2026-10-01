@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { normalizeBelt } from '../../shared/constants/belts.js';
+import { AppError, ErrorCode } from '../utils/errors.js';
 
 /**
  * A single cell from an uploaded spreadsheet. SheetJS returns the
@@ -50,34 +51,79 @@ export interface ImportOptions {
   ownerOrganizationId?: string | null;
 }
 
+/** Most rows a single import accepts. */
+export const MAX_IMPORT_ROWS = 5000;
+
+/**
+ * Rows written per transaction. A single interactive transaction around a
+ * whole 5000-row import ran into Prisma's default 5 s timeout and rolled the
+ * entire import back with a 500. Batches commit independently.
+ */
+const IMPORT_BATCH_SIZE = 100;
+const IMPORT_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 60_000 } as const;
+
+/** A row that passed validation and is ready to be written. */
+interface PreparedRow {
+  rowNum: number;
+  firstName: string;
+  lastName: string;
+  gender: 'M' | 'F';
+  dateOfBirth: Date;
+  /** Birth year implied by an age-only row (DOB synthesized as Jan 1). */
+  syntheticBirthYear: number | null;
+  belt: string;
+  danRank: number | null;
+  heightInches: number | null;
+  weightLbs: number | null;
+  schoolDojang: string | null;
+  specialNeeds: string | null;
+}
+
+const collapseSpaces = (s: string) => s.trim().replace(/\s+/g, ' ');
+
+/**
+ * Spreadsheet row number for error messages. SheetJS tags each parsed row
+ * with a non-enumerable 0-based `__rowNum__`; rows that arrive as JSON (the
+ * pre-parsed client path) fall back to "header on row 1, no blank rows".
+ */
+function spreadsheetRowNumber(row: ExcelRow, index: number): number {
+  const tagged = (row as { __rowNum__?: unknown }).__rowNum__;
+  return typeof tagged === 'number' ? tagged + 1 : index + 2;
+}
+
 export async function importFromExcel(
   prisma: PrismaClient,
   rows: ExcelRow[],
-  // Caller-provided mapping. `firstName` / `lastName` / `gender` /
-  // `belt` / `weight` are required; everything else is optional
-  // because not every upload carries a DOB column or a school column.
-  // We narrow the required keys up front so the loop body doesn't
-  // have to deal with `string | undefined` indexing.
+  // Caller-provided mapping. `gender` / `belt` / `weight` and either
+  // `firstName` + `lastName` or a combined `name` column are required;
+  // everything else is optional because not every upload carries a DOB
+  // column or a school column.
   mapping: Partial<ColumnMapping>,
   options: ImportOptions = {}
 ): Promise<ImportResult> {
   const matchScope = options.matchScope ?? 'none';
-  if (rows.length > 5000) {
-    throw new Error('Import limited to 5000 rows');
+  if (rows.length > MAX_IMPORT_ROWS) {
+    throw new AppError(`Import limited to ${MAX_IMPORT_ROWS} rows`, ErrorCode.IMPORT_FAILED, 400, {
+      recoverable: true,
+      suggestion: `Split the file into parts of at most ${MAX_IMPORT_ROWS} rows.`,
+    });
   }
 
   // Required-field guard. Throwing here keeps the existing per-row
   // error reporting downstream (`result.errors.push(...)`) untouched —
   // a missing required mapping is a hard failure for the whole import,
   // not a per-row error.
-  const firstNameCol = mapping.firstName;
-  const lastNameCol = mapping.lastName;
+  const firstNameCol = mapping.firstName || undefined;
+  const lastNameCol = mapping.lastName || undefined;
   const genderCol = mapping.gender;
   const beltCol = mapping.belt;
   const weightCol = mapping.weight;
-  if (!firstNameCol || !lastNameCol || !genderCol || !beltCol || !weightCol) {
-    throw new Error(
-      'Mapping is missing required columns: firstName, lastName, gender, belt, weight'
+  const hasNameColumns = Boolean((firstNameCol && lastNameCol) || mapping.name);
+  if (!hasNameColumns || !genderCol || !beltCol || !weightCol) {
+    throw new AppError(
+      'Mapping is missing required columns: firstName and lastName (or a combined name column), gender, belt, weight',
+      ErrorCode.VALIDATION_ERROR,
+      400,
     );
   }
 
@@ -88,172 +134,261 @@ export async function importFromExcel(
     errors: [],
   };
 
-  await prisma.$transaction(async (tx) => {
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const rowNum = i + 2; // Account for header row
+  // Phase 1: validate every row (no database access).
+  const prepared: PreparedRow[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = spreadsheetRowNumber(row, i);
+    const skip = (message: string) => {
+      result.errors.push({ row: rowNum, message });
+      result.skipped++;
+    };
 
-      try {
-        // Extract and validate required fields. The required-column
-        // check at the top of the function narrowed these from
-        // `string | undefined` to plain `string`, so direct indexing
-        // is safe.
-        let firstName = String(row[firstNameCol] || '').trim();
-        let lastName = String(row[lastNameCol] || '').trim();
+    let firstName = firstNameCol ? collapseSpaces(String(row[firstNameCol] || '')) : '';
+    let lastName = lastNameCol ? collapseSpaces(String(row[lastNameCol] || '')) : '';
 
-        // Handle combined "Name" column (Newton's .xlsm format)
-        if ((!firstName || !lastName) && mapping.name) {
-          const full = String(row[mapping.name] || '').trim();
-          if (full) {
-            const parts = full.split(/\s+/);
-            if (parts.length === 1) {
-              firstName = parts[0];
-            } else {
-              firstName = parts[0];
-              lastName = parts.slice(1).join(' ');
-            }
-          }
-        }
-
-        if (!firstName || !lastName) {
-          result.errors.push({ row: rowNum, message: 'Missing first or last name' });
-          result.skipped++;
-          continue;
-        }
-
-        // Parse gender
-        const genderRaw = String(row[genderCol] || '').toUpperCase().trim();
-        const gender = genderRaw.startsWith('M') ? 'M' : genderRaw.startsWith('F') ? 'F' : null;
-
-        if (!gender) {
-          result.errors.push({ row: rowNum, message: `Invalid gender: ${genderRaw}` });
-          result.skipped++;
-          continue;
-        }
-
-        // Parse date of birth or calculate from age
-        let dateOfBirth: Date | null = null;
-        // True when the DOB is synthesized (Jan 1) from an age-only
-        // column. Such a DOB is shared by every same-age namesake, so
-        // it must never be used as a match key.
-        let dobIsSynthetic = false;
-
-        if (mapping.dateOfBirth && row[mapping.dateOfBirth]) {
-          const dobRaw = row[mapping.dateOfBirth];
-          dateOfBirth = parseDate(dobRaw);
-        } else if (mapping.age && row[mapping.age]) {
-          // Calculate approximate DOB from age
-          const age = parseInt(String(row[mapping.age]));
-          if (!isNaN(age)) {
-            const today = new Date();
-            dateOfBirth = new Date(today.getFullYear() - age, 0, 1);
-            dobIsSynthetic = true;
-          }
-        }
-
-        if (!dateOfBirth) {
-          result.errors.push({ row: rowNum, message: 'Could not determine date of birth' });
-          result.skipped++;
-          continue;
-        }
-
-        // Parse belt
-        const beltRaw = String(row[beltCol] || '').trim();
-        const belt = normalizeBelt(beltRaw);
-
-        if (!belt) {
-          result.errors.push({ row: rowNum, message: 'Missing belt' });
-          result.skipped++;
-          continue;
-        }
-
-        // Parse optional fields
-        const danRank = mapping.danRank ? parseDanRank(row[mapping.danRank]) : null;
-        const heightInches = mapping.height ? parseHeight(row[mapping.height]) : null;
-        const weightLbs = parseWeight(row[weightCol]);
-        const schoolDojang = mapping.school ? String(row[mapping.school] || '').trim() || null : null;
-        const specialNeeds = mapping.specialNeeds ? String(row[mapping.specialNeeds] || '').trim() || null : null;
-
-        // Check for existing competitor (by name + exact DOB).
-        // Closes B7: case-insensitive match so a parent who
-        // imported "Minho Kim" doesn't create a new row when
-        // the next import contains "MINHO KIM".
-        //
-        // Multi-tenant: only competitors inside `matchScope` (the
-        // importer's writable set) are candidates; anything else gets
-        // a new row instead of overwriting another tenant's record.
-        // Rows with a synthetic (age-derived) DOB never match.
-        const existing =
-          matchScope === 'none' || dobIsSynthetic
-            ? null
-            : await tx.competitor.findFirst({
-                where: {
-                  firstName: { equals: firstName, mode: 'insensitive' },
-                  lastName: { equals: lastName, mode: 'insensitive' },
-                  dateOfBirth,
-                  deletedAt: null,
-                  ...(matchScope === 'all' ? {} : { AND: [matchScope] }),
-                },
-              });
-
-        if (existing) {
-          // Update existing competitor
-          await tx.competitor.update({
-            where: { id: existing.id },
-            data: {
-              gender,
-              belt,
-              danRank,
-              heightInches,
-              weightLbs,
-              schoolDojang,
-              specialNeeds,
-            },
-          });
-          result.updated++;
+    // Handle combined "Name" column (Newton's .xlsm format)
+    if ((!firstName || !lastName) && mapping.name) {
+      const full = collapseSpaces(String(row[mapping.name] || ''));
+      if (full) {
+        const parts = full.split(' ');
+        if (parts.length === 1) {
+          firstName = parts[0];
         } else {
-          // Create new competitor
-          await tx.competitor.create({
-            data: {
-              firstName,
-              lastName,
-              gender,
-              dateOfBirth,
-              belt,
-              danRank,
-              heightInches,
-              weightLbs,
-              schoolDojang,
-              specialNeeds,
-              organizationId: options.ownerOrganizationId ?? null,
-            },
-          });
-          result.imported++;
+          firstName = parts[0];
+          lastName = parts.slice(1).join(' ');
         }
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        result.errors.push({ row: rowNum, message });
-        result.skipped++;
       }
     }
-  });
 
+    if (!firstName || !lastName) {
+      skip('Missing first or last name');
+      continue;
+    }
+
+    // Parse gender
+    const genderRaw = String(row[genderCol] || '').toUpperCase().trim();
+    const gender = genderRaw.startsWith('M') ? 'M' : genderRaw.startsWith('F') ? 'F' : null;
+
+    if (!gender) {
+      skip(`Invalid gender: ${genderRaw}`);
+      continue;
+    }
+
+    // Parse date of birth or calculate from age
+    let dateOfBirth: Date | null = null;
+    // Set when the DOB is synthesized (Jan 1) from an age-only column.
+    // Such a DOB is shared by every same-age namesake, so it is never an
+    // exact match key; matching uses name + school + birth year instead.
+    let syntheticBirthYear: number | null = null;
+
+    if (mapping.dateOfBirth && row[mapping.dateOfBirth]) {
+      dateOfBirth = parseDateOfBirth(row[mapping.dateOfBirth]);
+    } else if (mapping.age && row[mapping.age]) {
+      // Calculate approximate DOB from age
+      const age = parseInt(String(row[mapping.age]));
+      if (!isNaN(age)) {
+        syntheticBirthYear = new Date().getUTCFullYear() - age;
+        dateOfBirth = new Date(Date.UTC(syntheticBirthYear, 0, 1));
+      }
+    }
+
+    if (!dateOfBirth) {
+      skip('Could not determine date of birth');
+      continue;
+    }
+
+    // Parse belt
+    const beltRaw = String(row[beltCol] || '').trim();
+    const belt = normalizeBelt(beltRaw);
+
+    if (!belt) {
+      skip('Missing belt');
+      continue;
+    }
+
+    prepared.push({
+      rowNum,
+      firstName,
+      lastName,
+      gender,
+      dateOfBirth,
+      syntheticBirthYear,
+      belt,
+      danRank: mapping.danRank ? parseDanRank(row[mapping.danRank]) : null,
+      heightInches: mapping.height ? parseHeight(row[mapping.height]) : null,
+      weightLbs: parseWeight(row[weightCol]),
+      schoolDojang: mapping.school ? collapseSpaces(String(row[mapping.school] || '')) || null : null,
+      specialNeeds: mapping.specialNeeds ? String(row[mapping.specialNeeds] || '').trim() || null : null,
+    });
+  }
+
+  // Phase 2: write in batches. Each batch commits on its own; if one fails
+  // (Postgres aborts the whole transaction on the first error), its rows are
+  // retried one by one so good rows still land and the failing row gets its
+  // real error.
+  const writeRow = async (tx: Prisma.TransactionClient, row: PreparedRow): Promise<'imported' | 'updated'> => {
+    // Check for existing competitor (by name + exact DOB).
+    // Closes B7: case-insensitive match so a parent who
+    // imported "Minho Kim" doesn't create a new row when
+    // the next import contains "MINHO KIM".
+    //
+    // Multi-tenant: only competitors inside `matchScope` (the
+    // importer's writable set) are candidates; anything else gets
+    // a new row instead of overwriting another tenant's record.
+    //
+    // Age-only rows have a synthetic DOB, so they match on name + school
+    // + the birth year implied by the age (either side of the birthday)
+    // instead; otherwise every re-import duplicated them.
+    const dobWhere: Prisma.CompetitorWhereInput = row.syntheticBirthYear === null
+      ? { dateOfBirth: row.dateOfBirth }
+      : {
+          dateOfBirth: {
+            gte: new Date(Date.UTC(row.syntheticBirthYear - 1, 0, 1)),
+            lt: new Date(Date.UTC(row.syntheticBirthYear + 1, 0, 1)),
+          },
+          schoolDojang: row.schoolDojang === null ? null : { equals: row.schoolDojang, mode: 'insensitive' },
+        };
+    const existing =
+      matchScope === 'none'
+        ? null
+        : await tx.competitor.findFirst({
+            where: {
+              firstName: { equals: row.firstName, mode: 'insensitive' },
+              lastName: { equals: row.lastName, mode: 'insensitive' },
+              ...dobWhere,
+              deletedAt: null,
+              ...(matchScope === 'all' ? {} : { AND: [matchScope] }),
+            },
+            orderBy: { createdAt: 'asc' }, // deterministic: the oldest record
+          });
+
+    if (existing) {
+      // Update existing competitor (an age-only row never overwrites the
+      // stored DOB, which may be the real one).
+      await tx.competitor.update({
+        where: { id: existing.id },
+        data: {
+          gender: row.gender,
+          belt: row.belt,
+          danRank: row.danRank,
+          heightInches: row.heightInches,
+          weightLbs: row.weightLbs,
+          schoolDojang: row.schoolDojang,
+          specialNeeds: row.specialNeeds,
+        },
+      });
+      return 'updated';
+    }
+    // Create new competitor
+    await tx.competitor.create({
+      data: {
+        firstName: row.firstName,
+        lastName: row.lastName,
+        gender: row.gender,
+        dateOfBirth: row.dateOfBirth,
+        belt: row.belt,
+        danRank: row.danRank,
+        heightInches: row.heightInches,
+        weightLbs: row.weightLbs,
+        schoolDojang: row.schoolDojang,
+        specialNeeds: row.specialNeeds,
+        organizationId: options.ownerOrganizationId ?? null,
+      },
+    });
+    return 'imported';
+  };
+
+  const tally = (outcome: 'imported' | 'updated') => {
+    if (outcome === 'imported') result.imported++;
+    else result.updated++;
+  };
+
+  for (let start = 0; start < prepared.length; start += IMPORT_BATCH_SIZE) {
+    const batch = prepared.slice(start, start + IMPORT_BATCH_SIZE);
+    try {
+      const outcomes = await prisma.$transaction(async (tx) => {
+        const done: Array<'imported' | 'updated'> = [];
+        for (const row of batch) done.push(await writeRow(tx, row));
+        return done;
+      }, IMPORT_TRANSACTION_OPTIONS);
+      outcomes.forEach(tally);
+    } catch {
+      for (const row of batch) {
+        try {
+          tally(await prisma.$transaction((tx) => writeRow(tx, row), IMPORT_TRANSACTION_OPTIONS));
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          result.errors.push({ row: row.rowNum, message });
+          result.skipped++;
+        }
+      }
+    }
+  }
+
+  result.errors.sort((a, b) => a.row - b.row);
   return result;
 }
 
-function parseDate(value: ExcelCellValue): Date | null {
+/**
+ * Parse a date of birth into a UTC-midnight Date (how DOBs are stored).
+ *
+ * - Excel serial numbers and `YYYY-MM-DD` strings are calendar dates, read
+ *   as UTC so the server's time zone never shifts them.
+ * - Slash dates follow the documented MM/DD/YYYY convention (see the import
+ *   template). A first part above 12 can only be a day, so DD/MM/YYYY is
+ *   accepted when unambiguous; impossible dates are rejected.
+ * - Anything else falls back to the JS parser, keeping its calendar day.
+ */
+export function parseDateOfBirth(value: ExcelCellValue): Date | null {
   if (value === null || value === undefined || value === '') return null;
 
-  // Handle Excel serial date number
+  const utcDate = (y: number, m: number, d: number): Date | null => {
+    if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return null;
+    if (y < 1900 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const date = new Date(Date.UTC(y, m - 1, d));
+    // Reject roll-over dates such as 02/30.
+    return date.getUTCMonth() === m - 1 && date.getUTCDate() === d ? date : null;
+  };
+
+  // Excel serial date number (days since 1899-12-30; time of day dropped)
   if (typeof value === 'number') {
-    const excelEpoch = new Date(1899, 11, 30);
-    const date = new Date(excelEpoch.getTime() + value * 24 * 60 * 60 * 1000);
-    return date;
+    if (!Number.isFinite(value) || value <= 0) return null;
+    const date = new Date(Date.UTC(1899, 11, 30) + Math.floor(value) * 86_400_000);
+    return utcDate(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
   }
 
-  // Handle string date
-  const date = new Date(String(value));
-  return isNaN(date.getTime()) ? null : date;
+  if (value instanceof Date) {
+    // SheetJS (cellDates) and JS parsers produce local midnight; keep the
+    // calendar day the spreadsheet showed.
+    if (isNaN(value.getTime())) return null;
+    return utcDate(value.getFullYear(), value.getMonth() + 1, value.getDate());
+  }
+
+  const str = String(value).trim();
+  if (!str) return null;
+
+  const iso = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/);
+  if (iso) return utcDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+
+  const slash = str.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/);
+  if (slash) {
+    const a = Number(slash[1]);
+    const b = Number(slash[2]);
+    let year = Number(slash[3]);
+    if (slash[3].length === 2) {
+      // Two-digit years: a birth year cannot be in the future.
+      const currentYY = new Date().getUTCFullYear() % 100;
+      year += year > currentYY ? 1900 : 2000;
+    }
+    // MM/DD/YYYY by convention; DD/MM/YYYY only when the first part
+    // cannot be a month.
+    return a > 12 ? utcDate(year, b, a) : utcDate(year, a, b);
+  }
+
+  const parsed = new Date(str);
+  if (isNaN(parsed.getTime())) return null;
+  return utcDate(parsed.getFullYear(), parsed.getMonth() + 1, parsed.getDate());
 }
 
 function parseDanRank(value: ExcelCellValue): number | null {

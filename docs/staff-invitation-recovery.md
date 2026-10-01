@@ -106,9 +106,7 @@ accepted rows can be removed from the list with the bin icon (hard delete).
 ## Access revocation
 
 Role change, deactivation and logout bump `User.tokenVersion`. The next
-authenticated request with an older session is refused with 401 (the auth
-cache is invalidated in the same process; other containers catch up within
-the ~15 s cache TTL).
+authenticated request with an older session is refused with 401.
 
 ## Tests
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   escapeHtml,
+  parentalConsentVerificationEmail,
   registrationConfirmationEmail,
   waitlistNotificationEmail,
   waitlistPromotionEmail,
@@ -120,6 +121,50 @@ describe('email-templates', () => {
       // Should use organizer brand in header
       expect(html).toContain('<h1>Tiger Dojo</h1>');
       expect(html).not.toContain('<h1>bowin</h1>');
+    });
+  });
+
+  describe('management link reaches every registrant', () => {
+    const managementUrl = 'https://app.test/manage-registration?token=TOKEN_abc';
+
+    it('the parental consent email (the only email a minor gets) carries the management link', () => {
+      const { html } = parentalConsentVerificationEmail({
+        competitorName: 'Kim Lee',
+        tournamentName: 'Open',
+        tournamentDate: new Date('2027-01-01'),
+        verificationUrl: 'https://app.test/verify-parent-consent?token=v',
+        managementUrl,
+        confirmationCode: 'abcd1234',
+        paymentDueCents: 2500,
+      });
+      expect(html).toContain(managementUrl);
+      expect(html).toContain('abcd1234');
+      expect(html).toContain('$25.00');
+      // No manual-entry code: there is no endpoint that accepts one.
+      expect(html).not.toMatch(/entering this code/i);
+    });
+
+    it('mentions the waitlist instead of a fee for a waitlisted minor', () => {
+      const { html } = parentalConsentVerificationEmail({
+        competitorName: 'Kim Lee',
+        tournamentName: 'Open',
+        tournamentDate: new Date('2027-01-01'),
+        verificationUrl: 'https://app.test/v',
+        managementUrl,
+        confirmationCode: 'abcd1234',
+        waitlistPosition: 3,
+      });
+      expect(html).toContain('position #3');
+      expect(html).not.toContain('Entry fee due');
+    });
+
+    it('the confirmation email flags an unpaid entry fee', () => {
+      const params = {
+        competitorName: 'Kim Lee', tournamentName: 'Open', tournamentDate: new Date('2027-01-01'),
+        tournamentLocation: null, events: 'Patterns', ageGroup: '12-14', confirmationCode: 'abcd1234', managementUrl,
+      };
+      expect(registrationConfirmationEmail({ ...params, paymentDueCents: 2500 }).html).toContain('Entry fee due');
+      expect(registrationConfirmationEmail(params).html).not.toContain('Entry fee due');
     });
   });
 });

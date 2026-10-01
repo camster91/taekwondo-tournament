@@ -21,13 +21,19 @@ function organizationWithoutSettings<T extends object>(organization: T): Omit<T,
   return safe;
 }
 
+/**
+ * The organization, if the caller owns it. Ownership is capped by the
+ * global role like every other membership: an owner who was demoted to
+ * scorekeeper/viewer can no longer export or delete the organization.
+ */
 async function ownedOrganization(
   prisma: PrismaClient,
   organizationId: string,
-  userId: string,
+  user: { id: string; role: string },
 ) {
+  if (user.role !== 'admin' && user.role !== 'director') return null;
   const membership = await prisma.organizationMember.findUnique({
-    where: { organizationId_userId: { organizationId, userId } },
+    where: { organizationId_userId: { organizationId, userId: user.id } },
     include: { organization: { include: { billingSubscription: true } } },
   });
   return membership?.role === 'owner' ? membership.organization : null;
@@ -176,7 +182,7 @@ router.post(
 
 router.get('/:id/export', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const organization = await ownedOrganization(prisma, req.params.id, req.user!.id);
+  const organization = await ownedOrganization(prisma, req.params.id, req.user!);
   if (!organization) return res.status(404).json({ error: 'Organization not found' });
 
   const tournaments = await prisma.tournament.findMany({
@@ -214,7 +220,7 @@ router.get('/:id/export', authenticate, async (req: AuthenticatedRequest, res: R
 
 router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const organization = await ownedOrganization(prisma, req.params.id, req.user!.id);
+  const organization = await ownedOrganization(prisma, req.params.id, req.user!);
   if (!organization) return res.status(404).json({ error: 'Organization not found' });
   const deletion = validateOrganizationDeletion({
     slug: organization.slug,
@@ -224,7 +230,19 @@ router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Respo
   });
   if (!deletion.ok) return res.status(deletion.status).json({ error: deletion.error });
 
-  await prisma.$transaction(async (tx) => {
+  // Legal hold (#121) blocks every hard delete, this one included.
+  const held = await prisma.tournament.count({
+    where: { organizationId: organization.id, legalHoldAt: { not: null } },
+  }) + await prisma.competitor.count({
+    where: { organizationId: organization.id, legalHoldAt: { not: null } },
+  });
+  if (held > 0) {
+    return res.status(409).json({
+      error: 'Records in this organization are under legal hold. An administrator must release the hold before it can be deleted.',
+    });
+  }
+
+  const closedAccounts = await prisma.$transaction(async (tx) => {
     const tournaments = await tx.tournament.findMany({
       where: { organizationId: organization.id },
       select: {
@@ -235,17 +253,47 @@ router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Respo
     const competitorIds = [...new Set(tournaments.flatMap((item) => (
       item.registrations.map((registration) => registration.competitorId)
     )))];
+    const memberIds = (await tx.organizationMember.findMany({
+      where: { organizationId: organization.id },
+      select: { userId: true },
+    })).map((member) => member.userId);
 
     await tx.tournament.deleteMany({ where: { organizationId: organization.id } });
+    // Competitors the organization owns outright (imported, never
+    // registered) would otherwise lose their owner and become readable by
+    // every user outside an organization.
+    await tx.competitor.deleteMany({
+      where: { organizationId: organization.id, registrations: { none: {} } },
+    });
     await tx.organization.delete({ where: { id: organization.id } });
     if (competitorIds.length) {
       await tx.competitor.deleteMany({
         where: { id: { in: competitorIds }, registrations: { none: {} } },
       });
     }
+
+    // A user with no organization falls into the legacy org-less pool and
+    // would gain access to every org-less tournament. Close the accounts of
+    // members (the owner included) left without an organization; admins
+    // keep their global access. Bumping tokenVersion ends their sessions.
+    const orphaned = await tx.user.findMany({
+      where: { id: { in: memberIds }, role: { not: 'admin' }, organizationMembers: { none: {} } },
+      select: { id: true },
+    });
+    if (orphaned.length) {
+      await tx.user.updateMany({
+        where: { id: { in: orphaned.map((user) => user.id) } },
+        data: { isActive: false, tokenVersion: { increment: 1 } },
+      });
+    }
+    return orphaned.map((user) => user.id);
   });
 
-  return res.status(204).send();
+  return res.status(200).json({
+    deleted: true,
+    closedAccounts: closedAccounts.length,
+    signedOut: closedAccounts.includes(req.user!.id),
+  });
 });
 
 export default router;

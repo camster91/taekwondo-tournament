@@ -97,6 +97,9 @@ test('director previews, applies, audits, and safely undoes schedule regeneratio
   expect(JSON.parse(restored.settings!).schedule.ringCount).toBe(1);
   expect((await prisma.tournamentOperationAudit.findUniqueOrThrow({ where: { id: audit.id } })).undoneAt).toBeInstanceOf(Date);
 
+  // The undo refetch resets the form to the restored config; editing before
+  // it lands gets overwritten and the regeneration then has nothing to review.
+  await expect(page.getByLabel('Number of Rings')).toHaveValue('1');
   await page.getByLabel('Number of Rings').fill('2');
   await page.getByRole('button', { name: 'Regenerate schedule' }).click();
   await expect(dialog).toBeVisible();

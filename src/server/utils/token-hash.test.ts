@@ -10,9 +10,11 @@ describe('token-hash', () => {
     expect(a).not.toBe('abc123');
   });
 
-  it('returns hash then plaintext for dual-read lookup', () => {
-    const values = secretLookupValues('raw-token');
-    expect(values).toEqual([hashSecret('raw-token'), 'raw-token']);
+  it('matches only the hash, never the raw value', () => {
+    expect(secretLookupValues('raw-token')).toEqual([hashSecret('raw-token')]);
+    // Submitting a stored hash must not match that same stored row.
+    const stored = hashSecret('raw-token');
+    expect(secretLookupValues(stored)).not.toContain(stored);
   });
 
   it('differs across distinct inputs', () => {

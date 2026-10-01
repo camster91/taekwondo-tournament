@@ -9,12 +9,11 @@ export function hashSecret(raw: string): string {
 }
 
 /**
- * Lookup helper for dual-read during the cutover window: try the
- * hashed form first (new rows), then plaintext (legacy rows that
- * expire within hours). Prefer hash hits.
+ * Values to match a stored secret against: only the hash. Accepting the raw
+ * value as well would let anyone who can read the table (or a backup) submit
+ * the stored hash itself as the secret. The plaintext rows from the hashing
+ * cutover expired long ago (10 min magic links, 72 h invites).
  */
 export function secretLookupValues(raw: string): string[] {
-  const hashed = hashSecret(raw);
-  if (hashed === raw) return [hashed];
-  return [hashed, raw];
+  return [hashSecret(raw)];
 }

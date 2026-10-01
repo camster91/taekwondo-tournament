@@ -1,5 +1,57 @@
 import { describe, expect, it } from 'vitest';
-import { buildRevisionFromEnv, createAppMetrics, createHttpMetrics, metricsTokenFromEnv } from './observability.js';
+import express, { type NextFunction, type Request, type Response } from 'express';
+import 'express-async-errors';
+import request from 'supertest';
+import {
+  buildRevisionFromEnv,
+  createAppMetrics,
+  createHttpMetrics,
+  metricRouteFor,
+  metricsTokenFromEnv,
+  trackMatchedRoute,
+  UNMATCHED_ROUTE,
+} from './observability.js';
+
+describe('HTTP metric route labels', () => {
+  it('caps distinct route labels so random paths cannot grow memory', () => {
+    const metrics = createHttpMetrics(3);
+    for (let i = 0; i < 50; i += 1) {
+      metrics.record({ method: 'GET', route: `/random-${i}x`, statusCode: 404, durationMs: 1 });
+    }
+    const output = metrics.render();
+    const series = output.split('\n').filter((line) => line.startsWith('bowin_http_requests_total{'));
+    expect(series).toHaveLength(4);
+    expect(output).toContain('bowin_http_requests_total{method="GET",route="other",status="4xx"} 47');
+  });
+
+  async function labelFor(path: string, method: 'get' | 'patch' = 'get'): Promise<string> {
+    const app = express();
+    let label = '';
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      trackMatchedRoute(req);
+      res.on('finish', () => { label = metricRouteFor(req); });
+      next();
+    });
+    const router = express.Router();
+    router.get('/registrations/:token', (_req: Request, res: Response) => { res.json({ ok: true }); });
+    router.patch('/registrations/:token', async () => { throw new Error('boom'); });
+    app.use('/api/public', router);
+    app.use((_err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+      res.status(500).json({ error: 'x' });
+    });
+    await request(app)[method](path);
+    await new Promise((resolve) => setImmediate(resolve));
+    return label;
+  }
+
+  it('labels by the matched route template, never the token-bearing path', async () => {
+    const token = 'A'.repeat(43);
+    expect(await labelFor(`/api/public/registrations/${token}`)).toBe('/api/public/registrations/:token');
+    // A thrown error keeps the mount prefix although Express resets baseUrl.
+    expect(await labelFor(`/api/public/registrations/${token}`, 'patch')).toBe('/api/public/registrations/:token');
+    expect(await labelFor(`/no/such/${token}`)).toBe(UNMATCHED_ROUTE);
+  });
+});
 
 describe('HTTP observability', () => {
   it('renders bounded Prometheus counters and latency totals', () => {

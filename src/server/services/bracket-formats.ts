@@ -16,6 +16,27 @@ import type { CompetitorSeed, MatchData, BracketStructure, SeedingConfig, Seedin
 export type RoundRobinPlacement = 'wins' | 'h2h' | 'points' | 'rating';
 
 /**
+ * Formats a new bracket may be generated (or corrected) into.
+ *
+ * `pool_play` is deliberately absent: `generatePoolPlay` only creates
+ * the pool stage, and no flow ever builds the finals across pool
+ * winners, so such a division can never produce placements or finish.
+ * Existing pool-play brackets stay readable.
+ */
+export const GENERATABLE_BRACKET_FORMATS = ['double_elim', 'single_elim', 'round_robin'] as const;
+export type GeneratableBracketFormat = typeof GENERATABLE_BRACKET_FORMATS[number];
+
+export const POOL_PLAY_UNAVAILABLE =
+  'Pool play is not available: its finals stage is not implemented. Use round robin, single elimination or double elimination.';
+
+/** A user-facing error for a format that cannot be generated, or null. */
+export function bracketFormatError(format: unknown): string | null {
+  if (format === 'pool_play') return POOL_PLAY_UNAVAILABLE;
+  if (typeof format === 'string' && (GENERATABLE_BRACKET_FORMATS as readonly string[]).includes(format)) return null;
+  return `Unknown bracket format "${String(format)}". Use one of: ${GENERATABLE_BRACKET_FORMATS.join(', ')}.`;
+}
+
+/**
  * Generate a round-robin schedule.
  * n competitors → n(n-1)/2 matches. Uses the "circle method" so each
  * round has at most ⌈n/2⌉ matches and every competitor plays once per round.

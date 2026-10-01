@@ -131,7 +131,13 @@ export default function BracketEditor() {
   const previewCorrectionLockRef = useRef(false);
   const applyCorrectionLockRef = useRef(false);
   const undoCorrectionLockRef = useRef(false);
-  const [pendingWinner, setPendingWinner] = useState<{ matchId: string; winnerId: string; name: string } | null>(null);
+  const [pendingWinner, setPendingWinner] = useState<{
+    matchId: string;
+    winnerId: string;
+    name: string;
+    expectedUpdatedAt?: string | null;
+    winnerChanged: boolean;
+  } | null>(null);
 
   const { data: division, isLoading } = useQuery<Division>({
     queryKey: ['division', divisionId],
@@ -290,16 +296,33 @@ export default function BracketEditor() {
     mutationFn: async ({
       matchId,
       winnerId,
+      expectedUpdatedAt,
+      winnerChanged,
     }: {
       matchId: string;
       winnerId: string;
+      expectedUpdatedAt?: string | null;
+      winnerChanged: boolean;
     }) => {
       const res = await fetch(`/api/brackets/match/${matchId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ winnerId, status: 'completed' }),
+        body: JSON.stringify({
+          winnerId,
+          status: 'completed',
+          // Director correction: flipping a recorded winner is explicit,
+          // and the old scores would contradict the new winner, so clear them.
+          correction: true,
+          ...(winnerChanged ? { score1: null, score2: null } : {}),
+          ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
+        }),
       });
-      if (!res.ok) throw new Error('Failed to update match');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(res.status === 409
+          ? (body.error || 'This match changed since you loaded it. Refresh before correcting it.')
+          : (body.error || 'Failed to update match'));
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -307,6 +330,8 @@ export default function BracketEditor() {
     },
     onError: (error: Error) => {
       addToast(error.message || 'Operation failed', 'error');
+      // A 409 means the match moved on; show the latest state.
+      queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
     },
   });
 
@@ -602,7 +627,13 @@ export default function BracketEditor() {
     const name = comp
       ? `${comp.competitor.firstName} ${comp.competitor.lastName}`
       : 'Unknown';
-    setPendingWinner({ matchId, winnerId, name });
+    setPendingWinner({
+      matchId,
+      winnerId,
+      name,
+      expectedUpdatedAt: match.updatedAt,
+      winnerChanged: match.status === 'completed' && match.winnerId !== winnerId,
+    });
   };
 
   return (
@@ -942,12 +973,16 @@ export default function BracketEditor() {
             updateMatchMutation.mutate({
               matchId: pendingWinner.matchId,
               winnerId: pendingWinner.winnerId,
+              expectedUpdatedAt: pendingWinner.expectedUpdatedAt,
+              winnerChanged: pendingWinner.winnerChanged,
             });
             setPendingWinner(null);
           }
         }}
         title="Confirm Winner"
-        message={`Record ${pendingWinner?.name ?? ''} as the winner of this match?`}
+        message={pendingWinner?.winnerChanged
+          ? `Change the recorded winner to ${pendingWinner.name}? The recorded scores will be cleared.`
+          : `Record ${pendingWinner?.name ?? ''} as the winner of this match?`}
         confirmText="Record Winner"
         variant="info"
         isLoading={updateMatchMutation.isPending}

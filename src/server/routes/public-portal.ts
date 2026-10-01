@@ -20,6 +20,7 @@ import {
   type RegistrationConsentResult,
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
+import { isOrgSlugAllowedOnHost } from '../middleware/custom-domain-host.js';
 import { getEventTypeLabel } from '../../shared/constants/sport-profiles.js';
 import {
   createPublicRegistration,
@@ -66,8 +67,8 @@ router.get('/:orgSlug', portalLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { orgSlug } = req.params;
 
-  // Validate orgSlug format
-  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug)) {
+  // Validate orgSlug format. On a custom domain only its own org is served.
+  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug) || !isOrgSlugAllowedOnHost(res, orgSlug)) {
     // Fail closed: wrong format gets empty list, not an error that leaks existence
     return res.json({ organization: null, events: [] });
   }
@@ -153,7 +154,7 @@ router.get('/:orgSlug/:eventSlug', portalLimiter, async (req: Request, res: Resp
   const { orgSlug, eventSlug } = req.params;
 
   // Validate slug formats
-  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug)) {
+  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug) || !isOrgSlugAllowedOnHost(res, orgSlug)) {
     return res.status(404).json({ error: 'Event not found' });
   }
   if (!eventSlug || !/^[a-z0-9-]{3,63}$/.test(eventSlug)) {
@@ -273,7 +274,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
   const { orgSlug, eventSlug } = req.params;
 
   // Validate slug formats
-  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug)) {
+  if (!orgSlug || !/^[a-z0-9-]{3,63}$/.test(orgSlug) || !isOrgSlugAllowedOnHost(res, orgSlug)) {
     return res.status(404).json({ error: 'Event not found' });
   }
   if (!eventSlug || !/^[a-z0-9-]{3,63}$/.test(eventSlug)) {
@@ -562,12 +563,13 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
       // P2.6: Use org brand/name, never UUID
       const organizerBrandName = tournament.brandName || organization.brandName || organization.name || tournament.name;
       const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`;
-      
+      const paymentDueCents = registration.paymentStatus === 'pending' ? registration.paymentAmountCents : null;
+
       if (isMinor) {
         const { createParentalConsentVerification } = await import('../services/parental-consent-verification.js');
         const { parentalConsentVerificationEmail } = await import('../services/email-templates.js');
         
-        const { token: verificationToken, code: verificationCode } = await createParentalConsentVerification(
+        const { token: verificationToken } = await createParentalConsentVerification(
           prisma,
           registration.id,
           parentEmail,
@@ -580,7 +582,12 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
           tournamentName: tournament.name,
           tournamentDate: tournament.date,
           verificationUrl,
-          code: verificationCode,
+          // The consent email is the only email a minor's parent gets, so it
+          // must carry the management link (pay / edit / withdraw).
+          managementUrl,
+          confirmationCode: registration.id.slice(0, 8),
+          waitlistPosition: registration.waitlistStatus === 'waitlisted' ? registration.waitlistPosition : null,
+          paymentDueCents,
           organizerBrandName,
         });
         
@@ -614,6 +621,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
             confirmationCode: registration.id.slice(0, 8),
             managementUrl,
             organizerBrandName,
+            paymentDueCents,
           });
           sendEmail(parentEmail, subject, html).catch((err) => {
             console.error('[portal/register] confirmation email failed:', err);

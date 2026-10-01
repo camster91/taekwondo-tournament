@@ -47,6 +47,12 @@ import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
 import { getAuthHeaders } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import {
+  describeForcedDataLoss,
+  divisionErrorMessage,
+  isForceConfirmable,
+  readDivisionOperationError,
+} from '../utils/division-operation-error';
 import { getSportProfile, getEventTypeLabel } from '../../shared/constants/sport-profiles';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
@@ -221,6 +227,10 @@ export default function Divisions() {
   const [moveTarget, setMoveTarget] = useState<{ assignment: AssignmentDivision['assignments'][0]; division: Division } | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [regenerateConfirm, setRegenerateConfirm] = useState(false);
+  // Second confirmation after the server refuses with a data-loss 409.
+  const [forceConfirm, setForceConfirm] = useState<
+    { kind: 'regenerate' | 'clear' | 'delete'; divisionId?: string; title: string; message: string } | null
+  >(null);
   const [resultMessage, setResultMessage] = useState<{ title: string; message: string } | null>(null);
   const [recommendationStatus, setRecommendationStatus] = useState<{ state: OperationState; message: string } | null>(null);
   const [applyRecommendationConfirm, setApplyRecommendationConfirm] = useState(false);
@@ -346,16 +356,24 @@ export default function Divisions() {
   });
 
   const autoGenerateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (options?: { force?: boolean }) => {
       const res = await fetch(`/api/divisions/tournament/${id}/auto-generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ config: { divisionThreshold: 8 } }),
+        body: JSON.stringify({ config: { divisionThreshold: 8 }, ...(options?.force ? { force: true } : {}) }),
       });
-      if (!res.ok) throw new Error('Failed to auto-generate divisions');
+      if (!res.ok) throw await readDivisionOperationError(res, 'Failed to auto-generate divisions');
       return res.json();
     },
+    onError: (error) => {
+      if (isForceConfirmable(error)) {
+        setForceConfirm({ kind: 'regenerate', title: 'Regenerating will delete data', message: describeForcedDataLoss(error, 'Regenerate divisions') });
+        return;
+      }
+      addToast(divisionErrorMessage(error, 'Failed to auto-generate divisions'), 'error');
+    },
     onSuccess: (result) => {
+      setForceConfirm(null);
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
       setResultMessage({
@@ -389,38 +407,50 @@ export default function Divisions() {
   });
 
   const clearDivisionsMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/divisions/tournament/${id}/all`, {
+    mutationFn: async (options?: { force?: boolean }) => {
+      const res = await fetch(`/api/divisions/tournament/${id}/all${options?.force ? '?force=true' : ''}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error || 'Failed to clear divisions');
+      if (!res.ok) throw await readDivisionOperationError(res, 'Failed to clear divisions');
+    },
+    onError: (error) => {
+      setClearConfirm(false);
+      if (isForceConfirmable(error)) {
+        setForceConfirm({ kind: 'clear', title: 'Clearing will delete data', message: describeForcedDataLoss(error, 'Clear all divisions') });
+        return;
       }
+      addToast(divisionErrorMessage(error, 'Failed to clear divisions'), 'error');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
       setClearConfirm(false);
+      setForceConfirm(null);
     },
   });
 
   const deleteDivisionMutation = useMutation({
-    mutationFn: async (divisionId: string) => {
-      const res = await fetch(`/api/divisions/${divisionId}`, {
+    mutationFn: async ({ divisionId, force }: { divisionId: string; force?: boolean }) => {
+      const res = await fetch(`/api/divisions/${divisionId}${force ? '?force=true' : ''}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error || 'Failed to delete division');
+      if (!res.ok) throw await readDivisionOperationError(res, 'Failed to delete division');
+    },
+    onError: (error, { divisionId }) => {
+      setDeleteTarget(null);
+      if (isForceConfirmable(error)) {
+        setForceConfirm({ kind: 'delete', divisionId, title: 'Deleting will remove results', message: describeForcedDataLoss(error, 'Delete the division') });
+        return;
       }
+      addToast(divisionErrorMessage(error, 'Failed to delete division'), 'error');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
       setDeleteTarget(null);
+      setForceConfirm(null);
     },
   });
 
@@ -709,12 +739,14 @@ export default function Divisions() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ config: { divisionThreshold: 8 } }),
       });
+      if (!res.ok) throw await readDivisionOperationError(res, 'Failed to generate preview');
       const data = await res.json();
+      if (!data || !Array.isArray(data.divisions)) throw new Error('Preview returned an unexpected response');
       setPreviewData(data);
       setShowPreview(true);
     } catch (error) {
       console.error('Preview error:', error);
-      addToast('Failed to generate preview', 'error');
+      addToast(divisionErrorMessage(error, 'Failed to generate preview'), 'error');
     }
     setPreviewLoading(false);
   };
@@ -1491,7 +1523,7 @@ export default function Divisions() {
       <ConfirmDialog
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && deleteDivisionMutation.mutate(deleteTarget.id)}
+        onConfirm={() => deleteTarget && deleteDivisionMutation.mutate({ divisionId: deleteTarget.id })}
         title="Delete Division"
         message={`Are you sure you want to delete "${deleteTarget?.name}"? This will remove all competitor assignments in this division.`}
         confirmText="Delete Division"
@@ -1519,6 +1551,23 @@ export default function Divisions() {
         message="Are you sure you want to delete all divisions? This will remove all competitor assignments and brackets. This action cannot be undone."
         confirmText="Clear All"
         isLoading={clearDivisionsMutation.isPending}
+      />
+
+      {/* Forced retry after the server's data-loss refusal (409) */}
+      <ConfirmDialog
+        isOpen={!!forceConfirm}
+        onClose={() => setForceConfirm(null)}
+        onConfirm={() => {
+          if (!forceConfirm) return;
+          if (forceConfirm.kind === 'regenerate') autoGenerateMutation.mutate({ force: true });
+          else if (forceConfirm.kind === 'clear') clearDivisionsMutation.mutate({ force: true });
+          else if (forceConfirm.divisionId) deleteDivisionMutation.mutate({ divisionId: forceConfirm.divisionId, force: true });
+        }}
+        title={forceConfirm?.title ?? ''}
+        message={<span className="whitespace-pre-wrap">{forceConfirm?.message}</span>}
+        confirmText="Yes, delete this data"
+        variant="danger"
+        isLoading={autoGenerateMutation.isPending || clearDivisionsMutation.isPending || deleteDivisionMutation.isPending}
       />
 
       {/* Regenerate Confirmation */}

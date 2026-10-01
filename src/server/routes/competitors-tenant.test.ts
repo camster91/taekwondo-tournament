@@ -26,6 +26,7 @@ vi.mock('../middleware/auth.js', () => ({
   resolveTournamentScope: vi.fn().mockResolvedValue({
     filter: { organizationId: { in: ['organization-1'] } },
     legacyPool: false,
+    orgIds: ['organization-1'],
   }),
   buildCompetitorAccessFilter: vi.fn().mockResolvedValue({
     registrations: { some: { tournament: { organizationId: { in: ['organization-1'] } } } },
@@ -42,7 +43,13 @@ vi.mock('../services/excel-template.js', () => ({
   generateImportTemplate: vi.fn(),
   getDefaultColumnMapping: vi.fn(),
 }));
-vi.mock('../services/excel-auto-map.js', () => ({ autoDetectMapping: vi.fn() }));
+vi.mock('../services/excel-auto-map.js', () => ({
+  autoDetectMapping: vi.fn(),
+  MAX_HEADER_ROW: 20,
+  readUploadedWorkbook: vi.fn(),
+  resolveImportSheet: vi.fn(),
+  sheetRowsForImport: vi.fn(),
+}));
 
 import './competitors.js';
 
@@ -72,5 +79,85 @@ describe('POST /:id/restore tenant isolation', () => {
     expect(prisma.competitor.findFirst).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(404);
     expect(prisma.competitor.update).not.toHaveBeenCalled();
+  });
+});
+
+function findRoute(method: string, path: string) {
+  const route = handlers.find((candidate) => candidate.method === method && candidate.path === path);
+  if (!route) throw new Error(`${method} ${path} not registered`);
+  return route;
+}
+
+function mockRes() {
+  const res: any = {};
+  res.status = vi.fn(() => res);
+  res.json = vi.fn(() => res);
+  return res;
+}
+
+describe('GET /meta/belts tenant isolation', () => {
+  it('scopes distinct belts to accessible competitors', async () => {
+    const prisma = { competitor: { findMany: vi.fn().mockResolvedValue([{ belt: 'Blue' }]) } };
+    const req: any = { user: { id: 'director-1', role: 'director' }, app: { locals: { prisma } } };
+    const res = mockRes();
+    await findRoute('get', '/meta/belts').handler(req, res);
+    const where = prisma.competitor.findMany.mock.calls[0][0].where;
+    expect(where.deletedAt).toBeNull();
+    expect(JSON.stringify(where.AND)).toContain('organization-1');
+    expect(res.json).toHaveBeenCalledWith(['Blue']);
+  });
+});
+
+describe('GET /:id/history tenant isolation', () => {
+  const competitor = { id: 'c1', firstName: 'A', lastName: 'B' };
+  const ownHistory = [{ id: 'h1', eventType: 'sparring', placement: 1, matchesWon: 2, matchesLost: 0 }];
+  const makePrisma = (totalHistory: number) => ({
+    competitor: { findFirst: vi.fn().mockResolvedValue(competitor) },
+    competitorHistory: {
+      findMany: vi.fn().mockResolvedValue(ownHistory),
+      count: vi.fn().mockResolvedValue(totalHistory),
+    },
+    competitorRating: { findMany: vi.fn().mockResolvedValue([{ eventType: 'sparring', rating: 1200 }]) },
+  });
+
+  it('limits history to accessible, non-deleted tournaments and omits ratings built from hidden history', async () => {
+    const prisma = makePrisma(3);
+    const req: any = { params: { id: 'c1' }, user: { id: 'director-1', role: 'director' }, app: { locals: { prisma } } };
+    const res = mockRes();
+    await findRoute('get', '/:id/history').handler(req, res);
+
+    const historyWhere = prisma.competitorHistory.findMany.mock.calls[0][0].where;
+    expect(historyWhere.competitorId).toBe('c1');
+    expect(historyWhere.tournament.deletedAt).toBeNull();
+    expect(JSON.stringify(historyWhere.tournament.AND)).toContain('organization-1');
+    expect(prisma.competitorRating.findMany).not.toHaveBeenCalled();
+    const body = res.json.mock.calls[0][0];
+    expect(body.history).toEqual(ownHistory);
+    expect(body.stats.sparring.rating).toBeUndefined();
+  });
+
+  it('returns ratings when every history row is visible', async () => {
+    const prisma = makePrisma(1);
+    const req: any = { params: { id: 'c1' }, user: { id: 'director-1', role: 'director' }, app: { locals: { prisma } } };
+    const res = mockRes();
+    await findRoute('get', '/:id/history').handler(req, res);
+    expect(res.json.mock.calls[0][0].stats.sparring.rating).toEqual({ eventType: 'sparring', rating: 1200 });
+  });
+});
+
+describe('POST / competitor ownership', () => {
+  it('resolves the owning organization at director level', async () => {
+    const auth = await import('../middleware/auth.js');
+    const prisma = {
+      tournament: { count: vi.fn().mockResolvedValue(1) },
+      competitor: { create: vi.fn().mockResolvedValue({ id: 'new' }) },
+    };
+    const req: any = {
+      user: { id: 'director-1', role: 'director' },
+      body: { firstName: 'A', lastName: 'B', gender: 'male', dateOfBirth: '2010-01-01', belt: 'white' },
+      app: { locals: { prisma } },
+    };
+    await findRoute('post', '/').handler(req, mockRes());
+    expect(auth.resolveTournamentScope).toHaveBeenCalledWith(req, prisma, 'director');
   });
 });

@@ -135,6 +135,8 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
         winnerId: string | null;
         competitor1Id: string | null;
         competitor2Id: string | null;
+        score1: string | null;
+        score2: string | null;
       }>;
     };
 
@@ -150,6 +152,8 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
           winnerId: m.winnerId,
           competitor1Id: m.competitor1Id,
           competitor2Id: m.competitor2Id,
+          score1: m.score1,
+          score2: m.score2,
         })),
       );
       baseByDivision.set(d.id, base);
@@ -295,6 +299,7 @@ router.post('/tournament/:tournamentId/preview', authenticate, requireTournament
     ...config,
     eventTypeLabels,
     customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
+    tournamentDate: tournament.date,
   };
 
   const preview = previewCategorization(registrations, categorizationConfig);
@@ -380,6 +385,7 @@ router.post('/tournament/:tournamentId/auto-generate', authenticate, requireTour
     customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
     // v2: pass the full rules object
     rules,
+    tournamentDate: tournament.date,
   };
 
   const result = await autoCategorize(prisma, tournamentId, registrations, categorizationConfig);
@@ -597,7 +603,8 @@ router.delete('/tournament/:tournamentId/all', authenticate, requireTournamentAc
     }
   }
 
-  // Create backup before deleting
+  // Create backup before deleting. saveBackup throws (503) when the backup
+  // cannot be stored, so nothing is deleted without a restorable backup.
   const backup = await backupDivisionState(prisma, tournamentId);
   await saveBackup(prisma, backup);
 

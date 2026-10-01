@@ -231,8 +231,8 @@ must send `X-CSRF-Token` equal to the readable `bowin_csrf` cookie
   pinned on both `jwt.sign` and `jwt.verify`. Don't relax these.
 - The token embeds `User.tokenVersion`; the middleware rejects a
   token whose version no longer matches. Logout, role changes and
-  deactivation bump it, so they revoke existing sessions (within the
-  ~15 s auth-cache TTL).
+  deactivation bump it, so they revoke existing sessions on the next
+  request (the user row is read on every authenticated request).
 
 ### Client requests
 
@@ -730,8 +730,8 @@ boundaries.
   regenerate.
 
 Known limits:
-- Revocation lags by up to the per-process auth-cache TTL (~15 s);
-  the cache is per container.
+- Rate limits and the WebSocket fan-out are per process; run one
+  replica (see `docs/DEPLOY.md#coolify`).
 
 ---
 
@@ -756,7 +756,7 @@ Known limits:
 | `OPENAI_API_KEY` | no | support assistant answers; without it support tickets still work |
 | `BUILD_SHA` | no (build arg) | commit reported by `/api/health` |
 | `ENABLE_DEMO_LOGIN` + `DEMO_ISOLATED_DATA` | no | isolated demo environments only |
-| `ENABLE_DEV_AUTH`, `ENABLE_E2E_AUTH_BYPASS`, `RATE_LIMIT_DISABLED` | never in prod | dev/test switches |
+| `ENABLE_DEV_AUTH`, `ENABLE_E2E_AUTH_BYPASS`, `RATE_LIMIT_DISABLED`, `STRIPE_WEBHOOK_TRUST_EVENT_PAYLOAD` | never in prod | dev/test switches (the last makes subscription webhooks skip re-fetching from Stripe; ignored in production) |
 
 ---
 

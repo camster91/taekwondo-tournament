@@ -4,7 +4,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { type RateLimitExceededEventHandler } from 'express-rate-limit';
-import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, setCsrfCookie, type AuthenticatedRequest, invalidateAuthCache } from '../middleware/auth.js';
+import { createToken, authenticate, requireRole, SESSION_COOKIE, SESSION_COOKIE_OPTIONS, setCsrfCookie, type AuthenticatedRequest } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validate.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { magicLinkEmail, welcomeEmail } from '../services/email-templates.js';
@@ -14,7 +14,13 @@ import { maybeIssueOfflineCapability } from '../services/offline-capability.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 import { checkInvitationToken, InvitationAlreadyClaimedError } from '../services/invitation-lifecycle.js';
 import { createRateLimiter } from '../middleware/rate-limit.js';
+import { anonymiseUserLinkedRecords, exportUserLinkedRecords } from '../services/gdpr-user-data.js';
 
+
+/** True for a Prisma known-request error with the given code (e.g. P2025 not found). */
+function isPrismaError(error: unknown, code: string): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
+}
 const router = Router();
 
 /** Include JWT in JSON only outside production (Bearer tooling / e2e). Cookie is the real session. */
@@ -97,6 +103,9 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
 
   if (!email) {
     return res.status(400).json({ error: 'Email is required' });
+  }
+  if (typeof email !== 'string' || email.length > 254) {
+    return res.status(400).json({ error: 'Invalid email format' });
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -214,7 +223,14 @@ router.post('/request-magic-link', authLimiter, async (req: Request, res: Respon
       code,
     });
 
-    const emailResult = await sendEmail(activeUser.email, template.subject, template.html);
+    // With a mail provider configured, send in the background: awaiting it
+    // made known accounts measurably slower to answer than unknown ones,
+    // which leaks whether an email has an account.
+    const emailResult = isEmailConfigured()
+      ? (sendEmail(activeUser.email, template.subject, template.html).catch((err) => {
+        console.error('[auth] magic-link email failed:', err);
+      }), { success: true })
+      : await sendEmail(activeUser.email, template.subject, template.html);
 
     // Dev mode: email not configured — log the link to the server console so
     // the operator can use it, but DO NOT echo it in the JSON response.
@@ -566,7 +582,6 @@ router.post('/logout', authenticate, async (req: AuthenticatedRequest, res: Resp
       where: { id: req.user!.id },
       data: { tokenVersion: { increment: 1 } },
     });
-    invalidateAuthCache(req.user!.id);
   } catch (error) {
     console.error('Logout tokenVersion bump failed:', error);
     // Fall through — clearing the cookie still ends the current session.
@@ -627,11 +642,12 @@ router.delete('/account', authenticate, async (req: AuthenticatedRequest, res: R
     return res.status(blocker.status).json({ error: blocker.error });
   }
 
-  await prisma.$transaction([
-    prisma.magicLink.deleteMany({ where: { email: user.email } }),
-    prisma.user.delete({ where: { id: user.id } }),
-  ]);
-  invalidateAuthCache(user.id);
+  await prisma.$transaction(async (tx) => {
+    await tx.magicLink.deleteMany({ where: { email: user.email } });
+    // PII outside the User row (audit emails, invitations, support tickets).
+    await anonymiseUserLinkedRecords(tx, user);
+    await tx.user.delete({ where: { id: user.id } });
+  });
   res.clearCookie(SESSION_COOKIE, { path: '/' });
   res.clearCookie('bowin_csrf', { path: '/' });
   return res.status(204).send();
@@ -788,7 +804,6 @@ router.put('/users/:userId/role', authenticate, requireRole('admin'), validateRe
         isActive: true,
       },
     });
-    invalidateAuthCache(userId);
 
     // Audit log: role change (P1-3)
     await createAuditLog(prisma, {
@@ -803,6 +818,7 @@ router.put('/users/:userId/role', authenticate, requireRole('admin'), validateRe
 
     res.json(user);
   } catch (error) {
+    if (isPrismaError(error, 'P2025')) return res.status(404).json({ error: 'User not found' });
     console.error('Update role error:', error);
     res.status(500).json({ error: 'Failed to update user role' });
   }
@@ -836,9 +852,6 @@ router.put('/users/:userId/status', authenticate, requireRole('admin'), validate
         isActive: true,
       },
     });
-    // Drop the cached auth entry so the deactivation / version bump
-    // takes effect on the very next request, not after the cache TTL.
-    invalidateAuthCache(userId);
 
     // Audit log: user status change (P1-3)
     await createAuditLog(prisma, {
@@ -853,6 +866,7 @@ router.put('/users/:userId/status', authenticate, requireRole('admin'), validate
 
     res.json(user);
   } catch (error) {
+    if (isPrismaError(error, 'P2025')) return res.status(404).json({ error: 'User not found' });
     console.error('Update status error:', error);
     res.status(500).json({ error: 'Failed to update user status' });
   }
@@ -898,20 +912,20 @@ router.post('/tournaments/:tournamentId/access', authenticate, requireRole('admi
     // changes. Without this, a scorekeeper whose access was just
     // promoted / demoted on a tournament still rides the JWT issued
     // before the change until it expires (up to 7 days), seeing
-    // data with stale role claims. The invalidateAuthCache call
-    // also drops the in-process cache hit so the next request
-    // re-reads the DB row.
+    // data with stale role claims.
     if (existing?.role !== role) {
       await prisma.user.update({
         where: { id: userId },
         data: { tokenVersion: { increment: 1 } },
         select: { id: true },
       });
-      invalidateAuthCache(userId);
     }
 
     res.json(access);
   } catch (error) {
+    if (isPrismaError(error, 'P2003') || isPrismaError(error, 'P2025')) {
+      return res.status(404).json({ error: 'User or tournament not found' });
+    }
     console.error('Grant access error:', error);
     res.status(500).json({ error: 'Failed to grant tournament access' });
   }
@@ -953,7 +967,6 @@ router.delete('/tournaments/:tournamentId/access/:userId', authenticate, require
       data: { tokenVersion: { increment: 1 } },
       select: { id: true },
     });
-    invalidateAuthCache(userId);
 
     res.status(204).send();
   } catch (error) {
@@ -970,8 +983,11 @@ router.post('/accept-invite', registerLimiter, async (req: Request, res: Respons
   if (!token) {
     return res.status(400).json({ error: 'Token is required' });
   }
-  if (!firstName || !lastName) {
+  if (typeof firstName !== 'string' || typeof lastName !== 'string' || !firstName.trim() || !lastName.trim()) {
     return res.status(400).json({ error: 'First name and last name are required' });
+  }
+  if (firstName.length > 100 || lastName.length > 100) {
+    return res.status(400).json({ error: 'Names must be 100 characters or fewer' });
   }
 
   try {
@@ -1335,12 +1351,18 @@ router.get('/gdpr/export', authenticate, async (req: AuthenticatedRequest, res: 
       take: 1000, // Last 1000 audit logs
     });
 
+    // Records outside the User row that hold this person's PII.
+    const linkedRecords = user ? await exportUserLinkedRecords(prisma, user) : null;
+
     const exportData = {
       exportDate: new Date().toISOString(),
       user,
       organizationMemberships: organizationMembers,
       tournamentAccess,
       auditLogs,
+      matchAuditLogs: linkedRecords?.matchAuditLogs ?? [],
+      invitations: linkedRecords?.invitations ?? [],
+      supportTickets: linkedRecords?.supportTickets ?? [],
     };
 
     res.setHeader('Content-Type', 'application/json');
@@ -1402,10 +1424,13 @@ router.delete('/gdpr/delete-account', authenticate, async (req: AuthenticatedReq
       // Outstanding sign-in codes for this address
       await tx.magicLink.deleteMany({ where: { email: user.email } });
 
+      // PII outside the User row: the email on match audit entries,
+      // invitations addressed to this user, support tickets they opened.
+      await anonymiseUserLinkedRecords(tx, user);
+
       // Finally, delete the user account
       await tx.user.delete({ where: { id: userId } });
     });
-    invalidateAuthCache(userId);
     res.clearCookie(SESSION_COOKIE, { path: '/' });
     res.clearCookie('bowin_csrf', { path: '/' });
 

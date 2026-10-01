@@ -1,7 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { getBeltLevel, getSimpleBeltCategory, isBlackBelt } from '../../shared/constants/belts.js';
 import { getAgeGroup, DEFAULT_AGE_GROUPS, BB_AGE_GROUPS, type AgeGroup } from '../../shared/constants/age-groups.js';
-import { getWeightClass, DEFAULT_WEIGHT_CLASSES } from '../../shared/constants/weight-classes.js';
+import { findWeightClass, DEFAULT_WEIGHT_CLASSES } from '../../shared/constants/weight-classes.js';
 import {
   DIVISION_SIZE_CONFIG,
   AGE_BOUNDARY_CONFIG,
@@ -32,6 +32,9 @@ export interface CategorizationConfig {
   balanceByExperience?: boolean;       // Consider experience in splits
   // v2: full tournament rules (overrides the individual flags when present)
   rules?: TournamentRules;
+  // Tournament date; with each competitor's dateOfBirth it gives the
+  // exact age in months used by the "compete with older" allowance.
+  tournamentDate?: Date | string;
 }
 
 // Source-internal type. Mirrors `Registration & { competitor: Competitor }` from
@@ -55,6 +58,7 @@ export interface RegistrationWithCompetitor {
     schoolDojang?: string | null;
     weightLbs?: number | null;
     danRank?: number | null;
+    dateOfBirth?: Date | string | null;
   };
 }
 
@@ -417,22 +421,13 @@ function categorizeBeltLevel(
       return config.useBlackBeltAgeGroups ? BB_AGE_GROUPS : DEFAULT_AGE_GROUPS;
     })();
 
+    // Every competitor lands in exactly one band (see resolveAgeBand).
+    const bandByRegistration = new Map(
+      genderRegs.map((r) => [r.id, resolveAgeBand(r, ageGroups, config)] as const)
+    );
+
     for (const ageGroup of ageGroups) {
-      const ageRegs = genderRegs.filter((r) => {
-        const age = r.ageAtTournament || 0;
-        // Standard age band match
-        if (age >= ageGroup.min && age <= ageGroup.max) return true;
-        // v2: "compete with older" opt-in — a competitor whose age is below
-        // the band's min (within ageFlexMonths) can be promoted up
-        if (r.competeWithOlder && config.enableAgeBoundaryFlex !== false) {
-          const toleranceMonths = config.ageBoundaryTolerance ?? 0;
-          if (toleranceMonths > 0) {
-            const ageWithFlex = age + toleranceMonths / 12;
-            if (ageWithFlex >= ageGroup.min && ageWithFlex <= ageGroup.max) return true;
-          }
-        }
-        return false;
-      });
+      const ageRegs = genderRegs.filter((r) => bandByRegistration.get(r.id) === ageGroup);
 
       if (ageRegs.length === 0) continue;
 
@@ -524,6 +519,54 @@ function categorizeBeltLevel(
   }
 
   return groups;
+}
+
+/**
+ * Whole months between date of birth and the tournament date.
+ * Returns null when either date is missing or unparseable.
+ */
+export function ageInMonthsAt(
+  dateOfBirth: Date | string | null | undefined,
+  tournamentDate: Date | string | null | undefined,
+): number | null {
+  if (!dateOfBirth || !tournamentDate) return null;
+  const birth = new Date(dateOfBirth);
+  const on = new Date(tournamentDate);
+  if (Number.isNaN(birth.getTime()) || Number.isNaN(on.getTime())) return null;
+  let months = (on.getFullYear() - birth.getFullYear()) * 12 + (on.getMonth() - birth.getMonth());
+  if (on.getDate() < birth.getDate()) months -= 1;
+  return months;
+}
+
+/**
+ * The single age band a registration competes in.
+ *
+ * Normally the band containing `ageAtTournament`. With the "compete with
+ * older" opt-in and an `ageBoundaryTolerance` of N months, a competitor
+ * who will reach the next band's minimum age within N months of the
+ * tournament is moved up into that band instead (never into two bands).
+ * The exact age in months comes from the date of birth at the tournament
+ * date; without those, the stored whole-year age is used (i.e. the
+ * competitor is treated as having just had their birthday).
+ */
+export function resolveAgeBand(
+  registration: RegistrationWithCompetitor,
+  ageGroups: AgeGroup[],
+  config: Pick<CategorizationConfig, 'enableAgeBoundaryFlex' | 'ageBoundaryTolerance' | 'tournamentDate'>,
+): AgeGroup | null {
+  const age = registration.ageAtTournament || 0;
+  const standard = ageGroups.find((group) => age >= group.min && age <= group.max) ?? null;
+
+  const toleranceMonths = config.ageBoundaryTolerance ?? 0;
+  if (!registration.competeWithOlder || config.enableAgeBoundaryFlex === false || toleranceMonths <= 0) {
+    return standard;
+  }
+  const months = ageInMonthsAt(registration.competitor.dateOfBirth, config.tournamentDate) ?? age * 12;
+  const flexedAge = Math.floor((months + toleranceMonths) / 12);
+  const promoted = ageGroups.find((group) => flexedAge >= group.min && flexedAge <= group.max) ?? null;
+  // Only ever move up; a gap in custom bands keeps the standard band.
+  if (promoted && (!standard || promoted.min > standard.min)) return promoted;
+  return standard;
 }
 
 function groupByDanRank(
@@ -633,21 +676,39 @@ function groupByWeightClass(
       }))
     : undefined;
 
+  // A wide age band (e.g. Black Belt "11 and Under") spans several
+  // weight tables, and every table reuses names like "Light". Grouping
+  // by name alone put a 6-year-old at 66 lb and an 11-year-old at
+  // 140 lb in one "Heavy" division, so the key includes the table's
+  // age range. The lookup age is clamped into the band so a competitor
+  // promoted via "compete with older" uses the band's table.
+  const tables = new Map<string, { name: string; ageMin: number; ageMax: number }>();
   for (const reg of registrations) {
     const weight = reg.weightAtRegistration || reg.competitor.weightLbs || 0;
-    const age = reg.ageAtTournament || 0;
-    const weightClass = getWeightClass(weight, age, gender, weightClassConfig) || 'Unassigned';
+    const age = Math.min(Math.max(reg.ageAtTournament || 0, ageGroup.min), ageGroup.max);
+    const weightClass = findWeightClass(weight, age, gender, weightClassConfig);
+    const key = weightClass ? `${weightClass.name}|${weightClass.ageMin}-${weightClass.ageMax}` : 'Unassigned';
+    if (weightClass) tables.set(key, weightClass);
 
-    if (!groups.has(weightClass)) {
-      groups.set(weightClass, []);
+    if (!groups.has(key)) {
+      groups.set(key, []);
     }
-    groups.get(weightClass)!.push(reg);
+    groups.get(key)!.push(reg);
   }
 
-  return Array.from(groups.entries()).map(([weightClass, regs]) => ({
-    weightClass,
-    registrations: regs,
-  }));
+  // Keep the plain class name when the band uses one weight table (the
+  // usual case); qualify it with the table's ages only when the band
+  // spans several tables, so the division names stay distinct.
+  const tableRanges = new Set(Array.from(tables.values()).map((wc) => `${wc.ageMin}-${wc.ageMax}`));
+  return Array.from(groups.entries()).map(([key, regs]) => {
+    const table = tables.get(key);
+    const label = !table
+      ? 'Unassigned'
+      : tableRanges.size > 1
+        ? `${table.name} (${table.ageMax >= 99 ? `${table.ageMin}+` : `${table.ageMin}-${table.ageMax}`})`
+        : table.name;
+    return { weightClass: label, registrations: regs };
+  });
 }
 
 function createDivisionGroup(

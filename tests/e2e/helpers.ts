@@ -100,6 +100,10 @@ export async function loginAsEmail(page: Page, email: string) {
   // Login redirects to "/" on success.
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 10_000 });
   await waitForSessionCookie(page);
+  // Let the post-login screen finish loading. A caller's page.goto() that
+  // interrupts the redirect mid-load can fail in WebKit with "internal error".
+  await page.waitForLoadState('load');
+  await page.locator('#main-content').waitFor({ timeout: 10_000 }).catch(() => undefined);
 }
 
 /**

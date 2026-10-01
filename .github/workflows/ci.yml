@@ -23,11 +23,13 @@ jobs:
     runs-on: ubuntu-latest
     # The e2e step runs four Playwright projects (chromium, firefox,
     # webkit, mobile-chrome) serially against one database, ~40 min on
-    # a healthy suite, so 45m left no headroom. If this gets tight
+    # a healthy suite, so 45m left no headroom. With the container smoke
+    # test the whole job reached 60m, which cancelled a finished run while
+    # it uploaded artifacts; 90m leaves room. If this gets tight
     # again, the scorekeeper tests share login state and could be made
     # faster via test.beforeAll + shared context — see tests/e2e/
     # scorekeeper-a11y.spec.ts.
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Checkout

@@ -98,6 +98,9 @@ export default defineConfig({
       STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || E2E_STRIPE_WEBHOOK_SECRET,
       STRIPE_STARTER_PRICE_ID: process.env.STRIPE_STARTER_PRICE_ID || 'price_e2e_starter',
       STRIPE_PRO_PRICE_ID: process.env.STRIPE_PRO_PRICE_ID || 'price_e2e_pro',
+      // The placeholder key cannot reach Stripe, so subscription webhooks
+      // apply the signed payload instead of re-fetching (non-production only).
+      STRIPE_WEBHOOK_TRUST_EVENT_PAYLOAD: String(1),
       METRICS_TOKEN: process.env.METRICS_TOKEN || E2E_METRICS_TOKEN,
       OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64: process.env.OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64 || E2E_OFFLINE_PRIVATE_KEY,
       VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64: process.env.VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64 || E2E_OFFLINE_PUBLIC_KEY,

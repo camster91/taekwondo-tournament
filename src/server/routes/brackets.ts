@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { generateBracket, generateSingleElimination, type BracketStructure } from '../services/bracket-generator.js';
-import { generateRoundRobin, generatePoolPlay } from '../services/bracket-formats.js';
+import { generateRoundRobin, bracketFormatError, POOL_PLAY_UNAVAILABLE } from '../services/bracket-formats.js';
 import {
   handleByeMatches,
   getBracketPlacements,
@@ -43,6 +43,7 @@ import {
 import { broadcastMatchUpdate, broadcastBracketRegenerated } from '../services/websocket.js';
 import { createBracketWriteLimiter, createBracketRebuildLimiter } from '../middleware/bracket-rate-limit.js';
 import { getEventTypeLabel } from '../../shared/constants/sport-profiles.js';
+import { decideMatchResultWrite, matchResultSchema, type MatchResultRequest } from '../services/match-result-guard.js';
 
 const router = Router();
 
@@ -57,21 +58,7 @@ const getParam = (param: string | string[] | undefined): string => {
   return param || '';
 };
 
-// Validation schemas
-const matchResultSchema = z.object({
-  winnerId: z.string().uuid().nullable().optional(),
-  // Scores must look like "5", "12", or "0" — at most 3 digits, no
-  // negatives, no decimals, no letters. Stops a scorekeeper from
-  // submitting "<script>" or 9999 by accident and lets the client
-  // assume the value is safe to render verbatim.
-  score1: z.string().regex(/^\d{1,3}$/, 'Score must be 0-999').optional(),
-  score2: z.string().regex(/^\d{1,3}$/, 'Score must be 0-999').optional(),
-  status: z.enum(['pending', 'ready', 'in_progress', 'completed', 'bye']).optional(),
-  // Notes are shown in the bracket detail panel and on the PDF export,
-  // so we cap length to keep both renderers fast and prevent a single
-  // match from bloating the PDF.
-  notes: z.string().max(500, 'Notes must be 500 characters or fewer').optional(),
-});
+// Validation schemas (matchResultSchema lives in services/match-result-guard.ts)
 
 // P2-9: Video URL validation schema
 const videoUrlSchema = z.object({
@@ -79,7 +66,10 @@ const videoUrlSchema = z.object({
 });
 
 const bracketCorrectionConfigSchema = z.object({
-  format: z.enum(['double_elim', 'single_elim', 'round_robin', 'pool_play']),
+  // pool_play is accepted by the enum (stored brackets may use it) but
+  // rejected with a clear message: its finals stage is not implemented.
+  format: z.enum(['double_elim', 'single_elim', 'round_robin', 'pool_play'])
+    .refine((format) => format !== 'pool_play', { message: POOL_PLAY_UNAVAILABLE }),
   seedingStrategy: z.enum(['school_spread', 'manual', 'skill_based', 'balanced']),
   poolCount: z.number().int().min(2).max(100).optional(),
   advancePerPool: z.number().int().min(1).max(8).optional(),
@@ -183,8 +173,13 @@ router.post('/division/:divisionId/generate', authenticate, bracketRebuildLimite
     });
   }
 
-  // format: 'double_elim' (default) | 'single_elim' | 'round_robin' | 'pool_play'
-  const { seedingStrategy = 'school_spread', format = 'double_elim', poolCount, advancePerPool } = req.body;
+  // format: 'double_elim' (default) | 'single_elim' | 'round_robin'.
+  // pool_play is rejected (no finals stage), as is any unknown format.
+  const { seedingStrategy = 'school_spread', format = 'double_elim' } = req.body;
+  const formatError = bracketFormatError(format);
+  if (formatError) {
+    return res.status(400).json({ error: formatError });
+  }
 
   const division = await prisma.division.findUnique({
     where: { id: divisionId },
@@ -223,12 +218,6 @@ router.post('/division/:divisionId/generate', authenticate, bracketRebuildLimite
   let bracketStructure: BracketStructure;
   if (format === 'round_robin') {
     bracketStructure = generateRoundRobin(competitors, { seedingStrategy });
-  } else if (format === 'pool_play') {
-    bracketStructure = generatePoolPlay(competitors, {
-      seedingStrategy,
-      poolCount,
-      advancePerPool,
-    });
   } else if (format === 'single_elim') {
     bracketStructure = generateSingleElimination(competitors, seedingStrategy);
   } else {
@@ -368,7 +357,7 @@ router.put('/match/:matchId', authenticate, bracketWriteLimiter, validateRequest
     return res.status(access.status || 403).json({ error: access.error });
   }
 
-  const { winnerId, score1, score2, status, notes } = req.body;
+  const { winnerId, score1, score2, status, notes } = req.body as MatchResultRequest;
   const user = req.user;
 
   // Get current match state for audit log
@@ -393,11 +382,42 @@ router.put('/match/:matchId', authenticate, bracketWriteLimiter, validateRequest
     }
   }
 
+  // Optimistic concurrency + result-flip guard. `expectedUpdatedAt` is
+  // the version the client rendered (or queued offline); changing the
+  // winner of a completed match needs an explicit `correction: true`.
+  // An identical resubmission is a no-op success so offline replays
+  // stay idempotent.
+  const decision = decideMatchResultWrite(currentMatch, req.body as MatchResultRequest);
+  if (decision.kind === 'noop' || decision.kind === 'conflict') {
+    const latest = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        competitor1: { include: { competitor: true } },
+        competitor2: { include: { competitor: true } },
+        winner: { include: { competitor: true } },
+      },
+    });
+    if (decision.kind === 'noop') return res.json(latest ?? currentMatch);
+    const recordedWinner = latest?.winner?.competitor;
+    const error = decision.reason === 'already_recorded' && recordedWinner
+      ? `This match was already recorded as a win for ${recordedWinner.firstName} ${recordedWinner.lastName}`
+        + `${latest?.score1 != null && latest?.score2 != null ? ` (${latest.score1}–${latest.score2})` : ''}. Refresh to see the recorded result.`
+      : decision.message;
+    return res.status(409).json({
+      error,
+      code: decision.reason === 'already_recorded' ? 'MATCH_ALREADY_RECORDED' : 'MATCH_VERSION_CONFLICT',
+      currentMatch: latest,
+    });
+  }
+  if (decision.kind === 'invalid') {
+    return res.status(400).json({ error: decision.message });
+  }
+
   if (
     status === 'completed' &&
     winnerId &&
-    score1 !== undefined &&
-    score2 !== undefined
+    score1 != null &&
+    score2 != null
   ) {
     const numericScore1 = Number(score1);
     const numericScore2 = Number(score2);
@@ -462,13 +482,7 @@ router.put('/match/:matchId', authenticate, bracketWriteLimiter, validateRequest
         id: getParam(req.params.matchId),
         updatedAt: currentMatch.updatedAt,
       },
-      data: {
-        winnerId,
-        score1,
-        score2,
-        status,
-        notes,
-      },
+      data: decision.data,
     });
 
     if (write.count !== 1) {
@@ -939,6 +953,15 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, bracketRebui
     },
   });
 
+  // Validate every requested format before generating anything, so a
+  // pool_play (no finals stage) or unknown format fails the whole call.
+  for (const requested of [defaultFormat, ...Object.values(formats as Record<string, unknown>)]) {
+    const formatError = bracketFormatError(requested);
+    if (formatError) {
+      return res.status(400).json({ error: formatError });
+    }
+  }
+
   const existingBracket = divisions.find((division) => division.bracket !== null);
   if (existingBracket) {
     return res.status(409).json({
@@ -969,8 +992,6 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, bracketRebui
       bracketStructure = generateSingleElimination(competitors, seedingStrategy);
     } else if (format === 'round_robin') {
       bracketStructure = generateRoundRobin(competitors, { seedingStrategy });
-    } else if (format === 'pool_play') {
-      bracketStructure = generatePoolPlay(competitors, { seedingStrategy });
     } else {
       bracketStructure = generateBracket(competitors, seedingStrategy);
     }

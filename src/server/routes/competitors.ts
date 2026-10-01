@@ -2,16 +2,16 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { z } from 'zod';
-import * as XLSX from 'xlsx';
 import { importFromExcel, type ColumnMapping, type ExcelRow } from '../services/excel-import.js';
 import { generateImportTemplate, getDefaultColumnMapping } from '../services/excel-template.js';
-import { autoDetectMapping } from '../services/excel-auto-map.js';
+import { autoDetectMapping, MAX_HEADER_ROW, readUploadedWorkbook, resolveImportSheet, sheetRowsForImport } from '../services/excel-auto-map.js';
 import { validateRequest } from '../middleware/validate.js';
 import { jsonBodyParser } from '../index.js';
 import {
   authenticate,
   requireRole,
   resolveTournamentScope,
+  buildTournamentAccessFilter,
   buildCompetitorAccessFilter,
   buildCompetitorWriteFilter,
   type AuthenticatedRequest,
@@ -20,6 +20,8 @@ import { parseBoundedInt, parseOptionalInt } from './query-parsing.js';
 import { legalHoldSchema, legalHoldData, competitorIsHeld } from '../services/legal-hold.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 import { findPotentialDuplicates, mergeCompetitors, MIN_DUPLICATE_THRESHOLD } from '../services/competitor-deduplication.js';
+import { recomputeRegistrationAges } from '../services/registration-age.js';
+import { isAppError } from '../utils/errors.js';
 
 const router = Router();
 
@@ -82,6 +84,7 @@ router.post('/auto-map', authenticate, requireRole('admin', 'director'), validat
     const result = autoDetectMapping(buffer);
     res.json({ ...result, fileName: fileName || 'uploaded' });
   } catch (err: unknown) {
+    if (isAppError(err)) throw err; // 400: sheet over the row limit
     console.error('[competitors/auto-map] parse failed:', err);
     res.status(500).json({ error: 'Failed to parse file' });
   }
@@ -311,8 +314,10 @@ router.get('/meta/schools', authenticate, async (req: Request, res: Response) =>
 // NOTE: Must be defined BEFORE /:id route to avoid being matched as an ID
 router.get('/meta/belts', authenticate, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  // Scoped like /meta/schools: only belts of accessible competitors.
+  const competitorFilter = await buildCompetitorAccessFilter(req as AuthenticatedRequest, prisma);
   const belts = await prisma.competitor.findMany({
-    where: { deletedAt: null },
+    where: competitorFilter ? { deletedAt: null, AND: [competitorFilter] } : { deletedAt: null },
     select: { belt: true },
     distinct: ['belt'],
     orderBy: { belt: 'asc' },
@@ -364,9 +369,16 @@ router.get('/:id/history', authenticate, async (req: Request, res: Response) => 
     return res.status(404).json({ error: 'Competitor not found' });
   }
 
-  // Get tournament history with placements
+  // Tournament history with placements, limited to tournaments the
+  // caller can open (a competitor shared across tenants must not reveal
+  // another tenant's events or results). Soft-deleted tournaments are
+  // hidden for everyone.
+  const tournamentFilter = await buildTournamentAccessFilter(req as AuthenticatedRequest, prisma);
   const history = await prisma.competitorHistory.findMany({
-    where: { competitorId },
+    where: {
+      competitorId,
+      tournament: tournamentFilter ? { deletedAt: null, AND: [tournamentFilter] } : { deletedAt: null },
+    },
     include: {
       tournament: {
         select: {
@@ -380,10 +392,15 @@ router.get('/:id/history', authenticate, async (req: Request, res: Response) => 
     orderBy: { createdAt: 'desc' },
   });
 
-  // Get current ratings (patterns and sparring)
-  const ratings = await prisma.competitorRating.findMany({
-    where: { competitorId },
-  });
+  // Ratings aggregate results from every tournament the competitor
+  // entered. Only return them when the caller can see all of that
+  // history; otherwise they would leak other tenants' results.
+  const totalHistoryCount = tournamentFilter
+    ? await prisma.competitorHistory.count({ where: { competitorId } })
+    : history.length;
+  const ratings = totalHistoryCount === history.length
+    ? await prisma.competitorRating.findMany({ where: { competitorId } })
+    : [];
 
   // Calculate aggregate stats
   const totalMatches = history.reduce((sum, h) => sum + h.matchesWon + h.matchesLost, 0);
@@ -486,7 +503,8 @@ function resolveOwnerOrganizationId(
 }
 
 async function importOwnerOrganizationId(req: AuthenticatedRequest, prisma: PrismaClient): Promise<string | null> {
-  const scope = await resolveTournamentScope(req, prisma);
+  // Owning a new competitor is a write: only director-level memberships count.
+  const scope = await resolveTournamentScope(req, prisma, 'director');
   return resolveOwnerOrganizationId(scope, undefined) ?? null;
 }
 
@@ -498,7 +516,9 @@ async function importOwnerOrganizationId(req: AuthenticatedRequest, prisma: Pris
 router.post('/', authenticate, requireRole('admin', 'director'), validateRequest(competitorCreateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const authReq = req as AuthenticatedRequest;
-  const scope = await resolveTournamentScope(authReq, prisma);
+  // Director-level scope: a viewer/scorekeeper membership must not let a
+  // global director create competitors owned by that organization.
+  const scope = await resolveTournamentScope(authReq, prisma, 'director');
   // Tenant users must belong to at least one tournament — creating
   // floating competitors that no scoped list would show (and that
   // later IDOR-scoped updates couldn't touch) is disallowed.
@@ -595,21 +615,29 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
     specialNeeds,
   } = req.body;
 
-  const competitor = await prisma.competitor.update({
-    where: { id },
-    data: {
-      firstName,
-      lastName,
-      gender,
-      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
-      belt,
-      beltStripe,
-      danRank,
-      heightInches,
-      weightLbs,
-      schoolDojang,
-      specialNeeds,
-    },
+  const competitor = await prisma.$transaction(async (tx) => {
+    const updated = await tx.competitor.update({
+      where: { id },
+      data: {
+        firstName,
+        lastName,
+        gender,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+        belt,
+        beltStripe,
+        danRank,
+        heightInches,
+        weightLbs,
+        schoolDojang,
+        specialNeeds,
+      },
+    });
+    // A corrected date of birth changes the stored age on every
+    // registration, which categorization reads.
+    if (dateOfBirth) {
+      await recomputeRegistrationAges(tx, { competitorId: id });
+    }
+    return updated;
   });
 
   res.json(competitor);
@@ -753,6 +781,10 @@ const importFileSchema = z.object({
   fileBase64: z.string().min(1),
   columnMapping: z.record(z.string(), z.string()),
   fileName: z.string().optional(),
+  // The sheet and header row the client previewed and mapped against.
+  // Omitted: the same auto-detection /auto-map uses.
+  sheetName: z.string().min(1).max(255).optional(),
+  headerRow: z.number().int().min(1).max(MAX_HEADER_ROW).optional(),
 });
 
 router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
@@ -778,22 +810,24 @@ router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin'
       if (buffer.length > 25 * 1024 * 1024) {
         return res.status(413).json({ error: 'File too large (max 25MB)' });
       }
-      // Read the workbook. The first non-empty sheet is what
-      // we import (matches the client behavior — see
-      // Competitors.tsx handleFileUpload which picks the sheet
-      // matching 'competitor' or falls back to SheetNames[0]).
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) {
-        return res.status(400).json({ error: 'Workbook has no sheets' });
-      }
-      const data = XLSX.utils.sheet_to_json<ExcelRow>(workbook.Sheets[sheetName], { defval: '' });
+      // Read the sheet + header row the client previewed and mapped
+      // (Competitors.tsx sends both). Previously this always read
+      // SheetNames[0] with the header on row 1, so a workbook whose
+      // roster is not the first sheet (Newton's .xlsm) imported 0 rows.
+      // Reads are row-bounded; an oversized sheet is a 400.
+      const workbook = readUploadedWorkbook(buffer);
+      const { sheetName, headerRow } = resolveImportSheet(workbook, {
+        sheetName: parsed.data.sheetName,
+        headerRow: parsed.data.headerRow,
+      });
+      const data = sheetRowsForImport(workbook, sheetName, headerRow);
       const result = await importFromExcel(prisma, data, parsed.data.columnMapping, {
         matchScope: await importMatchScope(req as AuthenticatedRequest, prisma),
         ownerOrganizationId: await importOwnerOrganizationId(req as AuthenticatedRequest, prisma),
       });
-      return res.json({ ...result, parsedServerSide: true });
+      return res.json({ ...result, sheetName, headerRow, parsedServerSide: true });
     } catch (err: unknown) {
+      if (isAppError(err)) throw err; // 400s: bad sheet, row limit, mapping
       console.error('[competitors/import] failed:', err);
       res.status(500).json({ error: 'Import failed' });
     }
@@ -846,6 +880,7 @@ router.post('/merge', authenticate, requireRole('admin', 'director'), validateRe
     const result = await mergeCompetitors(prisma, primaryId, secondaryId, mergeOptions);
     res.json({ success: true, result });
   } catch (err: unknown) {
+    if (isAppError(err)) throw err; // e.g. 409: both in the same division
     console.error('[competitors/merge] merge failed:', err);
     const message = err instanceof Error ? err.message : 'Failed to merge competitors';
     res.status(400).json({ error: message });

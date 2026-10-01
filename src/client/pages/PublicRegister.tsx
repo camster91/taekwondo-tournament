@@ -11,6 +11,8 @@ import { Select } from '../components/ui';
 import { Textarea } from '../components/ui';
 import { getSportProfile } from '../../shared/constants/sport-profiles';
 import { fetchJson, getApiFailure } from '../utils/api-status';
+import { ageOnDate } from '../utils/date-only';
+import { loadPendingCheckout, managementUrlFor, savePendingCheckout } from '../utils/pending-checkout';
 import {
   parseRegistrationLegalConfig,
   parseRegistrationResult,
@@ -166,15 +168,10 @@ export default function PublicRegister() {
   // autoCategorize would assign on submit.
   const ageBandPreview = useMemo(() => {
     if (!formData.dateOfBirth) return null;
-    const dob = new Date(formData.dateOfBirth);
-    if (isNaN(dob.getTime())) return null;
-    const now = new Date();
-    let age = now.getFullYear() - dob.getFullYear();
-    // Adjust if birthday hasn't occurred yet this year.
-    const monthDiff = now.getMonth() - dob.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
-      age--;
-    }
+    // Parse the YYYY-MM-DD input as a calendar date; `new Date(...)` reads it
+    // as UTC midnight, which is the previous local day west of UTC.
+    const age = ageOnDate(formData.dateOfBirth);
+    if (age === null) return null;
     if (age < 4 || age > 99) return null;
 
     // Pick CB vs BB grouping based on belt. "Black" or "Poom" → BB.
@@ -232,14 +229,10 @@ export default function PublicRegister() {
 
   const isMinor = useMemo(() => {
     if (!formData.dateOfBirth) return false;
-    const dob = new Date(formData.dateOfBirth);
-    const today = new Date();
-    let age = today.getFullYear() - dob.getFullYear();
-    const monthDiff = today.getMonth() - dob.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-      age--;
-    }
-    return age < 18;
+    // Calendar-date age: UTC parsing made a 17-year-old count as 18 on the
+    // day before their birthday west of UTC (skipping guardian fields).
+    const age = ageOnDate(formData.dateOfBirth);
+    return age !== null && age < 18;
   }, [formData.dateOfBirth]);
 
   // Map sport event types to the two boolean fields (patterns = first event, sparring = second)
@@ -355,33 +348,43 @@ export default function PublicRegister() {
 
   // P2-2: Handle payment return flow
   useEffect(() => {
+    // The confirmation (with the one-time management token) was saved to
+    // sessionStorage right before the Stripe redirect.
+    const saved = registrationIdFromPayment ? loadPendingCheckout(registrationIdFromPayment) : null;
     if (paymentStatus === 'success' && registrationIdFromPayment) {
-      // Payment succeeded; show success message
-      // We can't fetch the full registration details without the management
-      // token, so show a generic success screen
       setResult({
         success: true,
-        message: 'Payment complete! Your registration is confirmed.',
-        registration: {
-          id: registrationIdFromPayment,
-          confirmationCode: registrationIdFromPayment.slice(0, 8),
-          managementToken: '',
-          competitorName: '',
-          tournamentName: '',
-          tournamentDate: new Date().toISOString(),
-          events: { patterns: false, sparring: false },
-          ageGroup: '',
-          paymentStatus: 'paid',
-        },
+        message: 'Payment received! Your registration is confirmed once the payment is processed.',
+        registration: saved
+          ? { ...saved, paymentStatus: 'paid' }
+          : {
+            id: registrationIdFromPayment,
+            confirmationCode: registrationIdFromPayment.slice(0, 8),
+            managementToken: '',
+            competitorName: '',
+            tournamentName: '',
+            tournamentDate: new Date().toISOString(),
+            events: { patterns: false, sparring: false },
+            ageGroup: '',
+            paymentStatus: 'paid',
+          },
       });
       setRegisteredCount((c) => c + 1);
-      
+
       // Clear query params so back button doesn't re-trigger
       window.history.replaceState({}, '', '/register');
     } else if (paymentStatus === 'cancelled' && registrationIdFromPayment) {
-      // Payment cancelled; show error
-      setError('Payment was cancelled. Your registration is pending payment. Please contact the tournament organizer if you need assistance.');
-      
+      if (saved) {
+        // The registration exists but is unpaid: show it with a way to pay.
+        setResult({
+          success: true,
+          message: 'Payment was not completed. Your registration is saved, but the entry fee is still due.',
+          registration: { ...saved, paymentStatus: 'pending' },
+        });
+      } else {
+        setError('Payment was not completed. Your registration is saved, but the entry fee is still due. Use the "Manage Registration" link in your confirmation email to complete payment, or contact the tournament organizer.');
+      }
+
       // Clear query params
       window.history.replaceState({}, '', '/register');
     }
@@ -486,6 +489,9 @@ export default function PublicRegister() {
       
       // P2-2: If checkoutUrl is present, redirect to Stripe immediately
       if (parsedResult.checkoutUrl) {
+        // The management token is returned only once; keep it for the
+        // success/cancel page so the parent can still pay, edit or withdraw.
+        savePendingCheckout(parsedResult.registration);
         window.location.href = parsedResult.checkoutUrl;
         return;
       }
@@ -565,8 +571,20 @@ export default function PublicRegister() {
           <Card>
             <CardBody className="p-8 text-center">
               <CheckCircle className="h-16 w-16 text-success500 dark:text-success400 mx-auto mb-4" />
-              <h1 className="text-2xl font-bold text-surface-900 dark:text-white mb-2">Registration Complete!</h1>
+              <h1 className="text-2xl font-bold text-surface-900 dark:text-white mb-2">
+                {result.registration.paymentStatus === 'pending' ? 'Payment Not Completed' : 'Registration Complete!'}
+              </h1>
               <p className="text-surface-600 dark:text-surface-400 mb-6">{result.message}</p>
+
+              {result.registration.paymentStatus === 'pending' && result.registration.managementToken && (
+                <a
+                  href={managementUrlFor(result.registration.managementToken)}
+                  data-testid="complete-payment-link"
+                  className="block w-full mb-6 px-4 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium"
+                >
+                  Complete payment
+                </a>
+              )}
 
               {result.registration.confirmationCode && (
                 <div className="bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700 rounded-lg p-5 mb-6">
@@ -606,12 +624,17 @@ export default function PublicRegister() {
                       Look up your registration
                     </a>
                     {' '}·{' '}
-                    <a
-                      href={`/manage-registration?token=${encodeURIComponent(result.registration.managementToken || '')}`}
-                      className="underline hover:no-underline"
-                    >
-                      Edit or withdraw
-                    </a>
+                    {result.registration.managementToken ? (
+                      <a
+                        href={managementUrlFor(result.registration.managementToken)}
+                        data-testid="manage-registration-link"
+                        className="underline hover:no-underline"
+                      >
+                        Edit or withdraw
+                      </a>
+                    ) : (
+                      <span>use the Manage Registration link in your confirmation email to edit or withdraw</span>
+                    )}
                   </p>
                 </div>
               )}

@@ -6,6 +6,7 @@ import { validateRequest } from '../middleware/validate.js';
 import {
   authenticate,
   requireRole,
+  findOrgMembershipAtLevel,
   type AuthenticatedRequest,
 } from '../middleware/auth.js';
 
@@ -47,14 +48,12 @@ router.get('/', authenticate, requireRole('admin', 'director'), async (req: Auth
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const membership = await prisma.organizationMember.findFirst({
-    where: { userId: req.user.id },
-    select: { organizationId: true },
-    orderBy: { createdAt: 'asc' },
-  });
+  // Templates are director-level org data: a viewer/scorekeeper
+  // membership does not unlock them, whatever the global role.
+  const { membership } = await findOrgMembershipAtLevel(prisma, req.user.id, 'director');
 
   if (!membership) {
-    return res.status(403).json({ error: 'No organization membership found' });
+    return res.status(403).json({ error: 'No organization membership with director access found' });
   }
 
   const includeDeleted = req.query.trash === 'true';
@@ -79,13 +78,12 @@ router.get('/:id', authenticate, requireRole('admin', 'director'), async (req: A
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const membership = await prisma.organizationMember.findFirst({
-    where: { userId: req.user.id },
-    select: { organizationId: true },
-  });
+  // Templates are director-level org data: a viewer/scorekeeper
+  // membership does not unlock them, whatever the global role.
+  const { membership } = await findOrgMembershipAtLevel(prisma, req.user.id, 'director');
 
   if (!membership) {
-    return res.status(403).json({ error: 'No organization membership found' });
+    return res.status(403).json({ error: 'No organization membership with director access found' });
   }
 
   const template = await prisma.tournamentTemplate.findFirst({
@@ -110,14 +108,12 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const membership = await prisma.organizationMember.findFirst({
-    where: { userId: req.user.id },
-    select: { organizationId: true },
-    orderBy: { createdAt: 'asc' },
-  });
+  // Templates are director-level org data: a viewer/scorekeeper
+  // membership does not unlock them, whatever the global role.
+  const { membership } = await findOrgMembershipAtLevel(prisma, req.user.id, 'director');
 
   if (!membership) {
-    return res.status(403).json({ error: 'No organization membership found' });
+    return res.status(403).json({ error: 'No organization membership with director access found' });
   }
 
   const { name, description, sportProfileSlug, settings, rules, weightClasses, brandName, brandPrimaryColor, brandLogoUrl } = req.body;
@@ -150,13 +146,12 @@ router.put('/:id', authenticate, requireRole('admin', 'director'), validateReque
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const membership = await prisma.organizationMember.findFirst({
-    where: { userId: req.user.id },
-    select: { organizationId: true },
-  });
+  // Templates are director-level org data: a viewer/scorekeeper
+  // membership does not unlock them, whatever the global role.
+  const { membership } = await findOrgMembershipAtLevel(prisma, req.user.id, 'director');
 
   if (!membership) {
-    return res.status(403).json({ error: 'No organization membership found' });
+    return res.status(403).json({ error: 'No organization membership with director access found' });
   }
 
   const existing = await prisma.tournamentTemplate.findFirst({
@@ -201,13 +196,12 @@ router.delete('/:id', authenticate, requireRole('admin', 'director'), async (req
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const membership = await prisma.organizationMember.findFirst({
-    where: { userId: req.user.id },
-    select: { organizationId: true },
-  });
+  // Templates are director-level org data: a viewer/scorekeeper
+  // membership does not unlock them, whatever the global role.
+  const { membership } = await findOrgMembershipAtLevel(prisma, req.user.id, 'director');
 
   if (!membership) {
-    return res.status(403).json({ error: 'No organization membership found' });
+    return res.status(403).json({ error: 'No organization membership with director access found' });
   }
 
   const existing = await prisma.tournamentTemplate.findFirst({
@@ -238,13 +232,12 @@ router.post('/:id/restore', authenticate, requireRole('admin', 'director'), asyn
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const membership = await prisma.organizationMember.findFirst({
-    where: { userId: req.user.id },
-    select: { organizationId: true },
-  });
+  // Templates are director-level org data: a viewer/scorekeeper
+  // membership does not unlock them, whatever the global role.
+  const { membership } = await findOrgMembershipAtLevel(prisma, req.user.id, 'director');
 
   if (!membership) {
-    return res.status(403).json({ error: 'No organization membership found' });
+    return res.status(403).json({ error: 'No organization membership with director access found' });
   }
 
   const existing = await prisma.tournamentTemplate.findFirst({

@@ -9,6 +9,7 @@ import {
   buildRegistrationConsent,
   registrationLegalConfigFromEnv,
   validateLookupParams,
+  validateMergedRegistration,
   PUBLIC_REGISTRATION_LIMITS,
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
@@ -59,11 +60,28 @@ function publicRegistrationSettings(raw: string | null): { registrationFee?: str
   }
 }
 
-// Rate limit public registration to prevent abuse: 10 submissions per 15 minutes per IP
+// Rate limit public registration to prevent abuse: 10 submissions per 15 minutes per IP.
+// Each public write has its own budget: a family registering several kids
+// from one network must still be able to pay and confirm consent.
 const registrationLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: 'Too many registration attempts. Please try again later.' },
+});
+
+// Entry-fee checkout (requires the 43-char management token): parents may
+// retry payment a few times per registration.
+const checkoutLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many payment attempts. Please try again later.' },
+});
+
+// Parental consent confirmation (requires a 256-bit emailed token).
+const consentLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many verification attempts. Please try again later.' },
 });
 
 // School portal share-link reads can dump a school's full roster and
@@ -492,13 +510,14 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
       
       const organizerBrandName = tournamentForEmail?.brandName || tournamentForEmail?.organization?.brandName || undefined;
       const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`;
-      
+      const paymentDueCents = registration.paymentStatus === 'pending' ? registration.paymentAmountCents : null;
+
       // P2-14: For minors, send parental consent verification email INSTEAD of confirmation
       if (isMinor) {
         const { createParentalConsentVerification } = await import('../services/parental-consent-verification.js');
         const { parentalConsentVerificationEmail } = await import('../services/email-templates.js');
         
-        const { token: verificationToken, code: verificationCode } = await createParentalConsentVerification(
+        const { token: verificationToken } = await createParentalConsentVerification(
           prisma,
           registration.id,
           parentEmail,
@@ -511,7 +530,12 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
           tournamentName: tournamentForEmail?.name || registration.tournament.name,
           tournamentDate: tournamentForEmail?.date || registration.tournament.date,
           verificationUrl,
-          code: verificationCode,
+          // The consent email is the only email a minor's parent gets, so it
+          // must carry the management link (pay / edit / withdraw).
+          managementUrl,
+          confirmationCode: registration.id.slice(0, 8),
+          waitlistPosition: registration.waitlistStatus === 'waitlisted' ? registration.waitlistPosition : null,
+          paymentDueCents,
           organizerBrandName,
         });
         
@@ -548,6 +572,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
             confirmationCode: registration.id.slice(0, 8),
             managementUrl,
             organizerBrandName,
+            paymentDueCents,
           });
           sendEmail(parentEmail, subject, html).catch((err) => {
             console.error('[public/register] confirmation email failed:', err);
@@ -806,9 +831,60 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
       tournamentDate: registration.tournament.date,
       tournamentStatus: registration.tournament.status,
       checkedIn: registration.checkedIn,
+      // Lets the parent finish an unpaid entry fee (e.g. after an abandoned
+      // Checkout or a waitlist promotion) via POST /checkout.
+      paymentStatus: registration.paymentStatus,
+      paymentAmountCents: registration.paymentAmountCents,
+      waitlistStatus: registration.waitlistStatus,
+      waitlistPosition: registration.waitlistPosition,
     },
   });
 });
+
+/** Registration fields that decide division placement. */
+const DIVISION_REGISTRATION_FIELDS = ['patterns', 'sparring', 'weightAtRegistration', 'competeWithOlder'] as const;
+/** Competitor fields that decide division placement. */
+const DIVISION_COMPETITOR_FIELDS = ['gender', 'belt', 'danRank'] as const;
+
+const BRACKET_LOCKED_MESSAGE = 'Brackets have already been drawn for this competitor. Please contact the tournament organizer to change events, belt, weight or gender, or to withdraw.';
+
+/**
+ * Whether the registration is placed in a (live) division whose bracket has
+ * been generated. Such a bracket's matches and structure reference the
+ * registration, so self-service must not change its placement.
+ */
+async function isRegistrationInDrawnBracket(
+  db: Pick<PrismaClient, 'divisionAssignment'>,
+  registrationId: string,
+): Promise<boolean> {
+  const count = await db.divisionAssignment.count({
+    where: { registrationId, division: { deletedAt: null, bracket: { isNot: null } } },
+  });
+  return count > 0;
+}
+
+const PAID_WITHDRAWAL_MESSAGE = 'This registration has been paid. Please contact the tournament organizer to withdraw and arrange any refund.';
+
+/**
+ * Best-effort: expire the registration's open Checkout session so it can't
+ * be paid after a withdrawal. Returns true only when Stripe reports the
+ * session already completed/paid (the caller must not delete then).
+ * Without Stripe configured, or on any Stripe error, returns false.
+ */
+async function checkoutSessionAlreadyPaid(sessionId: string | null): Promise<boolean> {
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!stripeSecretKey || !sessionId || !sessionId.startsWith('cs_')) return false;
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(stripeSecretKey);
+  if (await expireCheckoutSessionBestEffort(stripe, sessionId)) return false;
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    return session.status === 'complete' || session.payment_status === 'paid';
+  } catch (error) {
+    console.warn('[registration-manage-withdraw] could not check checkout session:', error instanceof Error ? error.message : error);
+    return false;
+  }
+}
 
 const manageUpdateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
@@ -864,12 +940,21 @@ router.patch('/registrations/:token', manageUpdateLimiter, async (req: Request, 
   // them back empty. Treat empty values for those fields as "unchanged"
   // rather than as validation errors.
   const body: Record<string, unknown> = { ...(req.body ?? {}) };
-  for (const key of ['gender', 'belt', 'school', 'danRank'] as const) {
+  // The management page also submits `weight: null` when no weight was
+  // recorded; a weight cannot be cleared here, so treat it as unchanged.
+  for (const key of ['gender', 'belt', 'school', 'danRank', 'weight'] as const) {
     if (body[key] === '' || body[key] === null) delete body[key];
   }
   const { ok, error, data, regData } = buildRegistrationPatch(body);
   if (!ok) {
     return res.status(400).json({ error: error ?? 'Invalid patch.' });
+  }
+
+  // Validate the registration as it will be after the patch, not just the
+  // patch: the same rules as POST /register apply.
+  const mergedError = validateMergedRegistration(registration, regData);
+  if (mergedError) {
+    return res.status(400).json({ error: mergedError });
   }
 
   // specialNeeds and competeWithOlder are per-registration data (the
@@ -892,56 +977,69 @@ router.patch('/registrations/:token', manageUpdateLimiter, async (req: Request, 
   // anywhere else; otherwise it may be a record shared with other
   // tournaments (or entered by the organizer) and a token holder must
   // not overwrite it.
+  // Division placement depends only on these fields. Any other edit (name
+  // typo, school, special needs) leaves division assignments alone.
+  //
+  // Self-service never deletes Match rows: they belong to both competitors
+  // and Bracket.structure references them. Once the registration sits in a
+  // division whose bracket has been drawn, division-relevant edits (and
+  // withdrawal, below) are refused with 409 so the organizer handles them
+  // with the director tools. Before any bracket exists there are no
+  // matches, and the stale division assignments are simply dropped so the
+  // next auto-categorization places the competitor correctly.
   const outcome = await prisma.$transaction(async (tx) => {
+    let divisionChange = DIVISION_REGISTRATION_FIELDS.some(
+      (key) => key in regData && regData[key] !== registration[key],
+    );
+    let competitorChanges: Record<string, unknown> = {};
     if (Object.keys(data).length > 0) {
       const current = await tx.competitor.findUnique({
         where: { id: registration.competitorId },
         select: { firstName: true, gender: true, belt: true, danRank: true, schoolDojang: true },
       });
-      const changed = Object.fromEntries(
+      competitorChanges = Object.fromEntries(
         Object.entries(data).filter(([key, value]) => current?.[key as keyof typeof current] !== value),
       );
-      if (Object.keys(changed).length > 0) {
+      if (Object.keys(competitorChanges).length > 0) {
         const owned = await isCompetitorOwnedByRegistration(tx, registration);
-        if (!owned) return 'profile_locked' as const;
-        await tx.competitor.update({ where: { id: registration.competitorId }, data: changed });
+        if (!owned) return { status: 'profile_locked' as const };
       }
+      divisionChange ||= DIVISION_COMPETITOR_FIELDS.some((key) => key in competitorChanges);
+    }
+    if (divisionChange && await isRegistrationInDrawnBracket(tx, registration.id)) {
+      return { status: 'bracket_locked' as const };
+    }
+    if (Object.keys(competitorChanges).length > 0) {
+      await tx.competitor.update({ where: { id: registration.competitorId }, data: competitorChanges });
     }
     if (Object.keys(regData).length > 0) {
       await tx.registration.update({ where: { id: registration.id }, data: regData });
     }
-    return 'ok' as const;
+    if (divisionChange) {
+      await tx.divisionAssignment.deleteMany({ where: { registrationId: registration.id } });
+    }
+    return { status: 'ok' as const, divisionChange };
   });
 
-  if (outcome === 'profile_locked') {
+  if (outcome.status === 'profile_locked') {
     return res.status(409).json({
       error: 'Name, gender, belt and school for this competitor are managed by the tournament organizer. Please contact them to change these details.',
       code: 'COMPETITOR_PROFILE_LOCKED',
     });
   }
+  if (outcome.status === 'bracket_locked') {
+    return res.status(409).json({ error: BRACKET_LOCKED_MESSAGE, code: 'BRACKET_LOCKED' });
+  }
 
   // #118 acceptance: Audit log (non-sensitive)
   console.log(`[registration-manage-update] Registration ${registration.id.slice(0, 8)} updated via management token`);
 
-  // Invalidate bracket regeneration since the data changed.
-  // Closes B4: the previous code did an unconditional
-  //   bracket.deleteMany({ where: { division: { assignments: { some:
-  //     { registrationId: thisRegistration.id } } } } })
-  // which, because Bracket is 1:1 with Division, deleted the WHOLE
-  // bracket for the division — wiping every other competitor's
-  // match results when one parent fixed a typo. Now we delete
-  // only the matches that involved the patching registration
-  // (already done on the line above) and skip the bracket wipe
-  // entirely. The next bracket regeneration will produce a fresh
-  // structure that omits the changed registration.
-  await prisma.divisionAssignment.deleteMany({ where: { registrationId: registration.id } });
-  await prisma.match.deleteMany({ where: { OR: [{ competitor1Id: registration.id }, { competitor2Id: registration.id }] } });
-  // NOTE: do not delete the bracket — see B4. The downstream
-  // matches still reference the now-removed registration by
-  // id, but the scorekeeper / match view shows them as TBD
-  // until the director regenerates the bracket.
-
-  res.json({ success: true, message: 'Registration updated. Your division assignment may change when brackets are regenerated.' });
+  res.json({
+    success: true,
+    message: outcome.divisionChange
+      ? 'Registration updated. Your division assignment may change when divisions are regenerated.'
+      : 'Registration updated.',
+  });
 });
 
 // Withdraw a registration by confirmation code. Parents can do this
@@ -978,12 +1076,31 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
     return res.status(409).json({ error: 'Cannot withdraw once the tournament has started.' });
   }
 
-  // Cascade-delete related rows before removing the registration.
-  await prisma.$transaction(async (tx) => {
+  // Deleting a paid registration would destroy the only record of the
+  // payment (and any refund needs the organizer anyway).
+  if (registration.paymentStatus === 'paid') {
+    return res.status(409).json({ error: PAID_WITHDRAWAL_MESSAGE, code: 'PAID_REGISTRATION' });
+  }
+
+  // Close any open Checkout session first so it cannot be paid after the
+  // registration is gone. If it can no longer be expired because the
+  // parent just paid (webhook not processed yet), treat it as paid.
+  if (await checkoutSessionAlreadyPaid(registration.paymentIntentId)) {
+    return res.status(409).json({ error: PAID_WITHDRAWAL_MESSAGE, code: 'PAID_REGISTRATION' });
+  }
+
+  // Never delete Match rows here (they are shared with the opponent and
+  // referenced by Bracket.structure). Once a bracket including this
+  // registration exists, withdrawal goes through the organizer.
+  const withdrawal = await prisma.$transaction(async (tx) => {
+    if (await isRegistrationInDrawnBracket(tx, registration.id)) return 'bracket_locked' as const;
     await tx.divisionAssignment.deleteMany({ where: { registrationId: registration.id } });
-    await tx.match.deleteMany({ where: { OR: [{ competitor1Id: registration.id }, { competitor2Id: registration.id }] } });
     await tx.registration.delete({ where: { id: registration.id } });
+    return 'withdrawn' as const;
   });
+  if (withdrawal === 'bracket_locked') {
+    return res.status(409).json({ error: BRACKET_LOCKED_MESSAGE, code: 'BRACKET_LOCKED' });
+  }
 
   // #118 acceptance: Audit log (non-sensitive)
   console.log(`[registration-manage-withdraw] Registration ${registration.id.slice(0, 8)} withdrawn via management token`);
@@ -1007,10 +1124,13 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
   res.json({ success: true, message: 'Registration withdrawn.' });
 });
 
-// P2-14: Verify parental consent for minor registration
-router.get('/verify-parent-consent', registrationLimiter, async (req: Request, res: Response) => {
+// P2-14: Verify parental consent for minor registration.
+// POST only: consent is given by the parent's explicit click on the
+// verification page. A GET would be fired by mail link scanners and
+// previews, "consenting" without the parent.
+router.post('/verify-parent-consent', consentLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { token } = req.query;
+  const { token } = (req.body ?? {}) as { token?: unknown };
 
   if (!token || typeof token !== 'string') {
     return res.status(400).json({ error: 'Verification token is required' });
@@ -1094,7 +1214,9 @@ router.get(
   schoolPortalLimiter,
   async (req: Request, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
-    const schoolName = decodeURIComponent(req.params.schoolName);
+    // Express has already percent-decoded route params; decoding again
+    // throws URIError on names like "100% TKD" (and mangles "%41").
+    const schoolName = req.params.schoolName;
     const shareSlug = typeof req.query.slug === 'string' ? req.query.slug : '';
 
     const tournament = await prisma.tournament.findUnique({
@@ -1395,7 +1517,7 @@ router.get(
 // the parent). A registration UUID alone is not a secret — its first 8
 // characters are the printed confirmation code and it appears in Stripe
 // redirect URLs — so it is not accepted on its own.
-router.post('/checkout', registrationLimiter, async (req: Request, res: Response) => {
+router.post('/checkout', checkoutLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { managementToken, registrationId } = (req.body ?? {}) as {
     managementToken?: unknown;
@@ -1413,6 +1535,7 @@ router.post('/checkout', registrationLimiter, async (req: Request, res: Response
       id: true,
       paymentStatus: true,
       paymentIntentId: true,
+      waitlistStatus: true,
       managementTokenExpiresAt: true,
       managementTokenRevokedAt: true,
       tournament: { select: { id: true, name: true, settings: true, deletedAt: true } },
@@ -1432,6 +1555,14 @@ router.post('/checkout', registrationLimiter, async (req: Request, res: Response
 
   if (registration.paymentStatus === 'paid') {
     return res.status(409).json({ error: 'This registration has already been paid' });
+  }
+
+  // A waitlisted registrant holds no spot; payment opens on promotion.
+  if (registration.waitlistStatus === 'waitlisted') {
+    return res.status(409).json({
+      error: 'This registration is on the waitlist. Payment opens if a spot becomes available.',
+      code: 'WAITLISTED',
+    });
   }
 
   // Only pending/failed registrations can start a checkout. waived /

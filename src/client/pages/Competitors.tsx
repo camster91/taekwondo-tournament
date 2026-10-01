@@ -20,7 +20,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
 import Spinner from '../components/ui/Spinner';
 import { DataTable, TableHead, TableBody, TableRow, TableCell, IconButton } from '../components/ui';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
@@ -52,6 +52,8 @@ interface Competitor {
 interface ImportMapping {
   firstName: string;
   lastName: string;
+  /** Combined "First Last" column, split on the first space by the server. */
+  name?: string;
   gender: string;
   age?: string;
   dateOfBirth?: string;
@@ -64,6 +66,11 @@ interface ImportMapping {
   sparring?: string;
   specialNeeds?: string;
 }
+
+/** Header row of the client-side preview (sheet_to_json default). */
+const IMPORT_PREVIEW_HEADER_ROW = 1;
+/** Rows read for the preview; mirrors the server's 5000-row import cap. */
+const IMPORT_PREVIEW_MAX_ROWS = 5001;
 
 const BELT_OPTIONS = [
   'White',
@@ -103,6 +110,10 @@ const emptyForm = {
 export default function Competitors() {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
+  const { hasRole } = useAuth();
+  // Competitor writes (add, edit, import, delete) are admin/director only;
+  // other roles would just hit 403s.
+  const canEditCompetitors = hasRole(['admin', 'director']);
   const [search, setSearch] = useState('');
   const [beltFilter, setBeltFilter] = useState<string[]>([]);
   const [genderFilter, setGenderFilter] = useState<string>('');
@@ -142,6 +153,9 @@ export default function Competitors() {
   // — old imports that uploaded a file then had the page reload
   // before the file was held in state).
   const [importFile, setImportFile] = useState<File | null>(null);
+  // Sheet the preview was read from (header on row 1). Sent with the
+  // file so the server imports exactly what the user mapped.
+  const [importSheetName, setImportSheetName] = useState<string | null>(null);
   const [columnMapping, setColumnMapping] = useState<ImportMapping>({
     firstName: '',
     lastName: '',
@@ -315,13 +329,18 @@ export default function Competitors() {
     mutationFn: async (
       payload:
         | { data: Record<string, unknown>[]; mapping: ImportMapping }
-        | { fileBase64: string; fileName?: string; mapping: ImportMapping }
+        | { fileBase64: string; fileName?: string; sheetName?: string; mapping: ImportMapping }
     ) => {
       // Two request shapes — server accepts either (the
       // server-side xlsx parser is preferred per P8, but the
       // JSON path is kept for back-compat with old imports).
       const body = 'fileBase64' in payload
-        ? { fileBase64: payload.fileBase64, fileName: payload.fileName, columnMapping: payload.mapping }
+        ? {
+          fileBase64: payload.fileBase64,
+          fileName: payload.fileName,
+          columnMapping: payload.mapping,
+          ...(payload.sheetName ? { sheetName: payload.sheetName, headerRow: IMPORT_PREVIEW_HEADER_ROW } : {}),
+        }
         : { data: payload.data, columnMapping: payload.mapping };
       const res = await fetch('/api/competitors/import', {
         method: 'POST',
@@ -340,6 +359,7 @@ export default function Competitors() {
       setShowImportModal(false);
       setImportData(null);
       setImportFile(null);
+      setImportSheetName(null);
       setImportError(null);
     },
     onError: (error) => setImportError(error instanceof Error ? error.message : 'Failed to import competitors'),
@@ -383,13 +403,16 @@ export default function Competitors() {
       // file is actually selected for import preview.
       const XLSX = await import('xlsx');
       const data = new Uint8Array(event.target?.result as ArrayBuffer);
-      const workbook = XLSX.read(data, { type: 'array' });
+      // Row-bounded like the server parse (a sheet declaring a huge
+      // dimension otherwise stalls the tab).
+      const workbook = XLSX.read(data, { type: 'array', sheetRows: IMPORT_PREVIEW_MAX_ROWS });
 
       const sheetName =
         workbook.SheetNames.find((n) =>
           n.toLowerCase().includes('competitor')
         ) || workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
+      setImportSheetName(sheetName ?? null);
 
       const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
@@ -412,8 +435,8 @@ export default function Competitors() {
             autoMapping.firstName = col;
           else if (lower.includes('last') && lower.includes('name'))
             autoMapping.lastName = col;
-          else if (lower === 'name' && !autoMapping.firstName) {
-            autoMapping.firstName = col;
+          else if ((lower === 'name' || lower === 'full name') && !autoMapping.name) {
+            autoMapping.name = col;
           } else if (lower.includes('gender') || lower === 'sex')
             autoMapping.gender = col;
           else if (lower.includes('dob') || lower.includes('birth'))
@@ -470,7 +493,7 @@ export default function Competitors() {
         r.readAsDataURL(importFile);
       });
       importMutation.mutate(
-        { fileBase64, fileName: importFile.name, mapping: columnMapping },
+        { fileBase64, fileName: importFile.name, sheetName: importSheetName ?? undefined, mapping: columnMapping },
         { onSettled: () => {
           importPreparingRef.current = false;
           setImportPreparing(false);
@@ -520,7 +543,10 @@ export default function Competitors() {
         c.firstName,
         c.lastName,
         c.gender,
-        c.dateOfBirth ? new Date(c.dateOfBirth).toLocaleDateString() : '',
+        // Calendar date as stored (UTC midnight) in YYYY-MM-DD: a
+        // locale-formatted local date showed the previous day west of
+        // UTC and re-imported as a different person.
+        c.dateOfBirth ? String(c.dateOfBirth).slice(0, 10) : '',
         c.belt,
         c.danRank ?? '',
         c.heightInches ?? '',
@@ -571,19 +597,23 @@ export default function Competitors() {
         count={filteredCompetitors?.length ?? data?.competitors?.length ?? 0}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
-              <Upload className="h-4 w-4 mr-2" /> Import
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.xlsm"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <Button variant="primary" size="sm" onClick={() => { setEditingCompetitor(null); setFormData(emptyForm); setShowFormModal(true); }}>
-              <Plus className="h-4 w-4 mr-2" /> Add
-            </Button>
+            {canEditCompetitors && (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="h-4 w-4 mr-2" /> Import
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.xlsm"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <Button variant="primary" size="sm" onClick={() => { setEditingCompetitor(null); setFormData(emptyForm); setShowFormModal(true); }}>
+                  <Plus className="h-4 w-4 mr-2" /> Add
+                </Button>
+              </>
+            )}
             <div className="relative">
               <Button
                 variant="secondary"
@@ -612,13 +642,15 @@ export default function Competitors() {
                     >
                       <Download className="h-4 w-4" /> Template
                     </button>
-                    <Link
-                      to="/competitors/duplicates"
-                      onClick={() => setMoreMenuOpen(false)}
-                      className="w-full text-left px-4 py-2 text-sm text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-2"
-                    >
-                      <UserPlus className="h-4 w-4" /> Find Duplicates
-                    </Link>
+                    {canEditCompetitors && (
+                      <Link
+                        to="/competitors/duplicates"
+                        onClick={() => setMoreMenuOpen(false)}
+                        className="w-full text-left px-4 py-2 text-sm text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-2"
+                      >
+                        <UserPlus className="h-4 w-4" /> Find Duplicates
+                      </Link>
+                    )}
                   </div>
                 </>
               )}
@@ -669,9 +701,11 @@ export default function Competitors() {
               <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
                 Clear
               </Button>
-              <Button variant="danger" size="sm" onClick={() => setBulkDeleteOpen(true)}>
-                <Trash2 className="h-3.5 w-3.5" /> Delete {selectedIds.size}
-              </Button>
+              {canEditCompetitors && (
+                <Button variant="danger" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="h-3.5 w-3.5" /> Delete {selectedIds.size}
+                </Button>
+              )}
             </div>
           </div>
         </Toolbar>
@@ -810,7 +844,7 @@ export default function Competitors() {
                           {c.danRank && ` ${c.danRank}D`}
                         </span>
                       </div>
-                      <div className="flex gap-2">
+                      {canEditCompetitors && <div className="flex gap-2">
                         <button
                           onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
                           aria-label={`Edit ${c.firstName} ${c.lastName}`}
@@ -825,7 +859,7 @@ export default function Competitors() {
                         >
                           <Trash2 className="h-5 w-5" />
                         </button>
-                      </div>
+                      </div>}
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm mt-3">
                       <div className="flex justify-between">
@@ -885,8 +919,8 @@ export default function Competitors() {
                     {filteredCompetitors.map((c: Competitor) => (
                       <TableRow
                         key={c.id}
-                        onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
-                        className={`border-b border-surface-100 dark:border-surface-800/60 cursor-pointer ${selectedIds.has(c.id) ? 'row-selected' : ''}`}
+                        onClick={canEditCompetitors ? () => { setEditingCompetitor(c); setShowFormModal(true); } : undefined}
+                        className={`border-b border-surface-100 dark:border-surface-800/60 ${canEditCompetitors ? 'cursor-pointer' : ''} ${selectedIds.has(c.id) ? 'row-selected' : ''}`}
                       >
                         <TableCell className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
                           <input
@@ -943,20 +977,24 @@ export default function Competitors() {
                                 size="sm"
                               />
                             </Link>
-                            <IconButton
-                              icon={<Edit className="h-3.5 w-3.5" />}
-                              label={`Edit ${c.firstName} ${c.lastName}`}
-                              variant="primary"
-                              size="sm"
-                              onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
-                            />
-                            <IconButton
-                              icon={<Trash2 className="h-3.5 w-3.5" />}
-                              label={`Delete ${c.firstName} ${c.lastName}`}
-                              variant="danger"
-                              size="sm"
-                              onClick={() => setDeleteTarget(c)}
-                            />
+                            {canEditCompetitors && (
+                              <>
+                                <IconButton
+                                  icon={<Edit className="h-3.5 w-3.5" />}
+                                  label={`Edit ${c.firstName} ${c.lastName}`}
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => { setEditingCompetitor(c); setShowFormModal(true); }}
+                                />
+                                <IconButton
+                                  icon={<Trash2 className="h-3.5 w-3.5" />}
+                                  label={`Delete ${c.firstName} ${c.lastName}`}
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={() => setDeleteTarget(c)}
+                                />
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -976,9 +1014,9 @@ export default function Competitors() {
             <EmptyState
               icon={Users}
               title="No competitors yet"
-              description="Import competitors from an Excel file or add them manually."
-              action={{ label: 'Import from Excel', onClick: () => fileInputRef.current?.click() }}
-              secondaryAction={{ label: 'Add Manually', onClick: () => { setEditingCompetitor(null); setFormData(emptyForm); setShowFormModal(true); } }}
+              description={canEditCompetitors ? 'Import competitors from an Excel file or add them manually.' : 'No competitors are registered in tournaments you can access yet.'}
+              action={canEditCompetitors ? { label: 'Import from Excel', onClick: () => fileInputRef.current?.click() } : undefined}
+              secondaryAction={canEditCompetitors ? { label: 'Add Manually', onClick: () => { setEditingCompetitor(null); setFormData(emptyForm); setShowFormModal(true); } } : undefined}
             />
           )}
         </CardBody>
@@ -1245,7 +1283,7 @@ export default function Competitors() {
                 variant="success"
                 onClick={handleImport}
                 loading={importPreparing || importMutation.isPending}
-                disabled={importPreparing || importMutation.isPending || !columnMapping.firstName || !columnMapping.gender || !columnMapping.belt}
+                disabled={importPreparing || importMutation.isPending || !((columnMapping.firstName && columnMapping.lastName) || columnMapping.name) || !columnMapping.gender || !columnMapping.belt || !columnMapping.weight}
                 className="w-full sm:w-auto flex items-center justify-center"
               >
                 {(importPreparing || importMutation.isPending) ? (
@@ -1279,6 +1317,7 @@ export default function Competitors() {
             {[
               { key: 'firstName', label: 'First Name', required: true },
               { key: 'lastName', label: 'Last Name', required: true },
+              { key: 'name', label: 'Full Name (instead of First/Last)' },
               { key: 'gender', label: 'Gender', required: true },
               { key: 'dateOfBirth', label: 'Date of Birth' },
               { key: 'age', label: 'Age (if no DOB)' },

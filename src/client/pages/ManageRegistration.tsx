@@ -23,6 +23,7 @@ import {
   Calendar,
   MapPin,
   ShieldOff,
+  CreditCard,
 } from 'lucide-react';
 import { Card, CardBody } from '../components/ui';
 import Button from '../components/ui/Button';
@@ -31,10 +32,12 @@ import Label from '../components/ui/Label';
 import Select from '../components/ui/Select';
 import { classifyWithdrawalResponse } from '../utils/registration-withdrawal';
 import { fetchJson, getApiFailure } from '../utils/api-status';
+import { formatDateOnly } from '../utils/date-only';
 import {
   managedRegistrationMatchesUpdate,
   normalizeManagedRegistrationUpdate,
   parseManagedRegistrationResponse,
+  registrationPaymentDue,
   type ManagedRegistration as ManageRegistration,
   type ManagedRegistrationUpdate,
 } from '../utils/manage-registration-contract';
@@ -68,6 +71,7 @@ export default function ManageRegistration() {
   const [pendingUpdate, setPendingUpdate] = useState<ManagedRegistrationUpdate | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawn, setWithdrawn] = useState(false);
+  const [startingPayment, setStartingPayment] = useState(false);
 
   useEffect(() => {
     if (managementToken && !registration && !lookupLoading && !lookupError) {
@@ -230,6 +234,31 @@ export default function ManageRegistration() {
     }
   };
 
+  // Start (or restart) the entry-fee checkout with the private token; the
+  // server creates a fresh Stripe session and expires any older one.
+  const handleCompletePayment = async () => {
+    if (!registration || startingPayment) return;
+    setGlobalError(null);
+    setStartingPayment(true);
+    try {
+      const res = await fetch('/api/public/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ managementToken }),
+      });
+      const body = await res.json().catch(() => ({})) as { url?: string; error?: string };
+      if (!res.ok || !body.url) {
+        setGlobalError(body.error || 'Payment could not be started. Please try again or contact the tournament organizer.');
+        return;
+      }
+      window.location.href = body.url;
+    } catch {
+      setGlobalError('Payment could not be started. Please try again.');
+    } finally {
+      setStartingPayment(false);
+    }
+  };
+
   const reset = () => {
     if (saveConfirmationPending) return;
     setRegistration(null);
@@ -313,6 +342,35 @@ export default function ManageRegistration() {
             </div>
           )}
 
+          {registration.waitlistStatus === 'waitlisted' && (
+            <div
+              role="status"
+              className="mb-4 p-3 rounded-md bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700 text-sm text-primary-800 dark:text-primary-200"
+            >
+              On the waitlist{registration.waitlistPosition ? ` (position ${registration.waitlistPosition})` : ''}. No payment is due unless a spot opens up; we will email you if it does.
+            </div>
+          )}
+
+          {registrationPaymentDue(registration) && (
+            <div
+              role="status"
+              data-testid="payment-due"
+              className="mb-4 p-4 rounded-lg border border-warning/30 dark:border-warning bg-warning/10 dark:bg-warning/20 flex items-start justify-between gap-4"
+            >
+              <div className="flex-1 min-w-0 text-sm text-surface-800 dark:text-surface-200">
+                <p className="font-medium">Payment required</p>
+                <p className="mt-0.5">
+                  {registration.paymentAmountCents
+                    ? `The entry fee of $${(registration.paymentAmountCents / 100).toFixed(2)} has not been paid yet.`
+                    : 'The entry fee has not been paid yet.'}
+                </p>
+              </div>
+              <Button variant="primary" size="sm" onClick={handleCompletePayment} loading={startingPayment} className="flex-shrink-0">
+                <CreditCard className="h-4 w-4 mr-1" aria-hidden="true" /> Complete payment
+              </Button>
+            </div>
+          )}
+
           {savedAt && (
             <div
               role="status"
@@ -387,7 +445,7 @@ export default function ManageRegistration() {
                 </div>
                 <div>
                   <Label htmlFor="m-dob">Date of birth</Label>
-                  <ReadonlyField value={new Date(registration.dateOfBirth).toLocaleDateString()} />
+                  <ReadonlyField value={formatDateOnly(registration.dateOfBirth)} />
                   <p className="text-xs text-surface-500 mt-1">Locked for verification — can't be changed.</p>
                 </div>
                 <div>

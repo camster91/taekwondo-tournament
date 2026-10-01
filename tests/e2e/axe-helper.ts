@@ -20,6 +20,12 @@ export async function checkA11y(
     include?: string[];
   }
 ) {
+  // Let entry animations (fade-in etc.) settle first: axe samples computed
+  // colours, and a half-faded element reports a contrast it never has at rest.
+  await page.evaluate(() =>
+    Promise.all(document.getAnimations().filter((a) => a.playState === 'running' && a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => undefined))),
+  );
+
   const builder = new AxeBuilder({ page });
 
   // Exclude third-party embeds and marketing elements by default

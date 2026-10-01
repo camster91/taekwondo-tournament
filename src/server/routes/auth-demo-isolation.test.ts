@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import type { Server } from 'node:http';
 
-const invalidateAuthCache = vi.hoisted(() => vi.fn());
 
 vi.mock('../middleware/auth.js', () => ({
   createToken: vi.fn(() => 'mock-jwt-token'),
@@ -14,7 +13,6 @@ vi.mock('../middleware/auth.js', () => ({
   SESSION_COOKIE: 'bowin_session',
   SESSION_COOKIE_OPTIONS: {},
   setCsrfCookie: vi.fn(),
-  invalidateAuthCache,
 }));
 
 vi.mock('../services/email.js', () => ({
@@ -86,7 +84,6 @@ async function startAuthServer(options: {
 
 beforeEach(() => {
   process.env = { ...originalEnv };
-  invalidateAuthCache.mockReset();
 });
 
 afterEach(async () => {
@@ -110,7 +107,6 @@ describe('demo session isolation', () => {
       where: { id: 'demo-user' },
       data: { tokenVersion: { increment: 1 } },
     });
-    expect(invalidateAuthCache).toHaveBeenCalledWith('demo-user');
     expect(response.headers.get('set-cookie')).toContain('bowin_session=');
     expect(response.headers.get('set-cookie')).toContain('bowin_csrf=');
   });
@@ -128,7 +124,6 @@ describe('demo session isolation', () => {
       where: { id: 'normal-user' },
       data: { tokenVersion: { increment: 1 } },
     });
-    expect(invalidateAuthCache).toHaveBeenCalledWith('normal-user');
     expect(response.headers.get('set-cookie')).toContain('bowin_session=');
     expect(response.headers.get('set-cookie')).toContain('bowin_csrf=');
   });

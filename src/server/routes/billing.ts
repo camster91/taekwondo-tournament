@@ -70,6 +70,51 @@ export function evaluateEntryFeeSession(
   return { action: 'mark_paid' };
 }
 
+/**
+ * Test-only switch (never honoured in production): apply the signed event
+ * payload without fetching the subscription from Stripe, for e2e suites
+ * whose placeholder secret key cannot reach the Stripe API.
+ */
+export function trustSubscriptionEventPayload(env: Record<string, string | undefined>): boolean {
+  return env.STRIPE_WEBHOOK_TRUST_EVENT_PAYLOAD === '1' && env.NODE_ENV !== 'production';
+}
+
+type CurrentSubscriptionResult =
+  | { ok: true; subscription: unknown }
+  | { ok: false; status: number; body: Record<string, unknown> };
+
+/**
+ * The subscription's current state for a customer.subscription.* event,
+ * retrieved from Stripe so out-of-order deliveries cannot roll the plan
+ * back (or forward) to a stale snapshot.
+ */
+export async function currentSubscriptionForEvent(
+  stripe: { subscriptions: { retrieve: (id: string) => Promise<unknown> } },
+  event: { type: string; data: { object: unknown } },
+  env: Record<string, string | undefined> = process.env,
+): Promise<CurrentSubscriptionResult> {
+  const snapshot = event.data.object as { id?: unknown };
+  if (trustSubscriptionEventPayload(env)) return { ok: true, subscription: snapshot };
+  if (typeof snapshot.id !== 'string') {
+    return { ok: false, status: 400, body: { error: 'Subscription event has no subscription id.' } };
+  }
+  try {
+    return { ok: true, subscription: await stripe.subscriptions.retrieve(snapshot.id) };
+  } catch (error) {
+    const code = (error as { code?: unknown }).code;
+    if (code === 'resource_missing') {
+      // A deleted event's payload is the final state; anything else for a
+      // subscription Stripe no longer knows can never be applied.
+      if (event.type === 'customer.subscription.deleted') return { ok: true, subscription: snapshot };
+      return { ok: false, status: 200, body: { processed: false, ignored: true, reason: 'unknown_subscription' } };
+    }
+    // Transient (network / Stripe outage): fail so Stripe redelivers. The
+    // event is not recorded yet, so the retry is processed normally.
+    console.error('[billing/webhook] could not retrieve subscription:', error instanceof Error ? error.message : error);
+    return { ok: false, status: 503, body: { error: 'Could not load the subscription from Stripe; retry later.' } };
+  }
+}
+
 export async function stripeWebhookHandler(req: Request, res: Response): Promise<Response> {
   let config: ReturnType<typeof stripeRuntimeConfigFromEnv>;
   try {
@@ -286,8 +331,15 @@ export async function stripeWebhookHandler(req: Request, res: Response): Promise
   });
   if (existingSubEvent) return res.json({ processed: false, duplicate: true });
 
+  // Stripe does not guarantee delivery order: a delayed
+  // customer.subscription.updated(active) can arrive after .deleted and
+  // would re-grant a canceled plan if its payload were applied. Apply the
+  // subscription's current state from Stripe instead of the event snapshot.
+  const current = await currentSubscriptionForEvent(stripe, event);
+  if (!current.ok) return res.status(current.status).json(current.body);
+
   const mapped = mapStripeSubscription(
-    event.data.object as unknown as Parameters<typeof mapStripeSubscription>[0],
+    current.subscription as unknown as Parameters<typeof mapStripeSubscription>[0],
     config.prices,
   );
 

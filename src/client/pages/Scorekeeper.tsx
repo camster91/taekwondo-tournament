@@ -28,6 +28,7 @@ import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
 import { activateDialogFocus } from '../utils/dialog-focus';
 import { makeScoreOperation } from '../utils/offline-operation-queue';
+import { buildScoreResultPayload, type ScoreSubmission } from '../utils/score-result-payload';
 import { useOfflineOperations } from '../hooks/useOfflineOperations';
 import AccessibleDialog from '../components/ui/AccessibleDialog';
 import OperationStatus from '../components/ui/OperationStatus';
@@ -58,14 +59,6 @@ interface Tournament {
 }
 
 type ResultType = 'win' | 'dq' | 'forfeit' | 'injury';
-
-interface ScoreSubmission {
-  matchId: string;
-  winnerId: string;
-  score1: string;
-  score2: string;
-  notes: string;
-}
 
 /**
  * Validates scorekeeper result submission before showing confirmation dialog.
@@ -305,13 +298,8 @@ export default function Scorekeeper() {
   const stageScoreResult = (data: ScoreSubmission, deliveryUncertain = false) => {
     if (!tournamentId || !user) return;
     try {
-      offlineOperations.enqueue(makeScoreOperation(user.id, tournamentId, data.matchId, {
-        winnerId: data.winnerId,
-        score1: data.score1,
-        score2: data.score2,
-        status: 'completed',
-        notes: data.notes,
-      }, deliveryUncertain ? 'delivery_uncertain' : 'pending'));
+      offlineOperations.enqueue(makeScoreOperation(user.id, tournamentId, data.matchId,
+        buildScoreResultPayload(data), deliveryUncertain ? 'delivery_uncertain' : 'pending'));
     } catch {
       if (deliveryUncertain) {
         const division = divisions?.find((candidate) => candidate.id === selectedDivision);
@@ -357,13 +345,7 @@ export default function Scorekeeper() {
       const res = await fetch(`/api/brackets/match/${data.matchId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({
-          winnerId: data.winnerId,
-          score1: data.score1,
-          score2: data.score2,
-          status: 'completed',
-          notes: data.notes,
-        }),
+        body: JSON.stringify(buildScoreResultPayload(data)),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: 'Unknown error' }));
@@ -405,8 +387,11 @@ export default function Scorekeeper() {
       }
       // 409 conflict: another scorekeeper updated first (#138 conflict detection)
       if (error.isConflict || error.status === 409) {
-        addToast('Conflict: Another scorekeeper updated this match. Refresh before continuing.', 'error');
-        setAnnounce('Conflict: Another scorekeeper updated this match. Refresh the division to see the latest state.');
+        // The server names the recorded result ("This match was already
+        // recorded as a win for …; refresh"). Show it verbatim.
+        const message = error.message || 'Another scorekeeper updated this match. Refresh before continuing.';
+        addToast(`Conflict: ${message}`, 'error');
+        setAnnounce(`Conflict: ${message}`);
         queryClient.invalidateQueries({ queryKey: ['scorekeeper-divisions'] });
         return;
       }
@@ -573,6 +558,7 @@ export default function Scorekeeper() {
       score1,
       score2,
       notes: noteText,
+      expectedUpdatedAt: currentMatch.updatedAt ?? undefined,
     };
     if (shouldQueueOfflineMutation({ isOfflineSession, navigatorOnline: navigator.onLine })) stageScoreResult(submission);
     else recordResult.mutate(submission);

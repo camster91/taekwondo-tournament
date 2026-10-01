@@ -74,6 +74,7 @@ fi
 
 # Create backup directory if it doesn't exist
 mkdir -p "${BACKUP_DIR}"
+BACKUP_DIR="$(cd "${BACKUP_DIR}" && pwd)"
 cd "${BACKUP_DIR}"
 
 log "Starting backup at $(date)"
@@ -90,8 +91,28 @@ DB_PASS="${BASH_REMATCH[2]}"
 DB_HOST="${BASH_REMATCH[3]}"
 DB_PORT="${BASH_REMATCH[4]}"
 DB_NAME="${BASH_REMATCH[5]}"
+# Prisma-style URLs carry a query string (?schema=public); it is not part of
+# the database name.
+DB_NAME="${DB_NAME%%\?*}"
 
-# Create backup
+# Never leave a plaintext dump (or a half-written artifact) behind: on any
+# exit before the local backup is complete, remove whatever this run produced.
+# Afterwards only the plaintext intermediate and the dump log are removed.
+LOCAL_BACKUP_COMPLETE=false
+DUMP_LOG="${BACKUP_FILE}.log"
+cleanup_on_exit() {
+    rm -f "${BACKUP_DIR}/${BACKUP_FILE}" "${BACKUP_DIR}/${DUMP_LOG}"
+    if [[ "${LOCAL_BACKUP_COMPLETE}" != true ]]; then
+        rm -f "${BACKUP_DIR}/${ENCRYPTED_FILE}" "${BACKUP_DIR}/${ENCRYPTED_FILE}.sha256" \
+            "${BACKUP_DIR}/${BACKUP_FILE}.UNENCRYPTED" "${BACKUP_DIR}/${BACKUP_FILE}.UNENCRYPTED.sha256" \
+            "${BACKUP_DIR}/last-success.json.tmp"
+    fi
+}
+trap cleanup_on_exit EXIT
+
+# Create backup. pg_dump's verbose progress goes to a log file: piping it
+# through a filter would make the pipeline's exit status the filter's, not
+# pg_dump's (with pipefail, `grep -v` exits 1 when it filters every line).
 log "Dumping database ${DB_NAME} from ${DB_HOST}:${DB_PORT}..."
 if PGPASSWORD="${DB_PASS}" pg_dump \
     --host="${DB_HOST}" \
@@ -102,10 +123,11 @@ if PGPASSWORD="${DB_PASS}" pg_dump \
     --file="${BACKUP_FILE}" \
     --verbose \
     --no-owner \
-    --no-acl 2>&1 | grep -v "^pg_dump:"; then
+    --no-acl >"${DUMP_LOG}" 2>&1; then
     log "Database dump completed: ${BACKUP_FILE}"
 else
-    error "pg_dump failed"
+    error "pg_dump failed:"
+    tail -n 20 "${DUMP_LOG}" >&2 || true
     exit 2
 fi
 
@@ -114,7 +136,7 @@ BACKUP_SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
 log "Backup size: ${BACKUP_SIZE}"
 
 # Encrypt backup (only if encryption key is set)
-if [[ -n "${BACKUP_ENCRYPTION_KEY}" ]]; then
+if [[ -n "${BACKUP_ENCRYPTION_KEY:-}" ]]; then
     log "Encrypting backup..."
     if echo "${BACKUP_ENCRYPTION_KEY}" | gpg \
         --batch \
@@ -143,6 +165,9 @@ fi
 CHECKSUM=$(sha256sum "${ENCRYPTED_FILE}" | cut -d' ' -f1)
 echo "${CHECKSUM}  ${ENCRYPTED_FILE}" > "${ENCRYPTED_FILE}.sha256"
 log "Checksum: ${CHECKSUM}"
+# The local backup is now complete and verifiable; an off-host failure below
+# still exits non-zero (and skips last-success.json) but keeps this file.
+LOCAL_BACKUP_COMPLETE=true
 
 # Off-host sync (optional)
 if [[ "${OFF_HOST}" == true ]]; then
@@ -174,6 +199,8 @@ fi
 log "Cleaning up backups older than ${RETENTION_DAYS} days..."
 find "${BACKUP_DIR}" -name "bowin-backup-*.sql.gpg" -mtime "+${RETENTION_DAYS}" -delete
 find "${BACKUP_DIR}" -name "bowin-backup-*.sql.gpg.sha256" -mtime "+${RETENTION_DAYS}" -delete
+find "${BACKUP_DIR}" -name "bowin-backup-*.sql.UNENCRYPTED" -mtime "+${RETENTION_DAYS}" -delete
+find "${BACKUP_DIR}" -name "bowin-backup-*.sql.UNENCRYPTED.sha256" -mtime "+${RETENTION_DAYS}" -delete
 log "Cleanup complete"
 
 # Freshness marker for monitoring (#165): check-backup-freshness.sh
@@ -185,6 +212,6 @@ mv "${BACKUP_DIR}/last-success.json.tmp" "${BACKUP_DIR}/last-success.json"
 
 log "Backup completed successfully at $(date)"
 log "Backup file: ${BACKUP_DIR}/${ENCRYPTED_FILE}"
-log "To restore: gpg --decrypt ${ENCRYPTED_FILE} | pg_restore --dbname=\$DATABASE_URL"
+log "To restore: ./scripts/restore-database.sh ${BACKUP_DIR}/${ENCRYPTED_FILE}"
 
 exit 0

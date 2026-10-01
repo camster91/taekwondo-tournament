@@ -828,6 +828,14 @@ function generateDoubleEliminationBracket(competitors: (CompetitorSeed | null)[]
 
     if (numDropDownMatches > 0 && currentLosersMatches.length === numDropDownMatches) {
       const thisRoundMatchNumbers: number[] = [];
+      // Crossover: on alternating drop-down rounds the winners losers
+      // enter the losers bracket in reverse order. Dropping the loser of
+      // winners match i straight into losers match i pairs them with the
+      // survivor of the very players they just beat (8 players: the
+      // first drop-down match was a rematch of a winners round 1 bout).
+      // Only the links change; match numbers and `positions` do not.
+      // Brackets already stored keep their stored links.
+      const reverseDrop = (wr - 2) % 2 === 0;
       for (let i = 0; i < numDropDownMatches; i++) {
         const m: MatchData = {
           matchNumber,
@@ -838,7 +846,8 @@ function generateDoubleEliminationBracket(competitors: (CompetitorSeed | null)[]
         thisRoundMatchNumbers.push(matchNumber);
 
         // Link winners loser to this match
-        const wMatch = winners.find(w => w.matchNumber === wrMatches[i])!;
+        const dropIndex = reverseDrop ? numDropDownMatches - 1 - i : i;
+        const wMatch = winners.find(w => w.matchNumber === wrMatches[dropIndex])!;
         wMatch.nextLoserMatch = matchNumber;
 
         // Link losers bracket survivor to this match

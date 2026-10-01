@@ -4,9 +4,10 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
+import { recomputeRegistrationAges } from '../services/registration-age.js';
 import { generateSchedule, validateScheduleConfig, DEFAULT_CONFIG, type ScheduleConfig } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
-import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, buildCompetitorAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
+import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, buildCompetitorAccessFilter, findOrgMembershipAtLevel, checkTournamentAccess, type TournamentRole, type AuthenticatedRequest } from '../middleware/auth.js';
 import { generatePublicSlug, applySlugWithRetry, sanitizeBroadcastSubject } from './tournament-helpers.js';
 // requireRole stays in use for POST / (create new tournament) — there's
 // no parent tournament to scope-access yet. All other tournament-scoped
@@ -31,6 +32,8 @@ import { mergeGeneralSettings, mergeRulesSettings, saveTournamentSettingsAtomic,
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 import { legalHoldSchema, legalHoldData } from '../services/legal-hold.js';
 import { generateManagementToken, getManagementTokenExpiry, hashManagementToken } from '../utils/registration-management-token.js';
+import { promotedRegistrationPaymentData } from '../services/public-registration.js';
+import { isParentalConsentPending } from '../services/parental-consent-verification.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
 import { generateQRPoster } from '../services/qr-poster.js';
@@ -88,7 +91,12 @@ const registrationUpdateSchema = z.object({
   sparring: z.boolean().optional(),
   weightAtRegistration: z.number().positive().optional(),
   checkedIn: z.boolean().optional(),
-  checkInWeight: z.number().positive().optional(),
+  // null clears the recorded weigh-in (undo check-in, bulk check-in
+  // without a weigh-in, and offline-queued check-ins send null).
+  checkInWeight: z.number().positive().nullable().optional(),
+  // Accepted for client compatibility only: the server stamps
+  // checkInTime itself whenever `checkedIn` changes.
+  checkInTime: z.string().datetime().nullable().optional(),
   // v2 fields
   competeWithOlder: z.boolean().optional(),
   specialNeeds: z.string().max(500).optional().nullable(),
@@ -244,11 +252,14 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
   if (authReq.user?.role === 'admin' && typeof organizationId === 'string' && organizationId) {
     resolvedOrgId = organizationId;
   } else if (authReq.user) {
-    const membership = await prisma.organizationMember.findFirst({
-      where: { userId: authReq.user.id },
-      select: { organizationId: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    // Only a director-level membership (owner/admin/member/director) may
+    // own new tournaments. A tenant user whose memberships are all
+    // viewer/scorekeeper gets 403 rather than an orphan tournament
+    // they could not see (CLAUDE.md multi-tenant rule 6).
+    const { membership, hasMemberships } = await findOrgMembershipAtLevel(prisma, authReq.user.id, 'director');
+    if (!membership && hasMemberships) {
+      return res.status(403).json({ error: 'No organization membership with director access found' });
+    }
     resolvedOrgId = membership?.organizationId ?? null;
   }
 
@@ -310,14 +321,10 @@ router.post('/from-template/:templateId', authenticate, requireRole('admin', 'di
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const membership = await prisma.organizationMember.findFirst({
-    where: { userId: authReq.user.id },
-    select: { organizationId: true },
-    orderBy: { createdAt: 'asc' },
-  });
+  const { membership } = await findOrgMembershipAtLevel(prisma, authReq.user.id, 'director');
 
   if (!membership) {
-    return res.status(403).json({ error: 'No organization membership found' });
+    return res.status(403).json({ error: 'No organization membership with director access found' });
   }
 
   const template = await prisma.tournamentTemplate.findFirst({
@@ -931,6 +938,12 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
         },
       });
 
+      // Ages are stored per registration and drive categorization, so a
+      // date change must refresh them in the same transaction.
+      if (date) {
+        await recomputeRegistrationAges(tx, { tournamentId });
+      }
+
       // Record usage when tournament is completed
       if (status === 'completed' && current.status !== 'completed' && current.organizationId) {
         await recordTournamentUsage(tx as unknown as PrismaClient, tournamentId, current.organizationId);
@@ -1193,6 +1206,8 @@ router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer')
       parentName: true,
       parentEmail: true,
       parentPhone: true,
+      parentEmailVerified: true,
+      parentalConsentVerification: { select: { verifiedAt: true } },
       competitor: {
         select: {
           id: true,
@@ -1233,7 +1248,12 @@ router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer')
     take: 5000,
   });
 
-  res.json(registrations);
+  // Flag minors whose parent has not confirmed the emailed consent request
+  // (check-in shows a badge; it never blocks check-in).
+  res.json(registrations.map(({ parentalConsentVerification, ...registration }) => ({
+    ...registration,
+    parentalConsentPending: isParentalConsentPending({ ...registration, parentalConsentVerification }),
+  })));
 });
 
 // Get tournament capacity status
@@ -1310,6 +1330,7 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
           brandName: true,
           maxCapacity: true,
           organizationId: true,
+          settings: true,
           organization: {
             select: { brandName: true },
           },
@@ -1328,75 +1349,72 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
   }
 
   if (registration.waitlistStatus !== 'waitlisted') {
-    return res.status(400).json({ error: 'Registration is not waitlisted' });
-  }
-
-  // Check if tournament has available capacity
-  const { getTournamentCapacityStatus } = await import('../services/waitlist.js');
-  const capacityStatus = await getTournamentCapacityStatus(prisma, tournamentId);
-
-  if (capacityStatus && capacityStatus.maxCapacity && capacityStatus.spotsRemaining === 0) {
-    return res.status(400).json({
-      error: 'Tournament is at full capacity. Cannot promote from waitlist.',
-      capacity: capacityStatus,
-    });
+    return res.status(409).json({ error: 'Registration is not waitlisted', code: 'NOT_WAITLISTED' });
   }
 
   // Generate a new management token for the promoted registration
   const newManagementToken = generateManagementToken();
   const newExpiry = getManagementTokenExpiry(); // 30 days
 
-  // Promote in transaction to ensure atomicity
-  await prisma.$transaction(async (tx) => {
-    // Promote the registration
-    await tx.registration.update({
-      where: { id: registrationId },
-      data: {
-        waitlistStatus: 'promoted',
-        waitlistPromotedAt: new Date(),
-        waitlistPosition: null,
-        managementTokenHash: hashManagementToken(newManagementToken),
-        managementTokenExpiresAt: newExpiry,
-        managementTokenRevokedAt: null,
-      },
-    });
-
-    // Renumber remaining waitlist
-    const remaining = await tx.registration.findMany({
-      where: {
-        tournamentId,
-        waitlistStatus: 'waitlisted',
-      },
-      orderBy: { waitlistPosition: 'asc' },
-    });
-
-    for (let i = 0; i < remaining.length; i++) {
-      await tx.registration.update({
-        where: { id: remaining[i].id },
-        data: { waitlistPosition: i + 1 },
-      });
-    }
-
-    // Audit log
-    if (authReq.user) {
-      await createAuditLog(tx as unknown as PrismaClient, {
-        userId: authReq.user.id,
-        action: 'waitlist_promoted',
-        details: {
-          registrationId,
-          competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+  // The capacity count and the "still waitlisted" check are re-done inside
+  // one transaction holding the tournament lock that public registration
+  // uses, so concurrent promotes cannot overfill the tournament and a
+  // double-click cannot promote twice (or rotate the emailed token).
+  // A waitlisted entry owed nothing; the entry fee is due once promoted and
+  // the parent pays through the management link in the promotion email.
+  const promotionPayment = promotedRegistrationPaymentData(
+    registration.tournament.settings,
+    registration.paymentStatus,
+  );
+  const { promoteWaitlistedRegistration } = await import('../services/waitlist.js');
+  const outcome = await promoteWaitlistedRegistration(
+    prisma,
+    tournamentId,
+    registrationId,
+    {
+      managementTokenHash: hashManagementToken(newManagementToken),
+      managementTokenExpiresAt: newExpiry,
+      payment: promotionPayment,
+    },
+    async (tx) => {
+      // Audit log
+      if (authReq.user) {
+        await createAuditLog(tx as unknown as PrismaClient, {
+          userId: authReq.user.id,
+          action: 'waitlist_promoted',
+          details: {
+            registrationId,
+            competitorName: `${registration.competitor.firstName} ${registration.competitor.lastName}`,
+            tournamentId,
+            tournamentName: registration.tournament.name,
+          },
+          ipAddress: getClientIp(authReq),
+          userAgent: getUserAgent(authReq),
+          organizationId: registration.tournament.organizationId || undefined,
           tournamentId,
-          tournamentName: registration.tournament.name,
+        }).catch((err) => {
+          console.error('[audit-log] waitlist_promoted event failed:', err);
+        });
+      }
+    },
+  );
+
+  if (!outcome.ok) {
+    if (outcome.code === 'TOURNAMENT_FULL') {
+      return res.status(400).json({
+        error: 'Tournament is at full capacity. Cannot promote from waitlist.',
+        capacity: {
+          maxCapacity: outcome.maxCapacity,
+          activeCount: outcome.activeCount,
+          spotsRemaining: Math.max(0, outcome.maxCapacity - outcome.activeCount),
         },
-        ipAddress: getClientIp(authReq),
-        userAgent: getUserAgent(authReq),
-        organizationId: registration.tournament.organizationId || undefined,
-        tournamentId,
-      }).catch((err) => {
-        console.error('[audit-log] waitlist_promoted event failed:', err);
       });
     }
-  });
+    if (outcome.code === 'NOT_WAITLISTED') {
+      return res.status(409).json({ error: 'Registration is not waitlisted (it may already have been promoted)', code: 'NOT_WAITLISTED' });
+    }
+    return res.status(404).json({ error: 'Registration not found' });
+  }
 
   // Send promotion email
   if (registration.parentEmail && isEmailConfigured()) {
@@ -1411,6 +1429,11 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
       confirmationCode: registration.id.slice(0, 8),
       managementUrl,
       organizerBrandName,
+      paymentDueCents: 'paymentAmountCents' in promotionPayment
+        ? promotionPayment.paymentAmountCents
+        : registration.paymentStatus === 'pending' || registration.paymentStatus === 'failed'
+          ? registration.paymentAmountCents
+          : null,
     });
 
     sendEmail(registration.parentEmail, subject, html).catch((err) => {
@@ -1567,8 +1590,30 @@ router.post('/:id/registrations/bulk', authenticate, requireTournamentAccess('di
   res.json({ registered: registrations.length });
 });
 
-// Update registration (requires authentication + admin/director role)
-router.put('/:id/registrations/:regId', authenticate, requireTournamentAccess('director'), validateRequest(registrationUpdateSchema), async (req: Request, res: Response) => {
+const CHECK_IN_UPDATE_FIELDS = new Set(['checkedIn', 'checkInTime', 'checkInWeight']);
+
+/**
+ * True when a registration update touches ONLY check-in state. Check-in
+ * desks are staffed by scorekeepers (staffing assigns "check-in lead"
+ * to non-directors), so these updates need scorekeeper access; any
+ * other field still needs a director. Unknown keys fail closed to the
+ * director requirement.
+ */
+export function isCheckInOnlyUpdate(body: unknown): boolean {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const keys = Object.keys(body);
+  return keys.length > 0 && keys.every((key) => CHECK_IN_UPDATE_FIELDS.has(key));
+}
+
+const requireRegistrationUpdateAccess = async (req: Request, res: Response, next: () => void) => {
+  const minRole: TournamentRole = isCheckInOnlyUpdate(req.body) ? 'scorekeeper' : 'director';
+  const result = await checkTournamentAccess(req as AuthenticatedRequest, req.app.locals.prisma, getParam(req.params.id), minRole);
+  if (!result.ok) return res.status(result.status || 403).json({ error: result.error });
+  next();
+};
+
+// Update registration. Check-in-only updates: scorekeeper+; anything else: director.
+router.put('/:id/registrations/:regId', authenticate, requireRegistrationUpdateAccess, validateRequest(registrationUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { patterns, sparring, weightAtRegistration, checkedIn, checkInWeight, competeWithOlder, specialNeeds, manualDivisionId, seeding, paymentStatus } = req.body;
 
@@ -1588,7 +1633,7 @@ router.put('/:id/registrations/:regId', authenticate, requireTournamentAccess('d
     updateData.checkedIn = checkedIn;
     updateData.checkInTime = checkedIn ? new Date() : null;
   }
-  if (checkInWeight !== undefined) updateData.checkInWeight = checkInWeight;
+  if (checkInWeight !== undefined) updateData.checkInWeight = checkInWeight; // null clears it
   // v2 fields
   if (competeWithOlder !== undefined) updateData.competeWithOlder = competeWithOlder;
   if (specialNeeds !== undefined) updateData.specialNeeds = specialNeeds;

@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { readAdminOperationError } from '../utils/admin-operation-error';
 import { isDemoUser } from '../utils/demo-progress';
 import {
   LayoutDashboard,
@@ -162,6 +164,7 @@ export default function DirectorDashboard() {
   const [alertTitle, setAlertTitle] = useState('');
   const [alertDescription, setAlertDescription] = useState('');
   const [alertRingNumber, setAlertRingNumber] = useState<number | null>(null);
+  const toast = useToast();
   
   // Ring sync indicator state (P1-9)
   const [ringUpdates, setRingUpdates] = useState<Record<string, number>>({});
@@ -197,15 +200,17 @@ export default function DirectorDashboard() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ settings: { display: payload } }),
       });
-      if (!res.ok) throw new Error('Failed to update display settings');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Failed to update display settings'));
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['director-dashboard', tournamentId] });
+      toast.success('Public display settings applied.');
     },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to update display settings'),
   });
 
-  const { data: progress, isLoading, isError, error, refetch } = useQuery<TournamentProgress>({
+  const { data: progress, isLoading, isError, error, refetch, dataUpdatedAt } = useQuery<TournamentProgress>({
     queryKey: ['director-dashboard', tournamentId],
     queryFn: async () => {
       const [tournamentRes, divisionsRes] = await Promise.all([
@@ -216,7 +221,10 @@ export default function DirectorDashboard() {
       if (!tournamentRes.ok) throw new Error('Failed to fetch tournament');
 
       const tournament = (await tournamentRes.json()) as ApiTournamentSummary;
-      const divisions: ApiDivision[] = divisionsRes.ok ? await divisionsRes.json() : [];
+      // A failed divisions poll must not render an empty "all clear"
+      // board: throw so the query keeps the last good data and flags the error.
+      if (!divisionsRes.ok) throw new Error('Failed to fetch divisions');
+      const divisions: ApiDivision[] = await divisionsRes.json();
 
       const matches: ApiMatch[] = divisions.flatMap((d) =>
         (d.bracket?.matches ?? []).map((m) => ({
@@ -464,9 +472,10 @@ export default function DirectorDashboard() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(data),
       });
-      if (!response.ok) throw new Error('Failed to create alert');
+      if (!response.ok) throw new Error(await readAdminOperationError(response, 'Failed to create alert'));
       return response.json();
     },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to create alert'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sos-alerts'] });
       setShowNewAlert(false);
@@ -484,9 +493,10 @@ export default function DirectorDashboard() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ resolved: true }),
       });
-      if (!response.ok) throw new Error('Failed to resolve alert');
+      if (!response.ok) throw new Error(await readAdminOperationError(response, 'Failed to resolve alert'));
       return response.json();
     },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to resolve alert'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sos-alerts'] });
     },
@@ -520,7 +530,9 @@ export default function DirectorDashboard() {
     );
   }
 
-  if (isError) {
+  // Full error screen only when there is no previous good data; a failed
+  // background poll keeps the last good board with a stale-data warning.
+  if (isError && !progress) {
     return (
       <div className="space-y-6">
         <PageHeader
@@ -569,7 +581,7 @@ export default function DirectorDashboard() {
         actions={
           <div className="text-right">
             <div className="text-sm text-surface-600 dark:text-surface-400">Last updated</div>
-            <div className="text-lg font-medium text-surface-900 dark:text-white">{new Date().toLocaleTimeString()}</div>
+            <div className="text-lg font-medium text-surface-900 dark:text-white">{new Date(dataUpdatedAt || Date.now()).toLocaleTimeString()}</div>
           </div>
         }
       >
@@ -581,6 +593,15 @@ export default function DirectorDashboard() {
           Back to Tournament
         </Link>
       </PageHeader>
+
+      {isError && (
+        <OperationStatus
+          state="rejected"
+          message={`Live data could not be refreshed (${error instanceof Error ? error.message : 'unknown error'}). Showing the last successful update.`}
+          actionLabel="Retry"
+          onAction={() => refetch()}
+        />
+      )}
 
       <section aria-label="Ask about tournament operations">
         <Card>
@@ -715,7 +736,7 @@ export default function DirectorDashboard() {
             </h2>
             <p className="text-sm text-surface-600 dark:text-surface-400">Staff-raised urgent issues requiring immediate attention</p>
           </div>
-          <Button variant="primary" size="sm" onClick={() => setShowNewAlert(true)}>
+          <Button variant="primary" size="sm" onClick={() => { createSOSAlert.reset(); setShowNewAlert(true); }}>
             <AlertCircle className="h-4 w-4 mr-1" />
             Raise Alert
           </Button>
@@ -868,6 +889,11 @@ export default function DirectorDashboard() {
                     maxLength={1000}
                   />
                 </div>
+                {createSOSAlert.isError && (
+                  <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                    {createSOSAlert.error instanceof Error ? createSOSAlert.error.message : 'Failed to create alert'}
+                  </p>
+                )}
                 <div className="flex gap-3">
                   <Button
                     variant="primary"

@@ -350,6 +350,83 @@ describe('schedule-delay-propagation', () => {
     });
   });
 
+  describe('previewScheduleDelay - locks and same-ring overlaps', () => {
+    const mockTournament = (schedule: CanonicalScheduleSnapshot, divisions: Array<{ id: string; matches?: unknown[] }>) => {
+      (mockPrisma.tournament.findUnique as any).mockResolvedValue({
+        id: 'tournament-1',
+        settings: mergeCanonicalScheduleSettings(null, schedule),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+        divisions: divisions.map((division) => ({
+          id: division.id,
+          name: `Division ${division.id}`,
+          bracket: division.matches ? { matches: division.matches } : null,
+          assignments: [{ registrationId: `reg-${division.id}` }],
+        })),
+      });
+    };
+    const ringDelay = (delayMinutes: number): ScheduleDelayInput => ({
+      tournamentId: 'tournament-1', delayType: 'ring', ringNumber: 1, delayMinutes, reason: 'Test',
+    });
+    const autoBye = { id: 'bye', status: 'completed', notes: 'BYE', competitor1Id: 'reg-x', competitor2Id: null };
+    const realResult = { id: 'real', status: 'completed', notes: null, competitor1Id: 'reg-x', competitor2Id: 'reg-y' };
+
+    it('does not treat auto-completed BYE matches as a started division', async () => {
+      mockTournament(createBasicSchedule(), [
+        { id: 'div-1', matches: [autoBye] },
+        { id: 'div-2', matches: [autoBye] },
+        { id: 'div-3' },
+      ]);
+
+      const preview = await previewScheduleDelay(mockPrisma, ringDelay(15));
+
+      expect(preview.impact.affectedDivisionIds).toEqual(['div-1', 'div-2', 'div-3']);
+    });
+
+    it('rejects a delay that would run a division into a later division with real results', async () => {
+      // div-1 9:00-9:30 pending, div-2 9:35-10:05 already running.
+      mockTournament(
+        { version: 1, rows: [
+          { divisionId: 'div-1', ring: 1, startMinutes: 540, durationMinutes: 30, locked: false },
+          { divisionId: 'div-2', ring: 1, startMinutes: 575, durationMinutes: 30, locked: false },
+        ] },
+        [{ id: 'div-1', matches: [autoBye] }, { id: 'div-2', matches: [realResult] }],
+      );
+
+      await expect(previewScheduleDelay(mockPrisma, ringDelay(15)))
+        .rejects.toThrow(/Division div-2 on Ring 1 has recorded results or a match in progress/);
+    });
+
+    it('cascades a shifted division that lands inside a locked one to after it', async () => {
+      // div-1 9:00-9:30 pending; div-2 9:30-10:00 locked (running);
+      // div-3 10:00-11:00 pending. A 40-minute delay moves div-1 to
+      // 9:40, inside div-2, so div-1 is pushed to 10:00; div-3 keeps
+      // its 40-minute shift (10:40) and does not overlap div-1.
+      mockTournament(
+        { version: 1, rows: [
+          { divisionId: 'div-1', ring: 1, startMinutes: 540, durationMinutes: 30, locked: false },
+          { divisionId: 'div-2', ring: 1, startMinutes: 570, durationMinutes: 30, locked: false },
+          { divisionId: 'div-3', ring: 1, startMinutes: 600, durationMinutes: 60, locked: false },
+        ] },
+        [{ id: 'div-1' }, { id: 'div-2', matches: [realResult] }, { id: 'div-3' }],
+      );
+
+      const preview = await previewScheduleDelay(mockPrisma, ringDelay(40));
+      const start = (id: string) => preview.after.rows.find((row) => row.divisionId === id)?.startMinutes;
+
+      expect(start('div-2')).toBe(570);
+      expect(start('div-1')).toBe(600);
+      expect(start('div-3')).toBe(640);
+      // No two divisions on the ring overlap afterwards.
+      const ring = [...preview.after.rows].sort((a, b) => a.startMinutes - b.startMinutes);
+      for (let i = 1; i < ring.length; i++) {
+        expect(ring[i].startMinutes).toBeGreaterThanOrEqual(ring[i - 1].startMinutes + ring[i - 1].durationMinutes);
+      }
+      // The before snapshot is untouched.
+      expect(preview.before.rows.map((row) => row.startMinutes)).toEqual([540, 570, 600]);
+      expect(preview.impact.divisionMoves.find((move) => move.divisionId === 'div-1')?.newStartTime).toBe('10:00');
+    });
+  });
+
   describe('applyScheduleDelay', () => {
     it('should apply delay with proper audit trail', async () => {
       const schedule = createBasicSchedule();

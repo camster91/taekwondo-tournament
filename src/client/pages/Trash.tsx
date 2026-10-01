@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, RotateCcw, AlertTriangle, X, Search, Calendar, User } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
-import { useAuth } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { readAdminOperationError } from '../utils/admin-operation-error';
 import { PageHeader } from '../components/ui';
 import { Card, CardBody } from '../components/ui';
 import { Button } from '../components/ui';
@@ -32,11 +34,11 @@ export default function Trash() {
   const [search, setSearch] = useState('');
   const [purgingId, setPurgingId] = useState<string | null>(null);
 
-  // Auth is via HttpOnly cookies (bowin_session) — no need to attach
-  // an Authorization header. The browser sends the cookie on
-  // same-origin requests automatically. Leaving Content-Type so
-  // the server knows it's JSON.
-  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  const toast = useToast();
+  // The session cookie rides along automatically; getAuthHeaders() adds
+  // the X-CSRF-Token that cookie-authenticated POST/DELETE requests need
+  // (without it restore and purge were always rejected with 403).
+  const headers: HeadersInit = { 'Content-Type': 'application/json', ...getAuthHeaders() };
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['competitors', 'trash'],
@@ -50,19 +52,21 @@ export default function Trash() {
   const restore = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/competitors/${id}/restore`, { method: 'POST', headers });
-      if (!res.ok) throw new Error('Restore failed');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Restore failed'));
       return res.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['competitors'] }),
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Restore failed'),
   });
 
   const purge = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/competitors/${id}/purge`, { method: 'DELETE', headers });
-      if (!res.ok) throw new Error('Purge failed');
+      if (!res.ok) throw new Error(await readAdminOperationError(res, 'Purge failed'));
       return res;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['competitors'] }),
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Purge failed'),
   });
 
   const filtered = (data?.competitors || []).filter((c: TrashItem) => {

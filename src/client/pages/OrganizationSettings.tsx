@@ -13,7 +13,8 @@ import {
   Trophy,
   Trash2,
 } from 'lucide-react';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { Button, Card, Input, Label, Modal, PageHeader, Spinner, ConfirmDialog } from '../components/ui';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
@@ -100,6 +101,8 @@ function UsageBar({ label, value, limit, icon: Icon }: {
 export default function OrganizationSettings() {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
@@ -222,12 +225,19 @@ export default function OrganizationSettings() {
         const data = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(data.error || 'The organization could not be deleted.');
       }
+      return response.json().catch(() => ({})) as Promise<{ signedOut?: boolean }>;
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       setShowDelete(false);
       setDeleteConfirmation('');
       setExportAcknowledged(false);
       toast.success('Organization permanently deleted.');
+      if (result.signedOut) {
+        // The server closed this account along with the organization.
+        await logout();
+        navigate('/login', { replace: true });
+        return;
+      }
       await queryClient.invalidateQueries({ queryKey: ['organizations', 'current'] });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -853,6 +863,10 @@ export default function OrganizationSettings() {
         )}
       >
         <div className="space-y-5">
+          <p className="text-sm text-surface-700 dark:text-surface-300">
+            Members who belong to no other organization, including you, lose their accounts and are signed out.
+            Administrators keep theirs.
+          </p>
           <p className="text-sm text-surface-700 dark:text-surface-300">
             Enter <strong>{organization.slug}</strong> to confirm.
           </p>
