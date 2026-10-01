@@ -21,14 +21,63 @@ export function normalizeMetricRoute(path: string): string {
     .slice(0, 160) || '/';
 }
 
-export function createHttpMetrics() {
+/** Label for requests no Express route handled (404s, static files, probes). */
+export const UNMATCHED_ROUTE = 'unmatched';
+/** Label used once the distinct-route cap is reached. */
+export const OVERFLOW_ROUTE = 'other';
+/** Upper bound on distinct route labels, so metric memory stays bounded. */
+export const MAX_METRIC_ROUTES = 300;
+
+const matchedRouteKey = Symbol('bowinMatchedRoute');
+
+type RouteTrackingRequest = {
+  baseUrl?: string;
+  route?: unknown;
+  [matchedRouteKey]?: string;
+};
+
+/**
+ * Remember the Express route template (mount path + route path, e.g.
+ * `/api/public/registrations/:token`) at the moment the router matches it.
+ * Express assigns `req.route` when it dispatches to a route, and resets
+ * `req.baseUrl` while an error unwinds back to the app, so the template is
+ * captured on assignment rather than read on 'finish'. Never the raw path:
+ * raw paths are unbounded and can carry secrets (management tokens).
+ */
+export function trackMatchedRoute(req: RouteTrackingRequest): void {
+  let current = req.route;
+  Object.defineProperty(req, 'route', {
+    configurable: true,
+    enumerable: true,
+    get: () => current,
+    set: (value: unknown) => {
+      current = value;
+      const routePath = (value as { path?: unknown } | undefined)?.path;
+      if (typeof routePath === 'string') {
+        req[matchedRouteKey] = `${req.baseUrl ?? ''}${routePath}`;
+      }
+    },
+  });
+}
+
+/** The route template recorded by trackMatchedRoute, or 'unmatched'. */
+export function metricRouteFor(req: RouteTrackingRequest): string {
+  return req[matchedRouteKey] ?? UNMATCHED_ROUTE;
+}
+
+export function createHttpMetrics(maxRoutes = MAX_METRIC_ROUTES) {
   const requests = new Map<string, number>();
   const durations = new Map<string, number>();
+  const routes = new Set<string>();
 
   return {
     record(metric: HttpMetric) {
       const method = metric.method.toUpperCase().slice(0, 12);
-      const route = normalizeMetricRoute(metric.route);
+      let route = normalizeMetricRoute(metric.route);
+      if (!routes.has(route)) {
+        if (routes.size >= maxRoutes) route = OVERFLOW_ROUTE;
+        else routes.add(route);
+      }
       const requestKey = `${method}\u0000${route}\u0000${statusClass(metric.statusCode)}`;
       const durationKey = `${method}\u0000${route}`;
       requests.set(requestKey, (requests.get(requestKey) ?? 0) + 1);

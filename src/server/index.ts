@@ -46,7 +46,8 @@ import {
   buildRevisionFromEnv,
   createHttpMetrics,
   metricsTokenFromEnv,
-  normalizeMetricRoute,
+  metricRouteFor,
+  trackMatchedRoute,
 } from './services/observability.js';
 import {
   initSentry,
@@ -130,10 +131,13 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     : crypto.randomUUID();
   const startedAt = performance.now();
   res.setHeader('X-Request-ID', requestId);
+  trackMatchedRoute(req);
   res.on('finish', () => {
     httpMetrics.record({
       method: req.method,
-      route: normalizeMetricRoute(req.path),
+      // Matched route template, never req.path: raw paths are unbounded and
+      // can carry secrets such as registration management tokens.
+      route: metricRouteFor(req),
       statusCode: res.statusCode,
       durationMs: Math.round(performance.now() - startedAt),
     });
