@@ -60,8 +60,12 @@ export function shouldBlockNavigation(state: SaveState): boolean {
 /**
  * Returns the beforeunload message for dirty state
  */
-export function getBeforeUnloadMessage(state: SaveState): string | undefined {
-  if (state === 'dirty') {
+/**
+ * `hasUnsavedDrafts` covers the independently saved sections (capacity,
+ * waitlist, event slug) that are not tracked by the setup SaveState.
+ */
+export function getBeforeUnloadMessage(state: SaveState, hasUnsavedDrafts = false): string | undefined {
+  if (state === 'dirty' || (hasUnsavedDrafts && state !== 'saving')) {
     return 'You have unsaved changes. Are you sure you want to leave?';
   }
   if (state === 'saving') {

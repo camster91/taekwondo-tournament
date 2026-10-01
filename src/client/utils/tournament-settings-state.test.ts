@@ -50,6 +50,13 @@ describe('tournament-settings-state', () => {
       expect(getBeforeUnloadMessage('saving')).toBe('Save in progress. Leaving now may lose your changes.');
     });
 
+    it('warns about unsaved capacity/waitlist/event-slug drafts even when setup is clean', () => {
+      expect(getBeforeUnloadMessage('clean', true)).toBe('You have unsaved changes. Are you sure you want to leave?');
+      expect(getBeforeUnloadMessage('saved', true)).toBe('You have unsaved changes. Are you sure you want to leave?');
+      expect(getBeforeUnloadMessage('saving', true)).toBe('Save in progress. Leaving now may lose your changes.');
+      expect(getBeforeUnloadMessage('clean', false)).toBeUndefined();
+    });
+
     it('returns undefined for clean, saved, and error states', () => {
       expect(getBeforeUnloadMessage('clean')).toBeUndefined();
       expect(getBeforeUnloadMessage('saved')).toBeUndefined();

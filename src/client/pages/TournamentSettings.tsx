@@ -144,12 +144,24 @@ export default function TournamentSettings() {
   // Capacity & waitlist state (#191)
   const [maxCapacity, setMaxCapacity] = useState<number | null>(null);
   const [waitlistEnabled, setWaitlistEnabled] = useState<boolean>(false);
-  const [capacityDirty, setCapacityDirty] = useState(false);
+  const [capacityDirty, setCapacityDirtyState] = useState(false);
+  // Refs mirror setupDirtyRef: tournament refetches (focus, invalidation
+  // by other saves) must not overwrite drafts the director hasn't saved.
+  const capacityDirtyRef = useRef(false);
+  const setCapacityDirty = (dirty: boolean) => {
+    capacityDirtyRef.current = dirty;
+    setCapacityDirtyState(dirty);
+  };
 
   // Portal state — event slug and publication status
   const [eventSlug, setEventSlug] = useState<string>('');
   const [portalPublished, setPortalPublished] = useState<boolean>(false);
-  const [eventSlugDirty, setEventSlugDirty] = useState<boolean>(false);
+  const [eventSlugDirty, setEventSlugDirtyState] = useState<boolean>(false);
+  const eventSlugDirtyRef = useRef(false);
+  const setEventSlugDirty = (dirty: boolean) => {
+    eventSlugDirtyRef.current = dirty;
+    setEventSlugDirtyState(dirty);
+  };
 
   const { addToast } = useToast();
 
@@ -160,8 +172,9 @@ export default function TournamentSettings() {
   const [tab, setTab] = useState<SettingsTab>('setup');
 
   // Unsaved changes protection: block browser unload when dirty or saving
+  const hasUnsavedDrafts = capacityDirty || eventSlugDirty;
   useEffect(() => {
-    const message = getBeforeUnloadMessage(saveState);
+    const message = getBeforeUnloadMessage(saveState, hasUnsavedDrafts);
     if (!message) return;
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -172,7 +185,7 @@ export default function TournamentSettings() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [saveState]);
+  }, [saveState, hasUnsavedDrafts]);
 
   const { data: tournament, isLoading } = useQuery<Tournament>({
     queryKey: ['tournament', id],
@@ -273,20 +286,16 @@ export default function TournamentSettings() {
 
   // Hydrate capacity settings from tournament
   useEffect(() => {
-    if (tournament) {
-      setMaxCapacity(tournament.maxCapacity ?? null);
-      setWaitlistEnabled(tournament.waitlistEnabled ?? false);
-      setCapacityDirty(false);
-    }
+    if (!tournament || capacityDirtyRef.current) return;
+    setMaxCapacity(tournament.maxCapacity ?? null);
+    setWaitlistEnabled(tournament.waitlistEnabled ?? false);
   }, [tournament]);
 
   // Hydrate portal state from tournament data
   useEffect(() => {
-    if (tournament) {
-      setEventSlug(tournament.eventSlug || '');
-      setPortalPublished(tournament.portalPublished || false);
-      setEventSlugDirty(false);
-    }
+    if (!tournament) return;
+    setPortalPublished(tournament.portalPublished || false);
+    if (!eventSlugDirtyRef.current) setEventSlug(tournament.eventSlug || '');
   }, [tournament]);
 
   const generateSlugMutation = useMutation({
