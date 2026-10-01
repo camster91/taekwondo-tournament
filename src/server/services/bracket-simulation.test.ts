@@ -435,3 +435,35 @@ describe('skill_based seeding', () => {
     }
   });
 });
+
+describe('DE losers-bracket crossover (no immediate rematches)', () => {
+  // The first drop-down losers round pairs a winners round-2 loser with
+  // a losers round-1 survivor. Without crossover the survivor came from
+  // the very winners round-1 bouts the dropped player just won, so the
+  // 8-player L10 was a rematch of W1/W2.
+  const pairKey = (a: string, b: string) => [a, b].sort().join('|');
+
+  for (const n of [8, 16]) {
+    for (const [name, policy] of [['favourite', favourite], ['underdog', underdog], ['coin flip', coinFlip]] as const) {
+      for (const rngSeed of [1, 2, 3, 4, 5]) {
+        it(`N=${n}, ${name}, seed ${rngSeed}: the first drop-down round never repeats a winners round-1 pairing`, () => {
+          const structure = generateBracket(seeded(n), 'manual');
+          const { rows } = playOut(structure, policy, rngSeed);
+
+          const winnersRound1 = new Set(
+            rows
+              .filter((r) => r.bracketType === 'winners' && r.roundNumber === 1 && r.competitor1Id && r.competitor2Id)
+              .map((r) => pairKey(r.competitor1Id!, r.competitor2Id!)),
+          );
+          const firstDropDown = rows.filter((r) => r.bracketType === 'losers' && r.roundNumber === 2);
+          expect(firstDropDown.length).toBe(n / 4);
+          for (const r of firstDropDown) {
+            expect(r.competitor1Id && r.competitor2Id).toBeTruthy();
+            expect(winnersRound1.has(pairKey(r.competitor1Id!, r.competitor2Id!))).toBe(false);
+          }
+          expect(isBracketComplete(rows, structure)).toBe(true);
+        });
+      }
+    }
+  }
+});
