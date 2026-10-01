@@ -499,7 +499,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
         const { createParentalConsentVerification } = await import('../services/parental-consent-verification.js');
         const { parentalConsentVerificationEmail } = await import('../services/email-templates.js');
         
-        const { token: verificationToken, code: verificationCode } = await createParentalConsentVerification(
+        const { token: verificationToken } = await createParentalConsentVerification(
           prisma,
           registration.id,
           parentEmail,
@@ -512,7 +512,6 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
           tournamentName: tournamentForEmail?.name || registration.tournament.name,
           tournamentDate: tournamentForEmail?.date || registration.tournament.date,
           verificationUrl,
-          code: verificationCode,
           // The consent email is the only email a minor's parent gets, so it
           // must carry the management link (pay / edit / withdraw).
           managementUrl,
@@ -1098,10 +1097,13 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
   res.json({ success: true, message: 'Registration withdrawn.' });
 });
 
-// P2-14: Verify parental consent for minor registration
-router.get('/verify-parent-consent', registrationLimiter, async (req: Request, res: Response) => {
+// P2-14: Verify parental consent for minor registration.
+// POST only: consent is given by the parent's explicit click on the
+// verification page. A GET would be fired by mail link scanners and
+// previews, "consenting" without the parent.
+router.post('/verify-parent-consent', registrationLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { token } = req.query;
+  const { token } = (req.body ?? {}) as { token?: unknown };
 
   if (!token || typeof token !== 'string') {
     return res.status(400).json({ error: 'Verification token is required' });

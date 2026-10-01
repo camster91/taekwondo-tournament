@@ -33,6 +33,7 @@ import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log
 import { legalHoldSchema, legalHoldData } from '../services/legal-hold.js';
 import { generateManagementToken, getManagementTokenExpiry, hashManagementToken } from '../utils/registration-management-token.js';
 import { promotedRegistrationPaymentData } from '../services/public-registration.js';
+import { isParentalConsentPending } from '../services/parental-consent-verification.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
 import { generateQRPoster } from '../services/qr-poster.js';
@@ -1205,6 +1206,8 @@ router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer')
       parentName: true,
       parentEmail: true,
       parentPhone: true,
+      parentEmailVerified: true,
+      parentalConsentVerification: { select: { verifiedAt: true } },
       competitor: {
         select: {
           id: true,
@@ -1245,7 +1248,12 @@ router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer')
     take: 5000,
   });
 
-  res.json(registrations);
+  // Flag minors whose parent has not confirmed the emailed consent request
+  // (check-in shows a badge; it never blocks check-in).
+  res.json(registrations.map(({ parentalConsentVerification, ...registration }) => ({
+    ...registration,
+    parentalConsentPending: isParentalConsentPending({ ...registration, parentalConsentVerification }),
+  })));
 });
 
 // Get tournament capacity status

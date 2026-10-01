@@ -133,7 +133,6 @@ describe('email-templates', () => {
         tournamentName: 'Open',
         tournamentDate: new Date('2027-01-01'),
         verificationUrl: 'https://app.test/verify-parent-consent?token=v',
-        code: '123456',
         managementUrl,
         confirmationCode: 'abcd1234',
         paymentDueCents: 2500,
@@ -141,6 +140,8 @@ describe('email-templates', () => {
       expect(html).toContain(managementUrl);
       expect(html).toContain('abcd1234');
       expect(html).toContain('$25.00');
+      // No manual-entry code: there is no endpoint that accepts one.
+      expect(html).not.toMatch(/entering this code/i);
     });
 
     it('mentions the waitlist instead of a fee for a waitlisted minor', () => {
@@ -149,7 +150,6 @@ describe('email-templates', () => {
         tournamentName: 'Open',
         tournamentDate: new Date('2027-01-01'),
         verificationUrl: 'https://app.test/v',
-        code: '123456',
         managementUrl,
         confirmationCode: 'abcd1234',
         waitlistPosition: 3,

@@ -568,7 +568,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
         const { createParentalConsentVerification } = await import('../services/parental-consent-verification.js');
         const { parentalConsentVerificationEmail } = await import('../services/email-templates.js');
         
-        const { token: verificationToken, code: verificationCode } = await createParentalConsentVerification(
+        const { token: verificationToken } = await createParentalConsentVerification(
           prisma,
           registration.id,
           parentEmail,
@@ -581,7 +581,6 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
           tournamentName: tournament.name,
           tournamentDate: tournament.date,
           verificationUrl,
-          code: verificationCode,
           // The consent email is the only email a minor's parent gets, so it
           // must carry the management link (pay / edit / withdraw).
           managementUrl,

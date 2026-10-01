@@ -1,58 +1,46 @@
-// P2-14: Parental consent verification page
-import { useState, useEffect } from 'react';
+// P2-14: Parental consent verification page.
+// Consent is recorded only when the parent clicks the confirm button (a
+// POST). Opening the link does nothing by itself, so mail link scanners
+// and previews cannot consent on the parent's behalf.
+import { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { CheckCircle, AlertCircle, Trophy } from 'lucide-react';
-import Spinner from '../components/ui/Spinner';
+import { CheckCircle, AlertCircle, ShieldCheck } from 'lucide-react';
 import { Card, CardBody, Button } from '../components/ui';
 
 export default function VerifyParentConsent() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
 
-  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string; registration?: { competitorName: string; tournamentName: string } } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(token ? null : 'No verification token provided');
 
-  useEffect(() => {
-    if (!token) {
-      setError('No verification token provided');
-      setLoading(false);
-      return;
-    }
+  const confirmConsent = async () => {
+    if (!token || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/public/verify-parent-consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const data = await response.json().catch(() => ({}));
 
-    const verifyConsent = async () => {
-      try {
-        const response = await fetch(`/api/public/verify-parent-consent?token=${encodeURIComponent(token)}`);
-        const data = await response.json();
-
-        if (!response.ok) {
-          setError(data.error || 'Verification failed');
-          return;
-        }
-
-        setResult(data);
-      } catch (err) {
-        setError('An error occurred during verification. Please try again.');
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        setError(data.error || 'Verification failed');
+        return;
       }
-    };
 
-    void verifyConsent();
-  }, [token]);
+      setResult(data);
+    } catch {
+      setError('An error occurred during verification. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-surface-50 dark:bg-surface-950 flex items-center justify-center">
-        <div className="flex items-center text-surface-600 dark:text-surface-400">
-          <Spinner className="mr-2" />
-          Verifying parental consent...
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
+  if (error && !token) {
     return (
       <div className="min-h-screen bg-surface-50 dark:bg-surface-950 py-12 px-4">
         <div className="max-w-md mx-auto text-center">
@@ -98,7 +86,7 @@ export default function VerifyParentConsent() {
               )}
 
               <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
-                Your child's registration is now complete and confirmed. You should have received a confirmation email with all the details.
+                Thank you. Use the "Manage Registration" link in the same email to view, pay for, edit or withdraw this registration.
               </p>
 
               <Button as={Link} to="/" variant="primary" className="w-full">
@@ -111,5 +99,38 @@ export default function VerifyParentConsent() {
     );
   }
 
-  return null;
+  return (
+    <div className="min-h-screen bg-surface-50 dark:bg-surface-950 py-12 px-4">
+      <div className="max-w-md mx-auto">
+        <Card>
+          <CardBody className="p-8 text-center">
+            <ShieldCheck className="h-16 w-16 text-primary-600 dark:text-primary-400 mx-auto mb-4" aria-hidden="true" />
+            <h1 className="text-2xl font-bold text-surface-900 dark:text-white mb-2">Confirm parental consent</h1>
+            <p className="text-surface-600 dark:text-surface-400 mb-6">
+              By confirming, you state that you are the parent or legal guardian of the competitor and authorize their registration for this tournament.
+            </p>
+            {error && (
+              <div role="alert" className="mb-4 p-3 rounded-md bg-danger/10 border border-danger/30 text-sm text-danger text-left flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="primary"
+              className="w-full"
+              loading={submitting}
+              onClick={() => void confirmConsent()}
+              data-testid="confirm-parent-consent"
+            >
+              I am the parent/guardian — confirm consent
+            </Button>
+            <p className="text-xs text-surface-500 mt-4">
+              If you did not register a child for this tournament, close this page; nothing is recorded unless you confirm.
+            </p>
+          </CardBody>
+        </Card>
+      </div>
+    </div>
+  );
 }

@@ -1,8 +1,12 @@
 // P2-14: COPPA parental consent verification service
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import { hashSecret } from '../utils/token-hash.js';
 
 const VERIFICATION_TTL_MS = 48 * 60 * 60 * 1000; // 48 hours
+
+/** Raw consent tokens are 32 random bytes, hex encoded. */
+const TOKEN_PATTERN = /^[0-9a-f]{64}$/;
 
 /**
  * Generate a cryptographically secure 32-byte hex token for parental consent verification.
@@ -12,48 +16,50 @@ export function generateVerificationToken(): string {
 }
 
 /**
- * Generate a 6-digit numeric code for SMS or manual entry fallback.
- */
-export function generateVerificationCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-/**
- * Create a parental consent verification record and return the token + code.
+ * Create a parental consent verification record and return the raw token.
  * The verification link will be /verify-parent-consent?token=...
+ *
+ * Only the SHA-256 digest of the token is stored (the raw token lives in
+ * the parent's email). No manual-entry code is issued: there is no
+ * endpoint to redeem one, so the `code` column is left empty.
  */
 export async function createParentalConsentVerification(
   prisma: PrismaClient,
   registrationId: string,
   parentEmail: string,
-): Promise<{ token: string; code: string }> {
+): Promise<{ token: string }> {
   const token = generateVerificationToken();
-  const code = generateVerificationCode();
   const expiresAt = new Date(Date.now() + VERIFICATION_TTL_MS);
 
   await prisma.parentalConsentVerification.create({
     data: {
       registrationId,
       parentEmail,
-      token,
-      code,
+      token: hashSecret(token),
+      code: '',
       expiresAt,
     },
   });
 
-  return { token, code };
+  return { token };
 }
 
 /**
  * Verify a parental consent token and mark the registration as verified.
- * Returns the registration if successful, null if token is invalid/expired.
+ * Must only run on an explicit parent action (POST), never on a GET that a
+ * mail link scanner could prefetch. Lookup is by token digest only; legacy
+ * plaintext rows are no longer matched and simply expire.
  */
 export async function verifyParentalConsent(
   prisma: PrismaClient,
   token: string,
 ): Promise<{ ok: true; registration: { id: string; competitorName: string; tournamentName: string } } | { ok: false; error: string }> {
+  if (!TOKEN_PATTERN.test(token)) {
+    return { ok: false, error: 'Invalid verification link.' };
+  }
+
   const verification = await prisma.parentalConsentVerification.findUnique({
-    where: { token },
+    where: { token: hashSecret(token) },
     include: {
       registration: {
         include: {
@@ -68,16 +74,15 @@ export async function verifyParentalConsent(
     return { ok: false, error: 'Invalid verification link.' };
   }
 
+  const registration = {
+    id: verification.registration.id,
+    competitorName: `${verification.registration.competitor.firstName} ${verification.registration.competitor.lastName}`,
+    tournamentName: verification.registration.tournament.name,
+  };
+
   if (verification.verifiedAt) {
     // Already verified — return success (idempotent)
-    return {
-      ok: true,
-      registration: {
-        id: verification.registration.id,
-        competitorName: `${verification.registration.competitor.firstName} ${verification.registration.competitor.lastName}`,
-        tournamentName: verification.registration.tournament.name,
-      },
-    };
+    return { ok: true, registration };
   }
 
   if (new Date() > verification.expiresAt) {
@@ -99,14 +104,21 @@ export async function verifyParentalConsent(
     }),
   ]);
 
-  return {
-    ok: true,
-    registration: {
-      id: verification.registration.id,
-      competitorName: `${verification.registration.competitor.firstName} ${verification.registration.competitor.lastName}`,
-      tournamentName: verification.registration.tournament.name,
-    },
-  };
+  return { ok: true, registration };
+}
+
+/**
+ * Whether a registration is still waiting for the parent to confirm consent:
+ * a consent request was sent (minor self-registration) and not yet verified.
+ * Registrations entered by staff never get a request, so they are not
+ * flagged. Shown at check-in; it never blocks check-in.
+ */
+export function isParentalConsentPending(registration: {
+  parentEmailVerified: boolean;
+  parentalConsentVerification: { verifiedAt: Date | null } | null;
+}): boolean {
+  if (!registration.parentalConsentVerification) return false;
+  return !registration.parentEmailVerified && !registration.parentalConsentVerification.verifiedAt;
 }
 
 /**

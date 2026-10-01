@@ -53,6 +53,8 @@ interface Registration {
   checkedIn: boolean;
   checkInTime: string | null;
   checkInWeight: number | null;
+  /** Minor self-registration whose parent has not confirmed the consent email. */
+  parentalConsentPending?: boolean;
   competitor: {
     id: string;
     firstName: string;
@@ -678,6 +680,15 @@ export default function CheckIn() {
                       </span>
                       {isCheckedIn(registration) && (
                         <CheckCircle className="h-5 w-5 text-success ml-2" />
+                      )}
+                      {registration.parentalConsentPending && (
+                        <span
+                          data-testid="parental-consent-pending"
+                          title="The parent has not confirmed the emailed consent request. Check-in is still allowed; the director decides."
+                          className="ml-2 text-xs px-2 py-0.5 rounded bg-warning/10 text-warning border border-warning/30"
+                        >
+                          Parental consent not verified
+                        </span>
                       )}
                     </div>
                     <div className="text-sm text-surface-600 dark:text-surface-400 mt-1">
