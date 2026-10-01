@@ -3,6 +3,8 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { email, eventDate, hashPassword, password, secretMatches, text, tokenHash, uuid, verifyPassword } from './security.mjs';
+import {mountTournamentRoutes,Problem} from './tournament-routes.mjs';
+import {mountInviteRoutes} from './invite-routes.mjs';
 
 export function createApp({ pool, origin, setupToken, revision, secureCookies = true }) {
   if (new URL(origin).origin !== origin || (secureCookies && !origin.startsWith('https://'))) throw new Error('Canonical origin required');
@@ -35,8 +37,8 @@ export function createApp({ pool, origin, setupToken, revision, secureCookies = 
       .then(result => { if (!result.rowCount) return res.status(401).json({ error: 'AUTH_REQUIRED' }); req.user=result.rows[0]; next(); }).catch(next);
   };
   app.get('/api/health/ready', route(async (_req, res) => {
-    const result=await pool.query('SELECT version FROM public.bowin_rebuild_migrations WHERE version=1');
-    if(!result.rowCount)throw new Error('Foundation migration missing');
+    const result=await pool.query('SELECT version FROM public.bowin_rebuild_migrations ORDER BY version');
+    if(result.rows.map(row=>row.version).join(',')!=='1,2,3')throw new Error('Required migration missing');
     res.json({ status: 'ok', database: 'ok', revision });
   }));
   app.post('/api/auth/bootstrap', route(async (req, res) => {
@@ -98,8 +100,12 @@ export function createApp({ pool, origin, setupToken, revision, secureCookies = 
       await client.query('COMMIT');res.status(201).json({id});
     } catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }));
+  mountTournamentRoutes({app,pool,requireAuth,route});
+  mountInviteRoutes({app,pool,origin,requireAuth,route,issueSession});
   app.use((_req,res)=>res.status(404).json({error:'NOT_FOUND'}));
   app.use((error,_req,res,_next)=>{
+    if(error instanceof Problem)return res.status(error.status).json({error:error.code});
+    if(error.code==='23505')return res.status(409).json({error:'CONFLICT'});
     const invalid=error.message.startsWith('Invalid')||error.message.startsWith('Password')||error.type==='entity.parse.failed';
     res.status(invalid?400:503).json({error:invalid?'INVALID_INPUT':'REQUEST_UNAVAILABLE'});
   });

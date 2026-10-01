@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 // This runner is exclusively for the new dedicated database, never the old
 // shared taekwondo database. No DROP/TRUNCATE or legacy migrations are used.
 const expected = process.env.REBUILD_DATABASE_NAME;
@@ -11,10 +11,16 @@ try {
   await client.query('BEGIN');
   await client.query("SELECT pg_advisory_xact_lock(819403)");
   await client.query('CREATE TABLE IF NOT EXISTS public.bowin_rebuild_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())');
-  const exists = await client.query('SELECT version FROM public.bowin_rebuild_migrations WHERE version=1');
-  if (!exists.rowCount) {
-    await client.query(await readFile(new URL('../migrations/001_foundation.sql', import.meta.url), 'utf8'));
-    await client.query('INSERT INTO public.bowin_rebuild_migrations(version) VALUES(1)');
+  const directory=new URL('../migrations/',import.meta.url);
+  const files=(await readdir(directory)).filter(name=>/^\d{3}_[a-z_]+\.sql$/.test(name)).sort();
+  const applied=(await client.query('SELECT version FROM public.bowin_rebuild_migrations ORDER BY version')).rows.map(row=>row.version);
+  const versions=files.map(name=>Number(name.slice(0,3)));
+  if(versions.some((version,index)=>version!==index+1)||applied.some((version,index)=>version!==index+1||!versions.includes(version)))throw new Error('Migration history differs from candidate');
+  for (const file of files) {
+    const version=Number(file.slice(0,3));
+    if(applied.includes(version))continue;
+    await client.query(await readFile(new URL(file,directory),'utf8'));
+    await client.query('INSERT INTO public.bowin_rebuild_migrations(version) VALUES($1)',[version]);
   }
   await client.query('COMMIT');
   console.log('Dedicated rebuild foundation migration verified');
