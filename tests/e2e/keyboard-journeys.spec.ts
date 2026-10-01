@@ -180,8 +180,12 @@ test.describe('keyboard-only journeys', () => {
     const refreshed = page.waitForResponse((resp) => resp.url().includes('withMatches=true'));
     await page.keyboard.press('Enter');
     await expect(confirmDialog).toBeHidden();
-    expect((await saved).ok()).toBeTruthy();
+    const savedResponse = await saved;
+    expect(savedResponse.ok()).toBeTruthy();
+    const { matchNumber } = await savedResponse.json() as { matchNumber: number };
     await refreshed;
+    // Ctrl+Z targets the result this station recorded once it renders as completed.
+    await expect(page.getByRole('button', { name: new RegExp(`^Undo result: .*\\(match ${matchNumber}\\)$`) })).toBeVisible();
 
     // --- Undo the result with the keyboard shortcut ---
     await page.keyboard.press('Control+z');

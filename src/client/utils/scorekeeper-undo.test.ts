@@ -28,6 +28,14 @@ describe('scorekeeper undo selection', () => {
     expect(latestCompletedMatchId(matches, 'undone-elsewhere')).toBe('losers-8');
   });
 
+  it('never falls back to another match while the recorded one is listed but not completed', () => {
+    const matches = [
+      { id: 'recorded-5', matchNumber: 5, status: 'ready' },
+      { id: 'seeded-9', matchNumber: 9, status: 'completed' },
+    ];
+    expect(latestCompletedMatchId(matches, 'recorded-5')).toBeNull();
+  });
+
   it('returns null when the division has no completed result', () => {
     expect(latestCompletedMatchId([{ id: 'ready', matchNumber: 1, status: 'ready' }])).toBeNull();
   });

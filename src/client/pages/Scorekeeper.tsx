@@ -34,7 +34,7 @@ import AccessibleDialog from '../components/ui/AccessibleDialog';
 import OperationStatus from '../components/ui/OperationStatus';
 import { buildDeliveryUncertainMessage, buildOfflineOperationStatuses, buildOfflineReviewMessage, pendingOfflineTargetIds } from '../utils/offline-operation-status';
 import { readAdminOperationError } from '../utils/admin-operation-error';
-import { latestCompletedMatchId } from '../utils/scorekeeper-undo';
+import { isScoredResult, latestCompletedMatchId } from '../utils/scorekeeper-undo';
 import { browserVenueDataSnapshotStore, loadVenueData } from '../utils/venue-data-snapshot';
 import { isScorekeeperDivisionData } from '../utils/venue-data-contracts';
 import { shouldQueueOfflineMutation } from '../utils/offline-delivery';
@@ -431,6 +431,7 @@ export default function Scorekeeper() {
           queryClient.invalidateQueries({ queryKey: ['divisions'] }),
         ]);
         setPendingUndoId(null);
+        lastRecordedMatchIdRef.current = null;
         addToast('Match result undone', 'success');
         setAnnounce('Last result undone.');
       } catch {
@@ -463,6 +464,7 @@ export default function Scorekeeper() {
       ]);
       setUndoAcknowledged(false);
       setPendingUndoId(null);
+      lastRecordedMatchIdRef.current = null;
       addToast('Match result undone', 'success');
       setAnnounce('Last result undone.');
     } catch {
@@ -1500,8 +1502,9 @@ export default function Scorekeeper() {
       {/* Recent Results */}
       {(() => {
         const div = divisions?.find((d) => d.id === selectedDivision);
+        // Bye advancements have no scorekeeper result and cannot be undone.
         const completedMatches = div?.bracket?.matches
-          ?.filter((m) => m.status === 'completed')
+          ?.filter(isScoredResult)
           .slice(-5)
           .reverse() || [];
 
