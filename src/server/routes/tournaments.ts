@@ -7,7 +7,7 @@ import { calculateAge } from '../../shared/constants/age-groups.js';
 import { recomputeRegistrationAges } from '../services/registration-age.js';
 import { generateSchedule, validateScheduleConfig, DEFAULT_CONFIG, type ScheduleConfig } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
-import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, buildCompetitorAccessFilter, type AuthenticatedRequest } from '../middleware/auth.js';
+import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, buildCompetitorAccessFilter, findOrgMembershipAtLevel, checkTournamentAccess, type TournamentRole, type AuthenticatedRequest } from '../middleware/auth.js';
 import { generatePublicSlug, applySlugWithRetry, sanitizeBroadcastSubject } from './tournament-helpers.js';
 // requireRole stays in use for POST / (create new tournament) — there's
 // no parent tournament to scope-access yet. All other tournament-scoped
@@ -89,7 +89,12 @@ const registrationUpdateSchema = z.object({
   sparring: z.boolean().optional(),
   weightAtRegistration: z.number().positive().optional(),
   checkedIn: z.boolean().optional(),
-  checkInWeight: z.number().positive().optional(),
+  // null clears the recorded weigh-in (undo check-in, bulk check-in
+  // without a weigh-in, and offline-queued check-ins send null).
+  checkInWeight: z.number().positive().nullable().optional(),
+  // Accepted for client compatibility only: the server stamps
+  // checkInTime itself whenever `checkedIn` changes.
+  checkInTime: z.string().datetime().nullable().optional(),
   // v2 fields
   competeWithOlder: z.boolean().optional(),
   specialNeeds: z.string().max(500).optional().nullable(),
@@ -245,11 +250,14 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
   if (authReq.user?.role === 'admin' && typeof organizationId === 'string' && organizationId) {
     resolvedOrgId = organizationId;
   } else if (authReq.user) {
-    const membership = await prisma.organizationMember.findFirst({
-      where: { userId: authReq.user.id },
-      select: { organizationId: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    // Only a director-level membership (owner/admin/member/director) may
+    // own new tournaments. A tenant user whose memberships are all
+    // viewer/scorekeeper gets 403 rather than an orphan tournament
+    // they could not see (CLAUDE.md multi-tenant rule 6).
+    const { membership, hasMemberships } = await findOrgMembershipAtLevel(prisma, authReq.user.id, 'director');
+    if (!membership && hasMemberships) {
+      return res.status(403).json({ error: 'No organization membership with director access found' });
+    }
     resolvedOrgId = membership?.organizationId ?? null;
   }
 
@@ -311,14 +319,10 @@ router.post('/from-template/:templateId', authenticate, requireRole('admin', 'di
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const membership = await prisma.organizationMember.findFirst({
-    where: { userId: authReq.user.id },
-    select: { organizationId: true },
-    orderBy: { createdAt: 'asc' },
-  });
+  const { membership } = await findOrgMembershipAtLevel(prisma, authReq.user.id, 'director');
 
   if (!membership) {
-    return res.status(403).json({ error: 'No organization membership found' });
+    return res.status(403).json({ error: 'No organization membership with director access found' });
   }
 
   const template = await prisma.tournamentTemplate.findFirst({
@@ -1574,8 +1578,30 @@ router.post('/:id/registrations/bulk', authenticate, requireTournamentAccess('di
   res.json({ registered: registrations.length });
 });
 
-// Update registration (requires authentication + admin/director role)
-router.put('/:id/registrations/:regId', authenticate, requireTournamentAccess('director'), validateRequest(registrationUpdateSchema), async (req: Request, res: Response) => {
+const CHECK_IN_UPDATE_FIELDS = new Set(['checkedIn', 'checkInTime', 'checkInWeight']);
+
+/**
+ * True when a registration update touches ONLY check-in state. Check-in
+ * desks are staffed by scorekeepers (staffing assigns "check-in lead"
+ * to non-directors), so these updates need scorekeeper access; any
+ * other field still needs a director. Unknown keys fail closed to the
+ * director requirement.
+ */
+export function isCheckInOnlyUpdate(body: unknown): boolean {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const keys = Object.keys(body);
+  return keys.length > 0 && keys.every((key) => CHECK_IN_UPDATE_FIELDS.has(key));
+}
+
+const requireRegistrationUpdateAccess = async (req: Request, res: Response, next: () => void) => {
+  const minRole: TournamentRole = isCheckInOnlyUpdate(req.body) ? 'scorekeeper' : 'director';
+  const result = await checkTournamentAccess(req as AuthenticatedRequest, req.app.locals.prisma, getParam(req.params.id), minRole);
+  if (!result.ok) return res.status(result.status || 403).json({ error: result.error });
+  next();
+};
+
+// Update registration. Check-in-only updates: scorekeeper+; anything else: director.
+router.put('/:id/registrations/:regId', authenticate, requireRegistrationUpdateAccess, validateRequest(registrationUpdateSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { patterns, sparring, weightAtRegistration, checkedIn, checkInWeight, competeWithOlder, specialNeeds, manualDivisionId, seeding, paymentStatus } = req.body;
 
@@ -1595,7 +1621,7 @@ router.put('/:id/registrations/:regId', authenticate, requireTournamentAccess('d
     updateData.checkedIn = checkedIn;
     updateData.checkInTime = checkedIn ? new Date() : null;
   }
-  if (checkInWeight !== undefined) updateData.checkInWeight = checkInWeight;
+  if (checkInWeight !== undefined) updateData.checkInWeight = checkInWeight; // null clears it
   // v2 fields
   if (competeWithOlder !== undefined) updateData.competeWithOlder = competeWithOlder;
   if (specialNeeds !== undefined) updateData.specialNeeds = specialNeeds;

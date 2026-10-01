@@ -132,8 +132,8 @@ const primaryNav = [
 // Per-tournament views (only when a tournament is selected)
 const tournamentNav = [
   { name: 'Overview', icon: LayoutGrid, paramKey: 'id', paramValue: 'id' },
-  { name: 'Divisions', icon: Users, pathSuffix: '/divisions' },
-  { name: 'Schedule', icon: Calendar, pathSuffix: '/schedule' },
+  { name: 'Divisions', icon: Users, pathSuffix: '/divisions', roles: ['admin', 'director'] },
+  { name: 'Schedule', icon: Calendar, pathSuffix: '/schedule', roles: ['admin', 'director'] },
   { name: 'Staffing', icon: UserCheck, pathSuffix: '/staffing', roles: ['admin', 'director'] },
   { name: 'Settings', icon: SettingsIcon, pathSuffix: '/settings', roles: ['admin', 'director'] },
 ];
@@ -616,7 +616,7 @@ function AppRoutes() {
           <Route path="/verify" element={<VerifyMagicLink />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/scorekeeper/:tournamentId" element={<ProtectedRoute><Scorekeeper /></ProtectedRoute>} />
-          <Route path="/checkin/:tournamentId" element={<ProtectedRoute><CheckIn /></ProtectedRoute>} />
+          <Route path="/checkin/:tournamentId" element={<ProtectedRoute requiredRoles={['admin', 'director', 'scorekeeper']}><CheckIn /></ProtectedRoute>} />
           <Route path="/waitlist/:tournamentId" element={<ProtectedRoute><Waitlist /></ProtectedRoute>} />
           <Route path="/display/:tournamentId" element={<PublicScoreboard />} />
           <Route path="/announcer/:tournamentId" element={<AnnouncerView />} />

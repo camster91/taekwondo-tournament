@@ -57,6 +57,35 @@ test.describe('check-in (weigh-in flow)', () => {
     await expect(page.getByRole('button', { name: /^Undo$/i }).first()).toBeVisible();
   });
 
+  test('undo check-in clears the check-in on the server', async ({ page }) => {
+    await loginAsDemo(page);
+    await page.goto('/tournaments');
+    const href = await page.locator('a', { hasText: 'Spring Championship 2026' }).first().getAttribute('href');
+    const tournamentId = href!.replace('/tournaments/', '');
+    const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+    try {
+      const where = { tournamentId, competitor: { firstName: 'Minho', lastName: 'Kim' } };
+      await prisma.registration.updateMany({ where, data: { checkedIn: true, checkInTime: new Date(), checkInWeight: 150 } });
+
+      await page.goto(`/checkin/${tournamentId}`);
+      await page.locator('input[placeholder*="Search"]').first().fill('Minho');
+      const undo = page.getByRole('button', { name: /^Undo$/i }).first();
+      await expect(undo).toBeVisible({ timeout: 10_000 });
+      const response = page.waitForResponse((res) => res.request().method() === 'PUT' && /\/registrations\/[^/]+$/.test(res.url()));
+      await undo.click();
+      expect((await response).status()).toBe(200);
+      await expect(page.getByText(/Could not undo check-in/i)).toHaveCount(0);
+
+      const registration = await prisma.registration.findFirst({ where });
+      expect(registration?.checkedIn).toBe(false);
+      expect(registration?.checkInTime).toBeNull();
+      expect(registration?.checkInWeight).toBeNull();
+      await expect(page.getByRole('button', { name: /^Check In$/i }).first()).toBeVisible();
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
   test('offline check-in persists locally and syncs after reconnection', async ({ page, context }) => {
     await loginAsDemo(page);
     await page.goto('/tournaments');
@@ -221,10 +250,17 @@ test.describe('check-in (weigh-in flow)', () => {
       await expect(uncertain).toBeVisible();
       expect(attempts.get(ids[0])).toBe(1);
       expect(attempts.get(ids[1])).toBe(1);
+      // The un-mocked request reached the real server and was accepted
+      // (bulk check-in used to send checkInWeight:null, which the server
+      // rejected with a 400 that this spec's own mocked text hid).
+      await expect(page.getByText(/Validation failed/i)).toHaveCount(0);
+      await expect.poll(async () => (await prisma.registration.findUnique({ where: { id: ids[2] } }))?.checkedIn).toBe(true);
 
       retryConfirmed = true;
       await rejected.getByRole('button', { name: /Retry failed/i }).click();
       await expect(rejected).toHaveCount(0);
+      await expect(page.getByText(/Validation failed/i)).toHaveCount(0);
+      await expect.poll(async () => (await prisma.registration.findUnique({ where: { id: ids[0] } }))?.checkedIn).toBe(true);
       await expect(uncertain).toBeVisible();
       expect(attempts.get(ids[0])).toBe(2);
       expect(attempts.get(ids[1])).toBe(1);
