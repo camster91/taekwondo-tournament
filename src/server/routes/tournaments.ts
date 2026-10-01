@@ -52,6 +52,20 @@ import { materializeCanonicalTournamentSchedule } from '../services/canonical-sc
 
 const router = Router();
 
+/**
+ * Normalize a tournament date to noon UTC. The schema column is a
+ * timestamptz but the field represents a calendar date, not an
+ * instant. Storing at midnight UTC causes the date to shift by one
+ * day when displayed in negative-offset timezones (e.g. PDT shows
+ * "2026-08-14" for a date the user picked as 2026-08-15). Noon
+ * UTC is safe across all timezones. Used by create, create-from-
+ * template and update so every write path stores the same instant.
+ */
+export function normalizeTournamentDate(raw: string): Date {
+  const dateOnly = raw.includes('T') ? raw.slice(0, 10) : raw;
+  return new Date(dateOnly + 'T12:00:00.000Z');
+}
+
 const operationalQuerySchema = z.object({
   question: z.string().trim().min(1, 'A question is required').max(500, 'Question is too long'),
 });
@@ -268,17 +282,6 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
   const authReq = req as AuthenticatedRequest;
   const { name, date, location, settings, sportProfileSlug, organizationId } = req.body;
 
-  // Normalize the incoming date to noon UTC. The schema column is a
-  // timestamptz but the field represents a calendar date, not an
-  // instant. Storing at midnight UTC causes the date to shift by one
-  // day when displayed in negative-offset timezones (e.g. PDT shows
-  // "2026-08-14" for a date the user picked as 2026-08-15). Noon
-  // UTC is safe across all timezones.
-  const normalizeDate = (raw: string): Date => {
-    const dateOnly = raw.includes('T') ? raw.slice(0, 10) : raw;
-    return new Date(dateOnly + 'T12:00:00.000Z');
-  };
-
   // organizationId is admin-only. Directors inherit their org from
   // membership — accepting a client-supplied orgId let a director
   // plant tournaments into another org (or leave orphans visible to
@@ -318,7 +321,7 @@ router.post('/', authenticate, requireRole('admin', 'director'), validateRequest
   const tournament = await prisma.tournament.create({
     data: {
       name,
-      date: normalizeDate(date),
+      date: normalizeTournamentDate(date),
       location,
       settings: settings ? JSON.stringify(stripReservedOperationSettings(settings)) : null,
       status: 'draft',
@@ -382,11 +385,6 @@ router.post('/from-template/:templateId', authenticate, requireRole('admin', 'di
     return res.status(400).json({ error: 'Valid date is required' });
   }
 
-  const normalizeDate = (raw: string): Date => {
-    const dateOnly = raw.includes('T') ? raw.slice(0, 10) : raw;
-    return new Date(dateOnly + 'T12:00:00.000Z');
-  };
-
   const organization = await prisma.organization.findUnique({
     where: { id: membership.organizationId },
     select: { plan: true },
@@ -408,7 +406,7 @@ router.post('/from-template/:templateId', authenticate, requireRole('admin', 'di
   const tournament = await prisma.tournament.create({
     data: {
       name: name.trim(),
-      date: normalizeDate(date),
+      date: normalizeTournamentDate(date),
       location: typeof location === 'string' ? location : null,
       settings: template.settings,
       status: 'draft',
@@ -969,7 +967,7 @@ router.put('/:id', authenticate, requireTournamentAccess('director'), validateRe
         where: { id: tournamentId },
         data: {
           name,
-          date: date ? new Date(date) : undefined,
+          date: date ? normalizeTournamentDate(date) : undefined,
           location,
           status,
           settings: settings ? JSON.stringify(mergeGeneralSettings(current.settings, settings)) : undefined,
