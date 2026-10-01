@@ -6,7 +6,8 @@
  * tournament history.
  */
 
-import { Prisma, PrismaClient, Competitor } from '@prisma/client';
+import { Prisma, PrismaClient, Competitor, Registration } from '@prisma/client';
+import { AppError, ErrorCode } from '../utils/errors.js';
 
 /**
  * Calculate Levenshtein distance between two strings
@@ -243,6 +244,88 @@ export interface MergeResult {
   transferredRegistrations: number;
   transferredHistory: number;
   transferredRatings: number;
+  /** Tournaments where both were registered: the secondary's registration was folded into the primary's. */
+  mergedRegistrations: number;
+}
+
+/**
+ * Fold the secondary competitor's registration into the primary's when both
+ * are registered in the same tournament. Division assignments, bracket match
+ * slots/winners and incident links move to the primary's registration before
+ * the secondary's is deleted — deleting it first cascaded its assignments and
+ * SetNull-ed its match slots, silently corrupting played brackets.
+ *
+ * When both registrations sit in the same division or bracket the merged
+ * person would face themselves, so the merge is refused (409).
+ */
+async function foldDuplicateRegistration(
+  tx: Prisma.TransactionClient,
+  primaryReg: Registration,
+  secondaryReg: Registration,
+): Promise<void> {
+  const [primaryAssignments, secondaryAssignments, primaryMatches, secondaryMatches] = await Promise.all([
+    tx.divisionAssignment.findMany({ where: { registrationId: primaryReg.id }, select: { divisionId: true } }),
+    tx.divisionAssignment.findMany({ where: { registrationId: secondaryReg.id }, select: { divisionId: true } }),
+    tx.match.findMany({
+      where: { OR: [{ competitor1Id: primaryReg.id }, { competitor2Id: primaryReg.id }, { winnerId: primaryReg.id }] },
+      select: { bracket: { select: { divisionId: true } } },
+    }),
+    tx.match.findMany({
+      where: { OR: [{ competitor1Id: secondaryReg.id }, { competitor2Id: secondaryReg.id }, { winnerId: secondaryReg.id }] },
+      select: { bracket: { select: { divisionId: true } } },
+    }),
+  ]);
+
+  const primaryDivisionIds = new Set([
+    ...primaryAssignments.map((a) => a.divisionId),
+    ...primaryMatches.map((m) => m.bracket.divisionId),
+  ]);
+  const sharedDivisionIds = [...new Set([
+    ...secondaryAssignments.map((a) => a.divisionId),
+    ...secondaryMatches.map((m) => m.bracket.divisionId),
+  ])].filter((id) => primaryDivisionIds.has(id));
+
+  if (sharedDivisionIds.length > 0) {
+    const [tournament, divisions] = await Promise.all([
+      tx.tournament.findUnique({ where: { id: primaryReg.tournamentId }, select: { name: true } }),
+      tx.division.findMany({ where: { id: { in: sharedDivisionIds } }, select: { name: true } }),
+    ]);
+    const divisionNames = divisions.map((d) => `"${d.name}"`).join(', ');
+    throw new AppError(
+      `Both competitors are in the same division (${divisionNames}) of "${tournament?.name ?? 'the tournament'}". Merging them would put one person in that division or bracket twice, possibly facing themselves.`,
+      ErrorCode.COMPETITOR_ALREADY_REGISTERED,
+      409,
+      {
+        recoverable: true,
+        suggestion: 'Remove one of them from that division (and reset or correct its bracket) before merging.',
+      },
+    );
+  }
+
+  // Disjoint divisions: move the secondary's placements to the primary.
+  await tx.divisionAssignment.updateMany({
+    where: { registrationId: secondaryReg.id },
+    data: { registrationId: primaryReg.id },
+  });
+  await tx.match.updateMany({ where: { competitor1Id: secondaryReg.id }, data: { competitor1Id: primaryReg.id } });
+  await tx.match.updateMany({ where: { competitor2Id: secondaryReg.id }, data: { competitor2Id: primaryReg.id } });
+  await tx.match.updateMany({ where: { winnerId: secondaryReg.id }, data: { winnerId: primaryReg.id } });
+  await tx.incident.updateMany({ where: { registrationId: secondaryReg.id }, data: { registrationId: primaryReg.id } });
+
+  // Keep every event the person entered and any check-in already done.
+  const takeCheckIn = !primaryReg.checkedIn && secondaryReg.checkedIn;
+  await tx.registration.update({
+    where: { id: primaryReg.id },
+    data: {
+      patterns: primaryReg.patterns || secondaryReg.patterns,
+      sparring: primaryReg.sparring || secondaryReg.sparring,
+      ...(takeCheckIn
+        ? { checkedIn: true, checkInTime: secondaryReg.checkInTime, checkInWeight: secondaryReg.checkInWeight }
+        : {}),
+    },
+  });
+
+  await tx.registration.delete({ where: { id: secondaryReg.id } });
 }
 
 export async function mergeCompetitors(
@@ -275,14 +358,15 @@ export async function mergeCompetitors(
     });
 
     // Check for duplicate registrations (same tournament)
-    const primaryTournamentIds = await tx.registration.findMany({
+    const primaryRegsByTournament = await tx.registration.findMany({
       where: { competitorId: primaryId },
-      select: { tournamentId: true },
-    }).then(regs => new Set(regs.map(r => r.tournamentId)));
+    }).then(regs => new Map(regs.map(r => [r.tournamentId, r])));
 
     let transferredCount = 0;
+    let mergedRegistrations = 0;
     for (const reg of registrations) {
-      if (!primaryTournamentIds.has(reg.tournamentId)) {
+      const primaryReg = primaryRegsByTournament.get(reg.tournamentId);
+      if (!primaryReg) {
         // No conflict, transfer directly
         await tx.registration.update({
           where: { id: reg.id },
@@ -290,11 +374,11 @@ export async function mergeCompetitors(
         });
         transferredCount++;
       } else {
-        // Conflict: primary already has a registration for this tournament
-        // Keep the primary's registration, soft-delete the secondary's
-        await tx.registration.delete({
-          where: { id: reg.id },
-        });
+        // Conflict: primary already has a registration for this tournament.
+        // Keep the primary's registration and fold the secondary's into it
+        // (throws 409 if both are in the same division/bracket).
+        await foldDuplicateRegistration(tx, primaryReg, reg);
+        mergedRegistrations++;
       }
     }
 
@@ -357,6 +441,7 @@ export async function mergeCompetitors(
       transferredRegistrations: transferredCount,
       transferredHistory: historyCount,
       transferredRatings: ratingsCount,
+      mergedRegistrations,
     };
   });
 }

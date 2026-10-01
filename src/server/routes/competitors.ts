@@ -22,6 +22,7 @@ import { legalHoldSchema, legalHoldData, competitorIsHeld } from '../services/le
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 import { findPotentialDuplicates, mergeCompetitors, MIN_DUPLICATE_THRESHOLD } from '../services/competitor-deduplication.js';
 import { recomputeRegistrationAges } from '../services/registration-age.js';
+import { isAppError } from '../utils/errors.js';
 
 const router = Router();
 
@@ -873,6 +874,7 @@ router.post('/merge', authenticate, requireRole('admin', 'director'), validateRe
     const result = await mergeCompetitors(prisma, primaryId, secondaryId, mergeOptions);
     res.json({ success: true, result });
   } catch (err: unknown) {
+    if (isAppError(err)) throw err; // e.g. 409: both in the same division
     console.error('[competitors/merge] merge failed:', err);
     const message = err instanceof Error ? err.message : 'Failed to merge competitors';
     res.status(400).json({ error: message });
