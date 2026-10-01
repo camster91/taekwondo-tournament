@@ -1,5 +1,144 @@
 import * as XLSX from 'xlsx';
 import type { ColumnMapping, ExcelCellValue, ExcelRow } from './excel-import.js';
+import { MAX_IMPORT_ROWS, parseDateOfBirth } from './excel-import.js';
+import { AppError, ErrorCode } from '../utils/errors.js';
+
+/** Highest header row (1-indexed) a caller may name for an import. */
+export const MAX_HEADER_ROW = 20;
+/** Rows scanned when auto-detecting the header row. */
+const HEADER_SEARCH_ROWS = 5;
+/**
+ * Rows SheetJS materialises per sheet: the import cap plus room for a
+ * header row. `sheet_to_json` walks the sheet's declared dimension, so
+ * without this bound a 16 KB file declaring A1:J1048576 costs 13-20 s of CPU
+ * and hundreds of MB.
+ */
+export const SHEET_READ_ROWS = MAX_IMPORT_ROWS + MAX_HEADER_ROW;
+
+/**
+ * Parse an uploaded workbook with a bounded row count. Every server-side
+ * parse of user uploads goes through here.
+ */
+export function readUploadedWorkbook(buffer: Buffer): XLSX.WorkBook {
+  return XLSX.read(buffer, { type: 'buffer', sheetRows: SHEET_READ_ROWS });
+}
+
+function rowHasData(sheet: XLSX.WorkSheet, rowIdx: number, range: XLSX.Range): boolean {
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const cell = sheet[XLSX.utils.encode_cell({ r: rowIdx, c })] as XLSX.CellObject | undefined;
+    if (cell && cell.v !== undefined && cell.v !== null && cell.v !== '') return true;
+  }
+  return false;
+}
+
+/**
+ * Reject (400) a sheet that holds more rows than an import accepts. A sheet
+ * whose declared dimension is larger than the read window but whose data
+ * stops short of it (a bloated `!ref`, common after formatting whole rows)
+ * is fine: reading was already bounded by `sheetRows`.
+ */
+export function assertSheetWithinLimit(sheet: XLSX.WorkSheet, sheetName: string): void {
+  const fullRef = sheet['!fullref'];
+  const ref = sheet['!ref'];
+  if (!fullRef || !ref || fullRef === ref) return;
+  const full = XLSX.utils.decode_range(fullRef);
+  const read = XLSX.utils.decode_range(ref);
+  if (full.e.r <= read.e.r) return;
+  // SheetJS shrinks `!ref` to the cells it kept, so the window is only
+  // "full" when data reaches its last row.
+  if (read.e.r >= SHEET_READ_ROWS - 1 && rowHasData(sheet, read.e.r, read)) {
+    throw new AppError(
+      `Sheet "${sheetName}" has more than ${MAX_IMPORT_ROWS} rows. Split it into smaller files (max ${MAX_IMPORT_ROWS} competitors per import).`,
+      ErrorCode.IMPORT_FAILED,
+      400,
+      { recoverable: true, suggestion: `Import at most ${MAX_IMPORT_ROWS} rows at a time.` },
+    );
+  }
+}
+
+function sheetMatrix(sheet: XLSX.WorkSheet): unknown[][] {
+  // `header: 1` returns each row as an array of cells. Cell values
+  // are SheetJS's JS-native types (string/number/Date/null); we
+  // declare them as `unknown[]` here and narrow at the call sites
+  // that actually care (header detection, sample row assembly).
+  return XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null });
+}
+
+/** The sheet most likely to hold the roster: the one with the most data rows. */
+function pickBestSheet(workbook: XLSX.WorkBook): string | undefined {
+  let bestSheet = workbook.SheetNames[0];
+  let bestRowCount = 0;
+  for (const name of workbook.SheetNames) {
+    const rows = sheetMatrix(workbook.Sheets[name]);
+    // Count rows that have at least 3 non-null cells
+    const real = rows.filter((r) => Array.isArray(r) && r.filter((c) => c != null && c !== '').length >= 3);
+    if (real.length > bestRowCount) {
+      bestRowCount = real.length;
+      bestSheet = name;
+    }
+  }
+  return bestSheet;
+}
+
+/**
+ * Detect the header row: scan the first rows and pick the one that matches
+ * the most field aliases. Returns a 0-based index.
+ */
+function detectHeaderRowIdx(allRows: unknown[][]): number {
+  let headerRowIdx = 0;
+  let headerMatchScore = 0;
+  for (let i = 0; i < Math.min(HEADER_SEARCH_ROWS, allRows.length); i++) {
+    const row = allRows[i] || [];
+    let score = 0;
+    const fields: (keyof ColumnMapping)[] = ['firstName', 'lastName', 'gender', 'belt', 'weight', 'school', 'age', 'dateOfBirth'];
+    for (const f of fields) {
+      for (const cell of row) {
+        if (cell && scoreField(String(cell), f) > 50) {
+          score++;
+          break;
+        }
+      }
+    }
+    if (score > headerMatchScore) {
+      headerMatchScore = score;
+      headerRowIdx = i;
+    }
+  }
+  return headerRowIdx;
+}
+
+/**
+ * Resolve which sheet and header row (1-indexed) an import reads. Caller
+ * choices win when given (the client sends what it previewed); otherwise
+ * the same auto-detection `autoDetectMapping` uses. Throws 400 for a sheet
+ * that does not exist or is over the row limit.
+ */
+export function resolveImportSheet(
+  workbook: XLSX.WorkBook,
+  choice: { sheetName?: string; headerRow?: number } = {},
+): { sheetName: string; headerRow: number } {
+  let sheetName = choice.sheetName;
+  if (sheetName !== undefined && !workbook.SheetNames.includes(sheetName)) {
+    throw new AppError(`Sheet "${sheetName}" was not found in the workbook`, ErrorCode.INVALID_FILE_FORMAT, 400);
+  }
+  sheetName ??= pickBestSheet(workbook);
+  if (!sheetName) {
+    throw new AppError('Workbook has no sheets', ErrorCode.INVALID_FILE_FORMAT, 400);
+  }
+  const sheet = workbook.Sheets[sheetName];
+  assertSheetWithinLimit(sheet, sheetName);
+  const headerRow = choice.headerRow ?? detectHeaderRowIdx(sheetMatrix(sheet)) + 1;
+  return { sheetName, headerRow };
+}
+
+/**
+ * Rows of `sheetName` as objects keyed by the header row's labels. Each row
+ * keeps SheetJS's non-enumerable `__rowNum__` (0-based sheet row) so import
+ * errors can name the real spreadsheet row.
+ */
+export function sheetRowsForImport(workbook: XLSX.WorkBook, sheetName: string, headerRow: number): ExcelRow[] {
+  return XLSX.utils.sheet_to_json<ExcelRow>(workbook.Sheets[sheetName], { defval: '', range: headerRow - 1 });
+}
 
 /**
  * Auto-detect a column mapping for an uploaded Excel file.
@@ -67,41 +206,6 @@ function scoreField(headerRaw: string, field: keyof ColumnMapping): number {
 }
 
 /**
- * Parse a date from various common formats.
- *
- * SheetJS hands us `unknown` from cell reads; narrow via `typeof` /
- * `instanceof Date` before treating as a Date. String fallback keeps
- * the existing behavior for headers that come in as text.
- */
-function tryParseDate(v: ExcelCellValue): Date | null {
-  if (v === null || v === undefined || v === '') return null;
-  if (v instanceof Date) return v;
-  const s = String(v).trim();
-  if (!s) return null;
-  // ISO format
-  if (/^\d{4}-\d{1,2}-\d{1,2}/.test(s)) {
-    const d = new Date(s);
-    if (!isNaN(d.getTime())) return d;
-  }
-  // Excel serial date number
-  if (/^\d+(\.\d+)?$/.test(s)) {
-    const n = parseFloat(s);
-    if (n > 25000 && n < 80000) {
-      // Excel date serial: days since 1900-01-01
-      const d = new Date((n - 25569) * 86400 * 1000);
-      if (!isNaN(d.getTime())) return d;
-    }
-  }
-  // MM/DD/YYYY
-  if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(s)) {
-    const [m, d, y] = s.split('/');
-    const fullY = y.length === 2 ? 2000 + parseInt(y) : parseInt(y);
-    return new Date(fullY, parseInt(m) - 1, parseInt(d));
-  }
-  return null;
-}
-
-/**
  * Parse a height in 4'11" or 5'10 format to total inches.
  * Bare integers are interpreted as inches.
  */
@@ -123,27 +227,12 @@ function tryParseHeightInches(v: ExcelCellValue): number | null {
  * Pass a Buffer (from multer or fs.readFile) of an .xlsx or .xlsm.
  */
 export function autoDetectMapping(buffer: Buffer): AutoMapResult {
-  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  const workbook = readUploadedWorkbook(buffer);
   const availableSheets = workbook.SheetNames;
   const warnings: string[] = [];
 
   // Pick the most likely sheet — the one with the most data rows
-  let bestSheet = availableSheets[0];
-  let bestRowCount = 0;
-  for (const name of availableSheets) {
-    const sheet = workbook.Sheets[name];
-    // `header: 1` returns each row as an array of cells. Cell values
-    // are SheetJS's JS-native types (string/number/Date/null); we
-    // declare them as `unknown[]` here and narrow at the call sites
-    // that actually care (header detection, sample row assembly).
-    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null });
-    // Count rows that have at least 3 non-null cells
-    const real = rows.filter((r) => Array.isArray(r) && r.filter((c) => c != null && c !== '').length >= 3);
-    if (real.length > bestRowCount) {
-      bestRowCount = real.length;
-      bestSheet = name;
-    }
-  }
+  const bestSheet = pickBestSheet(workbook);
 
   if (!bestSheet) {
     return {
@@ -160,29 +249,12 @@ export function autoDetectMapping(buffer: Buffer): AutoMapResult {
   }
 
   const sheet = workbook.Sheets[bestSheet];
-  const allRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null });
+  assertSheetWithinLimit(sheet, bestSheet);
+  const allRows = sheetMatrix(sheet);
 
-  // Detect header row: scan the first 5 rows, pick the one that matches the
+  // Detect header row: scan the first rows, pick the one that matches the
   // most field aliases
-  let headerRowIdx = 0;
-  let headerMatchScore = 0;
-  for (let i = 0; i < Math.min(5, allRows.length); i++) {
-    const row = allRows[i] || [];
-    let score = 0;
-    const fields: (keyof ColumnMapping)[] = ['firstName', 'lastName', 'gender', 'belt', 'weight', 'school', 'age', 'dateOfBirth'];
-    for (const f of fields) {
-      for (const cell of row) {
-        if (cell && scoreField(String(cell), f) > 50) {
-          score++;
-          break;
-        }
-      }
-    }
-    if (score > headerMatchScore) {
-      headerMatchScore = score;
-      headerRowIdx = i;
-    }
-  }
+  const headerRowIdx = detectHeaderRowIdx(allRows);
 
   const rawHeaders: string[] = (allRows[headerRowIdx] || []).map((c: unknown) => String(c || '').trim());
   const dataRows = allRows.slice(headerRowIdx + 1);
@@ -263,7 +335,7 @@ export function autoDetectMapping(buffer: Buffer): AutoMapResult {
   }
 
   if (mapping.dateOfBirth && sampleRow[mapping.dateOfBirth]) {
-    if (!tryParseDate(sampleRow[mapping.dateOfBirth])) {
+    if (!parseDateOfBirth(sampleRow[mapping.dateOfBirth])) {
       warnings.push(`Date of Birth column "${mapping.dateOfBirth}" has unparseable value "${sampleRow[mapping.dateOfBirth]}". Falling back to age column if present.`);
       confidence.dateOfBirth = Math.min(confidence.dateOfBirth, 40);
     }

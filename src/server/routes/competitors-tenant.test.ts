@@ -43,7 +43,13 @@ vi.mock('../services/excel-template.js', () => ({
   generateImportTemplate: vi.fn(),
   getDefaultColumnMapping: vi.fn(),
 }));
-vi.mock('../services/excel-auto-map.js', () => ({ autoDetectMapping: vi.fn() }));
+vi.mock('../services/excel-auto-map.js', () => ({
+  autoDetectMapping: vi.fn(),
+  MAX_HEADER_ROW: 20,
+  readUploadedWorkbook: vi.fn(),
+  resolveImportSheet: vi.fn(),
+  sheetRowsForImport: vi.fn(),
+}));
 
 import './competitors.js';
 

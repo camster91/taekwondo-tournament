@@ -2,10 +2,9 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { z } from 'zod';
-import * as XLSX from 'xlsx';
 import { importFromExcel, type ColumnMapping, type ExcelRow } from '../services/excel-import.js';
 import { generateImportTemplate, getDefaultColumnMapping } from '../services/excel-template.js';
-import { autoDetectMapping } from '../services/excel-auto-map.js';
+import { autoDetectMapping, MAX_HEADER_ROW, readUploadedWorkbook, resolveImportSheet, sheetRowsForImport } from '../services/excel-auto-map.js';
 import { validateRequest } from '../middleware/validate.js';
 import { jsonBodyParser } from '../index.js';
 import {
@@ -85,6 +84,7 @@ router.post('/auto-map', authenticate, requireRole('admin', 'director'), validat
     const result = autoDetectMapping(buffer);
     res.json({ ...result, fileName: fileName || 'uploaded' });
   } catch (err: unknown) {
+    if (isAppError(err)) throw err; // 400: sheet over the row limit
     console.error('[competitors/auto-map] parse failed:', err);
     res.status(500).json({ error: 'Failed to parse file' });
   }
@@ -781,6 +781,10 @@ const importFileSchema = z.object({
   fileBase64: z.string().min(1),
   columnMapping: z.record(z.string(), z.string()),
   fileName: z.string().optional(),
+  // The sheet and header row the client previewed and mapped against.
+  // Omitted: the same auto-detection /auto-map uses.
+  sheetName: z.string().min(1).max(255).optional(),
+  headerRow: z.number().int().min(1).max(MAX_HEADER_ROW).optional(),
 });
 
 router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin', 'director'), async (req: Request, res: Response) => {
@@ -806,22 +810,24 @@ router.post('/import', jsonBodyParser('40mb'), authenticate, requireRole('admin'
       if (buffer.length > 25 * 1024 * 1024) {
         return res.status(413).json({ error: 'File too large (max 25MB)' });
       }
-      // Read the workbook. The first non-empty sheet is what
-      // we import (matches the client behavior — see
-      // Competitors.tsx handleFileUpload which picks the sheet
-      // matching 'competitor' or falls back to SheetNames[0]).
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) {
-        return res.status(400).json({ error: 'Workbook has no sheets' });
-      }
-      const data = XLSX.utils.sheet_to_json<ExcelRow>(workbook.Sheets[sheetName], { defval: '' });
+      // Read the sheet + header row the client previewed and mapped
+      // (Competitors.tsx sends both). Previously this always read
+      // SheetNames[0] with the header on row 1, so a workbook whose
+      // roster is not the first sheet (Newton's .xlsm) imported 0 rows.
+      // Reads are row-bounded; an oversized sheet is a 400.
+      const workbook = readUploadedWorkbook(buffer);
+      const { sheetName, headerRow } = resolveImportSheet(workbook, {
+        sheetName: parsed.data.sheetName,
+        headerRow: parsed.data.headerRow,
+      });
+      const data = sheetRowsForImport(workbook, sheetName, headerRow);
       const result = await importFromExcel(prisma, data, parsed.data.columnMapping, {
         matchScope: await importMatchScope(req as AuthenticatedRequest, prisma),
         ownerOrganizationId: await importOwnerOrganizationId(req as AuthenticatedRequest, prisma),
       });
-      return res.json({ ...result, parsedServerSide: true });
+      return res.json({ ...result, sheetName, headerRow, parsedServerSide: true });
     } catch (err: unknown) {
+      if (isAppError(err)) throw err; // 400s: bad sheet, row limit, mapping
       console.error('[competitors/import] failed:', err);
       res.status(500).json({ error: 'Import failed' });
     }

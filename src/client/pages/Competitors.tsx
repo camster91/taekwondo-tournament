@@ -52,6 +52,8 @@ interface Competitor {
 interface ImportMapping {
   firstName: string;
   lastName: string;
+  /** Combined "First Last" column, split on the first space by the server. */
+  name?: string;
   gender: string;
   age?: string;
   dateOfBirth?: string;
@@ -64,6 +66,11 @@ interface ImportMapping {
   sparring?: string;
   specialNeeds?: string;
 }
+
+/** Header row of the client-side preview (sheet_to_json default). */
+const IMPORT_PREVIEW_HEADER_ROW = 1;
+/** Rows read for the preview; mirrors the server's 5000-row import cap. */
+const IMPORT_PREVIEW_MAX_ROWS = 5001;
 
 const BELT_OPTIONS = [
   'White',
@@ -146,6 +153,9 @@ export default function Competitors() {
   // — old imports that uploaded a file then had the page reload
   // before the file was held in state).
   const [importFile, setImportFile] = useState<File | null>(null);
+  // Sheet the preview was read from (header on row 1). Sent with the
+  // file so the server imports exactly what the user mapped.
+  const [importSheetName, setImportSheetName] = useState<string | null>(null);
   const [columnMapping, setColumnMapping] = useState<ImportMapping>({
     firstName: '',
     lastName: '',
@@ -319,13 +329,18 @@ export default function Competitors() {
     mutationFn: async (
       payload:
         | { data: Record<string, unknown>[]; mapping: ImportMapping }
-        | { fileBase64: string; fileName?: string; mapping: ImportMapping }
+        | { fileBase64: string; fileName?: string; sheetName?: string; mapping: ImportMapping }
     ) => {
       // Two request shapes — server accepts either (the
       // server-side xlsx parser is preferred per P8, but the
       // JSON path is kept for back-compat with old imports).
       const body = 'fileBase64' in payload
-        ? { fileBase64: payload.fileBase64, fileName: payload.fileName, columnMapping: payload.mapping }
+        ? {
+          fileBase64: payload.fileBase64,
+          fileName: payload.fileName,
+          columnMapping: payload.mapping,
+          ...(payload.sheetName ? { sheetName: payload.sheetName, headerRow: IMPORT_PREVIEW_HEADER_ROW } : {}),
+        }
         : { data: payload.data, columnMapping: payload.mapping };
       const res = await fetch('/api/competitors/import', {
         method: 'POST',
@@ -344,6 +359,7 @@ export default function Competitors() {
       setShowImportModal(false);
       setImportData(null);
       setImportFile(null);
+      setImportSheetName(null);
       setImportError(null);
     },
     onError: (error) => setImportError(error instanceof Error ? error.message : 'Failed to import competitors'),
@@ -387,13 +403,16 @@ export default function Competitors() {
       // file is actually selected for import preview.
       const XLSX = await import('xlsx');
       const data = new Uint8Array(event.target?.result as ArrayBuffer);
-      const workbook = XLSX.read(data, { type: 'array' });
+      // Row-bounded like the server parse (a sheet declaring a huge
+      // dimension otherwise stalls the tab).
+      const workbook = XLSX.read(data, { type: 'array', sheetRows: IMPORT_PREVIEW_MAX_ROWS });
 
       const sheetName =
         workbook.SheetNames.find((n) =>
           n.toLowerCase().includes('competitor')
         ) || workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
+      setImportSheetName(sheetName ?? null);
 
       const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
@@ -416,8 +435,8 @@ export default function Competitors() {
             autoMapping.firstName = col;
           else if (lower.includes('last') && lower.includes('name'))
             autoMapping.lastName = col;
-          else if (lower === 'name' && !autoMapping.firstName) {
-            autoMapping.firstName = col;
+          else if ((lower === 'name' || lower === 'full name') && !autoMapping.name) {
+            autoMapping.name = col;
           } else if (lower.includes('gender') || lower === 'sex')
             autoMapping.gender = col;
           else if (lower.includes('dob') || lower.includes('birth'))
@@ -474,7 +493,7 @@ export default function Competitors() {
         r.readAsDataURL(importFile);
       });
       importMutation.mutate(
-        { fileBase64, fileName: importFile.name, mapping: columnMapping },
+        { fileBase64, fileName: importFile.name, sheetName: importSheetName ?? undefined, mapping: columnMapping },
         { onSettled: () => {
           importPreparingRef.current = false;
           setImportPreparing(false);
@@ -524,7 +543,10 @@ export default function Competitors() {
         c.firstName,
         c.lastName,
         c.gender,
-        c.dateOfBirth ? new Date(c.dateOfBirth).toLocaleDateString() : '',
+        // Calendar date as stored (UTC midnight) in YYYY-MM-DD: a
+        // locale-formatted local date showed the previous day west of
+        // UTC and re-imported as a different person.
+        c.dateOfBirth ? String(c.dateOfBirth).slice(0, 10) : '',
         c.belt,
         c.danRank ?? '',
         c.heightInches ?? '',
@@ -1261,7 +1283,7 @@ export default function Competitors() {
                 variant="success"
                 onClick={handleImport}
                 loading={importPreparing || importMutation.isPending}
-                disabled={importPreparing || importMutation.isPending || !columnMapping.firstName || !columnMapping.gender || !columnMapping.belt}
+                disabled={importPreparing || importMutation.isPending || !((columnMapping.firstName && columnMapping.lastName) || columnMapping.name) || !columnMapping.gender || !columnMapping.belt || !columnMapping.weight}
                 className="w-full sm:w-auto flex items-center justify-center"
               >
                 {(importPreparing || importMutation.isPending) ? (
@@ -1295,6 +1317,7 @@ export default function Competitors() {
             {[
               { key: 'firstName', label: 'First Name', required: true },
               { key: 'lastName', label: 'Last Name', required: true },
+              { key: 'name', label: 'Full Name (instead of First/Last)' },
               { key: 'gender', label: 'Gender', required: true },
               { key: 'dateOfBirth', label: 'Date of Birth' },
               { key: 'age', label: 'Age (if no DOB)' },

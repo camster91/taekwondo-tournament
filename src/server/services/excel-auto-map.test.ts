@@ -1,8 +1,16 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
+import * as XLSX from 'xlsx';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { autoDetectMapping } from './excel-auto-map.js';
+import {
+  autoDetectMapping,
+  readUploadedWorkbook,
+  resolveImportSheet,
+  sheetRowsForImport,
+  SHEET_READ_ROWS,
+} from './excel-auto-map.js';
+import { importFromExcel } from './excel-import.js';
 
 // Resolve the .xlsm fixture path relative to this test file, not to
 // the developer's home directory. The original test hard-coded
@@ -71,5 +79,104 @@ describe('Auto-detect mapping', () => {
   // build over a data file.
   it('fixture is present at the expected path', () => {
     expect(fixtureExists).toBe(true);
+  });
+});
+
+function workbookBuffer(sheets: Record<string, unknown[][]>): Buffer {
+  const wb = XLSX.utils.book_new();
+  for (const [name, aoa] of Object.entries(sheets)) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), name);
+  }
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+}
+
+/** Rewrite sheet1's declared <dimension> inside the .xlsx zip (the cells stay tiny). */
+function withDeclaredDimension(buf: Buffer, ref: string): Buffer {
+  const zip = XLSX.CFB.read(buf, { type: 'buffer' });
+  const entry = zip.FileIndex[zip.FullPaths.findIndex((p) => p.endsWith('xl/worksheets/sheet1.xml'))];
+  const xml = Buffer.from(entry.content as Uint8Array).toString();
+  entry.content = Buffer.from(xml.replace(/<dimension ref="[^"]*"\/>/, `<dimension ref="${ref}"/>`));
+  entry.size = entry.content.length;
+  return XLSX.CFB.write(zip, { type: 'buffer', fileType: 'zip' }) as Buffer;
+}
+
+function importDouble() {
+  const tx = {
+    competitor: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({}),
+      create: vi.fn().mockResolvedValue({}),
+    },
+  };
+  return { tx, prisma: { $transaction: vi.fn(async (fn: any) => fn(tx)) } as any };
+}
+
+describe('server import reads the sheet the client mapped (D4)', () => {
+  // What Competitors.tsx sends for the Newton's file: it previews the
+  // "Competitors list" sheet with the header on row 1 and maps the
+  // combined Name column.
+  const clientMapping = {
+    name: 'Name', gender: 'Gender', age: 'Age', belt: 'Belt', danRank: 'DAN',
+    height: 'Height', weight: 'Weight (lbs)', school: 'School',
+  };
+
+  itIfFixture('imports the Newton roster from the chosen sheet (SheetNames[0] imported 0 rows)', async () => {
+    const buf = readFileSync(FIXTURE_PATH);
+    const workbook = readUploadedWorkbook(buf);
+
+    // The old server path: first sheet ("Macro"), header row 1.
+    const oldRows = sheetRowsForImport(workbook, workbook.SheetNames[0], 1);
+    const old = await importFromExcel(importDouble().prisma, oldRows, clientMapping);
+    expect(old.imported).toBe(0);
+
+    const { sheetName, headerRow } = resolveImportSheet(workbook, { sheetName: 'Competitors list', headerRow: 1 });
+    const result = await importFromExcel(importDouble().prisma, sheetRowsForImport(workbook, sheetName, headerRow), clientMapping);
+    expect(sheetName).toBe('Competitors list');
+    expect(result.imported).toBeGreaterThan(600);
+    // Every skipped row is reported with its real spreadsheet row number.
+    expect(result.errors.length).toBe(result.skipped);
+    expect(result.errors.every((e) => e.row >= 2 && e.row <= 684)).toBe(true);
+  });
+
+  itIfFixture('falls back to the same auto-detection as /auto-map when no sheet is named', () => {
+    const workbook = readUploadedWorkbook(readFileSync(FIXTURE_PATH));
+    expect(resolveImportSheet(workbook)).toEqual({ sheetName: 'Competitors list', headerRow: 1 });
+  });
+
+  it('detects a header that is not on row 1 and rejects an unknown sheet', () => {
+    const workbook = readUploadedWorkbook(workbookBuffer({
+      Cover: [['Spring Open']],
+      Roster: [['Spring Open roster'], [], ['First Name', 'Last Name', 'Gender', 'Belt', 'Weight'], ['Ana', 'Lee', 'F', 'Blue', 70], ['Bo', 'Kim', 'M', 'Red', 80]],
+    }));
+    expect(resolveImportSheet(workbook)).toEqual({ sheetName: 'Roster', headerRow: 3 });
+    const rows = sheetRowsForImport(workbook, 'Roster', 3);
+    expect(rows.map((r) => r['First Name'])).toEqual(['Ana', 'Bo']);
+    expect(() => resolveImportSheet(workbook, { sheetName: 'Nope' })).toThrow(/not found/);
+  });
+});
+
+describe('bounded spreadsheet parsing (D10)', () => {
+  it('parses a tiny file that declares A1:J1048576 quickly', () => {
+    const buf = withDeclaredDimension(
+      workbookBuffer({ Sheet1: [['First Name', 'Last Name', 'Gender', 'Belt', 'Weight'], ['Ana', 'Lee', 'F', 'Blue', 70]] }),
+      'A1:J1048576',
+    );
+    expect(buf.length).toBeLessThan(64 * 1024);
+    expect(XLSX.read(buf, { type: 'buffer', sheetRows: 1 }).Sheets.Sheet1['!fullref']).toBe('A1:J1048576');
+    const started = Date.now();
+    const result = autoDetectMapping(buf);
+    const workbook = readUploadedWorkbook(buf);
+    const rows = sheetRowsForImport(workbook, resolveImportSheet(workbook).sheetName, 1);
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result.rowCount).toBe(1);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('rejects a sheet with more rows than an import accepts (400)', () => {
+    const aoa: unknown[][] = [['First Name', 'Last Name', 'Gender', 'Belt', 'Weight']];
+    for (let i = 0; i < SHEET_READ_ROWS + 10; i++) aoa.push([`F${i}`, 'L', 'M', 'Blue', 80]);
+    const buf = workbookBuffer({ Big: aoa });
+    expect(() => resolveImportSheet(readUploadedWorkbook(buf))).toThrow(expect.objectContaining({ statusCode: 400 }));
+    expect(() => autoDetectMapping(buf)).toThrow(/more than 5000 rows/);
   });
 });
