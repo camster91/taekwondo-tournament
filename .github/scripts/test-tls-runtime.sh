@@ -21,7 +21,9 @@ server {
  ssl_certificate /fixture/cert.pem;
  ssl_certificate_key /fixture/key.pem;
  location / {
-  proxy_pass http://$runtime:3001;
+  resolver 127.0.0.11 valid=1s ipv6=off;
+  set \$bowin_upstream http://$runtime:3001;
+  proxy_pass \$bowin_upstream;
   proxy_set_header Host \$http_host;
   proxy_set_header X-Forwarded-Proto https;
  }

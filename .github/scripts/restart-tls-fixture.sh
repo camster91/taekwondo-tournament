@@ -6,6 +6,7 @@ database="$BOWIN_TLS_QA_PREFIX-database"
 runtime="$BOWIN_TLS_QA_PREFIX-runtime"
 [[ $(docker inspect "$database" --format '{{index .Config.Labels "bowin.qa.fixture"}}') == "$BOWIN_TLS_QA_PREFIX" ]]
 [[ $(docker inspect "$runtime" --format '{{index .Config.Labels "bowin.qa.fixture"}}') == "$BOWIN_TLS_QA_PREFIX" ]]
+echo "Restarting disposable Bowin TLS fixture: ${1:-unknown}"
 case ${1:-} in
  database)
   started=$(docker inspect "$runtime" --format '{{.State.StartedAt}}')
