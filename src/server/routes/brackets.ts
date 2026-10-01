@@ -1474,7 +1474,7 @@ router.get('/division/:divisionId/certificate/:place', authenticate, async (req:
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader(
     'Content-Disposition',
-    `attachment; filename="certificate_${registration.competitor.lastName}_${place}.pdf"`
+    `attachment; filename="certificate_${registration.competitor.lastName.replace(/[^a-z0-9]/gi, '_')}_${place}.pdf"`
   );
   res.send(Buffer.from(pdfBuffer));
 });
