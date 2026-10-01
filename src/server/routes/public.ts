@@ -59,11 +59,28 @@ function publicRegistrationSettings(raw: string | null): { registrationFee?: str
   }
 }
 
-// Rate limit public registration to prevent abuse: 10 submissions per 15 minutes per IP
+// Rate limit public registration to prevent abuse: 10 submissions per 15 minutes per IP.
+// Each public write has its own budget: a family registering several kids
+// from one network must still be able to pay and confirm consent.
 const registrationLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: 'Too many registration attempts. Please try again later.' },
+});
+
+// Entry-fee checkout (requires the 43-char management token): parents may
+// retry payment a few times per registration.
+const checkoutLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many payment attempts. Please try again later.' },
+});
+
+// Parental consent confirmation (requires a 256-bit emailed token).
+const consentLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many verification attempts. Please try again later.' },
 });
 
 // School portal share-link reads can dump a school's full roster and
@@ -1101,7 +1118,7 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
 // POST only: consent is given by the parent's explicit click on the
 // verification page. A GET would be fired by mail link scanners and
 // previews, "consenting" without the parent.
-router.post('/verify-parent-consent', registrationLimiter, async (req: Request, res: Response) => {
+router.post('/verify-parent-consent', consentLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { token } = (req.body ?? {}) as { token?: unknown };
 
@@ -1488,7 +1505,7 @@ router.get(
 // the parent). A registration UUID alone is not a secret — its first 8
 // characters are the printed confirmation code and it appears in Stripe
 // redirect URLs — so it is not accepted on its own.
-router.post('/checkout', registrationLimiter, async (req: Request, res: Response) => {
+router.post('/checkout', checkoutLimiter, async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const { managementToken, registrationId } = (req.body ?? {}) as {
     managementToken?: unknown;
