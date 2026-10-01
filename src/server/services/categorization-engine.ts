@@ -42,6 +42,10 @@ export interface CategorizationConfig {
   // (manualDivisionId -> eventType). A pinned registration is excluded
   // only from that event; an unknown pin excludes it from both.
   pinnedDivisionEventTypes?: Record<string, string>;
+  // Events each registration already holds through an assignment in a
+  // kept (pinned) division (registrationId -> eventTypes). Kept divisions
+  // keep all their members, so those events are not categorized again.
+  heldPinnedEvents?: Record<string, string[]>;
 }
 
 // Source-internal type. Mirrors `Registration & { competitor: Competitor }` from
@@ -144,25 +148,47 @@ function droppedWarnings(dropped: DroppedRegistrations): string[] {
 export function excludePinnedEvents(
   registrations: RegistrationWithCompetitor[],
   pinnedDivisionEventTypes: Record<string, string> | undefined,
+  heldPinnedEvents?: Record<string, string[]>,
 ): { registrations: RegistrationWithCompetitor[]; pinnedCount: number } {
   const result: RegistrationWithCompetitor[] = [];
   let pinnedCount = 0;
   for (const registration of registrations) {
-    if (!registration.manualDivisionId) {
+    const held = new Set(heldPinnedEvents?.[registration.id] ?? []);
+    if (registration.manualDivisionId) {
+      pinnedCount++;
+      const pinnedEvent = pinnedDivisionEventTypes?.[registration.manualDivisionId];
+      if (pinnedEvent !== 'patterns' && pinnedEvent !== 'sparring') continue;
+      held.add(pinnedEvent);
+    }
+    if (held.size === 0) {
       result.push(registration);
       continue;
     }
-    pinnedCount++;
-    const pinnedEvent = pinnedDivisionEventTypes?.[registration.manualDivisionId];
-    if (pinnedEvent !== 'patterns' && pinnedEvent !== 'sparring') continue;
     const remaining = {
       ...registration,
-      patterns: registration.patterns && pinnedEvent !== 'patterns',
-      sparring: registration.sparring && pinnedEvent !== 'sparring',
+      patterns: registration.patterns && !held.has('patterns'),
+      sparring: registration.sparring && !held.has('sparring'),
     };
     if (remaining.patterns || remaining.sparring) result.push(remaining);
   }
   return { registrations: result, pinnedCount };
+}
+
+/** registrationId -> event types held via assignments in the given divisions. */
+export async function loadHeldPinnedEvents(
+  prisma: PrismaClient | Prisma.TransactionClient,
+  pinnedDivisionIds: string[],
+): Promise<Record<string, string[]>> {
+  if (pinnedDivisionIds.length === 0) return {};
+  const assignments = await prisma.divisionAssignment.findMany({
+    where: { divisionId: { in: pinnedDivisionIds } },
+    select: { registrationId: true, division: { select: { eventType: true } } },
+  });
+  const held: Record<string, string[]> = {};
+  for (const { registrationId, division } of assignments) {
+    (held[registrationId] ??= []).push(division.eventType);
+  }
+  return held;
 }
 
 function partitionRegistrationsForCategorization(
@@ -218,6 +244,7 @@ export function previewCategorization(
   const { registrations: unpinned, pinnedCount } = excludePinnedEvents(
     registrations,
     config.pinnedDivisionEventTypes,
+    config.heldPinnedEvents,
   );
   if (pinnedCount > 0) {
     warnings.push(`${pinnedCount} registration(s) are pinned to specific divisions; their pinned event will be excluded from auto-categorization. Run "Restore pinned" to re-include them.`);
@@ -337,9 +364,11 @@ export async function autoCategorize(
       pinnedDivisions.map((division) => [division.id, division.eventType])
     );
   }
+  const heldPinnedEvents = config.heldPinnedEvents ?? await loadHeldPinnedEvents(prisma, pinnedDivisionIds);
   const { registrations: unpinned, pinnedCount } = excludePinnedEvents(
     registrations,
     pinnedDivisionEventTypes,
+    heldPinnedEvents,
   );
   if (pinnedCount > 0) {
     warnings.push(`${pinnedCount} registration(s) are pinned to specific divisions; their pinned event was excluded from auto-categorization.`);
@@ -886,6 +915,8 @@ function splitDivision(
   config?: CategorizationConfig
 ): DivisionGroup[] {
   const count = group.registrations.length;
+  // A non-positive threshold would make numDivisions negative or infinite.
+  if (!(threshold >= 1) || count === 0) return [group];
   const numDivisions = Math.ceil(count / threshold);
   const perDivision = Math.ceil(count / numDivisions);
 

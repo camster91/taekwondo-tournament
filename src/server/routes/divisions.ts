@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient, type Prisma } from '@prisma/client';
-import { autoCategorize, previewCategorization, type CategorizationConfig } from '../services/categorization-engine.js';
+import { autoCategorize, loadHeldPinnedEvents, previewCategorization, type CategorizationConfig } from '../services/categorization-engine.js';
 import { getBracketPlacementsFromLoaded } from '../services/match-advancement.js';
 import { getEventTypeLabels } from '../../shared/constants/sport-profiles.js';
 import { parseTournamentRules } from '../../shared/constants/tournament-rules.js';
@@ -342,6 +342,7 @@ router.post('/tournament/:tournamentId/preview', authenticate, requireTournament
     categorizationConfig.pinnedDivisionEventTypes = Object.fromEntries(
       pinnedDivisions.map((division) => [division.id, division.eventType])
     );
+    categorizationConfig.heldPinnedEvents = await loadHeldPinnedEvents(prisma, pinnedDivisionIds);
   }
 
   const preview = previewCategorization(registrations, categorizationConfig);

@@ -131,6 +131,25 @@ describe('pinned registrations keep their other event (K4)', () => {
     expect(excludePinnedEvents([both], {}).registrations).toEqual([]);
   });
 
+  it('skips an event the registration already holds in a kept division', () => {
+    const { registrations } = excludePinnedEvents(
+      [both, reg('member', { patterns: true, sparring: false })],
+      { 'pinned-sparring': 'sparring' },
+      { both: ['patterns'], member: ['patterns'] },
+    );
+    expect(registrations).toEqual([]);
+  });
+
+  it('a non-positive division threshold does not hang or crash the split', () => {
+    const many = Array.from({ length: 12 }, (_, i) => reg(`r${i}`));
+    for (const divisionThreshold of [0, -3]) {
+      for (const enableSmartSplitting of [true, false]) {
+        const result = previewCategorization(many, { divisionThreshold, enableSmartSplitting });
+        expect(allRegistrationIds(result)).toHaveLength(12);
+      }
+    }
+  });
+
   it('preview places the pinned registration in its other event only', () => {
     const result = previewCategorization([both], {
       divisionThreshold: 8,
@@ -166,6 +185,9 @@ describe('pinned registrations keep their other event (K4)', () => {
     const prisma = {
       division: {
         findMany: async () => [{ id: 'pinned-sparring', eventType: 'sparring' }],
+      },
+      divisionAssignment: {
+        findMany: async () => [{ registrationId: 'both', division: { eventType: 'sparring' } }],
       },
       $transaction: async (callback: (client: typeof tx) => Promise<void>) => callback(tx),
     };
