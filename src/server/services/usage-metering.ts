@@ -26,16 +26,19 @@ export async function recordTournamentUsage(
     : null;
   const billingPeriodEnd = subscription?.currentPeriodEnd || null;
 
-  // Create usage record
-  await prisma.organizationUsageRecord.create({
-    data: {
+  // One record per tournament: re-completing a tournament (after reopening
+  // it) must not count it again. The unique (organizationId, tournamentId)
+  // index makes this race-safe; the first record wins.
+  await prisma.organizationUsageRecord.createMany({
+    data: [{
       organizationId,
       tournamentId,
       competitorCount,
       billingPeriodStart,
       billingPeriodEnd,
       recordedAt: new Date(),
-    },
+    }],
+    skipDuplicates: true,
   });
 }
 
