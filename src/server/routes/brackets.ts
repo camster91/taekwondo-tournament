@@ -43,6 +43,7 @@ import {
 import { broadcastMatchUpdate, broadcastBracketRegenerated } from '../services/websocket.js';
 import { createBracketWriteLimiter, createBracketRebuildLimiter } from '../middleware/bracket-rate-limit.js';
 import { getEventTypeLabel } from '../../shared/constants/sport-profiles.js';
+import { decideMatchResultWrite, matchResultSchema, type MatchResultRequest } from '../services/match-result-guard.js';
 
 const router = Router();
 
@@ -57,21 +58,7 @@ const getParam = (param: string | string[] | undefined): string => {
   return param || '';
 };
 
-// Validation schemas
-const matchResultSchema = z.object({
-  winnerId: z.string().uuid().nullable().optional(),
-  // Scores must look like "5", "12", or "0" — at most 3 digits, no
-  // negatives, no decimals, no letters. Stops a scorekeeper from
-  // submitting "<script>" or 9999 by accident and lets the client
-  // assume the value is safe to render verbatim.
-  score1: z.string().regex(/^\d{1,3}$/, 'Score must be 0-999').optional(),
-  score2: z.string().regex(/^\d{1,3}$/, 'Score must be 0-999').optional(),
-  status: z.enum(['pending', 'ready', 'in_progress', 'completed', 'bye']).optional(),
-  // Notes are shown in the bracket detail panel and on the PDF export,
-  // so we cap length to keep both renderers fast and prevent a single
-  // match from bloating the PDF.
-  notes: z.string().max(500, 'Notes must be 500 characters or fewer').optional(),
-});
+// Validation schemas (matchResultSchema lives in services/match-result-guard.ts)
 
 // P2-9: Video URL validation schema
 const videoUrlSchema = z.object({
@@ -368,7 +355,7 @@ router.put('/match/:matchId', authenticate, bracketWriteLimiter, validateRequest
     return res.status(access.status || 403).json({ error: access.error });
   }
 
-  const { winnerId, score1, score2, status, notes } = req.body;
+  const { winnerId, score1, score2, status, notes } = req.body as MatchResultRequest;
   const user = req.user;
 
   // Get current match state for audit log
@@ -393,11 +380,42 @@ router.put('/match/:matchId', authenticate, bracketWriteLimiter, validateRequest
     }
   }
 
+  // Optimistic concurrency + result-flip guard. `expectedUpdatedAt` is
+  // the version the client rendered (or queued offline); changing the
+  // winner of a completed match needs an explicit `correction: true`.
+  // An identical resubmission is a no-op success so offline replays
+  // stay idempotent.
+  const decision = decideMatchResultWrite(currentMatch, req.body as MatchResultRequest);
+  if (decision.kind === 'noop' || decision.kind === 'conflict') {
+    const latest = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        competitor1: { include: { competitor: true } },
+        competitor2: { include: { competitor: true } },
+        winner: { include: { competitor: true } },
+      },
+    });
+    if (decision.kind === 'noop') return res.json(latest ?? currentMatch);
+    const recordedWinner = latest?.winner?.competitor;
+    const error = decision.reason === 'already_recorded' && recordedWinner
+      ? `This match was already recorded as a win for ${recordedWinner.firstName} ${recordedWinner.lastName}`
+        + `${latest?.score1 != null && latest?.score2 != null ? ` (${latest.score1}–${latest.score2})` : ''}. Refresh to see the recorded result.`
+      : decision.message;
+    return res.status(409).json({
+      error,
+      code: decision.reason === 'already_recorded' ? 'MATCH_ALREADY_RECORDED' : 'MATCH_VERSION_CONFLICT',
+      currentMatch: latest,
+    });
+  }
+  if (decision.kind === 'invalid') {
+    return res.status(400).json({ error: decision.message });
+  }
+
   if (
     status === 'completed' &&
     winnerId &&
-    score1 !== undefined &&
-    score2 !== undefined
+    score1 != null &&
+    score2 != null
   ) {
     const numericScore1 = Number(score1);
     const numericScore2 = Number(score2);
@@ -462,13 +480,7 @@ router.put('/match/:matchId', authenticate, bracketWriteLimiter, validateRequest
         id: getParam(req.params.matchId),
         updatedAt: currentMatch.updatedAt,
       },
-      data: {
-        winnerId,
-        score1,
-        score2,
-        status,
-        notes,
-      },
+      data: decision.data,
     });
 
     if (write.count !== 1) {
