@@ -384,6 +384,9 @@ describe('DELETE /gdpr/delete-account — same safeguards as DELETE /account', (
       userAuditLog: { deleteMany: vi.fn() },
       userOnboardingChecklist: { deleteMany: vi.fn() },
       magicLink: { deleteMany: vi.fn() },
+      matchAuditLog: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      invitation: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      supportTicket: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       user: { delete: vi.fn() },
     };
     return {
@@ -432,6 +435,10 @@ describe('DELETE /gdpr/delete-account — same safeguards as DELETE /account', (
     expect(res.statusCode).toBe(200);
     expect(prisma.tx.user.delete).toHaveBeenCalledWith({ where: { id: 'u-1' } });
     expect(prisma.tx.magicLink.deleteMany).toHaveBeenCalledWith({ where: { email: 'u@x.com' } });
+    // PII outside the User row is anonymised in the same transaction.
+    expect(prisma.tx.matchAuditLog.updateMany.mock.calls[0][0].data).toEqual({ userEmail: null });
+    expect(prisma.tx.invitation.updateMany).toHaveBeenCalled();
+    expect(prisma.tx.supportTicket.updateMany.mock.calls[0][0].data).toMatchObject({ requestedByEmail: null, requestedByName: null, conversation: '[]' });
     expect(res.clearCookie).toHaveBeenCalledWith('bowin_session', { path: '/' });
   });
 });

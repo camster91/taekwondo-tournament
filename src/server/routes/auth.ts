@@ -14,6 +14,7 @@ import { maybeIssueOfflineCapability } from '../services/offline-capability.js';
 import { createAuditLog, getClientIp, getUserAgent } from '../services/audit-log.js';
 import { checkInvitationToken, InvitationAlreadyClaimedError } from '../services/invitation-lifecycle.js';
 import { createRateLimiter } from '../middleware/rate-limit.js';
+import { anonymiseUserLinkedRecords, exportUserLinkedRecords } from '../services/gdpr-user-data.js';
 
 
 /** True for a Prisma known-request error with the given code (e.g. P2025 not found). */
@@ -641,10 +642,12 @@ router.delete('/account', authenticate, async (req: AuthenticatedRequest, res: R
     return res.status(blocker.status).json({ error: blocker.error });
   }
 
-  await prisma.$transaction([
-    prisma.magicLink.deleteMany({ where: { email: user.email } }),
-    prisma.user.delete({ where: { id: user.id } }),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    await tx.magicLink.deleteMany({ where: { email: user.email } });
+    // PII outside the User row (audit emails, invitations, support tickets).
+    await anonymiseUserLinkedRecords(tx, user);
+    await tx.user.delete({ where: { id: user.id } });
+  });
   res.clearCookie(SESSION_COOKIE, { path: '/' });
   res.clearCookie('bowin_csrf', { path: '/' });
   return res.status(204).send();
@@ -1348,12 +1351,18 @@ router.get('/gdpr/export', authenticate, async (req: AuthenticatedRequest, res: 
       take: 1000, // Last 1000 audit logs
     });
 
+    // Records outside the User row that hold this person's PII.
+    const linkedRecords = user ? await exportUserLinkedRecords(prisma, user) : null;
+
     const exportData = {
       exportDate: new Date().toISOString(),
       user,
       organizationMemberships: organizationMembers,
       tournamentAccess,
       auditLogs,
+      matchAuditLogs: linkedRecords?.matchAuditLogs ?? [],
+      invitations: linkedRecords?.invitations ?? [],
+      supportTickets: linkedRecords?.supportTickets ?? [],
     };
 
     res.setHeader('Content-Type', 'application/json');
@@ -1414,6 +1423,10 @@ router.delete('/gdpr/delete-account', authenticate, async (req: AuthenticatedReq
       
       // Outstanding sign-in codes for this address
       await tx.magicLink.deleteMany({ where: { email: user.email } });
+
+      // PII outside the User row: the email on match audit entries,
+      // invitations addressed to this user, support tickets they opened.
+      await anonymiseUserLinkedRecords(tx, user);
 
       // Finally, delete the user account
       await tx.user.delete({ where: { id: userId } });
