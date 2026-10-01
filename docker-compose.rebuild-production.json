@@ -1,0 +1,95 @@
+{
+  "services": {
+    "postgres": {
+      "image": "postgres:16-alpine",
+      "environment": {
+        "POSTGRES_DB": "bowin_rebuild_production",
+        "POSTGRES_USER": "postgres",
+        "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD:?required}"
+      },
+      "volumes": [
+        "bowin_rebuild_production_database_v1:/var/lib/postgresql/data"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -U postgres -d bowin_rebuild_production"
+        ],
+        "interval": "5s",
+        "timeout": "3s",
+        "retries": 20
+      },
+      "restart": "unless-stopped"
+    },
+    "runtime-role": {
+      "image": "${BOWIN_RUNTIME_IMAGE:?required}",
+      "environment": {
+        "REBUILD_DATABASE_NAME": "bowin_rebuild_production",
+        "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD:?required}",
+        "OWNER_DATABASE_PASSWORD": "${OWNER_DATABASE_PASSWORD:?required}",
+        "RUNTIME_DATABASE_PASSWORD": "${RUNTIME_DATABASE_PASSWORD:?required}"
+      },
+      "command": [
+        "node",
+        "src/provision-roles.mjs"
+      ],
+      "depends_on": {
+        "postgres": {
+          "condition": "service_healthy"
+        }
+      },
+      "restart": "no"
+    },
+    "migrate": {
+      "image": "${BOWIN_RUNTIME_IMAGE:?required}",
+      "environment": {
+        "DATABASE_URL": "${DATABASE_OWNER_URL:?required}",
+        "REBUILD_DATABASE_NAME": "bowin_rebuild_production",
+        "BOWIN_RUNTIME_ROLE": "bowin_runtime"
+      },
+      "command": [
+        "node",
+        "src/migrate.mjs"
+      ],
+      "depends_on": {
+        "runtime-role": {
+          "condition": "service_completed_successfully"
+        }
+      },
+      "restart": "no"
+    },
+    "app": {
+      "image": "${BOWIN_RUNTIME_IMAGE:?required}",
+      "expose": [
+        "3001"
+      ],
+      "environment": {
+        "DATABASE_URL": "${DATABASE_URL:?required}",
+        "REBUILD_DATABASE_NAME": "bowin_rebuild_production",
+        "BOWIN_RUNTIME_ROLE": "bowin_runtime",
+        "APP_ORIGIN": "${APP_ORIGIN:?required}",
+        "SETUP_TOKEN": "${SETUP_TOKEN:?required}"
+      },
+      "depends_on": {
+        "migrate": {
+          "condition": "service_completed_successfully"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/api/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        ],
+        "interval": "10s",
+        "timeout": "5s",
+        "retries": 12
+      },
+      "restart": "unless-stopped"
+    }
+  },
+  "volumes": {
+    "bowin_rebuild_production_database_v1": {}
+  }
+}

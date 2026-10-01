@@ -164,6 +164,7 @@ jobs:
         with:
           name: bowin-tls-qa-attempt-${{ github.run_attempt }}
           path: |
+            bowin-production-role-verification.json
             bowin-tls-verification.json
             bowin-tls-desktop.png
             bowin-tls-mobile.png

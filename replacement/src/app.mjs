@@ -8,7 +8,7 @@ import {mountTournamentRoutes,Problem} from './tournament-routes.mjs';
 import {mountInviteRoutes} from './invite-routes.mjs';
 import {mountPublicResults} from './schedule-public-routes.mjs';
 
-export function createApp({ pool, origin, setupToken, revision, secureCookies = true }) {
+export function createApp({ pool, origin, setupToken, revision, secureCookies = true, runtimeRole }) {
   if (new URL(origin).origin !== origin || (secureCookies && !origin.startsWith('https://'))) throw new Error('Canonical origin required');
   const app = express();
   app.locals.canonicalOrigin=origin;
@@ -40,6 +40,10 @@ export function createApp({ pool, origin, setupToken, revision, secureCookies = 
       .then(result => { if (!result.rowCount) return res.status(401).json({ error: 'AUTH_REQUIRED' }); req.user=result.rows[0]; next(); }).catch(next);
   };
   app.get('/api/health/ready', route(async (_req, res) => {
+    if(runtimeRole){
+      const role=(await pool.query("SELECT current_user AS name,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,has_schema_privilege(current_user,'public','CREATE') AS public_create,has_schema_privilege(current_user,'bowin_rebuild','CREATE') AS app_create,has_table_privilege(current_user,'bowin_rebuild.audit_events','UPDATE') AS audit_update,has_table_privilege(current_user,'bowin_rebuild.audit_events','DELETE') AS audit_delete FROM pg_roles WHERE rolname=current_user")).rows[0];
+      if(runtimeRole!=='bowin_runtime'||role?.name!==runtimeRole||Object.entries(role).some(([key,value])=>key!=='name'&&value))throw new Error('Restricted runtime role required');
+    }
     const result=await pool.query('SELECT version FROM public.bowin_rebuild_migrations ORDER BY version');
     if(result.rows.map(row=>row.version).join(',')!=='1,2,3,4,5,6')throw new Error('Required migration missing');
     res.json({ status: 'ok', database: 'ok', revision });

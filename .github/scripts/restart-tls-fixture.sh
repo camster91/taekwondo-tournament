@@ -2,6 +2,10 @@
 set -euo pipefail
 [[ ${GITHUB_ACTIONS:-} == true ]]
 [[ ${BOWIN_TLS_QA_PREFIX:-} =~ ^bowin-tls-[0-9]+-[0-9]+$ ]]
+if [[ ${BOWIN_PRODUCTION_COMPOSE_QA:-} == true ]]; then
+  python3 replacement/test/production-compose-qa.py restart --target "${1:?}"
+  exit 0
+fi
 database="$BOWIN_TLS_QA_PREFIX-database"
 runtime="$BOWIN_TLS_QA_PREFIX-runtime"
 [[ $(docker inspect "$database" --format '{{index .Config.Labels "bowin.qa.fixture"}}') == "$BOWIN_TLS_QA_PREFIX" ]]

@@ -14,7 +14,7 @@ be reused. Public-display names are separate from private competitor names. Publ
 results expose aliases only when an owner or organizer publishes the event. Registration uses explicit organizer assignment
 to a division, not automatic age/belt/weight categorization. Sparring divisions select
 single-elimination, patterns select scored-final. The implemented sparring engine takes
-an explicit organizer seed order of 2–256 checked-in competitors, creates balanced
+an explicit organizer seed order of 2â€“256 checked-in competitors, creates balanced
 byes, advances winners and stores the final champion. Owner/organizer roles generate
 brackets; owner/organizer/scorekeeper roles record integer point totals. Ties, premature
 matches and overwriting completed results are rejected. Scoring records actor, match,
@@ -53,8 +53,8 @@ registration edits/withdrawals, production HTTPS/browser acceptance, and complet
 not a completed rebuild or a live release. Existing API integration tests against
 fresh isolated PostgreSQL prove invite/session/tenant/role and registration boundaries,
 the three-competitor final and concurrent score submission rejection. Domain tests
-exercise all 2–256 bracket sizes, verifying every entrant appears exactly once and
-exactly n–1 actual matches decide the champion.
+exercise all 2â€“256 bracket sizes, verifying every entrant appears exactly once and
+exactly nâ€“1 actual matches decide the champion.
 Full release handoff and complete replacement-host recovery remain required.
 
 Use `npm ci`, `npm test`, and `npm run migrate` with a dedicated disposable database.
@@ -114,3 +114,20 @@ cookies hidden from document.cookie, and explicitly restarts the fixture databas
 and runtime while checking the same session and final rankings. The fixture uses a
 self-signed loopback certificate; it does not prove public certificate issuance,
 DNS or production Coolify routing. Publication also requires this job to pass.
+
+
+Production preparation uses `docker-compose.rebuild-production.json`: a separate
+`bowin_rebuild_production` database and volume, provisioning, owner migrations,
+and an app using `bowin_runtime`. All three Node steps use the same checked runtime
+image; production inputs must supply its immutable registry digest. The app has no
+administrator/owner credential inputs, schema creation or migration/audit rewrite
+rights. Audit inserts and reads remain available. Readiness validates its restricted
+role. Existing role credentials must authenticate; provisioning does not rotate them.
+
+The HTTPS CI job now executes this tracked production Compose in a fresh isolated
+project. Only a loopback self-signed TLS proxy and test networks are added. It verifies
+actual denied SQL privileges, repeats provisioning/migrations, rejects a wrong owner
+credential, and repeats the browser/session/restart journeys as the runtime role.
+Fixture credentials are generated locally for that disposable project and removed
+with the project after testing. This is preparation; no production resource, real
+credentials, routing, automatic deploy flag or database has been changed.
