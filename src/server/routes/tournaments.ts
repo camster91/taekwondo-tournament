@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { calculateAge } from '../../shared/constants/age-groups.js';
 import { recomputeRegistrationAges } from '../services/registration-age.js';
+import { sameEventAssignmentWhere } from '../services/division-assignment-rules.js';
 import { generateSchedule, validateScheduleConfig, DEFAULT_CONFIG, type ScheduleConfig } from '../services/schedule-generator.js';
 import { validateRequest } from '../middleware/validate.js';
 import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, buildCompetitorAccessFilter, findOrgMembershipAtLevel, checkTournamentAccess, type TournamentRole, type AuthenticatedRequest } from '../middleware/auth.js';
@@ -64,6 +65,39 @@ const router = Router();
 export function normalizeTournamentDate(raw: string): Date {
   const dateOnly = raw.includes('T') ? raw.slice(0, 10) : raw;
   return new Date(dateOnly + 'T12:00:00.000Z');
+}
+
+/**
+ * Resolve a template's `settings` + `rules` JSON into the new
+ * tournament's settings string. An object `rules` (TournamentRules, as
+ * saved by TournamentTemplateForm) is normalized through
+ * parseTournamentRules and merged into settings with the same helper
+ * PUT /:id/rules uses. An array `rules` (legacy TournamentRule rows) is
+ * returned as `legacyRuleRows` for the caller to insert. Unparseable
+ * rules are ignored (settings are kept as they are).
+ */
+export function templateRulesToTournament(
+  settings: string | null,
+  rules: string | null,
+): { settings: string | null; legacyRuleRows: Array<Record<string, unknown>> } {
+  if (!rules) return { settings, legacyRuleRows: [] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rules);
+  } catch (err) {
+    console.error('[create-from-template] Failed to parse template rules:', err);
+    return { settings, legacyRuleRows: [] };
+  }
+  if (Array.isArray(parsed)) {
+    return {
+      settings,
+      legacyRuleRows: parsed.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row)),
+    };
+  }
+  if (!parsed || typeof parsed !== 'object') return { settings, legacyRuleRows: [] };
+  const normalized = parseTournamentRules(JSON.stringify(parsed));
+  const merged = mergeRulesSettings(settings, JSON.parse(serializeTournamentRules(normalized)));
+  return { settings: JSON.stringify(merged), legacyRuleRows: [] };
 }
 
 const operationalQuerySchema = z.object({
@@ -403,12 +437,19 @@ router.post('/from-template/:templateId', authenticate, requireRole('admin', 'di
     });
   }
 
+  // Templates saved by TournamentTemplateForm store `rules` as one
+  // TournamentRules object; it belongs in tournament.settings, where
+  // parseTournamentRules (and PUT /:id/rules) read and write it. Older
+  // templates may hold an array of TournamentRule rows instead; those
+  // keep being copied as rows below.
+  const { settings: templateSettings, legacyRuleRows } = templateRulesToTournament(template.settings, template.rules);
+
   const tournament = await prisma.tournament.create({
     data: {
       name: name.trim(),
       date: normalizeTournamentDate(date),
       location: typeof location === 'string' ? location : null,
-      settings: template.settings,
+      settings: templateSettings,
       status: 'draft',
       sportProfileSlug: template.sportProfileSlug,
       organizationId: membership.organizationId,
@@ -448,12 +489,10 @@ router.post('/from-template/:templateId', authenticate, requireRole('admin', 'di
     }
   }
 
-  if (template.rules) {
+  if (legacyRuleRows.length > 0) {
     try {
-      const rules = JSON.parse(template.rules);
-      const rulesData = Array.isArray(rules) ? rules : [rules];
       await prisma.tournamentRule.createMany({
-        data: rulesData.map((rule: Record<string, unknown>) => ({
+        data: legacyRuleRows.map((rule) => ({
           tournamentId: tournament.id,
           name: String(rule.name || 'Custom Rule'),
           description: rule.description ? String(rule.description) : null,
@@ -763,46 +802,94 @@ router.post('/:id/clone', authenticate, requireTournamentAccess('director'), val
     if (limitError) return res.status(limitError.status).json(limitError.body);
   }
 
-  const cloned = await prisma.tournament.create({
-    data: {
-      name: newName,
-      date: new Date(newDate.toISOString().slice(0, 10) + 'T12:00:00.000Z'),
-      location: original.location,
-      status: 'draft',
-      settings: stripReservedOperationSettingsFromRaw(original.settings),
-      sportProfileSlug: original.sportProfileSlug,
-      sportProfileId: original.sportProfileId,
-      organizationId: original.organizationId,
-      createdById: (req as AuthenticatedRequest).user?.id ?? null,
-    },
-  });
+  // Everything is copied in one transaction: a failure part-way never
+  // leaves a clone without its weight classes or rules.
+  const cloned = await prisma.$transaction(async (tx) => {
+    const created = await tx.tournament.create({
+      data: {
+        name: newName,
+        date: new Date(newDate.toISOString().slice(0, 10) + 'T12:00:00.000Z'),
+        location: original.location,
+        status: 'draft',
+        settings: stripReservedOperationSettingsFromRaw(original.settings),
+        sportProfileSlug: original.sportProfileSlug,
+        sportProfileId: original.sportProfileId,
+        organizationId: original.organizationId,
+        createdById: (req as AuthenticatedRequest).user?.id ?? null,
+      },
+    });
 
-  // Optional: copy the competitor list over too. Off by default since most
-  // directors want a fresh roster for the new year. Toggle via the UI later.
-  if (body.includeRegistrations) {
-    const regs = await prisma.registration.findMany({ where: { tournamentId: original.id } });
-    if (regs.length > 0) {
-      await prisma.registration.createMany({
-        data: regs.map((r) => ({
-          competitorId: r.competitorId,
-          tournamentId: cloned.id,
-          patterns: r.patterns,
-          sparring: r.sparring,
-          weightAtRegistration: r.weightAtRegistration,
-          ageAtTournament: r.ageAtTournament,
-          parentName: r.parentName,
-          parentEmail: r.parentEmail,
-          parentPhone: r.parentPhone,
-          heightAtRegistration: r.heightAtRegistration,
-          reachAtRegistration: r.reachAtRegistration,
-          experienceScore: r.experienceScore,
-          skillEstimate: r.skillEstimate,
-          competeWithOlder: r.competeWithOlder,
-          specialNeeds: r.specialNeeds,
+    // Weight classes live in their own table (not settings).
+    const weightClasses = await tx.weightClass.findMany({ where: { tournamentId: original.id } });
+    if (weightClasses.length > 0) {
+      await tx.weightClass.createMany({
+        data: weightClasses.map((wc) => ({
+          tournamentId: created.id,
+          name: wc.name,
+          gender: wc.gender,
+          ageMin: wc.ageMin,
+          ageMax: wc.ageMax,
+          weightMinLbs: wc.weightMinLbs,
+          weightMaxLbs: wc.weightMaxLbs,
+          displayOrder: wc.displayOrder,
         })),
       });
     }
-  }
+
+    // Rule-engine rules (TournamentRule rows).
+    const rules = await tx.tournamentRule.findMany({ where: { tournamentId: original.id } });
+    if (rules.length > 0) {
+      await tx.tournamentRule.createMany({
+        data: rules.map((rule) => ({
+          tournamentId: created.id,
+          name: rule.name,
+          description: rule.description,
+          category: rule.category,
+          ruleType: rule.ruleType,
+          enforcement: rule.enforcement,
+          parameters: rule.parameters,
+          priority: rule.priority,
+          isActive: rule.isActive,
+          source: rule.source,
+          createdBy: rule.createdBy,
+        })),
+      });
+    }
+
+    // Optional: copy the competitor list over too. Off by default since
+    // most directors want a fresh roster for the new year. Only entries
+    // that were actually in the field are copied (not waitlisted or
+    // withdrawn ones), and ages are recomputed for the new date.
+    if (body.includeRegistrations) {
+      const regs = await tx.registration.findMany({
+        where: { tournamentId: original.id, waitlistStatus: { in: ['active', 'promoted'] } },
+      });
+      if (regs.length > 0) {
+        await tx.registration.createMany({
+          data: regs.map((r) => ({
+            competitorId: r.competitorId,
+            tournamentId: created.id,
+            patterns: r.patterns,
+            sparring: r.sparring,
+            weightAtRegistration: r.weightAtRegistration,
+            ageAtTournament: r.ageAtTournament,
+            parentName: r.parentName,
+            parentEmail: r.parentEmail,
+            parentPhone: r.parentPhone,
+            heightAtRegistration: r.heightAtRegistration,
+            reachAtRegistration: r.reachAtRegistration,
+            experienceScore: r.experienceScore,
+            skillEstimate: r.skillEstimate,
+            competeWithOlder: r.competeWithOlder,
+            specialNeeds: r.specialNeeds,
+          })),
+        });
+        await recomputeRegistrationAges(tx, { tournamentId: created.id });
+      }
+    }
+
+    return created;
+  });
 
   res.status(201).json(cloned);
 });
@@ -839,8 +926,12 @@ router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'),
     return res.status(404).json({ error: 'Tournament not found.' });
   }
 
-  // Pull all registrations + competitor + parent contact info.
-  const where: Record<string, unknown> = { tournamentId: getParam(req.params.id) };
+  // Pull the registrations in the field (not waitlisted or withdrawn)
+  // with competitor + parent contact info.
+  const where: Record<string, unknown> = {
+    tournamentId: getParam(req.params.id),
+    waitlistStatus: { in: ['active', 'promoted'] },
+  };
   if (!test) {
     // Production sends go only to entries that have a parentEmail set.
     where.parentEmail = { not: null };
@@ -848,20 +939,19 @@ router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'),
   const regs = await prisma.registration.findMany({
     where,
     include: { competitor: true },
+    // Test mode previews one email built from the first registration.
+    ...(test ? { take: 1, orderBy: { createdAt: 'asc' as const } } : {}),
   });
 
   if (regs.length === 0) {
     return res.json({ sent: 0, failures: 0, message: 'No recipients matched.' });
   }
 
-  // Closes S7: test mode now actually restricts the send to the
-  // requesting director's own email. The previous implementation
-  // sent to every parent regardless of the `test` flag, which
-  // meant a director clicking "Send test" with placeholder text
-  // would email every parent. We do this by replacing the `to`
-  // address with the director's own email; the merge fields still
-  // resolve from the first registration so the test preview
-  // looks like a real send.
+  // Closes S7: test mode restricts the send to the requesting
+  // director's own email, and sends exactly ONE preview (the query
+  // above takes a single registration) rather than one copy per
+  // registration. The merge fields resolve from that registration so
+  // the preview looks like a real send.
   const tDate = new Date(tournament.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const directorEmail = req.user?.email?.trim();
   if (test && !directorEmail) {
@@ -910,7 +1000,9 @@ router.post('/:id/broadcast', authenticate, requireTournamentAccess('director'),
     failures,
     total: regs.length,
     message: test
-      ? `Test mode: sent ${sent} email(s) to the director (${directorEmail}) for preview.`
+      ? (sent > 0
+        ? `Test mode: sent a preview email to the director (${directorEmail}).`
+        : `Test mode: the preview email to the director (${directorEmail}) failed.`)
       : `Sent to ${sent} parent(s). ${failures} failed.`,
   });
 });
@@ -1225,11 +1317,23 @@ router.get('/:id/registrations', authenticate, requireTournamentAccess('viewer')
     // Ensures check-in sees all completed public registrations (#187).
     waitlistStatus: { in: ['active', 'promoted'] },
   };
-  // `?notInDivision=<id>` returns only registrations that have no
-  // DivisionAssignment for this specific division. Used by the
-  // BracketEditor "Add competitor" picker. Closes H2 from the UI audit.
+  // `?notInDivision=<id>` returns only registrations POST
+  // /api/divisions/:id/assign would accept for that division: entered in
+  // its event and with no assignment in any division of its event type
+  // (same rule as the assign route's 409). Used by the BracketEditor
+  // "Add competitor" picker. Closes H2 from the UI audit.
   if (notInDivision && typeof notInDivision === 'string') {
-    where.assignments = { none: { divisionId: notInDivision } };
+    const target = await prisma.division.findFirst({
+      where: { id: notInDivision, tournamentId: getParam(req.params.id) },
+      select: { eventType: true },
+    });
+    if (!target) {
+      return res.status(404).json({ error: 'Division not found' });
+    }
+    where.assignments = { none: sameEventAssignmentWhere(target.eventType) };
+    if (target.eventType === 'patterns' || target.eventType === 'sparring') {
+      where[target.eventType] = true;
+    }
   }
 
   const registrations = await prisma.registration.findMany({

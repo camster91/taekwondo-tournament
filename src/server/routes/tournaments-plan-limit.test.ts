@@ -42,6 +42,9 @@ const prisma = {
   organizationMember: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
   organization: { findUnique: vi.fn() },
   registration: { findMany: vi.fn(), createMany: vi.fn() },
+  weightClass: { findMany: vi.fn(), createMany: vi.fn() },
+  tournamentRule: { findMany: vi.fn(), createMany: vi.fn() },
+  $transaction: vi.fn(),
 };
 
 function makeApp() {
@@ -65,6 +68,9 @@ beforeEach(() => {
   prisma.organizationMember.findUnique.mockResolvedValue({ role: 'owner' });
   prisma.organization.findUnique.mockResolvedValue({ plan: 'free' });
   prisma.tournament.count.mockResolvedValue(0);
+  prisma.weightClass.findMany.mockResolvedValue([]);
+  prisma.tournamentRule.findMany.mockResolvedValue([]);
+  prisma.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => unknown) => fn(prisma));
 });
 
 describe('POST /api/tournaments/:id/clone', () => {

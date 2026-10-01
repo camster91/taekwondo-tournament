@@ -37,11 +37,12 @@ describe('Tournament registrations waitlistStatus filtering', () => {
     const where: Record<string, unknown> = {
       tournamentId: 'test-tournament-id',
       waitlistStatus: { in: ['active', 'promoted'] },
-      assignments: { none: { divisionId: 'division-123' } },
+      assignments: { none: { division: { eventType: 'sparring' } } },
+      sparring: true,
     };
 
     expect(where.waitlistStatus).toBeDefined();
     expect(where.assignments).toBeDefined();
-    expect((where.assignments as any).none.divisionId).toBe('division-123');
+    expect((where.assignments as any).none.division.eventType).toBe('sparring');
   });
 });

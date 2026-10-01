@@ -461,8 +461,12 @@ export default function Divisions() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ splitCount: 2 }),
       });
-      if (!res.ok) throw new Error('Failed to split division');
+      if (!res.ok) throw await readDivisionOperationError(res, 'Failed to split division');
       return res.json();
+    },
+    onError: (error) => {
+      setSplitTarget(null);
+      addToast(divisionErrorMessage(error, 'Failed to split division'), 'error');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
@@ -698,7 +702,10 @@ export default function Divisions() {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
-      if (!res.ok) throw new Error('Failed to unassign');
+      if (!res.ok) throw await readDivisionOperationError(res, 'Failed to unassign');
+    },
+    onError: (error) => {
+      addToast(divisionErrorMessage(error, 'Failed to unassign'), 'error');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });

@@ -22,6 +22,7 @@ import {
 } from '../middleware/auth.js';
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validate.js';
+import { sameEventAssignmentWhere } from '../services/division-assignment-rules.js';
 
 const router = Router();
 
@@ -30,6 +31,90 @@ const getParam = (param: string | string[] | undefined): string => {
   if (Array.isArray(param)) return param[0];
   return param || '';
 };
+
+export interface ActiveBracketInfo {
+  divisionId: string;
+  divisionName: string;
+  matchCount: number;
+}
+
+type DivisionReadClient = Pick<PrismaClient | Prisma.TransactionClient, 'division'>;
+
+/**
+ * 409 body shared by every route that refuses to change a division's
+ * roster under a bracket (merge, move, split, unassign).
+ */
+export function activeBracketsConflict(
+  action: string,
+  activeBrackets: ActiveBracketInfo[],
+  suggestion = 'A match has been played, so the roster is fixed; use the bracket correction workflow',
+  warning = `${activeBrackets.length} division(s) have matches in progress or completed`,
+) {
+  return {
+    error: `Cannot ${action} divisions with active brackets`,
+    code: 'ACTIVE_BRACKETS' as const,
+    activeBrackets,
+    warning,
+    suggestion,
+  };
+}
+
+/**
+ * Divisions (of the given ids) whose bracket has started: a real match
+ * (both competitors, not a bye) is in progress or completed. A drawn but
+ * unplayed bracket does not count; see clearUnstartedBrackets.
+ */
+export async function findDivisionsWithBrackets(
+  prisma: DivisionReadClient,
+  divisionIds: string[],
+): Promise<ActiveBracketInfo[]> {
+  const divisions = await prisma.division.findMany({
+    where: {
+      id: { in: [...new Set(divisionIds)] },
+      bracket: {
+        is: {
+          matches: {
+            some: {
+              status: { in: ['in_progress', 'completed'] },
+              competitor1Id: { not: null },
+              competitor2Id: { not: null },
+            },
+          },
+        },
+      },
+    },
+    select: { id: true, name: true, bracket: { select: { _count: { select: { matches: true } } } } },
+  });
+  return divisions.map((division) => ({
+    divisionId: division.id,
+    divisionName: division.name,
+    matchCount: division.bracket?._count.matches ?? 0,
+  }));
+}
+
+/**
+ * A roster change under a drawn but unplayed bracket would leave that bracket
+ * listing the wrong people (and, for move/split, a competitor in two
+ * brackets). Clear it so it is regenerated from the new roster.
+ */
+export async function clearUnstartedBrackets(
+  tx: Pick<Prisma.TransactionClient, 'bracket'>,
+  divisionIds: string[],
+): Promise<number> {
+  const { count } = await tx.bracket.deleteMany({ where: { divisionId: { in: [...new Set(divisionIds)] } } });
+  return count;
+}
+
+export const assignBodySchema = z.object({
+  registrationId: z.string().min(1),
+  seedPosition: z.number().int().optional().nullable(),
+  manualOverride: z.boolean().optional(),
+});
+
+export const moveBodySchema = z.object({
+  assignmentId: z.string().min(1),
+  toDivisionId: z.string().min(1),
+});
 
 // Validation schemas
 const divisionCreateSchema = z.object({
@@ -639,14 +724,14 @@ router.delete('/tournament/:tournamentId/all', authenticate, requireTournamentAc
 });
 
 // Assign competitor to division (requires authentication)
-router.post('/:id/assign', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:id/assign', authenticate, validateRequest(assignBodySchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
   const divisionId = getParam(req.params.id);
 
   // Resolve the parent tournament for the per-tournament check.
   const division = await prisma.division.findUnique({
     where: { id: divisionId },
-    select: { tournamentId: true },
+    select: { tournamentId: true, eventType: true },
   });
   if (!division) {
     return res.status(404).json({ error: 'Division not found' });
@@ -656,7 +741,7 @@ router.post('/:id/assign', authenticate, async (req: AuthenticatedRequest, res: 
     return res.status(access.status || 403).json({ error: access.error });
   }
 
-  const { registrationId, seedPosition, manualOverride } = req.body;
+  const { registrationId, seedPosition, manualOverride } = req.body as z.infer<typeof assignBodySchema>;
 
   // Cross-tournament FK check: the registration must belong to the
   // same tournament as the division. Closes B5 (cross-tenant data
@@ -675,17 +760,20 @@ router.post('/:id/assign', authenticate, async (req: AuthenticatedRequest, res: 
   }
 
   // Idempotency check: a registration can only be assigned to ONE
-  // division at a time. Without this, calling POST /:id/assign for
-  // the same registration in different divisions would silently
-  // land the kid in two divisions — the auto-categorization engine
-  // would then count them twice, the bracket generator would create
-  // duplicate match slots, etc.
+  // division per event type. Without this, calling POST /:id/assign
+  // for the same registration in different divisions would silently
+  // land the kid in two divisions of one event — the auto-categorization
+  // engine would then count them twice, the bracket generator would
+  // create duplicate match slots, etc. A registration entered in both
+  // events legitimately holds one patterns and one sparring assignment
+  // (auto-categorization creates exactly that), so only the same event
+  // type conflicts.
   //
   // The schema's @@unique([divisionId, registrationId]) only blocks
   // re-assignment to the SAME division, not different ones — that's
   // a logical constraint this route enforces.
   const existingAssignment = await prisma.divisionAssignment.findFirst({
-    where: { registrationId },
+    where: { registrationId, ...sameEventAssignmentWhere(division.eventType) },
     select: { id: true, divisionId: true, division: { select: { name: true } } },
   });
   if (existingAssignment) {
@@ -701,7 +789,7 @@ router.post('/:id/assign', authenticate, async (req: AuthenticatedRequest, res: 
     data: {
       divisionId,
       registrationId,
-      seedPosition,
+      seedPosition: seedPosition ?? null,
       manualOverride: manualOverride ?? true,
     },
     include: {
@@ -723,7 +811,7 @@ router.delete('/:id/assign/:assignmentId', authenticate, async (req: Authenticat
   // per-tournament access check before deleting.
   const assignment = await prisma.divisionAssignment.findUnique({
     where: { id: assignmentId },
-    select: { division: { select: { tournamentId: true } } },
+    select: { divisionId: true, division: { select: { tournamentId: true } } },
   });
   if (!assignment) {
     return res.status(404).json({ error: 'Assignment not found' });
@@ -733,23 +821,31 @@ router.delete('/:id/assign/:assignmentId', authenticate, async (req: Authenticat
     return res.status(access.status || 403).json({ error: access.error });
   }
 
-  await prisma.divisionAssignment.delete({
-    where: { id: assignmentId },
+  // Once a real match is played the roster is fixed (use the correction
+  // workflow); before that, removing clears the unplayed bracket.
+  const withBrackets = await findDivisionsWithBrackets(prisma, [assignment.divisionId]);
+  if (withBrackets.length > 0) {
+    return res.status(409).json(activeBracketsConflict('remove competitors from', withBrackets));
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.divisionAssignment.delete({ where: { id: assignmentId } });
+    await clearUnstartedBrackets(tx, [assignment.divisionId]);
   });
 
   res.status(204).send();
 });
 
 // Move competitor between divisions (requires authentication)
-router.post('/:id/move', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:id/move', authenticate, validateRequest(moveBodySchema), async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { assignmentId, toDivisionId } = req.body;
+  const { assignmentId, toDivisionId } = req.body as z.infer<typeof moveBodySchema>;
 
   // Resolve the assignment's current division → parent tournament
   // for the per-tournament access check.
   const current = await prisma.divisionAssignment.findUnique({
     where: { id: assignmentId },
-    select: { division: { select: { tournamentId: true } } },
+    select: { divisionId: true, division: { select: { tournamentId: true } } },
   });
   if (!current) {
     return res.status(404).json({ error: 'Assignment not found' });
@@ -774,17 +870,28 @@ router.post('/:id/move', authenticate, async (req: AuthenticatedRequest, res: Re
     });
   }
 
-  const assignment = await prisma.divisionAssignment.update({
-    where: { id: assignmentId },
-    data: {
-      divisionId: toDivisionId,
-      manualOverride: true,
-    },
-    include: {
-      registration: {
-        include: { competitor: true },
+  // Neither started bracket may change under the competitor; unplayed
+  // brackets of either division are cleared with the move.
+  const withBrackets = await findDivisionsWithBrackets(prisma, [current.divisionId, toDivisionId]);
+  if (withBrackets.length > 0) {
+    return res.status(409).json(activeBracketsConflict('move competitors between', withBrackets));
+  }
+
+  const assignment = await prisma.$transaction(async (tx) => {
+    const moved = await tx.divisionAssignment.update({
+      where: { id: assignmentId },
+      data: {
+        divisionId: toDivisionId,
+        manualOverride: true,
       },
-    },
+      include: {
+        registration: {
+          include: { competitor: true },
+        },
+      },
+    });
+    await clearUnstartedBrackets(tx, [current.divisionId, toDivisionId]);
+    return moved;
   });
 
   res.json(assignment);
@@ -824,56 +931,67 @@ router.post('/:id/split', authenticate, async (req: AuthenticatedRequest, res: R
     return res.status(access.status || 403).json({ error: access.error });
   }
 
+  const withBrackets = await findDivisionsWithBrackets(prisma, [division.id]);
+  if (withBrackets.length > 0) {
+    return res.status(409).json(activeBracketsConflict('split', withBrackets));
+  }
+
   const assignments = division.assignments;
   const perDivision = Math.ceil(assignments.length / splitCount);
 
-  // Create new divisions and reassign
-  const newDivisions = [];
+  // Create the new divisions and reassign in one transaction so a
+  // failure part-way never leaves half-split divisions behind.
+  const newDivisions = await prisma.$transaction(async (tx) => {
+    await clearUnstartedBrackets(tx, [division.id]);
+    const created = [];
 
-  for (let i = 0; i < splitCount; i++) {
-    const isFirst = i === 0;
-    const newDivision = isFirst
-      ? division
-      : await prisma.division.create({
-          data: {
-            tournamentId: division.tournamentId,
-            name: `${division.name.replace(/ DIV\d+$/, '')} DIV${i + 1}`,
-            beltLevel: division.beltLevel,
-            gender: division.gender,
-            eventType: division.eventType,
-            ageMin: division.ageMin,
-            ageMax: division.ageMax,
-            beltColors: division.beltColors,
-            danMin: division.danMin,
-            danMax: division.danMax,
-            weightClass: division.weightClass,
-            divisionNumber: i + 1,
-            isSpecialNeeds: division.isSpecialNeeds,
-          },
-        });
+    for (let i = 0; i < splitCount; i++) {
+      const isFirst = i === 0;
+      const newDivision = isFirst
+        ? division
+        : await tx.division.create({
+            data: {
+              tournamentId: division.tournamentId,
+              name: `${division.name.replace(/ DIV\d+$/, '')} DIV${i + 1}`,
+              beltLevel: division.beltLevel,
+              gender: division.gender,
+              eventType: division.eventType,
+              ageMin: division.ageMin,
+              ageMax: division.ageMax,
+              beltColors: division.beltColors,
+              danMin: division.danMin,
+              danMax: division.danMax,
+              weightClass: division.weightClass,
+              divisionNumber: i + 1,
+              isSpecialNeeds: division.isSpecialNeeds,
+            },
+          });
 
-    // Update first division name if needed
-    if (isFirst && !division.name.includes('DIV')) {
-      await prisma.division.update({
-        where: { id: division.id },
-        data: { name: `${division.name} DIV1`, divisionNumber: 1 },
-      });
-    }
-
-    const divisionAssignments = assignments.slice(i * perDivision, (i + 1) * perDivision);
-
-    // Move assignments to new division
-    if (!isFirst) {
-      for (const assignment of divisionAssignments) {
-        await prisma.divisionAssignment.update({
-          where: { id: assignment.id },
-          data: { divisionId: newDivision.id },
+      // Update first division name if needed
+      if (isFirst && !division.name.includes('DIV')) {
+        await tx.division.update({
+          where: { id: division.id },
+          data: { name: `${division.name} DIV1`, divisionNumber: 1 },
         });
       }
+
+      const divisionAssignments = assignments.slice(i * perDivision, (i + 1) * perDivision);
+
+      // Move assignments to new division
+      if (!isFirst) {
+        for (const assignment of divisionAssignments) {
+          await tx.divisionAssignment.update({
+            where: { id: assignment.id },
+            data: { divisionId: newDivision.id },
+          });
+        }
+      }
+
+      created.push(newDivision);
     }
 
-    newDivisions.push(newDivision);
-  }
+    return created;
+  });
 
   res.json(newDivisions);
 });
@@ -989,13 +1107,12 @@ router.post('/merge', authenticate, async (req: AuthenticatedRequest, res: Respo
   }
 
   if (activeBrackets.length > 0) {
-    return res.status(409).json({
-      error: 'Cannot merge divisions with active brackets',
-      code: 'ACTIVE_BRACKETS',
+    return res.status(409).json(activeBracketsConflict(
+      'merge',
       activeBrackets,
-      warning: `${activeBrackets.length} division(s) have completed or in-progress matches`,
-      suggestion: 'Regenerate brackets after merge, or clear brackets before merging',
-    });
+      'Regenerate brackets after merge, or clear brackets before merging',
+      `${activeBrackets.length} division(s) have completed or in-progress matches`,
+    ));
   }
 
   // Perform merge in a transaction
