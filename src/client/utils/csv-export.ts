@@ -90,10 +90,18 @@ export function getPlaceName(place: number): string {
   return `${place}${suffix} Place`;
 }
 
+// A text cell starting with one of these is evaluated as a formula by
+// Excel / Sheets / LibreOffice (CSV formula injection). Names and schools
+// come from public registrants, so such cells are neutralised.
+const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+
 // Quote-escape a single CSV cell per RFC 4180: wrap in double quotes and
-// escape any inner double quotes by doubling them.
+// escape any inner double quotes by doubling them. Text that a spreadsheet
+// would run as a formula gets a leading single quote; real numbers
+// (e.g. -5 passed as a number) are left intact.
 export function escapeCSVCell(cell: string | number | null | undefined): string {
-  const s = cell == null ? '' : String(cell);
+  let s = cell == null ? '' : String(cell);
+  if (typeof cell === 'string' && FORMULA_TRIGGER.test(s)) s = `'${s}`;
   return `"${s.replace(/"/g, '""')}"`;
 }
 

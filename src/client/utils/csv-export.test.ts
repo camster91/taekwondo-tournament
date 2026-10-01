@@ -99,6 +99,25 @@ describe('escapeCSVCell', () => {
   it('keeps commas intact inside quotes so the cell does not split', () => {
     expect(escapeCSVCell('Newton, MA')).toBe('"Newton, MA"');
   });
+
+  it('neutralises text cells a spreadsheet would run as a formula', () => {
+    expect(escapeCSVCell('=HYPERLINK("http://evil","x")')).toBe('"\'=HYPERLINK(""http://evil"",""x"")"');
+    expect(escapeCSVCell('+1+1')).toBe('"\'+1+1"');
+    expect(escapeCSVCell('-2+3')).toBe('"\'-2+3"');
+    expect(escapeCSVCell('@SUM(A1)')).toBe('"\'@SUM(A1)"');
+    expect(escapeCSVCell('\t=1')).toBe('"\'\t=1"');
+    expect(escapeCSVCell('\r=1')).toBe('"\'\r=1"');
+  });
+
+  it('leaves real numbers and harmless text untouched', () => {
+    expect(escapeCSVCell(-5)).toBe('"-5"');
+    expect(escapeCSVCell('Anne-Marie')).toBe('"Anne-Marie"');
+    expect(escapeCSVCell('a=b')).toBe('"a=b"');
+  });
+
+  it('applies through the builders (registrant-controlled names)', () => {
+    expect(rowsToCSV([['=cmd|\' /C calc\'!A0', 'School']])).toBe('"\'=cmd|\' /C calc\'!A0","School"');
+  });
 });
 
 describe('rowsToCSV', () => {
