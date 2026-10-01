@@ -846,6 +846,29 @@ async function isRegistrationInDrawnBracket(
   return count > 0;
 }
 
+const PAID_WITHDRAWAL_MESSAGE = 'This registration has been paid. Please contact the tournament organizer to withdraw and arrange any refund.';
+
+/**
+ * Best-effort: expire the registration's open Checkout session so it can't
+ * be paid after a withdrawal. Returns true only when Stripe reports the
+ * session already completed/paid (the caller must not delete then).
+ * Without Stripe configured, or on any Stripe error, returns false.
+ */
+async function checkoutSessionAlreadyPaid(sessionId: string | null): Promise<boolean> {
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!stripeSecretKey || !sessionId || !sessionId.startsWith('cs_')) return false;
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(stripeSecretKey);
+  if (await expireCheckoutSessionBestEffort(stripe, sessionId)) return false;
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    return session.status === 'complete' || session.payment_status === 'paid';
+  } catch (error) {
+    console.warn('[registration-manage-withdraw] could not check checkout session:', error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
 const manageUpdateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -1025,6 +1048,19 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
   }
   if (['in_progress', 'completed'].includes(registration.tournament.status)) {
     return res.status(409).json({ error: 'Cannot withdraw once the tournament has started.' });
+  }
+
+  // Deleting a paid registration would destroy the only record of the
+  // payment (and any refund needs the organizer anyway).
+  if (registration.paymentStatus === 'paid') {
+    return res.status(409).json({ error: PAID_WITHDRAWAL_MESSAGE, code: 'PAID_REGISTRATION' });
+  }
+
+  // Close any open Checkout session first so it cannot be paid after the
+  // registration is gone. If it can no longer be expired because the
+  // parent just paid (webhook not processed yet), treat it as paid.
+  if (await checkoutSessionAlreadyPaid(registration.paymentIntentId)) {
+    return res.status(409).json({ error: PAID_WITHDRAWAL_MESSAGE, code: 'PAID_REGISTRATION' });
   }
 
   // Never delete Match rows here (they are shared with the opponent and
