@@ -43,9 +43,44 @@ fresh isolated PostgreSQL prove invite/session/tenant/role and registration boun
 the three-competitor final and concurrent score submission rejection. Domain tests
 exercise all 2–256 bracket sizes, verifying every entrant appears exactly once and
 exactly n–1 actual matches decide the champion.
-Browser acceptance, restart persistence and candidate backup/restore remain required.
+Browser acceptance and complete replacement-host recovery remain required.
 
 Use `npm ci`, `npm test`, and `npm run migrate` with a dedicated disposable database.
 Runtime configuration: DATABASE_URL, REBUILD_DATABASE_NAME, APP_ORIGIN, SETUP_TOKEN,
 and a full RELEASE_SHA. Never use production/archive database connections for tests.
 Coolify configuration and checked immutable-image releases follow candidate validation.
+
+## Checked replacement images
+
+`Rebuild checks` first migrates a disposable PostgreSQL 16 database twice and runs
+the replacement's source tests. It then saves the exact runtime image and a receipt
+bound to the repository, full source revision, workflow run and build attempt.
+The receipt includes the archive checksum and immutable image identity.
+
+A separate runner imports that saved image without rebuilding. The existing API
+integration journey runs against the imported runtime: setup, login/invitation,
+organization isolation, roles, registration/check-in, scheduling, bracket scoring,
+public-result privacy and session revocation. Both runtime and test-client databases
+are disposable QA databases; provider credentials are absent. The job checks the
+unprivileged runtime UID, readiness/source revision, repeated image migrations and
+database content preservation across an image restart. These are API checks; they
+do not prove browser workflows or completion of the rebuilt product.
+
+Image publication is disabled unless `BOWIN_IMMUTABLE_RELEASE_ENABLED=true`, and
+then only runs for a main push after both replacement jobs pass. It loads and
+verifies the saved image again, publishes a source/run/attempt-specific tag to
+`ghcr.io/camster91/bowin-rebuild`, and records its immutable registry digest.
+It never rebuilds during publication. A separate draft GitHub release stores and
+refetches the receipt without exposing runtime configuration or secrets.
+
+Actions archives expire after seven days and may disappear on full reruns.
+Distinct attempt names distinguish receipts but do not guarantee artifact retention.
+Draft receipt records preserve publication metadata; they do not themselves preserve
+backup data or guarantee registry retention. Publication and VPS registry access
+remain unverified until exercised against the actual registry and account.
+
+The existing root application's build/publication workflow is a legacy path and
+does not publish this replacement image. No replacement production promotion,
+default-branch change, secret enrollment, live routing change or database reset is
+part of these image checks. A reviewed Coolify consumer and recovery handoff remain
+required before enabling production automation.

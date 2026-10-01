@@ -8,10 +8,18 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
   assert.match(new URL(connection).pathname,/^\/bowin_rebuild_qa_[a-z0-9_]+$/);
   const pool=new pg.Pool({connectionString:connection});
   const origin='https://qa.example.invalid',setupToken='QaSetupOnly-'.repeat(4);
-  const app=createApp({pool,origin,setupToken,revision:'a'.repeat(40)});
-  const server=app.listen(0,'127.0.0.1');
-  await new Promise(resolve=>server.on('listening',resolve));
-  const base=`http://127.0.0.1:${server.address().port}`;
+  const external=process.env.BOWIN_CHECKED_RUNTIME_URL;
+  if(external){
+    const target=new URL(external);
+    assert.equal(process.env.GITHUB_ACTIONS,'true');
+    assert.equal(target.protocol,'http:');assert.equal(target.hostname,'127.0.0.1');
+    assert.equal(target.pathname,'/');assert.equal(target.username,'');assert.equal(target.password,'');
+    assert.match(process.env.RELEASE_SHA||'',/^[a-f0-9]{40}$/);
+  }
+  const app=external?null:createApp({pool,origin,setupToken,revision:'a'.repeat(40)});
+  const server=app?app.listen(0,'127.0.0.1'):null;
+  if(server)await new Promise(resolve=>server.on('listening',resolve));
+  const base=external||`http://127.0.0.1:${server.address().port}`;
   const fixture={email:'owner@example.invalid',name:'QA owner',organization:'QA tournament club',password:'QaFixtureOnly-123456',setupToken};
   async function request(path,{method='GET',body,cookie,requestOrigin=origin}={}){
     return fetch(base+path,{method,headers:{origin:requestOrigin,'content-type':'application/json',...(cookie?{cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
@@ -47,7 +55,8 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
     const tournamentId=(await created.json()).id;
     const tournamentPath=path+'/'+tournamentId;
     const listed=await request(path,{cookie});assert.equal((await listed.json()).tournaments.length,1);
-    assert.equal((await request('/api/health/ready')).status,200);
+    const readiness=await request('/api/health/ready');assert.equal(readiness.status,200);
+    assert.equal((await readiness.json()).revision,external?process.env.RELEASE_SHA:'a'.repeat(40));
     const divisionBody={name:'QA sparring',discipline:'sparring',format:'single_elimination'};
     assert.equal((await request(tournamentPath+'/divisions',{method:'POST',cookie,body:{...divisionBody,format:'scored_final'}})).status,400);
     const division=await request(tournamentPath+'/divisions',{method:'POST',cookie,body:divisionBody});assert.equal(division.status,201);
@@ -161,6 +170,6 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
     assert.equal((await request('/api/me',{cookie:loggedIn})).status,401);
     assert.equal((await pool.query('SELECT 1 FROM bowin_rebuild.audit_events')).rowCount,30);
   } finally {
-    await new Promise(resolve=>server.close(resolve));await pool.end();
+    if(server)await new Promise(resolve=>server.close(resolve));await pool.end();
   }
 });
