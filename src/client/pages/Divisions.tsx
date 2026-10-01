@@ -360,7 +360,7 @@ export default function Divisions() {
       const res = await fetch(`/api/divisions/tournament/${id}/auto-generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ config: { divisionThreshold: 8 }, ...(options?.force ? { force: true } : {}) }),
+        body: JSON.stringify(options?.force ? { force: true } : {}),
       });
       if (!res.ok) throw await readDivisionOperationError(res, 'Failed to auto-generate divisions');
       return res.json();
@@ -737,7 +737,7 @@ export default function Divisions() {
       const res = await fetch(`/api/divisions/tournament/${id}/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ config: { divisionThreshold: 8 } }),
+        body: JSON.stringify({}),
       });
       if (!res.ok) throw await readDivisionOperationError(res, 'Failed to generate preview');
       const data = await res.json();

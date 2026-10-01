@@ -4,6 +4,7 @@ import { PrismaClient, type Prisma } from '@prisma/client';
 import { autoCategorize, previewCategorization, type CategorizationConfig } from '../services/categorization-engine.js';
 import { getBracketPlacementsFromLoaded } from '../services/match-advancement.js';
 import { getEventTypeLabels } from '../../shared/constants/sport-profiles.js';
+import { parseTournamentRules } from '../../shared/constants/tournament-rules.js';
 import { Errors } from '../utils/errors.js';
 import {
   checkDataLoss,
@@ -258,6 +259,45 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
   res.json(division);
 });
 
+// Registrations that take part in categorization (matches the
+// tournament registrations list): waitlisted/withdrawn are left out.
+const CATEGORIZABLE_WAITLIST_STATUSES = ['active', 'promoted'];
+
+/**
+ * Categorization config for preview and auto-generate, built from the
+ * tournament rules. The client may only override the split threshold
+ * with a positive integer; everything else comes from the rules.
+ */
+async function buildCategorizationConfig(
+  prisma: PrismaClient,
+  tournament: { id: string; settings: string | null; sportProfileSlug: string | null; date: Date },
+  clientConfig: unknown,
+): Promise<CategorizationConfig> {
+  const rules = parseTournamentRules(tournament.settings);
+  const requestedThreshold = (clientConfig as { divisionThreshold?: unknown } | null | undefined)?.divisionThreshold;
+  const customWeightClasses = await prisma.weightClass.findMany({
+    where: { tournamentId: tournament.id },
+  });
+  return {
+    divisionThreshold:
+      typeof requestedThreshold === 'number' && Number.isInteger(requestedThreshold) && requestedThreshold > 0
+        ? requestedThreshold
+        : rules.divisions.maxDivisionSize,
+    minDivisionSize: rules.divisions.minDivisionSize,
+    enableSmartSplitting: rules.divisions.splitBy !== 'age',
+    enableSmartMerging: rules.divisions.minDivisionSize > 1,
+    enableAgeBoundaryFlex: rules.divisions.ageFlexMonths > 0,
+    ageBoundaryTolerance: rules.divisions.ageFlexMonths,
+    useBlackBeltAgeGroups: rules.ageBands.preset === 'blackBelt',
+    customAgeGroups: rules.ageBands.customBands,
+    eventTypeLabels: getEventTypeLabels(tournament.sportProfileSlug),
+    customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
+    // v2: pass the full rules object
+    rules,
+    tournamentDate: tournament.date,
+  };
+}
+
 // Preview divisions before generating (requires authentication + admin/director role)
 router.post('/tournament/:tournamentId/preview', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
@@ -271,9 +311,10 @@ router.post('/tournament/:tournamentId/preview', authenticate, requireTournament
     return res.status(404).json({ error: 'Tournament not found' });
   }
 
-  // Get all registrations with competitor data
+  // Get active registrations with competitor data (waitlisted and
+  // withdrawn registrations are not categorized).
   const registrations = await prisma.registration.findMany({
-    where: { tournamentId: getParam(req.params.tournamentId) },
+    where: { tournamentId: tournament.id, waitlistStatus: { in: CATEGORIZABLE_WAITLIST_STATUSES } },
     include: { competitor: true },
   });
 
@@ -285,22 +326,23 @@ router.post('/tournament/:tournamentId/preview', authenticate, requireTournament
     });
   }
 
-  // Derive event type labels from sport profile
-  const eventTypeLabels = getEventTypeLabels(tournament.sportProfileSlug);
+  // Run preview (no database changes) with the same config as auto-generate
+  const categorizationConfig = await buildCategorizationConfig(prisma, tournament, config);
 
-  // Fetch custom weight classes from DB
-  const customWeightClasses = await prisma.weightClass.findMany({
-    where: { tournamentId: getParam(req.params.tournamentId) },
-  });
-
-  // Run preview (no database changes)
-  const categorizationConfig: CategorizationConfig = {
-    divisionThreshold: config?.divisionThreshold ?? 8,
-    ...config,
-    eventTypeLabels,
-    customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
-    tournamentDate: tournament.date,
-  };
+  // The preview cannot query inside the engine, so resolve the event of
+  // each pinned division here (auto-generate does this itself).
+  const pinnedDivisionIds = Array.from(
+    new Set(registrations.map((r) => r.manualDivisionId).filter((id): id is string => Boolean(id)))
+  );
+  if (pinnedDivisionIds.length > 0) {
+    const pinnedDivisions = await prisma.division.findMany({
+      where: { tournamentId: tournament.id, id: { in: pinnedDivisionIds } },
+      select: { id: true, eventType: true },
+    });
+    categorizationConfig.pinnedDivisionEventTypes = Object.fromEntries(
+      pinnedDivisions.map((division) => [division.id, division.eventType])
+    );
+  }
 
   const preview = previewCategorization(registrations, categorizationConfig);
   res.json(preview);
@@ -354,39 +396,15 @@ router.post('/tournament/:tournamentId/auto-generate', authenticate, requireTour
   const backup = await backupDivisionState(prisma, tournamentId);
   await saveBackup(prisma, backup);
 
-  // Get all registrations with competitor data
+  // Get active registrations with competitor data (waitlisted and
+  // withdrawn registrations are not categorized).
   const registrations = await prisma.registration.findMany({
-    where: { tournamentId },
+    where: { tournamentId, waitlistStatus: { in: CATEGORIZABLE_WAITLIST_STATUSES } },
     include: { competitor: true },
   });
 
-  // Derive event type labels from sport profile
-  const eventTypeLabels = getEventTypeLabels(tournament.sportProfileSlug);
-
-  // Fetch custom weight classes from DB
-  const customWeightClasses = await prisma.weightClass.findMany({
-    where: { tournamentId },
-  });
-
-  // Load tournament rules from settings (with default fallback)
-  const { parseTournamentRules } = await import('../../shared/constants/tournament-rules.js');
-  const rules = parseTournamentRules(tournament.settings);
-
   // Run auto-categorization
-  const categorizationConfig: CategorizationConfig = {
-    divisionThreshold: config?.divisionThreshold ?? rules.divisions.maxDivisionSize,
-    enableSmartSplitting: rules.divisions.splitBy !== 'age',
-    enableSmartMerging: rules.divisions.minDivisionSize > 1,
-    enableAgeBoundaryFlex: rules.divisions.ageFlexMonths > 0,
-    ageBoundaryTolerance: rules.divisions.ageFlexMonths,
-    useBlackBeltAgeGroups: rules.ageBands.preset === 'blackBelt',
-    customAgeGroups: rules.ageBands.customBands,
-    eventTypeLabels,
-    customWeightClasses: customWeightClasses.length > 0 ? customWeightClasses : undefined,
-    // v2: pass the full rules object
-    rules,
-    tournamentDate: tournament.date,
-  };
+  const categorizationConfig = await buildCategorizationConfig(prisma, tournament, config);
 
   const result = await autoCategorize(prisma, tournamentId, registrations, categorizationConfig);
 

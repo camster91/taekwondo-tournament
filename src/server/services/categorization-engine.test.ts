@@ -341,6 +341,9 @@ describe('autoCategorize — pinned division preservation', () => {
       },
     };
     const prisma = {
+      division: {
+        findMany: async () => [{ id: 'pinned-division', eventType: 'patterns' }],
+      },
       $transaction: async (callback: (client: typeof tx) => Promise<void>) => callback(tx),
     };
     const pinned = {

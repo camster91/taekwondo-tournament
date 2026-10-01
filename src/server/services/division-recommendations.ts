@@ -178,7 +178,8 @@ export async function loadDivisionRecommendationInput(
   });
   if (!tournament) throw new Error('Tournament not found');
   const registrations = await db.registration.findMany({
-    where: { tournamentId },
+    // Waitlisted and withdrawn registrations are not categorized.
+    where: { tournamentId, waitlistStatus: { in: ['active', 'promoted'] } },
     select: {
       id: true, competitorId: true, patterns: true, sparring: true,
       ageAtTournament: true, weightAtRegistration: true, manualDivisionId: true,

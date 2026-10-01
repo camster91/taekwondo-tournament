@@ -125,8 +125,8 @@ const atomicTournamentSettingsSchema = z.object({
 
 const scheduleConfigSchema = z.object({
   startTime: z.string(), endTime: z.string(), ringCount: z.number().int().min(1).max(10),
-  matchDurationMinutes: z.object({ patterns: z.number().positive(), sparring: z.number().positive() }),
-  breakBetweenDivisions: z.number().min(0).max(30),
+  matchDurationMinutes: z.object({ patterns: z.number().int().positive(), sparring: z.number().int().positive() }),
+  breakBetweenDivisions: z.number().int().min(0).max(30),
 });
 
 const scheduleApplySchema = z.object({
