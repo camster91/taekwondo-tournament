@@ -186,6 +186,25 @@ export function buildRegistrationPatch(body: Record<string, unknown> | undefined
 import { normalizeBelt } from '../../shared/constants/belts.js';
 
 /**
+ * Validate a registration's merged state (stored values overlaid with a
+ * self-service patch) against the same event rules as POST /register.
+ * Returns an error message, or null when the result is valid.
+ */
+export function validateMergedRegistration(
+  current: { patterns: boolean; sparring: boolean; weightAtRegistration: number | null },
+  regPatch: Record<string, unknown>,
+): string | null {
+  const patterns = typeof regPatch.patterns === 'boolean' ? regPatch.patterns : current.patterns;
+  const sparring = typeof regPatch.sparring === 'boolean' ? regPatch.sparring : current.sparring;
+  const weight = typeof regPatch.weightAtRegistration === 'number'
+    ? regPatch.weightAtRegistration
+    : current.weightAtRegistration;
+  if (!patterns && !sparring) return 'Please select at least one event.';
+  if (sparring && !(typeof weight === 'number' && weight > 0)) return 'Weight is required for sparring registration.';
+  return null;
+}
+
+/**
  * Validate the GET-registration lookup parameters. Returns null when
  * ok, or an error message describing the missing/invalid field.
  */

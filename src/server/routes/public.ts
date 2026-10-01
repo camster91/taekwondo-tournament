@@ -9,6 +9,7 @@ import {
   buildRegistrationConsent,
   registrationLegalConfigFromEnv,
   validateLookupParams,
+  validateMergedRegistration,
   PUBLIC_REGISTRATION_LIMITS,
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
@@ -939,12 +940,21 @@ router.patch('/registrations/:token', manageUpdateLimiter, async (req: Request, 
   // them back empty. Treat empty values for those fields as "unchanged"
   // rather than as validation errors.
   const body: Record<string, unknown> = { ...(req.body ?? {}) };
-  for (const key of ['gender', 'belt', 'school', 'danRank'] as const) {
+  // The management page also submits `weight: null` when no weight was
+  // recorded; a weight cannot be cleared here, so treat it as unchanged.
+  for (const key of ['gender', 'belt', 'school', 'danRank', 'weight'] as const) {
     if (body[key] === '' || body[key] === null) delete body[key];
   }
   const { ok, error, data, regData } = buildRegistrationPatch(body);
   if (!ok) {
     return res.status(400).json({ error: error ?? 'Invalid patch.' });
+  }
+
+  // Validate the registration as it will be after the patch, not just the
+  // patch: the same rules as POST /register apply.
+  const mergedError = validateMergedRegistration(registration, regData);
+  if (mergedError) {
+    return res.status(400).json({ error: mergedError });
   }
 
   // specialNeeds and competeWithOlder are per-registration data (the

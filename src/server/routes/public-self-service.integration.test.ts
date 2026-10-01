@@ -5,6 +5,7 @@
  *   referenced by Bracket.structure); division assignments are only touched
  *   when a division-relevant field changes, and such changes (and
  *   withdrawal) are refused once a bracket has been drawn.
+ * - edits are validated against the merged (stored + patch) registration.
  *
  * Skipped when no migrated Postgres is reachable (see contracts/db-probe.ts).
  */
@@ -170,6 +171,35 @@ describe.skipIf(!prisma)('parent self-service edits and withdrawal (database)', 
       expect(await prisma!.registration.findUnique({ where: { id: a.registration.id } })).not.toBeNull();
       const match = await prisma!.match.findUniqueOrThrow({ where: { id: matchId! } });
       expect(match.competitor1Id).toBe(a.registration.id);
+    });
+
+    it('validates the merged registration, not just the patch', async () => {
+      const t = await createTournament();
+      const a = await register(app, t.id, 'Max');
+
+      const noEvents = await request(app).patch(`/api/public/registrations/${a.token}`).send({ patterns: false });
+      expect(noEvents.status).toBe(400);
+      expect(noEvents.body.error).toMatch(/at least one event/);
+
+      const noWeight = await request(app).patch(`/api/public/registrations/${a.token}`).send({ sparring: true });
+      expect(noWeight.status).toBe(400);
+      expect(noWeight.body.error).toMatch(/Weight is required/);
+
+      const stored = await prisma!.registration.findUniqueOrThrow({ where: { id: a.registration.id } });
+      expect(stored).toMatchObject({ patterns: true, sparring: false });
+
+      const ok = await request(app).patch(`/api/public/registrations/${a.token}`).send({ sparring: true, weight: 120 });
+      expect(ok.status).toBe(200);
+    });
+
+    it('accepts the management page payload with weight: null for a registrant without weight', async () => {
+      const t = await createTournament();
+      const a = await register(app, t.id, 'Ned');
+      const res = await request(app).patch(`/api/public/registrations/${a.token}`).send({
+        firstName: 'Ned', gender: 'F', belt: 'Blue', school: null, weight: null,
+        specialNeeds: 'Glasses', competeWithOlder: false, patterns: true, sparring: false,
+      });
+      expect(res.status).toBe(200);
     });
 
     it('withdraws normally before brackets are drawn', async () => {

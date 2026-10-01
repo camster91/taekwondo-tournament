@@ -12,8 +12,28 @@ import {
   buildRegistrationConsent,
   registrationLegalConfigFromEnv,
   validateLookupParams,
+  validateMergedRegistration,
   PUBLIC_REGISTRATION_LIMITS,
 } from './public-validation.js';
+
+describe('validateMergedRegistration', () => {
+  const patternsOnly = { patterns: true, sparring: false, weightAtRegistration: null };
+
+  it('rejects a patch that leaves no event', () => {
+    expect(validateMergedRegistration(patternsOnly, { patterns: false })).toMatch(/at least one event/);
+    expect(validateMergedRegistration(patternsOnly, { patterns: false, sparring: false })).toMatch(/at least one event/);
+  });
+
+  it('rejects sparring without a stored or supplied weight', () => {
+    expect(validateMergedRegistration(patternsOnly, { sparring: true })).toMatch(/Weight is required/);
+  });
+
+  it('accepts sparring with a weight from the patch or the stored registration', () => {
+    expect(validateMergedRegistration(patternsOnly, { sparring: true, weightAtRegistration: 70 })).toBeNull();
+    expect(validateMergedRegistration({ ...patternsOnly, weightAtRegistration: 70 }, { sparring: true })).toBeNull();
+    expect(validateMergedRegistration(patternsOnly, {})).toBeNull();
+  });
+});
 
 describe('buildRegistrationConsent', () => {
   const acceptedAt = new Date('2026-08-07T12:00:00.000Z');
