@@ -16,6 +16,7 @@ case ${1:-} in
    sleep 1
   done
   [[ $(docker inspect "$runtime" --format '{{.State.StartedAt}}') == "$started" ]]
+  [[ $(docker inspect "$runtime" --format '{{.State.Running}}') == true ]]
   ;;
  runtime) docker restart "$runtime" >/dev/null ;;
  *) exit 1 ;;

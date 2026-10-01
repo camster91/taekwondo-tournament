@@ -51,7 +51,7 @@ docker run -d --name "$runtime" --network "$network" --label "bowin.qa.fixture=$
 docker run -d --name "$proxy" --network "$network" -p 127.0.0.1:19443:443 \
  -v "$fixture:/fixture:ro" -v "$fixture/nginx.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine >/dev/null
 for attempt in $(seq 1 60); do
- if curl --insecure --silent --fail https://127.0.0.1:19443/api/health/ready >/dev/null; then break; fi
+ if curl --connect-timeout 2 --max-time 3 --insecure --silent --fail https://127.0.0.1:19443/api/health/ready >/dev/null; then break; fi
  [[ $attempt != 60 ]] || exit 1
  sleep 1
 done
