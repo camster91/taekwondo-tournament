@@ -67,6 +67,39 @@ export function normalizeTournamentDate(raw: string): Date {
   return new Date(dateOnly + 'T12:00:00.000Z');
 }
 
+/**
+ * Resolve a template's `settings` + `rules` JSON into the new
+ * tournament's settings string. An object `rules` (TournamentRules, as
+ * saved by TournamentTemplateForm) is normalized through
+ * parseTournamentRules and merged into settings with the same helper
+ * PUT /:id/rules uses. An array `rules` (legacy TournamentRule rows) is
+ * returned as `legacyRuleRows` for the caller to insert. Unparseable
+ * rules are ignored (settings are kept as they are).
+ */
+export function templateRulesToTournament(
+  settings: string | null,
+  rules: string | null,
+): { settings: string | null; legacyRuleRows: Array<Record<string, unknown>> } {
+  if (!rules) return { settings, legacyRuleRows: [] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rules);
+  } catch (err) {
+    console.error('[create-from-template] Failed to parse template rules:', err);
+    return { settings, legacyRuleRows: [] };
+  }
+  if (Array.isArray(parsed)) {
+    return {
+      settings,
+      legacyRuleRows: parsed.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row)),
+    };
+  }
+  if (!parsed || typeof parsed !== 'object') return { settings, legacyRuleRows: [] };
+  const normalized = parseTournamentRules(JSON.stringify(parsed));
+  const merged = mergeRulesSettings(settings, JSON.parse(serializeTournamentRules(normalized)));
+  return { settings: JSON.stringify(merged), legacyRuleRows: [] };
+}
+
 const operationalQuerySchema = z.object({
   question: z.string().trim().min(1, 'A question is required').max(500, 'Question is too long'),
 });
@@ -404,12 +437,19 @@ router.post('/from-template/:templateId', authenticate, requireRole('admin', 'di
     });
   }
 
+  // Templates saved by TournamentTemplateForm store `rules` as one
+  // TournamentRules object; it belongs in tournament.settings, where
+  // parseTournamentRules (and PUT /:id/rules) read and write it. Older
+  // templates may hold an array of TournamentRule rows instead; those
+  // keep being copied as rows below.
+  const { settings: templateSettings, legacyRuleRows } = templateRulesToTournament(template.settings, template.rules);
+
   const tournament = await prisma.tournament.create({
     data: {
       name: name.trim(),
       date: normalizeTournamentDate(date),
       location: typeof location === 'string' ? location : null,
-      settings: template.settings,
+      settings: templateSettings,
       status: 'draft',
       sportProfileSlug: template.sportProfileSlug,
       organizationId: membership.organizationId,
@@ -449,12 +489,10 @@ router.post('/from-template/:templateId', authenticate, requireRole('admin', 'di
     }
   }
 
-  if (template.rules) {
+  if (legacyRuleRows.length > 0) {
     try {
-      const rules = JSON.parse(template.rules);
-      const rulesData = Array.isArray(rules) ? rules : [rules];
       await prisma.tournamentRule.createMany({
-        data: rulesData.map((rule: Record<string, unknown>) => ({
+        data: legacyRuleRows.map((rule) => ({
           tournamentId: tournament.id,
           name: String(rule.name || 'Custom Rule'),
           description: rule.description ? String(rule.description) : null,
