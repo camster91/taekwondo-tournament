@@ -107,3 +107,10 @@ Untrusted names render as text. Invite fragments are cleared on arrival, and no
 session credentials are stored in browser storage. Forms use associated labels and
 native keyboard controls, with responsive layouts for tournament-day phones.
 Browser checks use a separate disposable database and fictional accounts only.
+
+The imported-runtime HTTPS job repeats the browser journey behind a disposable TLS
+proxy with LOCAL_QA unset. It asserts Secure/HttpOnly/Strict cookies, keeps session
+cookies hidden from document.cookie, and explicitly restarts the fixture database
+and runtime while checking the same session and final rankings. The fixture uses a
+self-signed loopback certificate; it does not prove public certificate issuance,
+DNS or production Coolify routing. Publication also requires this job to pass.
