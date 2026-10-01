@@ -401,6 +401,102 @@ interface PlacementMatch {
   winnerId: string | null;
   competitor1Id: string | null;
   competitor2Id: string | null;
+  /** Only used for round-robin point differential tie-breaks. */
+  score1?: string | null;
+  score2?: string | null;
+}
+
+/**
+ * A round-robin bracket (`generateRoundRobin`): every match lives in
+ * `winners`, there are no losers/finals and no named grand final. Pool
+ * play has the same shape but tags its pool rounds as 1000+; it has no
+ * finals implementation, so it is NOT treated as one league here.
+ */
+export function isRoundRobinStructure(
+  structure: Pick<BracketStructure, 'winners' | 'losers' | 'finals'> & { positions?: BracketPositions | null } | null | undefined
+): boolean {
+  if (!structure) return false;
+  return (structure.losers?.length ?? 0) === 0 &&
+    (structure.finals?.length ?? 0) === 0 &&
+    (structure.positions?.grandFinals ?? null) === null &&
+    (structure.winners?.length ?? 0) > 0 &&
+    structure.winners.every((m) => m.round < 1000);
+}
+
+const numericScore = (value: string | null | undefined): number | null =>
+  value != null && /^\d{1,3}$/.test(value) ? Number(value) : null;
+
+/**
+ * Round-robin standings, once every match is completed.
+ *
+ * Ranking: most wins; competitors tied on wins are separated by their
+ * head-to-head wins against each other (a mini-league among the tied
+ * group); any still tied are separated by point differential across all
+ * their matches, but only when every one of those matches has numeric
+ * scores (a forfeit with blank scores makes the differential
+ * meaningless). Whoever is still tied shares the place, and the next
+ * place skips accordingly (1, 1, 3).
+ *
+ * Returns places 1-3 only, like the elimination formats. Empty until
+ * the league is complete.
+ */
+export function resolveRoundRobinStandings(
+  matches: PlacementMatch[]
+): { place: number; competitorId: string }[] {
+  if (matches.length === 0) return [];
+  if (matches.some((m) => m.status !== 'completed' || !m.winnerId)) return [];
+
+  const competitors = new Set<string>();
+  for (const m of matches) {
+    if (m.competitor1Id) competitors.add(m.competitor1Id);
+    if (m.competitor2Id) competitors.add(m.competitor2Id);
+  }
+  const winsAmong = (id: string, group: Set<string>) => matches.filter((m) =>
+    m.winnerId === id &&
+    group.has(m.competitor1Id ?? '') &&
+    group.has(m.competitor2Id ?? '')
+  ).length;
+  const all = competitors;
+
+  const pointDiff = (id: string): number | null => {
+    let diff = 0;
+    for (const m of matches) {
+      if (m.competitor1Id !== id && m.competitor2Id !== id) continue;
+      const s1 = numericScore(m.score1);
+      const s2 = numericScore(m.score2);
+      if (s1 === null || s2 === null) return null;
+      diff += m.competitor1Id === id ? s1 - s2 : s2 - s1;
+    }
+    return diff;
+  };
+
+  // Split `group` into ordered tiers by `key` (higher first).
+  const tiersBy = (group: string[], key: (id: string) => number): string[][] => {
+    const values = new Map(group.map((id) => [id, key(id)]));
+    const distinct = [...new Set(values.values())].sort((a, b) => b - a);
+    return distinct.map((v) => group.filter((id) => values.get(id) === v));
+  };
+
+  const ordered: string[][] = [];
+  for (const winTier of tiersBy([...all], (id) => winsAmong(id, all))) {
+    if (winTier.length === 1) { ordered.push(winTier); continue; }
+    const tied = new Set(winTier);
+    for (const h2hTier of tiersBy(winTier, (id) => winsAmong(id, tied))) {
+      if (h2hTier.length === 1) { ordered.push(h2hTier); continue; }
+      const diffs = h2hTier.map(pointDiff);
+      if (diffs.some((d) => d === null)) { ordered.push(h2hTier); continue; }
+      ordered.push(...tiersBy(h2hTier, (id) => pointDiff(id) ?? 0));
+    }
+  }
+
+  const placements: { place: number; competitorId: string }[] = [];
+  let place = 1;
+  for (const tier of ordered) {
+    if (place > 3) break;
+    for (const id of tier) placements.push({ place, competitorId: id });
+    place += tier.length;
+  }
+  return placements;
 }
 
 /**
@@ -428,6 +524,11 @@ export function resolvePlacements(
   positions: BracketPositions | null | undefined,
   structure?: Pick<BracketStructure, 'winners' | 'losers' | 'finals'> | null
 ): { place: number; competitorId: string }[] {
+  // Round robin has no named positions; placements are league standings.
+  if (structure && isRoundRobinStructure({ ...structure, positions })) {
+    return resolveRoundRobinStandings(matches);
+  }
+
   // No positions = we can't reliably map roles to match numbers.
   // Each bracket size has different positions; without the named
   // map, any guess is a guess. The legacy fallback for 8-person DE
@@ -563,6 +664,8 @@ export async function getBracketPlacements(
       winnerId: m.winnerId,
       competitor1Id: m.competitor1Id,
       competitor2Id: m.competitor2Id,
+      score1: m.score1,
+      score2: m.score2,
     })),
     positions,
     structure
@@ -655,8 +758,13 @@ interface CompletionMatch {
  */
 export function isBracketCompletePure(
   matches: CompletionMatch[],
-  positions: BracketPositions | null | undefined
+  positions: BracketPositions | null | undefined,
+  structure?: Pick<BracketStructure, 'winners' | 'losers' | 'finals'> | null
 ): boolean {
+  // Round robin: complete once every league match has been played.
+  if (structure && isRoundRobinStructure({ ...structure, positions })) {
+    return matches.length > 0 && matches.every((m) => m.status === 'completed');
+  }
   if (!positions) return false;
   const byNum = new Map<number, CompletionMatch>();
   for (const m of matches) byNum.set(m.matchNumber, m);
@@ -992,5 +1100,5 @@ export function isBracketComplete(
     grandFinals: 14,
     reset: 15,
   };
-  return isBracketCompletePure(matches, positions);
+  return isBracketCompletePure(matches, positions, structure);
 }

@@ -135,6 +135,8 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
         winnerId: string | null;
         competitor1Id: string | null;
         competitor2Id: string | null;
+        score1: string | null;
+        score2: string | null;
       }>;
     };
 
@@ -150,6 +152,8 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
           winnerId: m.winnerId,
           competitor1Id: m.competitor1Id,
           competitor2Id: m.competitor2Id,
+          score1: m.score1,
+          score2: m.score2,
         })),
       );
       baseByDivision.set(d.id, base);

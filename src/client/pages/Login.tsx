@@ -237,7 +237,7 @@ export default function Login() {
             <div className="mt-8 space-y-3 animate-slide-up animate-in-2">
               {[
                 { icon: Users, label: 'Smart auto-categorization', sub: 'Newton\'s 2025 rules, your rules' },
-                { icon: Calendar, label: 'Round-robin & pool play', sub: 'Not just double-elim' },
+                { icon: Calendar, label: 'Round-robin & single elimination', sub: 'Not just double-elim' },
                 { icon: Award, label: 'Real-time scoreboard', sub: 'TV-ready, public link' },
                 { icon: Zap, label: 'Excel import', sub: 'Drop your .xlsm, we handle the rest' },
               ].map((f) => (

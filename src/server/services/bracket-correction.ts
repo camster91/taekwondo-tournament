@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { generateBracket, generateSingleElimination, type BracketStructure, type SeedingStrategy } from './bracket-generator.js';
-import { generatePoolPlay, generateRoundRobin } from './bracket-formats.js';
+import { bracketFormatError, generatePoolPlay, generateRoundRobin } from './bracket-formats.js';
 import { handleByeMatches } from './match-advancement.js';
 
 export interface BracketCorrectionAssignment {
@@ -64,6 +64,8 @@ export interface BracketCorrectionConfig {
 }
 
 export function assertDeterministicCorrectionConfig(config: BracketCorrectionConfig): void {
+  const formatError = bracketFormatError(config.format);
+  if (formatError) throw new Error(formatError);
   if (config.seedingStrategy === 'random' || config.seedingStrategy === 'fairness_optimized') {
     throw new Error('Bracket corrections require a deterministic seeding strategy');
   }

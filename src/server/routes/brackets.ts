@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { generateBracket, generateSingleElimination, type BracketStructure } from '../services/bracket-generator.js';
-import { generateRoundRobin, generatePoolPlay } from '../services/bracket-formats.js';
+import { generateRoundRobin, bracketFormatError, POOL_PLAY_UNAVAILABLE } from '../services/bracket-formats.js';
 import {
   handleByeMatches,
   getBracketPlacements,
@@ -66,7 +66,10 @@ const videoUrlSchema = z.object({
 });
 
 const bracketCorrectionConfigSchema = z.object({
-  format: z.enum(['double_elim', 'single_elim', 'round_robin', 'pool_play']),
+  // pool_play is accepted by the enum (stored brackets may use it) but
+  // rejected with a clear message: its finals stage is not implemented.
+  format: z.enum(['double_elim', 'single_elim', 'round_robin', 'pool_play'])
+    .refine((format) => format !== 'pool_play', { message: POOL_PLAY_UNAVAILABLE }),
   seedingStrategy: z.enum(['school_spread', 'manual', 'skill_based', 'balanced']),
   poolCount: z.number().int().min(2).max(100).optional(),
   advancePerPool: z.number().int().min(1).max(8).optional(),
@@ -170,8 +173,13 @@ router.post('/division/:divisionId/generate', authenticate, bracketRebuildLimite
     });
   }
 
-  // format: 'double_elim' (default) | 'single_elim' | 'round_robin' | 'pool_play'
-  const { seedingStrategy = 'school_spread', format = 'double_elim', poolCount, advancePerPool } = req.body;
+  // format: 'double_elim' (default) | 'single_elim' | 'round_robin'.
+  // pool_play is rejected (no finals stage), as is any unknown format.
+  const { seedingStrategy = 'school_spread', format = 'double_elim' } = req.body;
+  const formatError = bracketFormatError(format);
+  if (formatError) {
+    return res.status(400).json({ error: formatError });
+  }
 
   const division = await prisma.division.findUnique({
     where: { id: divisionId },
@@ -210,12 +218,6 @@ router.post('/division/:divisionId/generate', authenticate, bracketRebuildLimite
   let bracketStructure: BracketStructure;
   if (format === 'round_robin') {
     bracketStructure = generateRoundRobin(competitors, { seedingStrategy });
-  } else if (format === 'pool_play') {
-    bracketStructure = generatePoolPlay(competitors, {
-      seedingStrategy,
-      poolCount,
-      advancePerPool,
-    });
   } else if (format === 'single_elim') {
     bracketStructure = generateSingleElimination(competitors, seedingStrategy);
   } else {
@@ -951,6 +953,15 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, bracketRebui
     },
   });
 
+  // Validate every requested format before generating anything, so a
+  // pool_play (no finals stage) or unknown format fails the whole call.
+  for (const requested of [defaultFormat, ...Object.values(formats as Record<string, unknown>)]) {
+    const formatError = bracketFormatError(requested);
+    if (formatError) {
+      return res.status(400).json({ error: formatError });
+    }
+  }
+
   const existingBracket = divisions.find((division) => division.bracket !== null);
   if (existingBracket) {
     return res.status(409).json({
@@ -981,8 +992,6 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, bracketRebui
       bracketStructure = generateSingleElimination(competitors, seedingStrategy);
     } else if (format === 'round_robin') {
       bracketStructure = generateRoundRobin(competitors, { seedingStrategy });
-    } else if (format === 'pool_play') {
-      bracketStructure = generatePoolPlay(competitors, { seedingStrategy });
     } else {
       bracketStructure = generateBracket(competitors, seedingStrategy);
     }
