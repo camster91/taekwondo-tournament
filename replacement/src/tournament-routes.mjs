@@ -2,6 +2,7 @@ import express from 'express';
 import {randomUUID} from 'node:crypto';
 import {text,uuid} from './security.mjs';
 import {bracketChampion,createBracket,scoreBracket} from './brackets.mjs';
+import {mountSchedulePublication} from './schedule-public-routes.mjs';
 
 export class Problem extends Error {
   constructor(status,code){super(code);this.status=status;this.code=code;}
@@ -15,7 +16,7 @@ export function mountTournamentRoutes({app,pool,requireAuth,route}){
   async function access(client,req,lock=false){
     const {organizationId,tournamentId}=req.params;
     if(!uuid(organizationId)||!uuid(tournamentId))throw new Problem(404,'NOT_FOUND');
-    const result=await client.query(`SELECT t.id,t.status,m.role FROM bowin_rebuild.tournaments t JOIN bowin_rebuild.memberships m ON m.organization_id=t.organization_id WHERE t.id=$1 AND t.organization_id=$2 AND m.user_id=$3 ${lock?'FOR UPDATE OF t,m':''}`,[tournamentId,organizationId,req.user.id]);
+    const result=await client.query(`SELECT t.id,t.status,t.event_date::text,t.time_zone,m.role FROM bowin_rebuild.tournaments t JOIN bowin_rebuild.memberships m ON m.organization_id=t.organization_id WHERE t.id=$1 AND t.organization_id=$2 AND m.user_id=$3 ${lock?'FOR UPDATE OF t,m':''}`,[tournamentId,organizationId,req.user.id]);
     if(!result.rowCount)throw new Problem(404,'NOT_FOUND');
     return result.rows[0];
   }
@@ -132,5 +133,6 @@ export function mountTournamentRoutes({app,pool,requireAuth,route}){
       return{id:bracket.id,matches,champion_id:champion,auditDetails:{matchKey:key,scoreLeft:left,scoreRight:right,winnerId:matches.find(match=>match.key===key).winner}};
     },['owner','organizer','scorekeeper']);res.json(result);
   }));
+  mountSchedulePublication({router,pool,access,mutate,Problem,origin:app.locals.canonicalOrigin});
   app.use('/api/organizations/:organizationId/tournaments/:tournamentId',requireAuth,router);
 }

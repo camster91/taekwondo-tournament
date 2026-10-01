@@ -41,7 +41,7 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
     assert.equal((await request('/api/auth/accept-invite',{method:'POST',body:acceptance})).status,404);
     assert.equal((await request(invitePath,{method:'POST',cookie:scoreCookie,body:{email:'unauthorized@example.invalid',role:'organizer'}})).status,403);
     const path=`/api/organizations/${organizationId}/tournaments`;
-    const payload={name:'QA Championship',venue:'QA Gym',eventDate:'2027-02-28'};
+    const payload={name:'QA Championship',venue:'QA Gym',eventDate:'2027-02-28',timeZone:'America/Toronto'};
     assert.equal((await request(path,{method:'POST',cookie,body:{...payload,eventDate:'2027-02-29'}})).status,400);
     const created=await request(path,{method:'POST',cookie,body:payload});assert.equal(created.status,201);
     const tournamentId=(await created.json()).id;
@@ -52,6 +52,24 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
     assert.equal((await request(tournamentPath+'/divisions',{method:'POST',cookie,body:{...divisionBody,format:'scored_final'}})).status,400);
     const division=await request(tournamentPath+'/divisions',{method:'POST',cookie,body:divisionBody});assert.equal(division.status,201);
     const divisionId=(await division.json()).id;
+    const scheduleBody={ring:'Ring A',startsAt:'2027-02-28T10:00:00.000Z',durationMinutes:30};
+    const schedulePath=tournamentPath+`/divisions/${divisionId}/schedule`;
+    assert.equal((await request(schedulePath,{method:'POST',cookie:scoreCookie,body:scheduleBody})).status,403);
+    assert.equal((await request(schedulePath,{method:'POST',cookie,body:{...scheduleBody,startsAt:'2027-03-01T10:00:00.000Z'}})).status,409);
+    assert.equal((await request(schedulePath,{method:'POST',cookie,body:scheduleBody})).status,200);
+    // March 1 in UTC is still February 28 in the organizer's time zone.
+    assert.equal((await request(schedulePath,{method:'POST',cookie,body:{...scheduleBody,startsAt:'2027-03-01T00:00:00.000Z'}})).status,200);
+    assert.equal((await request(schedulePath,{method:'POST',cookie,body:scheduleBody})).status,200);
+    const extraDivisions=[];
+    for(const name of ['QA patterns A','QA patterns B']){
+      const extra=await request(tournamentPath+'/divisions',{method:'POST',cookie,body:{name,discipline:'patterns',format:'scored_final'}});
+      assert.equal(extra.status,201);extraDivisions.push((await extra.json()).id);
+    }
+    const secondSchedule=tournamentPath+`/divisions/${extraDivisions[0]}/schedule`;
+    assert.equal((await request(secondSchedule,{method:'POST',cookie,body:{...scheduleBody,ring:'ring a'}})).status,409);
+    assert.equal((await request(secondSchedule,{method:'POST',cookie,body:{...scheduleBody,startsAt:'2027-02-28T10:30:00.000Z'}})).status,200);
+    const raceBooking=await Promise.all(extraDivisions.map(id=>request(tournamentPath+`/divisions/${id}/schedule`,{method:'POST',cookie,body:{...scheduleBody,ring:'Ring B'}})));
+    assert.deepEqual(raceBooking.map(response=>response.status).sort(),[200,409]);
     const competitorBody={name:'Private QA competitor',club:'QA club',publicDisplayName:'QA athlete A'};
     const competitor=await request(tournamentPath+'/competitors',{method:'POST',cookie,body:competitorBody});assert.equal(competitor.status,201);
     const competitorId=(await competitor.json()).id;
@@ -78,6 +96,7 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
     assert.equal((await request(foreignPath,{cookie})).status,404);
     assert.equal((await request(foreignPath,{method:'POST',cookie,body:payload})).status,404);
     for(const suffix of ['divisions','competitors','registrations'])assert.equal((await request(foreignPath+'/'+tournamentId+'/'+suffix,{cookie})).status,404);
+    assert.equal((await request(foreignPath+`/${tournamentId}/schedule`,{cookie})).status,404);
     // A valid invitation cannot replace an existing account's password.
     const ownerInvite=await request(invitePath,{method:'POST',cookie,body:{email:fixture.email,role:'organizer'}});assert.equal(ownerInvite.status,201);
     const ownerInviteToken=(await ownerInvite.json()).inviteUrl.split('#')[1];
@@ -112,6 +131,24 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
     const persisted=await request(bracketPath,{cookie});assert.equal((await persisted.json()).champion_id,competitorId);
     const scoreAudit=(await pool.query("SELECT details FROM bowin_rebuild.audit_events WHERE action='match.scored' ORDER BY id DESC LIMIT 1")).rows[0].details;
     assert.deepEqual(scoreAudit,{matchKey:'2:1',scoreLeft:3,scoreRight:1,winnerId:competitorId});
+    assert.equal((await request(schedulePath,{method:'POST',cookie,body:scheduleBody})).status,409);
+    const privacyState=(await pool.query('SELECT publication_enabled,public_id FROM bowin_rebuild.tournaments WHERE id=$1',[tournamentId])).rows[0];
+    assert.equal(privacyState.publication_enabled,false);assert.equal(privacyState.public_id,null);
+    const publishPath=tournamentPath+'/publication';
+    assert.equal((await request(publishPath,{method:'POST',cookie:scoreCookie,body:{published:true}})).status,403);
+    const publication=await request(publishPath,{method:'POST',cookie,body:{published:true}});assert.equal(publication.status,200);
+    const publicId=(await publication.json()).publicUrl.split('/').at(-1);
+    const publicResponse=await request('/api/public/tournaments/'+publicId);assert.equal(publicResponse.status,200);
+    assert.equal(publicResponse.headers.get('cache-control'),'no-store');
+    const displayed=await publicResponse.json();
+    assert.equal(displayed.organizer.name,fixture.organization);
+    assert.equal(displayed.tournament.timeZone,'America/Toronto');
+    const publicDivision=displayed.divisions.find(item=>item.name===divisionBody.name);
+    assert.equal(publicDivision.champion,competitorBody.publicDisplayName);assert.equal(publicDivision.schedule.ring,'ring a');
+    const serialized=JSON.stringify(displayed);
+    for(const privateValue of [fixture.email,fixture.name,competitorBody.name,competitorBody.club,competitorId,divisionId,userId,'checked_in_by','token_hash','audit_events'])assert.ok(!serialized.includes(privateValue),`Public projection exposed ${privateValue}`);
+    assert.equal((await request(publishPath,{method:'POST',cookie,body:{published:false}})).status,200);
+    assert.equal((await request('/api/public/tournaments/'+publicId)).status,404);
     await pool.query("UPDATE bowin_rebuild.memberships SET role='scorekeeper' WHERE user_id=$1 AND organization_id=$2",[userId,organizationId]);
     assert.equal((await request(path,{method:'POST',cookie,body:payload})).status,403);
     for(const [suffix,body] of [['divisions',divisionBody],['competitors',competitorBody],['registrations',registrationBody],[`registrations/${registrationId}/check-in`,undefined]])assert.equal((await request(tournamentPath+'/'+suffix,{method:'POST',cookie,body})).status,403);
@@ -122,7 +159,7 @@ test('Fresh setup, sessions, registration/check-in and tenant/role boundaries',{
     const loggedIn=login.headers.get('set-cookie').split(';')[0];
     await pool.query("UPDATE bowin_rebuild.sessions SET expires_at=now()-interval '1 second'");
     assert.equal((await request('/api/me',{cookie:loggedIn})).status,401);
-    assert.equal((await pool.query('SELECT 1 FROM bowin_rebuild.audit_events')).rowCount,21);
+    assert.equal((await pool.query('SELECT 1 FROM bowin_rebuild.audit_events')).rowCount,30);
   } finally {
     await new Promise(resolve=>server.close(resolve));await pool.end();
   }

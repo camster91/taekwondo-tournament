@@ -5,10 +5,12 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { email, eventDate, hashPassword, password, secretMatches, text, tokenHash, uuid, verifyPassword } from './security.mjs';
 import {mountTournamentRoutes,Problem} from './tournament-routes.mjs';
 import {mountInviteRoutes} from './invite-routes.mjs';
+import {mountPublicResults} from './schedule-public-routes.mjs';
 
 export function createApp({ pool, origin, setupToken, revision, secureCookies = true }) {
   if (new URL(origin).origin !== origin || (secureCookies && !origin.startsWith('https://'))) throw new Error('Canonical origin required');
   const app = express();
+  app.locals.canonicalOrigin=origin;
   app.disable('x-powered-by');
   app.use(helmet());
   app.use(express.json({ limit: '16kb' }));
@@ -38,7 +40,7 @@ export function createApp({ pool, origin, setupToken, revision, secureCookies = 
   };
   app.get('/api/health/ready', route(async (_req, res) => {
     const result=await pool.query('SELECT version FROM public.bowin_rebuild_migrations ORDER BY version');
-    if(result.rows.map(row=>row.version).join(',')!=='1,2,3,4')throw new Error('Required migration missing');
+    if(result.rows.map(row=>row.version).join(',')!=='1,2,3,4,5')throw new Error('Required migration missing');
     res.json({ status: 'ok', database: 'ok', revision });
   }));
   app.post('/api/auth/bootstrap', route(async (req, res) => {
@@ -85,23 +87,26 @@ export function createApp({ pool, origin, setupToken, revision, secureCookies = 
   }
   app.get('/api/organizations/:organizationId/tournaments',requireAuth,route(async(req,res) => {
     if (!await membership(req,res))return;
-    const result=await pool.query('SELECT id,name,event_date::text,venue,status FROM bowin_rebuild.tournaments WHERE organization_id=$1 ORDER BY event_date,id',[req.params.organizationId]);
+    const result=await pool.query('SELECT id,name,event_date::text,venue,status,time_zone FROM bowin_rebuild.tournaments WHERE organization_id=$1 ORDER BY event_date,id',[req.params.organizationId]);
     res.json({tournaments:result.rows});
   }));
   app.post('/api/organizations/:organizationId/tournaments',requireAuth,route(async(req,res) => {
     const member=await membership(req,res);if(!member)return;
     if (!['owner','organizer'].includes(member.role))return res.status(403).json({error:'ROLE_REJECTED'});
     const name=text(req.body?.name,1,120), venue=text(req.body?.venue,1,200), date=eventDate(req.body?.eventDate), id=randomUUID();
+    const timeZone=req.body?.timeZone||'UTC';
+    try{if(typeof timeZone!=='string'||timeZone.length>80)throw new Error();new Intl.DateTimeFormat('en',{timeZone}).format();}catch{throw new Error('Invalid tournament time zone');}
     const client=await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('INSERT INTO bowin_rebuild.tournaments(id,organization_id,name,event_date,venue,created_by) VALUES($1,$2,$3,$4,$5,$6)',[id,req.params.organizationId,name,date,venue,req.user.id]);
+      await client.query('INSERT INTO bowin_rebuild.tournaments(id,organization_id,name,event_date,venue,created_by,time_zone) VALUES($1,$2,$3,$4,$5,$6,$7)',[id,req.params.organizationId,name,date,venue,req.user.id,timeZone]);
       await client.query("INSERT INTO bowin_rebuild.audit_events(organization_id,actor_id,action,target_id) VALUES($1,$2,'tournament.created',$3)",[req.params.organizationId,req.user.id,id]);
       await client.query('COMMIT');res.status(201).json({id});
     } catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }));
   mountTournamentRoutes({app,pool,requireAuth,route});
   mountInviteRoutes({app,pool,origin,requireAuth,route,issueSession});
+  mountPublicResults({app,pool,route,Problem});
   app.use((_req,res)=>res.status(404).json({error:'NOT_FOUND'}));
   app.use((error,_req,res,_next)=>{
     if(error instanceof Problem)return res.status(error.status).json({error:error.code});

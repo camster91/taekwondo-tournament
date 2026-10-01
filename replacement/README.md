@@ -10,8 +10,8 @@ divisions, competitor records, division registration/check-in and one-time invit
 Owners invite organizer/scorekeeper accounts through a token returned once; no messages
 are sent. Existing accounts must prove their current password to accept an invitation;
 an invitation never replaces their password. Tokens expire after 24 hours and cannot
-be reused. Public-display names are separate from private competitor names; no public
-competitor endpoint has been added. Registration uses explicit organizer assignment
+be reused. Public-display names are separate from private competitor names. Public
+results expose aliases only when an owner or organizer publishes the event. Registration uses explicit organizer assignment
 to a division, not automatic age/belt/weight categorization. Sparring divisions select
 single-elimination, patterns select scored-final. The implemented sparring engine takes
 an explicit organizer seed order of 2–256 checked-in competitors, creates balanced
@@ -28,9 +28,16 @@ the first user. Session cookies are HttpOnly, Secure, SameSite Strict and expire
 12 hours; all mutations require the configured canonical Origin. Local QA alone can
 disable Secure cookies with `LOCAL_QA=true`; candidate/production must leave it unset.
 
+Ring scheduling uses explicit UTC timestamps and the tournament's IANA time zone.
+Bookings must fall on the local event date, last at most eight hours and cannot
+overlap another division on the same normalized ring. Transaction locks serialize
+concurrent bookings. Completed divisions cannot be rescheduled. Public results
+are disabled by default and may be withdrawn; their field allowlist includes
+organizer branding, event details, schedules, aliases and scores, excluding private
+names, clubs, account details, internal identifiers and audit records.
+
 The complete rebuild still requires public/self-service registration where enabled,
-registration edits/withdrawals, patterns scoring, scheduling, organizer-
-branded public results, the browser interface, and end-to-end QA. This foundation is
+registration edits/withdrawals, patterns scoring, the browser interface, and end-to-end QA. This foundation is
 not a completed rebuild or a live release. Existing API integration tests against
 fresh isolated PostgreSQL prove invite/session/tenant/role and registration boundaries,
 the three-competitor final and concurrent score submission rejection. Domain tests
