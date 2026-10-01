@@ -1,0 +1,50 @@
+name: Rebuild checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, codex/fresh-rebuild]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bowin-rebuild-checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  foundation:
+    name: Fresh database and tenant/auth boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: QaDatabaseOnly-123456
+          POSTGRES_DB: bowin_rebuild_qa_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d bowin_rebuild_qa_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: replacement
+    env:
+      DATABASE_URL: postgres://postgres:QaDatabaseOnly-123456@localhost:5432/bowin_rebuild_qa_ci
+      REBUILD_DATABASE_NAME: bowin_rebuild_qa_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: replacement/package-lock.json
+      - run: npm ci --ignore-scripts
+      - name: Fresh and idempotent migrations
+        run: |
+          npm run migrate
+          npm run migrate
+      - name: Authentication, tenant, role and input checks
+        run: npm test
+      - name: Build replacement runtime image
+        run: docker build --target runtime --build-arg SOURCE_COMMIT="$GITHUB_SHA" -t bowin-rebuild:candidate .
