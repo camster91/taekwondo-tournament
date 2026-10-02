@@ -81,3 +81,25 @@ test('shows the demo action only when the server advertises it', async ({ page }
   // so assert it is rendered, mirroring the toHaveCount(0) check above.
   await expect(page.getByText('Live demo data, fully featured')).toHaveCount(1);
 });
+
+test('first-run setup sends the setup key and explains a wrong one', async ({ page }) => {
+  await page.route('**/api/auth/setup-status', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: '{"needsSetup":true}',
+  }));
+  let sentBody: Record<string, unknown> | null = null;
+  await page.route('**/api/auth/setup', (route) => {
+    sentBody = route.request().postDataJSON();
+    return route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"Invalid or missing setupKey"}' });
+  });
+
+  await page.goto('/login');
+  await expect(page.getByRole('heading', { name: 'Set up your admin account' })).toBeVisible();
+  await page.getByLabel('First name').fill('Jane');
+  await page.getByLabel('Last name').fill('Smith');
+  await page.getByLabel('Email').fill('jane@example.com');
+  await page.getByLabel('Setup key').fill('wrong-key');
+  await page.getByRole('button', { name: 'Create admin account' }).click();
+
+  await expect(page.getByText("That setup key isn't right. Check it and try again.")).toBeVisible();
+  expect(sentBody).toMatchObject({ email: 'jane@example.com', firstName: 'Jane', lastName: 'Smith', setupKey: 'wrong-key' });
+});

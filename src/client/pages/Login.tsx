@@ -50,6 +50,7 @@ export default function Login() {
   // Setup state
   const [setupFirstName, setSetupFirstName] = useState('');
   const [setupLastName, setSetupLastName] = useState('');
+  const [setupKey, setSetupKey] = useState('');
 
   const {
     data: setupStatus,
@@ -104,11 +105,17 @@ export default function Login() {
       const res = await fetch('/api/auth/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, firstName: setupFirstName, lastName: setupLastName }),
+        body: JSON.stringify({ email, firstName: setupFirstName, lastName: setupLastName, setupKey }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || 'Setup failed');
+        setError(
+          res.status === 401
+            ? "That setup key isn't right. Check it and try again."
+            : res.status === 503
+              ? 'This server has no setup key yet. Ask whoever runs the server to set ADMIN_SETUP_KEY, then try again.'
+              : data.error || 'Setup failed',
+        );
       } else {
         // Session cookie is set by the server. Hard nav so
         // AuthProvider re-mounts and hydrates user state from /me.
@@ -300,6 +307,7 @@ export default function Login() {
                 email={email} setEmail={setEmail}
                 firstName={setupFirstName} setFirstName={setSetupFirstName}
                 lastName={setupLastName} setLastName={setSetupLastName}
+                setupKey={setupKey} setSetupKey={setSetupKey}
                 onSubmit={handleSetupSubmit} error={error} loading={isLoading}
               />
             ) : (
@@ -598,6 +606,8 @@ function SetupForm({
   setFirstName,
   lastName,
   setLastName,
+  setupKey,
+  setSetupKey,
   onSubmit,
   error,
   loading,
@@ -608,6 +618,8 @@ function SetupForm({
   setFirstName: (v: string) => void;
   lastName: string;
   setLastName: (v: string) => void;
+  setupKey: string;
+  setSetupKey: (v: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   error: string;
   loading: boolean;
@@ -629,17 +641,32 @@ function SetupForm({
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>First name</Label>
-            <Input type="text" required value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Jane" />
+            <Label htmlFor="setup-first-name">First name</Label>
+            <Input id="setup-first-name" type="text" required autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Jane" />
           </div>
           <div>
-            <Label>Last name</Label>
-            <Input type="text" required value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Smith" />
+            <Label htmlFor="setup-last-name">Last name</Label>
+            <Input id="setup-last-name" type="text" required autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Smith" />
           </div>
         </div>
         <div>
-          <Label>Email</Label>
-          <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@yourschool.com" />
+          <Label htmlFor="setup-email">Email</Label>
+          <Input id="setup-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@yourschool.com" />
+        </div>
+        <div>
+          <Label htmlFor="setup-key">Setup key</Label>
+          <Input
+            id="setup-key"
+            type="password"
+            required
+            autoComplete="off"
+            value={setupKey}
+            onChange={(e) => setSetupKey(e.target.value)}
+            aria-describedby="setup-key-help"
+          />
+          <p id="setup-key-help" className="mt-1 text-xs text-surface-600 dark:text-surface-400">
+            The one-time key set on your server as ADMIN_SETUP_KEY. Ask whoever installed the app if you don&apos;t have it.
+          </p>
         </div>
         <Button type="submit" variant="primary" loading={loading} className="w-full">
           {loading ? <><Spinner size="sm" className="mr-2" /> Creating...</> : 'Create admin account'}
