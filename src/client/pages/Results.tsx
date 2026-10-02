@@ -20,7 +20,7 @@ import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
 import { Select } from '../components/ui';
 import { StatTile } from '../components/ui';
-import { DataTable, TableHead, TableBody } from '../components/ui';
+import { DataTable, TableHead, TableBody, EmptyState } from '../components/ui';
 import {
   type DivisionLike,
   type SchoolStats,
@@ -427,6 +427,16 @@ export default function Results() {
             <CardSkeleton />
             <CardSkeleton />
           </div>
+        ) : divisions && !filteredDivisions?.length ? (
+          <Card>
+            <EmptyState
+              icon={Trophy}
+              title="No results yet"
+              description={filterEvent === 'all'
+                ? 'Medals and standings appear here as soon as the first matches are scored.'
+                : 'No matches have been scored for this event yet.'}
+            />
+          </Card>
         ) : viewMode === 'schools' ? (
           <>
             {/* School Medal Table */}
