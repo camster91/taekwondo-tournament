@@ -1,7 +1,7 @@
 import { useState, useEffect, useId } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText, AlertTriangle } from 'lucide-react';
+import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText, AlertTriangle, Trash2 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
@@ -9,6 +9,7 @@ import { StatusBadge } from '../components/ui/Badge';
 import Badge from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
 import OperationStatus from '../components/ui/OperationStatus';
+import DeletedTournaments from '../components/DeletedTournaments';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { SPORT_PROFILES } from '../../shared/constants/sport-profiles';
 import { saveDraft, loadDraft, clearDraft, type DraftTournament } from '../utils/draft-storage';
@@ -65,6 +66,7 @@ export default function Tournaments() {
     }
   };
   const fieldId = useId();
+  const canManageTournaments = user?.role === 'admin' || user?.role === 'director';
   const [deleteTarget, setDeleteTarget] = useState<Tournament | null>(null);
   const [showDraftDialog, setShowDraftDialog] = useState(false);
   const [draftTournament, setDraftTournament] = useState<DraftTournament | null>(null);
@@ -198,14 +200,25 @@ export default function Tournaments() {
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
-        title="Tournaments"
-        description="Create and manage your tournaments"
-        actions={
-          <Button variant="primary" onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4 mr-2" /> New Tournament
-          </Button>
-        }
+        title={urlFilters.trash ? 'Deleted tournaments' : 'Tournaments'}
+        description={urlFilters.trash
+          ? 'Restore a tournament to bring it back with its registrations, divisions and brackets.'
+          : 'Create and manage your tournaments'}
+        actions={urlFilters.trash ? undefined : (
+          <>
+            {canManageTournaments && (
+              <Button as={Link} to="/tournaments?trash=true" variant="ghost">
+                <Trash2 className="h-4 w-4 mr-2" aria-hidden="true" /> Deleted
+              </Button>
+            )}
+            <Button variant="primary" onClick={() => setShowCreateModal(true)}>
+              <Plus className="h-4 w-4 mr-2" /> New Tournament
+            </Button>
+          </>
+        )}
       />
+
+      {urlFilters.trash ? <DeletedTournaments /> : (<>
 
       {/* Error Banner */}
       {isError && (
@@ -296,6 +309,8 @@ export default function Tournaments() {
           />
         </Card>
       )}
+
+      </>)}
 
       {/* Create Modal */}
       {showCreateModal && (
@@ -448,7 +463,7 @@ export default function Tournaments() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
         title="Delete Tournament"
-        message={`Are you sure you want to delete "${deleteTarget?.name}"? This will also delete all registrations, divisions, and brackets. This action cannot be undone.`}
+        message={`"${deleteTarget?.name}" will be removed from your tournament list. Its registrations, divisions and brackets are kept, and you can restore it from Deleted tournaments.`}
         confirmText="Delete Tournament"
         isLoading={deleteMutation.isPending}
       />
@@ -573,6 +588,7 @@ function TournamentCard({
         </Button>
         <Button
           onClick={onDelete}
+          aria-label={`Delete ${tournament.name}`}
           variant="secondary"
           className="flex-1 text-danger hover:text-danger hover:bg-danger/10 dark:hover:bg-danger/20"
         >
