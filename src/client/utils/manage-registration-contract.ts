@@ -3,8 +3,9 @@ export interface ManagedRegistration {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
-  gender: string;
-  belt: string;
+  /** Null when the organizer owns the competitor record (see profileEditable). */
+  gender: string | null;
+  belt: string | null;
   weight: number | null;
   school: string | null;
   specialNeeds: string | null;
@@ -16,6 +17,12 @@ export interface ManagedRegistration {
   tournamentDate: string;
   tournamentStatus: string;
   checkedIn: boolean;
+  /**
+   * False when the competitor record is shared (a returning competitor or one
+   * the organizer entered): gender, belt and school are then hidden and only
+   * the organizer can change them.
+   */
+  profileEditable?: boolean;
   paymentStatus?: string | null;
   paymentAmountCents?: number | null;
   waitlistStatus?: string | null;
@@ -61,7 +68,9 @@ export function parseManagedRegistrationResponse(value: unknown): { registration
   const valid = typeof item.confirmationCode === 'string' && /^[0-9a-f]{8}$/i.test(item.confirmationCode)
     && text(item.firstName) && text(item.lastName)
     && isoDate(item.dateOfBirth)
-    && (item.gender === 'M' || item.gender === 'F') && text(item.belt)
+    && (item.profileEditable === false
+      ? (item.gender === null || item.gender === 'M' || item.gender === 'F') && (item.belt === null || text(item.belt))
+      : (item.gender === 'M' || item.gender === 'F') && text(item.belt))
     && (item.weight === null || (typeof item.weight === 'number' && Number.isFinite(item.weight)))
     && nullableText(item.school) && nullableText(item.specialNeeds)
     && typeof item.competeWithOlder === 'boolean'

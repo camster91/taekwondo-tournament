@@ -32,6 +32,20 @@ describe('managed registration response', () => {
     expect(() => parseManagedRegistrationResponse(payload)).toThrow('Registration status could not be verified');
   });
 
+  it('accepts a returning competitor whose profile the organizer keeps', () => {
+    const locked = { ...registration, gender: null, belt: null, school: null, profileEditable: false };
+    expect(parseManagedRegistrationResponse({ registration: locked })).toEqual({ registration: locked });
+    // An editable profile must still carry gender and belt.
+    expect(() => parseManagedRegistrationResponse({ registration: { ...locked, profileEditable: true } }))
+      .toThrow('Registration status could not be verified');
+  });
+
+  it('confirms a locked-profile save without gender or belt', () => {
+    const locked = { ...registration, gender: null, belt: null, school: null, profileEditable: false };
+    const expected = normalizeManagedRegistrationUpdate({ ...locked, firstName: 'Amira' });
+    expect(managedRegistrationMatchesUpdate({ ...locked, firstName: 'Amira' }, expected)).toBe(true);
+  });
+
   it('confirms only the normalized editable values submitted', () => {
     const expected = normalizeManagedRegistrationUpdate({ ...registration, firstName: '  Amira  ', school: '' });
     expect(managedRegistrationMatchesUpdate({ ...registration, firstName: 'Amira', school: null }, expected)).toBe(true);

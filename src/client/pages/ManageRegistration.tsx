@@ -432,7 +432,9 @@ export default function ManageRegistration() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="m-firstName">First name</Label>
-                  {editMode ? (
+                  {registration.profileEditable === false ? (
+                    <OrganizerKeptField value={registration.firstName} />
+                  ) : editMode ? (
                     <Input id="m-firstName" value={form.firstName || ''} onChange={(e) => setForm({ ...form, firstName: e.target.value })} />
                   ) : (
                     <ReadonlyField value={registration.firstName} />
@@ -450,7 +452,9 @@ export default function ManageRegistration() {
                 </div>
                 <div>
                   <Label htmlFor="m-gender">Gender</Label>
-                  {editMode ? (
+                  {registration.profileEditable === false ? (
+                    <OrganizerKeptField value={registration.gender === 'M' ? 'Male' : registration.gender === 'F' ? 'Female' : null} />
+                  ) : editMode ? (
                     <Select id="m-gender" value={form.gender || 'M'} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
                       <option value="M">Male</option>
                       <option value="F">Female</option>
@@ -462,7 +466,9 @@ export default function ManageRegistration() {
                 </div>
                 <div>
                   <Label htmlFor="m-belt">Belt rank</Label>
-                  {editMode ? (
+                  {registration.profileEditable === false ? (
+                    <OrganizerKeptField value={registration.belt} />
+                  ) : editMode ? (
                     <Select id="m-belt" value={form.belt || ''} onChange={(e) => setForm({ ...form, belt: e.target.value })}>
                       {TKD_BELT_OPTIONS.map((b) => (
                         <option key={b} value={b}>{b}</option>
@@ -489,7 +495,9 @@ export default function ManageRegistration() {
                 </div>
                 <div className="sm:col-span-2">
                   <Label htmlFor="m-school">School / Dojang</Label>
-                  {editMode ? (
+                  {registration.profileEditable === false ? (
+                    <OrganizerKeptField value={registration.school} />
+                  ) : editMode ? (
                     <Input id="m-school" value={form.school || ''} onChange={(e) => setForm({ ...form, school: e.target.value })} />
                   ) : (
                     <ReadonlyField value={registration.school || 'Independent'} />
@@ -627,5 +635,15 @@ function ReadonlyField({ value }: { value: string | number | null | undefined })
     <div className="h-10 px-3 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-900/50 text-sm text-surface-900 dark:text-surface-100 flex items-center">
       {value ?? '—'}
     </div>
+  );
+}
+
+/** A profile field only the organizer can change (returning competitors). */
+function OrganizerKeptField({ value }: { value: string | null | undefined }) {
+  return (
+    <>
+      <ReadonlyField value={value || 'On file with the organizer'} />
+      <p className="text-xs text-surface-500 mt-1">Kept by the organizer. Ask them if this needs to change.</p>
+    </>
   );
 }
