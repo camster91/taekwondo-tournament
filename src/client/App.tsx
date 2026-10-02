@@ -36,6 +36,7 @@ import { ToastProvider } from './context/ToastContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import SupportChatWidget from './components/SupportChatWidget';
+import ReportBugButton from './components/ReportBugButton';
 import LiveChatWidget from './components/LiveChatWidget';
 import Tour from './components/Tour';
 import CloseButton from './components/ui/CloseButton';
@@ -528,6 +529,8 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
             >
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
+
+            {user && <ReportBugButton />}
 
             {/* Notification bell */}
             <button

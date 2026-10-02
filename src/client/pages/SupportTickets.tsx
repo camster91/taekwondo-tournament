@@ -30,14 +30,16 @@ export default function SupportTickets() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<SupportTicketStatus | ''>('');
+  const [typeFilter, setTypeFilter] = useState<'' | 'bug-report'>('');
   const [search, setSearch] = useState('');
   const [limit, setLimit] = useState(60);
 
   const { data: tickets = [], isLoading } = useQuery<SupportTicket[]>({
-    queryKey: ['support-tickets', statusFilter, limit],
+    queryKey: ['support-tickets', statusFilter, typeFilter, limit],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter) params.set('status', statusFilter);
+      if (typeFilter) params.set('source', typeFilter);
       params.set('limit', String(limit));
       const res = await fetch(`/api/support?${params.toString()}`, {
         headers: getAuthHeaders(),
@@ -102,14 +104,14 @@ export default function SupportTickets() {
           action={
             <button
               type="button"
-              onClick={() => void queryClient.invalidateQueries({ queryKey: ['support-tickets', statusFilter, limit] })}
+              onClick={() => void queryClient.invalidateQueries({ queryKey: ['support-tickets', statusFilter, typeFilter, limit] })}
               className="inline-flex items-center gap-2 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-500"
             >
               <RefreshCcw className="h-3.5 w-3.5" /> Refresh
             </button>
           }
         />
-        <CardBody className="grid gap-3 md:grid-cols-3">
+        <CardBody className="grid gap-3 md:grid-cols-4">
           <label className="grid gap-1 text-sm">
             <span className="text-surface-600 dark:text-surface-300">Search</span>
             <input
@@ -130,6 +132,16 @@ export default function SupportTickets() {
               <option value="in_progress">In Progress</option>
               <option value="resolved">Resolved</option>
               <option value="closed">Closed</option>
+            </Select>
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span className="text-surface-600 dark:text-surface-300">Type</span>
+            <Select
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value === 'bug-report' ? 'bug-report' : '')}
+            >
+              <option value="">All</option>
+              <option value="bug-report">Bug reports</option>
             </Select>
           </label>
           <label className="grid gap-1 text-sm">
@@ -176,7 +188,7 @@ export default function SupportTickets() {
                       <td className="px-4 py-3 align-top">
                         <div className="font-mono text-xs text-surface-700 dark:text-surface-300">{ticket.id}</div>
                         <div className="mt-1 text-sm font-medium text-surface-900 dark:text-white">{ticket.subject}</div>
-                        <div className="text-xs text-surface-500 dark:text-surface-400">{ticket.source} {ticket.page ? `• ${ticket.page}` : ''}</div>
+                        <div className="text-xs text-surface-500 dark:text-surface-400">{ticket.source === 'bug-report' ? 'Bug report' : ticket.source} {ticket.page ? `• ${ticket.page}` : ''}</div>
                         {ticket.notes ? (
                           <div className="mt-2 rounded-md bg-surface-50 px-2 py-1 text-xs text-surface-600 dark:bg-surface-900 dark:text-surface-300">
                             <span className="font-medium">Notes:</span> {ticket.notes}
