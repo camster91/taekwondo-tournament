@@ -26,6 +26,12 @@ describe('matchResultSchema', () => {
   it('still rejects malformed scores', () => {
     expect(matchResultSchema.safeParse({ score1: '-1' }).success).toBe(false);
     expect(matchResultSchema.safeParse({ score1: '1000' }).success).toBe(false);
+    expect(matchResultSchema.safeParse({ score1: '8.755' }).success).toBe(false);
+    expect(matchResultSchema.safeParse({ score1: '<b>1</b>' }).success).toBe(false);
+  });
+
+  it('accepts judged scores with up to two decimal places', () => {
+    expect(matchResultSchema.safeParse({ score1: '8.7', score2: '8.75' }).success).toBe(true);
   });
 
   it('accepts null scores, expectedUpdatedAt and correction', () => {
