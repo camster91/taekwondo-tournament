@@ -59,7 +59,7 @@ export default function StatTile({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400 [overflow-wrap:anywhere]">
             {label}
           </p>
           <p
