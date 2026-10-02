@@ -192,9 +192,6 @@ export default function Dashboard() {
         <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-accent-500/15 rounded-full blur-3xl translate-y-1/2" />
         <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/500/15 border border-success/500/20 text-success/300 text-xs font-medium mb-3">
-              <span className="live-dot" /> All systems normal
-            </div>
             <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-white">
               {tournaments && tournaments.length > 0 ? 'Welcome back' : 'Welcome'}
             </h1>

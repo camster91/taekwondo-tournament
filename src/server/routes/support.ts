@@ -13,6 +13,8 @@ import { validateRequest } from '../middleware/validate.js';
 import { sendEmail } from '../services/email.js';
 import { escapeHtml } from '../services/email-templates.js';
 import {
+  BUG_REPORT_SOURCE,
+  bugReportSchema,
   supportChatSchema,
   supportTicketQuerySchema,
   supportTicketUpdateSchema,
@@ -633,6 +635,54 @@ const supportChatHandler = [
   handleSupportChat,
 ] as const;
 
+// "Report a bug": a signed-in user describes a problem in a short form.
+// Stored as a support ticket with source "bug-report" so it shows on the
+// Support Tickets page (filterable) and can be triaged later, by a person
+// or an AI pass over the structured text below.
+router.post(
+  '/bug-report',
+  authenticate,
+  userTicketLimiter,
+  validateRequest(bugReportSchema),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    if (!req.user) return res.status(401).json({ error: 'Authentication required.' });
+    const body = req.body as {
+      title: string;
+      whatHappened: string;
+      expected?: string | null;
+      severity: 'low' | 'normal' | 'high';
+      page?: string | null;
+      browser?: string | null;
+    };
+    const report = [
+      `What happened: ${body.whatHappened}`,
+      body.expected ? `Expected: ${body.expected}` : null,
+      `Severity: ${body.severity}`,
+      body.page ? `Page: ${body.page}` : null,
+      body.browser ? `Browser: ${body.browser}` : null,
+    ].filter(Boolean).join('\n');
+    const organizationId = await getSupportOrganizationId(prisma, req.user.id);
+    const ticket = await prisma.supportTicket.create({
+      data: {
+        source: BUG_REPORT_SOURCE,
+        status: 'open',
+        priority: body.severity,
+        subject: body.title,
+        requestedByEmail: req.user.email,
+        requestedByName: `${req.user.firstName} ${req.user.lastName}`.trim(),
+        page: body.page ?? null,
+        lastUserMessage: report,
+        conversation: JSON.stringify([{ role: 'user', content: report, at: new Date().toISOString() }]),
+        userId: req.user.id,
+        organizationId,
+      },
+      select: { id: true },
+    });
+    res.status(201).json({ id: ticket.id });
+  },
+);
+
 router.post('/', ...supportChatHandler);
 router.post('/chat', ...supportChatHandler);
 
@@ -784,12 +834,13 @@ router.get(
   validateRequest(supportTicketQuerySchema, 'query'),
   async (req: AuthenticatedRequest, res: Response) => {
     const prisma: PrismaClient = req.app.locals.prisma;
-    const parsed = req.query as { status?: 'open' | 'in_progress' | 'resolved' | 'closed'; limit?: number };
+    const parsed = req.query as { status?: 'open' | 'in_progress' | 'resolved' | 'closed'; source?: string; limit?: number };
     const organizationIds = req.user?.role === 'admin' || !req.user
       ? null
       : await getSupportOrganizationIds(prisma, req.user.id);
     const where = {
       ...(parsed.status ? { status: parsed.status } : {}),
+      ...(parsed.source ? { source: parsed.source } : {}),
       ...(organizationIds ? { organizationId: { in: organizationIds } } : {}),
     };
 

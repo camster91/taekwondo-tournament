@@ -180,3 +180,20 @@ describe('bounded spreadsheet parsing (D10)', () => {
     expect(() => autoDetectMapping(buf)).toThrow(/more than 5000 rows/);
   });
 });
+
+describe('import template', () => {
+  it('ships an empty Competitors sheet and never imports the example sheet', async () => {
+    const { generateImportTemplate, EXAMPLE_SHEET_NAME } = await import('./excel-template.js');
+    const workbook = XLSX.read(generateImportTemplate(), { type: 'buffer' });
+    expect(workbook.SheetNames[0]).toBe('Competitors');
+    expect(XLSX.utils.sheet_to_json(workbook.Sheets.Competitors)).toHaveLength(0);
+    expect(XLSX.utils.sheet_to_json(workbook.Sheets[EXAMPLE_SHEET_NAME]).length).toBeGreaterThan(0);
+
+    // Even with only one real row typed in, auto-detection picks
+    // Competitors, not the fuller example sheet.
+    XLSX.utils.sheet_add_aoa(workbook.Sheets.Competitors, [
+      ['Ava', 'Lee', 'F', '2014-05-02', 'Green', '', 72, '', 'Test Dojang', 'Y', '', ''],
+    ], { origin: 'A2' });
+    expect(resolveImportSheet(workbook).sheetName).toBe('Competitors');
+  });
+});

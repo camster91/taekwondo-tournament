@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SCORE_FORMAT_MESSAGE, SCORE_PATTERN } from '../../shared/utils/score.js';
 
 /**
  * Request body for `PUT /api/brackets/match/:matchId`.
@@ -13,14 +14,15 @@ import { z } from 'zod';
 const blankToUndefined = (value: unknown) =>
   typeof value === 'string' && value.trim() === '' ? undefined : value;
 
-// Scores must look like "5", "12", or "0" — at most 3 digits, no
-// negatives, no decimals, no letters. Stops a scorekeeper from
-// submitting "<script>" or 9999 by accident and lets the client assume
-// the value is safe to render verbatim. `null` clears a stored score
-// (used when a director corrects the winner of a completed match).
+// Scores must look like "5", "12", "0" or "8.75" (see shared/utils/score):
+// 0-999 with up to two decimals, no negatives, no letters. Stops a
+// scorekeeper from submitting "<script>" or 9999 by accident and lets the
+// client assume the value is safe to render verbatim. `null` clears a
+// stored score (used when a director corrects the winner of a completed
+// match).
 const scoreSchema = z.preprocess(
   blankToUndefined,
-  z.string().regex(/^\d{1,3}$/, 'Score must be 0-999').nullable().optional(),
+  z.string().regex(SCORE_PATTERN, SCORE_FORMAT_MESSAGE).nullable().optional(),
 );
 
 export const matchResultSchema = z.object({

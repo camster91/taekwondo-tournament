@@ -11,72 +11,17 @@ import { describe, it, expect } from 'vitest';
  * - Field-level validation messages are clear
  */
 
-type ResultType = 'win' | 'dq' | 'forfeit' | 'injury';
+import type { ApiMatch } from '../../shared/contracts';
+import { validateResult } from './scorekeeper-validation';
 
-interface Match {
-  id: string;
-  competitor1: { id: string; competitor: { firstName: string; lastName: string } } | null;
-  competitor2: { id: string; competitor: { firstName: string; lastName: string } } | null;
-}
-
-/**
- * Validates scorekeeper result submission before showing confirmation dialog.
- * Copy of the function from Scorekeeper.tsx for isolated testing.
- */
-function validateResult(
-  resultType: ResultType,
-  selectedWinner: string | null,
-  match: Match | undefined,
-  score1: string,
-  score2: string,
-): string | null {
-  if (!match) return 'No match selected.';
-  if (!selectedWinner) return 'Select a winner before recording the result.';
-  
-  if (!match.competitor1 || !match.competitor2) {
-    return 'This match has an empty slot. Assign both competitors before scoring.';
-  }
-  
-  if (selectedWinner !== match.competitor1.id && selectedWinner !== match.competitor2.id) {
-    return 'Selected winner is not a competitor in this match.';
-  }
-
-  if (resultType === 'win') {
-    if (!score1.trim() || !score2.trim()) {
-      return 'Enter scores for both competitors when recording a win.';
-    }
-    
-    const first = Number(score1);
-    const second = Number(score2);
-    
-    if (
-      !/^\d{1,3}$/.test(score1) ||
-      !/^\d{1,3}$/.test(score2) ||
-      !Number.isInteger(first) ||
-      !Number.isInteger(second)
-    ) {
-      return 'Scores must be whole numbers from 0 to 999.';
-    }
-    
-    if (first === second) {
-      return 'A win cannot end in a tie. Enter non-tied scores or choose Forfeit/Injury/DQ.';
-    }
-
-    const scoreWinnerId = first > second ? match.competitor1.id : match.competitor2.id;
-    if (scoreWinnerId !== selectedWinner) {
-      return 'The winner must have the higher score. Check your scores or winner selection.';
-    }
-  }
-  
-  return null;
-}
+const FORMAT = 'Scores must be numbers from 0 to 999, with up to two decimal places.';
 
 describe('Scorekeeper validation (#188)', () => {
-  const mockMatch: Match = {
+  const mockMatch = {
     id: 'match-1',
     competitor1: { id: 'comp-1', competitor: { firstName: 'Alice', lastName: 'Smith' } },
     competitor2: { id: 'comp-2', competitor: { firstName: 'Bob', lastName: 'Jones' } },
-  };
+  } as unknown as ApiMatch;
 
   describe('Win result type', () => {
     it('accepts valid win with non-tied scores and correct winner', () => {
@@ -107,17 +52,17 @@ describe('Scorekeeper validation (#188)', () => {
     });
 
     it('rejects win with invalid score format', () => {
-      expect(validateResult('win', 'comp-1', mockMatch, 'abc', '5')).toBe(
-        'Scores must be whole numbers from 0 to 999.'
-      );
-      expect(validateResult('win', 'comp-1', mockMatch, '10', '5.5')).toBe(
-        'Scores must be whole numbers from 0 to 999.'
-      );
-      expect(validateResult('win', 'comp-1', mockMatch, '-5', '3')).toBe(
-        'Scores must be whole numbers from 0 to 999.'
-      );
-      expect(validateResult('win', 'comp-1', mockMatch, '1000', '5')).toBe(
-        'Scores must be whole numbers from 0 to 999.'
+      expect(validateResult('win', 'comp-1', mockMatch, 'abc', '5')).toBe(FORMAT);
+      expect(validateResult('win', 'comp-1', mockMatch, '10', '5.555')).toBe(FORMAT);
+      expect(validateResult('win', 'comp-1', mockMatch, '-5', '3')).toBe(FORMAT);
+      expect(validateResult('win', 'comp-1', mockMatch, '1000', '5')).toBe(FORMAT);
+    });
+
+    it('accepts judged scores with up to two decimal places', () => {
+      expect(validateResult('win', 'comp-1', mockMatch, '8.75', '8.7')).toBeNull();
+      expect(validateResult('win', 'comp-2', mockMatch, '7.5', '7.55')).toBeNull();
+      expect(validateResult('win', 'comp-1', mockMatch, '8.5', '8.50')).toBe(
+        'A win cannot end in a tie. Enter non-tied scores or choose Forfeit/Injury/DQ.'
       );
     });
 
@@ -212,7 +157,7 @@ describe('Scorekeeper validation (#188)', () => {
       expect(validateResult('win', null, mockMatch, '10', '5')).toContain('Select a winner');
       expect(validateResult('win', 'comp-1', mockMatch, '5', '5')).toContain('tie');
       expect(validateResult('win', 'comp-1', mockMatch, '', '')).toContain('Enter scores');
-      expect(validateResult('win', 'comp-1', mockMatch, 'abc', '5')).toContain('whole numbers');
+      expect(validateResult('win', 'comp-1', mockMatch, 'abc', '5')).toContain('up to two decimal places');
     });
   });
 });

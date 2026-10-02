@@ -64,14 +64,25 @@ function sheetMatrix(sheet: XLSX.WorkSheet): unknown[][] {
   return XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null });
 }
 
-/** The sheet most likely to hold the roster: the one with the most data rows. */
+/**
+ * The sheet most likely to hold the roster. A sheet named like
+ * "Competitors" that has data wins (the import template's sheet, and the
+ * same rule the client preview uses); otherwise the one with the most data
+ * rows. Sheets named "Example…" (the template's sample sheet) are never
+ * picked.
+ */
 function pickBestSheet(workbook: XLSX.WorkBook): string | undefined {
+  // Rows that have at least 3 non-null cells.
+  const dataRows = (name: string) => sheetMatrix(workbook.Sheets[name])
+    .filter((r) => Array.isArray(r) && r.filter((c) => c != null && c !== '').length >= 3);
+  const named = workbook.SheetNames.find((n) => /competitor/i.test(n) && dataRows(n).length > 1);
+  if (named) return named;
+
   let bestSheet = workbook.SheetNames[0];
   let bestRowCount = 0;
   for (const name of workbook.SheetNames) {
-    const rows = sheetMatrix(workbook.Sheets[name]);
-    // Count rows that have at least 3 non-null cells
-    const real = rows.filter((r) => Array.isArray(r) && r.filter((c) => c != null && c !== '').length >= 3);
+    if (/^example/i.test(name.trim())) continue;
+    const real = dataRows(name);
     if (real.length > bestRowCount) {
       bestRowCount = real.length;
       bestSheet = name;

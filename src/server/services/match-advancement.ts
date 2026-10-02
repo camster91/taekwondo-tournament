@@ -3,6 +3,7 @@ import type { PrismaClient, Prisma, Match } from '@prisma/client';
 import { BracketStructure, MatchData } from './bracket-generator.js';
 import { AppError, ErrorCode } from '../utils/errors.js';
 import { BYE_NOTE, isByeMatch } from '../../shared/utils/match-progress.js';
+import { parseScore } from '../../shared/utils/score.js';
 
 export interface AdvancementResult {
   advanced: boolean;
@@ -431,8 +432,7 @@ export function isRoundRobinStructure(
     structure.winners.every((m) => m.round < 1000);
 }
 
-const numericScore = (value: string | null | undefined): number | null =>
-  value != null && /^\d{1,3}$/.test(value) ? Number(value) : null;
+const numericScore = parseScore;
 
 /**
  * Round-robin standings, once every match is completed.

@@ -178,6 +178,27 @@ test.describe('scorekeeper (a11y)', () => {
     await expect(record).toBeEnabled();
   });
 
+  test('records a judged result with decimal scores', async ({ page }) => {
+    const tournamentId = await setupScorekeeperTest(page);
+    await page.goto(`/scorekeeper/${tournamentId}`);
+    await page.waitForLoadState('networkidle');
+
+    await page.locator('button').filter({ has: page.locator('text=/\\d+ ready/i') }).first().click();
+    await page.locator('button[aria-pressed][aria-label*="select as winner"]').first().click();
+    await page.locator('#scorekeeper-score1').fill('8.75');
+    await page.locator('#scorekeeper-score2').fill('8.5');
+    await expect(page.getByRole('alert')).toHaveCount(0);
+
+    await page.getByRole('button', { name: /^Record Result$/i }).click();
+    const confirmDialog = page.getByRole('dialog', { name: /Confirm Result/i });
+    await expect(confirmDialog).toBeVisible();
+    const saved = page.waitForResponse((resp) => resp.request().method() === 'PUT' && /\/api\/brackets\/match\/[^/]+$/.test(resp.url()));
+    await confirmDialog.getByRole('button', { name: /^Confirm/i }).click();
+    const savedResponse = await saved;
+    expect(savedResponse.ok()).toBeTruthy();
+    expect(await savedResponse.json()).toMatchObject({ score1: '8.75', score2: '8.5', status: 'completed' });
+  });
+
   test('result-type buttons live in a radiogroup with aria-pressed', async ({ page }) => {
     const tournamentId = await setupScorekeeperTest(page);
     await page.goto(`/scorekeeper/${tournamentId}`);

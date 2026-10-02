@@ -50,6 +50,7 @@ import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner';
 import PendingOperationsPanel from '../components/PendingOperationsPanel';
 
 import type { ApiMatch, ApiDivision, ApiTournamentSummary } from '../../shared/contracts';
+import { validateResult, type ResultType } from '../utils/scorekeeper-validation';
 
 type ScoreRequestError = Error & { status?: number; isConflict?: boolean };
 
@@ -57,71 +58,6 @@ type ScoreRequestError = Error & { status?: number; isConflict?: boolean };
 interface Tournament {
   id: string;
   sportProfileSlug: string | null;
-}
-
-type ResultType = 'win' | 'dq' | 'forfeit' | 'injury';
-
-/**
- * Validates scorekeeper result submission before showing confirmation dialog.
- * Prevents invalid results from reaching the server.
- * 
- * Rules:
- * - Win: requires valid non-tied scores, winner must match higher score
- * - Forfeit/Injury/DQ: winner selection required, scores optional
- * - All: both competitors must be assigned
- */
-function validateResult(
-  resultType: ResultType,
-  selectedWinner: string | null,
-  match: ApiMatch | undefined,
-  score1: string,
-  score2: string,
-): string | null {
-  // Must have a match and winner selected
-  if (!match) return 'No match selected.';
-  if (!selectedWinner) return 'Select a winner before recording the result.';
-  
-  // Both competitors must be assigned
-  if (!match.competitor1 || !match.competitor2) {
-    return 'This match has an empty slot. Assign both competitors before scoring.';
-  }
-  
-  // Winner must be one of the two competitors
-  if (selectedWinner !== match.competitor1.id && selectedWinner !== match.competitor2.id) {
-    return 'Selected winner is not a competitor in this match.';
-  }
-
-  // Win-specific validation: scores must be valid and non-tied
-  if (resultType === 'win') {
-    if (!score1.trim() || !score2.trim()) {
-      return 'Enter scores for both competitors when recording a win.';
-    }
-    
-    const first = Number(score1);
-    const second = Number(score2);
-    
-    if (
-      !/^\d{1,3}$/.test(score1) ||
-      !/^\d{1,3}$/.test(score2) ||
-      !Number.isInteger(first) ||
-      !Number.isInteger(second)
-    ) {
-      return 'Scores must be whole numbers from 0 to 999.';
-    }
-    
-    if (first === second) {
-      return 'A win cannot end in a tie. Enter non-tied scores or choose Forfeit/Injury/DQ.';
-    }
-
-    const scoreWinnerId = first > second ? match.competitor1.id : match.competitor2.id;
-    if (scoreWinnerId !== selectedWinner) {
-      return 'The winner must have the higher score. Check your scores or winner selection.';
-    }
-  }
-  
-  // Forfeit/Injury/DQ: winner required, scores optional (no validation)
-  
-  return null; // Valid
 }
 
 export default function Scorekeeper() {
@@ -1023,6 +959,11 @@ export default function Scorekeeper() {
 
   // Match scoring view
   const division = divisions?.find((d) => d.id === selectedDivision);
+  // Penalties (gam-jeom, shido…) only apply to bouts. Judged events in the
+  // other slot (patterns / forms) don't show the penalty buttons.
+  const isCombatEvent = division?.eventType === 'patterns' || division?.eventType === 'sparring'
+    ? getEventForSlot(sportProfile.slug, division.eventType)?.isCombat ?? division.eventType === 'sparring'
+    : true;
 
   return (
     <div className="min-h-screen bg-surface-900 text-white">
@@ -1226,6 +1167,7 @@ export default function Scorekeeper() {
                 </div>
               </button>
               {/* Penalty Controls for Competitor 1 */}
+              {isCombatEvent && (
               <div className="flex flex-col gap-2" role="group" aria-label={`${getCompetitorName(currentMatch.competitor1)} penalty controls`}>
                 <button
                   onClick={(e) => { e.stopPropagation(); setPenalties1(p => p + 1); }}
@@ -1248,6 +1190,7 @@ export default function Scorekeeper() {
                   {penalties1}
                 </div>
               </div>
+              )}
             </div>
 
             <div className="text-center text-surface-400 font-bold">VS</div>
@@ -1292,6 +1235,7 @@ export default function Scorekeeper() {
                 </div>
               </button>
               {/* Penalty Controls for Competitor 2 */}
+              {isCombatEvent && (
               <div className="flex flex-col gap-2" role="group" aria-label={`${getCompetitorName(currentMatch.competitor2)} penalty controls`}>
                 <button
                   onClick={(e) => { e.stopPropagation(); setPenalties2(p => p + 1); }}
@@ -1314,6 +1258,7 @@ export default function Scorekeeper() {
                   {penalties2}
                 </div>
               </div>
+              )}
             </div>
           </div>
 
@@ -1327,10 +1272,10 @@ export default function Scorekeeper() {
                 <input
                   id="scorekeeper-score1"
                   type="number"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   min="0"
                   max="999"
-                  step="1"
+                  step="0.01"
                   value={score1}
                   onChange={(e) => setScore1(e.target.value)}
                   className="w-full p-4 text-2xl text-center bg-surface-700 rounded-lg"
@@ -1344,10 +1289,10 @@ export default function Scorekeeper() {
                 <input
                   id="scorekeeper-score2"
                   type="number"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   min="0"
                   max="999"
-                  step="1"
+                  step="0.01"
                   value={score2}
                   onChange={(e) => setScore2(e.target.value)}
                   className="w-full p-4 text-2xl text-center bg-surface-700 rounded-lg"

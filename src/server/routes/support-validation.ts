@@ -39,9 +39,22 @@ export const supportTicketUpdateSchema = z
     message: 'At least one support-ticket field is required',
   });
 
+/** Ticket `source` written by the "Report a bug" form. */
+export const BUG_REPORT_SOURCE = 'bug-report';
+
+export const bugReportSchema = z.object({
+  title: z.string().trim().min(3, 'Give the problem a short title').max(120, 'Keep the title under 120 characters'),
+  whatHappened: z.string().trim().min(5, 'Describe what happened').max(2000, 'Description is too long'),
+  expected: z.string().trim().max(1000, 'Too long').optional().nullable(),
+  severity: z.enum(['low', 'normal', 'high']),
+  page: z.string().trim().max(255).optional().nullable(),
+  browser: z.string().trim().max(300).optional().nullable(),
+});
+
 export const supportTicketQuerySchema = z
   .object({
     status: z.enum(['open', 'in_progress', 'resolved', 'closed']).optional(),
+    source: z.string().trim().min(1).max(40).optional(),
     limit: z
       .string()
       .optional()
@@ -50,6 +63,7 @@ export const supportTicketQuerySchema = z
   })
   .transform((value) => ({
     status: value.status,
+    source: value.source,
     limit: value.limit,
   }));
 

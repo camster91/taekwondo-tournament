@@ -16,3 +16,25 @@ describe('support configuration validation', () => {
     expect(parsed.success).toBe(true);
   });
 });
+
+describe('bugReportSchema', () => {
+  it('accepts a complete report and trims it', async () => {
+    const { bugReportSchema } = await import('./support-validation.js');
+    const parsed = bugReportSchema.safeParse({
+      title: '  Bracket PDF blank ',
+      whatHappened: 'The PDF downloads with no names on it.',
+      expected: 'Names in each slot',
+      severity: 'high',
+      page: '/tournaments/x/divisions',
+      browser: 'Mozilla/5.0',
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.title).toBe('Bracket PDF blank');
+  });
+
+  it('requires a title, a description and a known severity', async () => {
+    const { bugReportSchema } = await import('./support-validation.js');
+    expect(bugReportSchema.safeParse({ title: '', whatHappened: 'x', severity: 'low' }).success).toBe(false);
+    expect(bugReportSchema.safeParse({ title: 'Broken', whatHappened: 'Broken badly', severity: 'urgent' }).success).toBe(false);
+  });
+});
