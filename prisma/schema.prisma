@@ -1024,3 +1024,16 @@ model PlatformSetting {
   updatedById String?
   updatedAt   DateTime @updatedAt
 }
+
+// Family portal: a short-lived emailed link that lists every registration
+// made with one parent email (no account). Only the token hash is stored.
+model FamilyAccessLink {
+  id        String   @id @default(uuid())
+  email     String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+}
