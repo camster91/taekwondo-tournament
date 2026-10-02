@@ -329,10 +329,10 @@ export default function Divisions() {
       return { action, body };
     },
     onMutate: ({ action }) => {
-      const label = action === 'propose' ? 'Generating deterministic recommendation' : `${action[0].toUpperCase()}${action.slice(1)}ing recommendation`;
+      const label = { propose: 'Working out suggested divisions', approve: 'Approving the suggestion', apply: 'Applying the suggestion', reject: 'Rejecting the suggestion' }[action];
       setRecommendationStatus({ state: 'pending', message: `${label}…` });
     },
-    onError: (error) => setRecommendationStatus({ state: 'rejected', message: error instanceof Error ? error.message : 'Recommendation operation failed' }),
+    onError: (error) => setRecommendationStatus({ state: 'rejected', message: error instanceof Error ? error.message : 'Something went wrong with the suggestion. Please try again.' }),
     onSuccess: async ({ action }) => {
       await queryClient.invalidateQueries({ queryKey: ['division-recommendations', id] });
       if (action === 'apply') {
@@ -345,12 +345,12 @@ export default function Divisions() {
       setRecommendationStatus({
         state: 'resolved',
         message: action === 'propose'
-          ? 'Recommendation ready for director review. No divisions changed.'
+          ? 'Suggested divisions are ready to review. Nothing has changed yet.'
           : action === 'approve'
-            ? 'Recommendation approved. Divisions have not changed; Apply is still required.'
+            ? 'Suggestion approved. Nothing changes until you press Apply to divisions.'
             : action === 'apply'
-              ? 'Approved recommendation applied. The latest recovery backup was replaced with the pre-change divisions.'
-              : 'Recommendation rejected without changing divisions.',
+              ? 'Suggestion applied to your divisions. A backup of the old divisions was saved first.'
+              : 'Suggestion rejected. Your divisions are unchanged.',
       });
     },
   });
@@ -933,8 +933,8 @@ export default function Divisions() {
 
       <Card className="mb-6">
         <CardHeader
-          title="Division recommendation assistant"
-          description="Deterministic suggestions only. A director must approve and then apply; nothing changes automatically."
+          title="Suggested divisions"
+          description="Get divisions suggested from your registrations and rules. You review, approve, then apply. Nothing changes until you apply."
         />
         <CardBody className="space-y-4">
           {recommendationStatus && (
@@ -947,19 +947,19 @@ export default function Divisions() {
           )}
           {recommendationsLoading || recommendationsFetching && !recommendations ? (
             <div role="status" className="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-300">
-              <Spinner size="sm" /> Loading current recommendation state…
+              <Spinner size="sm" /> Loading suggestions…
             </div>
           ) : recommendationsError ? (
             <OperationStatus
               state="rejected"
-              message="Current recommendations could not be loaded. No proposal or approval action is available until the server state is known."
+              message="Suggestions could not be loaded. Try again before suggesting or approving anything."
               actionLabel="Try again"
               onAction={() => void refetchRecommendations()}
             />
           ) : !latestRecommendation ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-surface-600 dark:text-surface-300">
-                Review sparse categories, incomplete registrations, and manual placements before changing divisions.
+                See who would go in which division before anything changes. Competitors missing details and anyone you've pinned are shown separately.
               </p>
               <Button
                 variant="secondary"
@@ -967,7 +967,7 @@ export default function Divisions() {
                 onClick={() => recommendationMutation.mutate({ action: 'propose' })}
               >
                 <Wand2 className="mr-2 h-4 w-4" aria-hidden="true" />
-                Generate recommendation
+                Suggest divisions
               </Button>
             </div>
           ) : (
@@ -975,13 +975,13 @@ export default function Divisions() {
               <div>
                 <p className="font-medium text-surface-900 dark:text-white">{latestRecommendation.explanation}</p>
                 <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">
-                  {latestRecommendation.proposedDiff.divisions.length} proposed divisions · {recommendationImpact?.retainedDivisions.length ?? 0} pinned divisions retained · {recommendationImpact?.retainedAssignments ?? 0} placements retained · {latestRecommendation.proposedDiff.excluded.length} registrations require review
+                  {latestRecommendation.proposedDiff.divisions.length} suggested divisions · {recommendationImpact?.retainedDivisions.length ?? 0} pinned divisions kept · {recommendationImpact?.retainedAssignments ?? 0} placements kept · {latestRecommendation.proposedDiff.excluded.length} competitors need your review
                 </p>
                 <p className="mt-1 text-xs text-surface-500 dark:text-surface-400">
-                  Input completeness: {Math.round(latestRecommendation.confidence * 100)}% · Status: {latestRecommendation.status}
+                  Details complete: {Math.round(latestRecommendation.confidence * 100)}% · Status: {latestRecommendation.status}
                 </p>
                 <p className="mt-1 text-xs text-surface-500 dark:text-surface-400">
-                  Deterministic means reproducible, not automatically correct. Review every proposed placement before approval.
+                  The same registrations and rules always give the same suggestion, but it can still be wrong. Check each placement before approving.
                 </p>
               </div>
               
@@ -990,13 +990,13 @@ export default function Divisions() {
                 <div className="bg-warning/50 dark:bg-warning/900/20 border-l-4 border-warning500 p-4 rounded">
                   <h4 className="text-sm font-semibold text-warning900 dark:text-warning300 mb-2 flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4" />
-                    Conflicts & Manual Review Required
+                    Check before applying
                   </h4>
                   <div className="space-y-2 text-xs text-warning800 dark:text-warning200">
                     {recommendationImpact.replacedDivisions.length > 0 && (
                       <div>
                         <p className="font-medium">
-                          {recommendationImpact.replacedDivisions.length} non-pinned division{recommendationImpact.replacedDivisions.length === 1 ? '' : 's'} will be replaced:
+                          {recommendationImpact.replacedDivisions.length} division{recommendationImpact.replacedDivisions.length === 1 ? '' : 's'} you haven't pinned will be replaced:
                         </p>
                         <ul className="list-disc pl-5 mt-1">
                           {recommendationImpact.replacedDivisions.map((division) => (
@@ -1004,14 +1004,14 @@ export default function Divisions() {
                           ))}
                         </ul>
                         <p className="mt-1 italic">
-                          To preserve a division, manually pin competitors before applying.
+                          To keep a division as it is, pin its competitors first.
                         </p>
                       </div>
                     )}
                     {latestRecommendation.proposedDiff.excluded.length > 0 && (
                       <div>
                         <p className="font-medium">
-                          {latestRecommendation.proposedDiff.excluded.length} registration{latestRecommendation.proposedDiff.excluded.length === 1 ? '' : 's'} cannot be auto-assigned:
+                          {latestRecommendation.proposedDiff.excluded.length} registration{latestRecommendation.proposedDiff.excluded.length === 1 ? '' : 's'} can't be placed automatically:
                         </p>
                         <ul className="list-disc pl-5 mt-1">
                           {latestRecommendation.proposedDiff.excluded.map((excluded) => (
@@ -1021,7 +1021,7 @@ export default function Divisions() {
                           ))}
                         </ul>
                         <p className="mt-1 italic">
-                          Review these competitors after applying and assign manually.
+                          Place these competitors yourself after applying.
                         </p>
                       </div>
                     )}
@@ -1030,7 +1030,7 @@ export default function Divisions() {
               )}
               
               <div>
-                <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Proposed divisions and placements</h3>
+                <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Who goes where</h3>
                 <div className="mt-2 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-surface-200 p-3 dark:border-surface-700">
                   {latestRecommendation.proposedDiff.divisions.map((division) => (
                     <div key={`${division.name}-${division.eventType}`} className="border-b border-surface-100 pb-2 last:border-0 dark:border-surface-800">
@@ -1051,7 +1051,7 @@ export default function Divisions() {
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 <div>
-                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Pinned divisions retained in the final state</h3>
+                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Pinned divisions (kept as they are)</h3>
                   {recommendationImpact?.retainedDivisions.length ? (
                     <div className="mt-1 space-y-2 text-sm text-surface-600 dark:text-surface-300">
                       {recommendationImpact.retainedDivisions.map((division) => (
@@ -1062,46 +1062,46 @@ export default function Divisions() {
                             {division.assignments.map((assignment) => (
                               <li key={assignment.registrationId}>
                                 {recommendationImpact.names.get(assignment.registrationId) ?? `Registration ${assignment.registrationId.slice(0, 8)}`}
-                                {assignment.manualOverride ? ' — manually pinned' : ' — retained with pinned division'}
+                                {assignment.manualOverride ? ' — manually pinned' : ' — kept with its pinned division'}
                               </li>
                             ))}
                           </ul>
                         </div>
                       ))}
                     </div>
-                  ) : <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">No manual placements are present.</p>}
+                  ) : <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">You haven't pinned anyone.</p>}
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Requires manual review</h3>
+                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Needs your review</h3>
                   {latestRecommendation.proposedDiff.excluded.length ? (
                     <ul className="mt-1 list-disc pl-5 text-sm text-warning700 dark:text-warning300">
                       {latestRecommendation.proposedDiff.excluded.map((entry) => (
                         <li key={entry.registrationId}>{entry.competitorName}: {entry.reasons.join(', ')}</li>
                       ))}
                     </ul>
-                  ) : <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">Every unpinned registration has the required facts.</p>}
+                  ) : <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">Everyone has the details needed to be placed.</p>}
                 </div>
               </div>
               <div className="rounded-lg bg-surface-50 p-3 text-sm text-surface-700 dark:bg-surface-800 dark:text-surface-200">
-                <p className="font-medium">Concrete configuration</p>
+                <p className="font-medium">Rules used</p>
                 <p>
-                  Maximum size {latestRecommendation.inputSnapshot.config.divisionThreshold}; smart split {latestRecommendation.inputSnapshot.config.enableSmartSplitting ? 'on' : 'off'}; smart merge {latestRecommendation.inputSnapshot.config.enableSmartMerging ? 'on' : 'off'}; age flexibility {latestRecommendation.inputSnapshot.config.ageBoundaryTolerance ?? 0} months; age bands {latestRecommendation.inputSnapshot.config.useBlackBeltAgeGroups ? 'black-belt preset' : 'standard/custom rules'}; custom weight classes {latestRecommendation.inputSnapshot.config.customWeightClasses?.map((weightClass) => weightClass.name).join(', ') || 'none'}.
+                  Up to {latestRecommendation.inputSnapshot.config.divisionThreshold} per division; split big divisions {latestRecommendation.inputSnapshot.config.enableSmartSplitting ? 'on' : 'off'}; merge small divisions {latestRecommendation.inputSnapshot.config.enableSmartMerging ? 'on' : 'off'}; age flexibility {latestRecommendation.inputSnapshot.config.ageBoundaryTolerance ?? 0} months; age bands {latestRecommendation.inputSnapshot.config.useBlackBeltAgeGroups ? 'black-belt preset' : 'standard/custom rules'}; custom weight classes {latestRecommendation.inputSnapshot.config.customWeightClasses?.map((weightClass) => weightClass.name).join(', ') || 'none'}.
                 </p>
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 <div>
-                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Constraints honored</h3>
+                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Rules followed</h3>
                   <ul className="mt-1 list-disc pl-5 text-sm text-surface-600 dark:text-surface-300">
                     {latestRecommendation.constraintsConsidered.map((constraint) => <li key={constraint}>{constraint}</li>)}
                   </ul>
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Warnings and exceptions</h3>
+                  <h3 className="text-sm font-semibold text-surface-900 dark:text-white">Warnings</h3>
                   {latestRecommendation.warnings.length ? (
                     <ul className="mt-1 list-disc pl-5 text-sm text-warning700 dark:text-warning300">
                       {latestRecommendation.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}
                     </ul>
-                  ) : <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">No incomplete registration warnings.</p>}
+                  ) : <p className="mt-1 text-sm text-surface-600 dark:text-surface-300">No warnings.</p>}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1111,7 +1111,7 @@ export default function Divisions() {
                       variant="primary"
                       loading={recommendationMutation.isPending}
                       onClick={() => recommendationMutation.mutate({ action: 'approve', recommendationId: latestRecommendation.id })}
-                    >Approve recommendation</Button>
+                    >Approve suggestion</Button>
                     <Button
                       variant="secondary"
                       disabled={recommendationMutation.isPending}
@@ -1124,14 +1124,14 @@ export default function Divisions() {
                     variant="primary"
                     disabled={recommendationMutation.isPending}
                     onClick={() => setApplyRecommendationConfirm(true)}
-                  >Apply approved recommendation</Button>
+                  >Apply to divisions</Button>
                 )}
                 {(latestRecommendation.status === 'rejected' || latestRecommendation.status === 'applied') && (
                   <Button
                     variant="secondary"
                     loading={recommendationMutation.isPending}
                     onClick={() => recommendationMutation.mutate({ action: 'propose' })}
-                  >Generate a new recommendation</Button>
+                  >Suggest again</Button>
                 )}
               </div>
             </div>
@@ -1142,18 +1142,18 @@ export default function Divisions() {
       <ConfirmDialog
         isOpen={applyRecommendationConfirm}
         onClose={() => { if (!recommendationMutation.isPending) setApplyRecommendationConfirm(false); }}
-        title="Apply approved division recommendation?"
-        confirmText="Apply recommendation"
+        title="Apply suggested divisions?"
+        confirmText="Apply"
         isLoading={recommendationMutation.isPending}
         closeDisabled={recommendationMutation.isPending}
         variant="danger"
         message={latestRecommendation ? (
           <span className="space-y-2 text-left">
             <span className="block">
-              This replaces {recommendationImpact?.replacedDivisions.length ?? 0} non-pinned division{recommendationImpact?.replacedDivisions.length === 1 ? '' : 's'} and {recommendationImpact?.replacedAssignments ?? 0} assignments. It retains {recommendationImpact?.retainedDivisions.length ?? 0} pinned division{recommendationImpact?.retainedDivisions.length === 1 ? '' : 's'} with {recommendationImpact?.retainedAssignments ?? 0} existing placements, then adds {latestRecommendation.proposedDiff.divisions.length} proposed divisions with {recommendationImpact?.proposedAssignments ?? 0} assignments.
+              This replaces {recommendationImpact?.replacedDivisions.length ?? 0} division{recommendationImpact?.replacedDivisions.length === 1 ? '' : 's'} you haven't pinned ({recommendationImpact?.replacedAssignments ?? 0} placements) and keeps {recommendationImpact?.retainedDivisions.length ?? 0} pinned division{recommendationImpact?.retainedDivisions.length === 1 ? '' : 's'} with {recommendationImpact?.retainedAssignments ?? 0} placements. It then adds {latestRecommendation.proposedDiff.divisions.length} suggested divisions with {recommendationImpact?.proposedAssignments ?? 0} placements.
             </span>
             <span className="block">
-              Expected final state: {recommendationImpact?.finalDivisionCount ?? 0} divisions and {recommendationImpact?.finalAssignmentCount ?? 0} assignments. {latestRecommendation.proposedDiff.excluded.length} incomplete registrations remain unassigned. Existing brackets block application. The latest recovery backup will be replaced with the pre-change divisions; this audit does not promise a permanent undo.
+              You'll end up with {recommendationImpact?.finalDivisionCount ?? 0} divisions and {recommendationImpact?.finalAssignmentCount ?? 0} placements. {latestRecommendation.proposedDiff.excluded.length} {latestRecommendation.proposedDiff.excluded.length === 1 ? 'competitor' : 'competitors'} missing details won't be placed. It can't be applied while brackets exist. Your current divisions are backed up first, but only the latest backup is kept, so treat this as hard to undo.
             </span>
           </span>
         ) : ''}

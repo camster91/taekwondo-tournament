@@ -28,25 +28,25 @@ test('director reviews, approves, confirms, and applies a deterministic division
     await skipOnboardingTour(page);
     await loginAsEmail(page, email);
     await page.goto(`/tournaments/${tournamentId}/divisions`);
-    await expect(page.getByRole('heading', { name: 'Division recommendation assistant' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Suggested divisions' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Generate recommendation' }).click();
-    await expect(page.getByText('Recommendation ready for director review. No divisions changed.')).toBeVisible();
+    await page.getByRole('button', { name: 'Suggest divisions' }).click();
+    await expect(page.getByText('Suggested divisions are ready to review. Nothing has changed yet.')).toBeVisible();
     await expect(page.getByText('Amina Rahman — North Star')).toBeVisible();
     await expect(page.getByText('Needs Age Review: missing tournament age', { exact: true })).toBeVisible();
-    await expect(page.getByText(/Input completeness: 50%/)).toBeVisible();
-    await expect(page.getByText(/Deterministic means reproducible, not automatically correct/)).toBeVisible();
+    await expect(page.getByText(/Details complete: 50%/)).toBeVisible();
+    await expect(page.getByText(/always give the same suggestion, but it can still be wrong/)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Approve recommendation' }).click();
-    await expect(page.getByText('Recommendation approved. Divisions have not changed; Apply is still required.')).toBeVisible();
+    await page.getByRole('button', { name: 'Approve suggestion' }).click();
+    await expect(page.getByText('Suggestion approved. Nothing changes until you press Apply to divisions.')).toBeVisible();
     expect(await prisma.division.count({ where: { tournamentId } })).toBe(0);
 
-    await page.getByRole('button', { name: 'Apply approved recommendation' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Apply approved division recommendation?' });
-    await expect(dialog).toContainText('1 incomplete registrations remain unassigned');
-    await expect(dialog).toContainText('this audit does not promise a permanent undo');
-    await dialog.getByRole('button', { name: 'Apply recommendation' }).click();
-    await expect(page.getByText(/Approved recommendation applied/)).toBeVisible();
+    await page.getByRole('button', { name: 'Apply to divisions' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Apply suggested divisions?' });
+    await expect(dialog).toContainText("1 competitor missing details won't be placed");
+    await expect(dialog).toContainText('treat this as hard to undo');
+    await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+    await expect(page.getByText(/Suggestion applied to your divisions/)).toBeVisible();
 
     expect(await prisma.division.count({ where: { tournamentId } })).toBe(1);
     expect(await prisma.divisionAssignment.count({ where: { division: { tournamentId } } })).toBe(1);
