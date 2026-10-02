@@ -1015,3 +1015,12 @@ model StaffAssignment {
   @@index([userId, status])
 }
 
+
+// Installation-wide settings a root admin manages in the app (e.g. the
+// Mailgun email settings). `value` is an encrypted JSON blob.
+model PlatformSetting {
+  key         String   @id
+  value       String
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}

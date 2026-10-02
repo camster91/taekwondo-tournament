@@ -208,7 +208,7 @@ export default function Login() {
                 to="/register"
                 className="text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white"
               >
-                Competitor registration →
+                Register a competitor →
               </Link>
             ) : null}
           </div>
@@ -280,7 +280,7 @@ export default function Login() {
         </section>
 
         {/* ─── Right: Auth card ─── */}
-        <section className="flex items-center justify-center px-6 py-12 lg:py-24 bg-surface-50 dark:bg-surface-950">
+        <section className="flex items-center justify-center px-6 pt-12 pb-28 lg:py-24 bg-surface-50 dark:bg-surface-950">
           <div className="w-full max-w-md">
             {setupStatusLoading ? (
               <div role="status" aria-live="polite" className="text-center py-10">
@@ -323,7 +323,7 @@ export default function Login() {
                   Organizer Sign In
                 </h1>
                 <p className="text-sm text-surface-600 dark:text-surface-400 mb-6">
-                  Access your tournament management workspace
+                  For tournament organizers and their staff. We email you a sign-in link, so there is no password to remember.
                 </p>
 
                 {step === 'email' ? (
@@ -364,7 +364,7 @@ export default function Login() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-surface-600">
           <div>bowin &middot; tournament manager v1.0</div>
           <div className="flex items-center gap-4">
-            <a href="/register" className="hover:text-surface-900 dark:hover:text-white">Public Registration</a>
+            <a href="/register" className="hover:text-surface-900 dark:hover:text-white">Register a competitor</a>
             <a href="/api/health" target="_blank" rel="noopener" className="hover:text-surface-900 dark:hover:text-white">Status</a>
           </div>
         </div>
@@ -393,9 +393,6 @@ function EmailForm({
   return (
     <div className="space-y-5">
       <h2 className="sr-only">Sign in</h2>
-      <h3 className="text-sm font-medium text-surface-600 dark:text-surface-400 text-center">
-        Or sign in with email
-      </h3>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
@@ -441,15 +438,15 @@ function EmailForm({
         </>
       )}
 
-      <div className="relative">
-        <Button
-          as={Link}
-          to="/register"
-          variant="secondary"
-          className="w-full text-primary-700 dark:text-primary-300 border border-primary-300 dark:border-primary-600"
-        >
-          <UserPlus className="h-4 w-4 mr-2" /> Register as Competitor
-        </Button>
+      <div className="rounded-xl border border-surface-200 bg-surface-0 p-4 text-sm text-surface-600 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-300">
+        <p className="flex items-start gap-2">
+          <UserPlus className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+          <span>
+            <strong className="text-surface-900 dark:text-white">Registering a competitor?</strong> You don&apos;t need an account.
+            Use the registration link from your tournament organizer, or{' '}
+            <Link to="/register" className="font-medium text-primary-700 underline dark:text-primary-300">find an open tournament</Link>.
+          </span>
+        </p>
       </div>
     </div>
   );
@@ -556,9 +553,12 @@ function CodeForm({
       <div className="bg-success/10 dark:bg-success/20 border border-success/20 dark:border-success/30 rounded-xl p-4 flex items-start">
         <CheckCircle className="h-5 w-5 text-success mr-3 flex-shrink-0 mt-0.5" />
         <div className="text-sm">
-          <div className="font-medium text-success dark:text-success">Sign-in link sent</div>
+          <div className="font-medium text-success dark:text-success">Check your email</div>
           <p className="mt-1 text-success/90 dark:text-success/80">
-            We sent a link to <strong>{email}</strong>.{devModeData ? ' Or use the magic link above.' : ' Or enter the 6-digit code below.'}
+            If <strong>{email}</strong> has an organizer account, a sign-in link is on its way.{devModeData ? ' Or use the magic link above.' : ' You can also enter the 6-digit code from that email below.'}
+          </p>
+          <p className="mt-1 text-success/90 dark:text-success/80">
+            Nothing after a few minutes? Check spam. New organizers need an invite from their organization&apos;s admin.
           </p>
         </div>
       </div>

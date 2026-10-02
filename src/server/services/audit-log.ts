@@ -18,7 +18,9 @@ export type AuditAction =
   | 'user_status_changed'
   | 'waitlist_promoted'
   | 'legal_hold_placed'
-  | 'legal_hold_released';
+  | 'legal_hold_released'
+  | 'email_settings_saved'
+  | 'email_settings_cleared';
 
 export interface AuditLogOptions {
   userId: string;
