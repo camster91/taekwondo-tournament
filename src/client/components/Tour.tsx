@@ -14,60 +14,9 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import Button from './ui/Button';
+import { TOUR_STEPS, type TourStep } from './tour-steps';
 
 const STORAGE_KEY = 'bowin_tour_completed';
-
-export interface TourStep {
-  /** CSS selector for the element to highlight */
-  selector: string;
-  title: string;
-  body: string;
-  /** Preferred popover position relative to the highlighted element.
-   *  Auto-falls-back if it would clip off-screen. */
-  position?: 'top' | 'bottom' | 'left' | 'right';
-  /** Optional route hint: tour waits for this path before checking the selector. */
-  route?: string;
-}
-
-export const TOUR_STEPS: TourStep[] = [
-  {
-    selector: '[data-tour="dashboard-hero"]',
-    title: 'Welcome to your tournament manager',
-    body: 'This 6-step tour shows you how to run a real tournament end-to-end. You\'ll see where the 4 main workflows live: creating a tournament, importing competitors, scoring matches on the day, and sharing the live scoreboard with spectators. Press Next to advance, Back to revisit, or Escape to close the tour.',
-    position: 'bottom',
-  },
-  {
-    selector: 'a[href="/tournaments"]',
-    title: 'Tournaments list',
-    body: 'Every tournament you create lives here. Click any card to open it. Draft tournaments can\'t accept registrations — flip the status to "Registration" from the detail page when you\'re ready to share the public sign-up link with parents.',
-    position: 'right',
-  },
-  {
-    selector: '[data-tour="tournament-detail-actions"]',
-    title: 'Tournament detail — your control center',
-    body: 'From here you: (1) Import competitors from Excel or add them manually, (2) Auto-generate divisions by age/belt/weight, (3) Generate brackets, and (4) Run the day-of. The "View Public" button opens the read-only scoreboard in a new tab — useful for checking what spectators will see without logging out.',
-    position: 'bottom',
-    route: '/tournaments/435ab382-fe49-4469-be51-b826a40ddcf3',
-  },
-  {
-    selector: '[data-tour="nav-scorekeeper"]',
-    title: 'Scorekeeper — runs the day',
-    body: 'Pick a division, then click competitor 1 or 2 to mark a winner. Keyboard shortcuts make this much faster: 1/2 = pick winner, ←/→ = navigate matches, Enter = confirm, Esc = back, ? = help. With a few hours of practice you can score a whole division without leaving the keyboard.',
-    position: 'right',
-  },
-  {
-    selector: '[data-tour="public-display"]',
-    title: 'Public scoreboard — for spectators',
-    body: 'Connect a laptop to the venue TV and open this URL. Auto-refreshes every 3 seconds, no login required for spectators. Generate a shareable link from Settings → Share Link to give to people who want to follow along on their phones. Parents stuck at work really appreciate this.',
-    position: 'top',
-  },
-  {
-    selector: '[data-tour="settings-share-link"]',
-    title: 'Settings + share link',
-    body: 'Settings is split into two tabs: Setup (quick) for things you change per tournament, like the registration fee note and the share link, and Categorization + Brackets (advanced) for the rules engine that decides how competitors get grouped. Default rules work for most dojangs — only change them if you know what you\'re doing. When you\'re done with the tour, click "Import competitors" from the tournament detail page to get started.',
-    position: 'left',
-  },
-];
 
 interface Rect {
   top: number;
@@ -80,13 +29,16 @@ interface PopoverPosition {
   top: number;
   left: number;
   arrow: 'top' | 'bottom' | 'left' | 'right' | 'none';
+  /** Phones: pin the card to the top or bottom edge (away from the
+   *  highlighted element) so its buttons stay on screen. */
+  docked?: 'top' | 'bottom';
 }
 
 const POPOVER_WIDTH = 360;
-const POPOVER_MIN_WIDTH = 280; // For mobile
 const POPOVER_HEIGHT = 200;
 const GUTTER = 16;
 const ARROW_SIZE = 10;
+const DOCK_BELOW_WIDTH = 640;
 
 function computePopover(target: Rect, requested: TourStep['position'], viewport: { w: number; h: number }): PopoverPosition {
   const candidates: ('top' | 'bottom' | 'left' | 'right')[] = requested
@@ -123,10 +75,15 @@ function computePopover(target: Rect, requested: TourStep['position'], viewport:
       return { top, left, arrow };
     }
   }
-  // Fallback: center of screen
+  return centeredPopover(viewport);
+}
+
+/** Middle of the screen, kept inside the side gutters on narrow phones. */
+function centeredPopover(viewport: { w: number; h: number }): PopoverPosition {
+  const width = Math.min(POPOVER_WIDTH, viewport.w - GUTTER * 2);
   return {
-    top: viewport.h / 2 - POPOVER_HEIGHT / 2,
-    left: viewport.w / 2 - POPOVER_WIDTH / 2,
+    top: Math.max(GUTTER, viewport.h / 2 - POPOVER_HEIGHT / 2),
+    left: Math.max(GUTTER, viewport.w / 2 - width / 2),
     arrow: 'none',
   };
 }
@@ -158,6 +115,10 @@ export default function Tour({ force = false, onComplete }: TourProps) {
   const [open, setOpen] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
+  // The current step's element isn't on this page (or is hidden, e.g. the
+  // side menu on a phone): show the step as a centred card instead of a
+  // dim screen with nothing to click.
+  const [targetMissing, setTargetMissing] = useState(false);
   const retryRef = useRef(0);
 
   // Determine if the tour should show
@@ -176,34 +137,35 @@ export default function Tour({ force = false, onComplete }: TourProps) {
 
   const currentStep = TOUR_STEPS[stepIndex];
 
-  // Find the target element, wait for it if not present
+  // Find the target element, wait briefly for it if not present
   useEffect(() => {
     if (!open || !currentStep) return;
     let cancelled = false;
+    setTargetRect(null);
+    setTargetMissing(false);
+    retryRef.current = 0;
 
     const findAndMeasure = () => {
       if (cancelled) return;
       const el = document.querySelector(currentStep.selector);
       if (!el) {
-        // Element not on this page. If step declares a route, navigate.
-        if (currentStep.route) {
+        // Element not on this page yet. If the step declares a route,
+        // navigate there first; either way give the page a moment to render.
+        if (currentStep.route && retryRef.current === 0 && window.location.pathname !== currentStep.route) {
           window.history.pushState({}, '', currentStep.route);
           window.dispatchEvent(new PopStateEvent('popstate'));
-          // Retry a few times after the route change
-          if (retryRef.current < 10) {
-            retryRef.current++;
-            setTimeout(findAndMeasure, 250);
-          }
+        }
+        if (retryRef.current < 8) {
+          retryRef.current++;
+          setTimeout(findAndMeasure, 250);
+        } else {
+          setTargetMissing(true);
         }
         return;
       }
-      retryRef.current = 0;
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) {
-        // Element is hidden — skip this step
-        if (stepIndex < TOUR_STEPS.length - 1) {
-          setStepIndex(stepIndex + 1);
-        }
+        setTargetMissing(true);
         return;
       }
       // Scroll the element into view
@@ -253,13 +215,19 @@ export default function Tour({ force = false, onComplete }: TourProps) {
   }, [open, finish, next, prev]);
 
   const popover = useMemo(() => {
-    if (!open || !targetRect) return null;
+    if (!open) return null;
+    const viewport = { w: window.innerWidth, h: window.innerHeight };
+    if (viewport.w < DOCK_BELOW_WIDTH && (targetRect || targetMissing)) {
+      const targetInLowerHalf = targetRect && targetRect.top + targetRect.height / 2 > viewport.h / 2;
+      return { top: 0, left: 0, arrow: 'none', docked: targetInLowerHalf ? 'top' : 'bottom' };
+    }
+    if (!targetRect) return targetMissing ? centeredPopover(viewport) : null;
     return computePopover(
       targetRect,
       currentStep?.position,
-      { w: window.innerWidth, h: window.innerHeight },
+      viewport,
     );
-  }, [open, targetRect, currentStep]);
+  }, [open, targetRect, targetMissing, currentStep]);
 
   if (!open || !currentStep) return null;
 
@@ -302,8 +270,12 @@ export default function Tour({ force = false, onComplete }: TourProps) {
       {/* Popover — pointer-events-auto so its buttons are clickable */}
       {popover && (
         <div
-          className="absolute w-[280px] sm:w-[360px] max-w-[calc(100vw-32px)] bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 animate-slide-up pointer-events-auto"
-          style={{ top: popover.top, left: popover.left }}
+          className={`absolute bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 animate-slide-up pointer-events-auto overflow-y-auto ${
+            popover.docked ? 'max-h-[60vh]' : 'w-[360px] max-w-[calc(100vw-32px)] max-h-[calc(100vh-32px)]'
+          }`}
+          style={popover.docked
+            ? { left: GUTTER, right: GUTTER, [popover.docked]: GUTTER }
+            : { top: popover.top, left: popover.left }}
           role="document"
           aria-labelledby="tour-title"
           aria-describedby="tour-body"
