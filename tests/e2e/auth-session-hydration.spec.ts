@@ -141,5 +141,5 @@ test('late anonymous bootstrap cannot overwrite a newly verified session', async
 
   await expect(page).toHaveURL('/dashboard');
   await expect(page.getByText('Your session has expired. Please log in again.')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Welcome', exact: true })).toBeVisible();
 });

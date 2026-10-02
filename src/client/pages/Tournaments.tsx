@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText, AlertTriangle } from 'lucide-react';
+import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText, AlertTriangle, Trash2 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import EmptyState from '../components/ui/EmptyState';
@@ -9,6 +9,7 @@ import { StatusBadge } from '../components/ui/Badge';
 import Badge from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
 import OperationStatus from '../components/ui/OperationStatus';
+import DeletedTournaments from '../components/DeletedTournaments';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { SPORT_PROFILES } from '../../shared/constants/sport-profiles';
 import { saveDraft, loadDraft, clearDraft, type DraftTournament } from '../utils/draft-storage';
@@ -64,6 +65,8 @@ export default function Tournaments() {
       setSearchParams(next, { replace: true });
     }
   };
+  const fieldId = useId();
+  const canManageTournaments = user?.role === 'admin' || user?.role === 'director';
   const [deleteTarget, setDeleteTarget] = useState<Tournament | null>(null);
   const [showDraftDialog, setShowDraftDialog] = useState(false);
   const [draftTournament, setDraftTournament] = useState<DraftTournament | null>(null);
@@ -197,14 +200,25 @@ export default function Tournaments() {
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
-        title="Tournaments"
-        description="Create and manage your tournaments"
-        actions={
-          <Button variant="primary" onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4 mr-2" /> New Tournament
-          </Button>
-        }
+        title={urlFilters.trash ? 'Deleted tournaments' : 'Tournaments'}
+        description={urlFilters.trash
+          ? 'Restore a tournament to bring it back with its registrations, divisions and brackets.'
+          : 'Create and manage your tournaments'}
+        actions={urlFilters.trash ? undefined : (
+          <>
+            {canManageTournaments && (
+              <Button as={Link} to="/tournaments?trash=true" variant="ghost">
+                <Trash2 className="h-4 w-4 mr-2" aria-hidden="true" /> Deleted
+              </Button>
+            )}
+            <Button variant="primary" onClick={() => setShowCreateModal(true)}>
+              <Plus className="h-4 w-4 mr-2" /> New Tournament
+            </Button>
+          </>
+        )}
       />
+
+      {urlFilters.trash ? <DeletedTournaments /> : (<>
 
       {/* Error Banner */}
       {isError && (
@@ -220,6 +234,7 @@ export default function Tournaments() {
       {tournaments && tournaments.length > 0 && (
         <Input
           type="text"
+          aria-label="Search tournaments"
           placeholder="Search tournaments..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -295,6 +310,8 @@ export default function Tournaments() {
         </Card>
       )}
 
+      </>)}
+
       {/* Create Modal */}
       {showCreateModal && (
         <Modal
@@ -348,9 +365,10 @@ export default function Tournaments() {
             )}
             {templates && templates.length > 0 && (
               <div>
-                <Label>Use Template (Optional)</Label>
+                <Label htmlFor={`${fieldId}-template`}>Use Template (Optional)</Label>
                 <div className="flex items-center gap-2">
                   <select
+                    id={`${fieldId}-template`}
                     value={selectedTemplateId}
                     onChange={(e) => setSelectedTemplateId(e.target.value)}
                     className="flex-1 rounded-lg border border-surface-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-100"
@@ -382,12 +400,13 @@ export default function Tournaments() {
               </div>
             )}
             <div>
-              <Label>Sport</Label>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              <Label id={`${fieldId}-sport`}>Sport</Label>
+              <div role="group" aria-labelledby={`${fieldId}-sport`} className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                 {SPORT_PROFILES.map((sport) => (
                   <button
                     key={sport.slug}
                     type="button"
+                    aria-pressed={formData.sportProfileSlug === sport.slug}
                     onClick={() => setFormData({ ...formData, sportProfileSlug: sport.slug })}
                     className={`flex flex-col items-center p-2 rounded-lg border-2 text-xs font-medium transition-colors ${
                       formData.sportProfileSlug === sport.slug
@@ -395,15 +414,16 @@ export default function Tournaments() {
                         : 'border-surface-200 dark:border-surface-700 hover:border-primary-300 text-surface-600 dark:text-surface-400'
                     }`}
                   >
-                    <span className="text-2xl mb-1">{sport.icon}</span>
+                    <span className="text-2xl mb-1" aria-hidden="true">{sport.icon}</span>
                     <span>{sport.name}</span>
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <Label>Tournament Name *</Label>
+              <Label htmlFor={`${fieldId}-name`}>Tournament Name *</Label>
               <Input
+                id={`${fieldId}-name`}
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -413,8 +433,9 @@ export default function Tournaments() {
               />
             </div>
             <div>
-              <Label>Date *</Label>
+              <Label htmlFor={`${fieldId}-date`}>Date *</Label>
               <Input
+                id={`${fieldId}-date`}
                 type="date"
                 value={formData.date}
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
@@ -422,8 +443,9 @@ export default function Tournaments() {
               />
             </div>
             <div>
-              <Label>Location</Label>
+              <Label htmlFor={`${fieldId}-location`}>Location</Label>
               <Input
+                id={`${fieldId}-location`}
                 type="text"
                 value={formData.location}
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
@@ -441,7 +463,7 @@ export default function Tournaments() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
         title="Delete Tournament"
-        message={`Are you sure you want to delete "${deleteTarget?.name}"? This will also delete all registrations, divisions, and brackets. This action cannot be undone.`}
+        message={`"${deleteTarget?.name}" will be removed from your tournament list. Its registrations, divisions and brackets are kept, and you can restore it from Deleted tournaments.`}
         confirmText="Delete Tournament"
         isLoading={deleteMutation.isPending}
       />
@@ -566,6 +588,7 @@ function TournamentCard({
         </Button>
         <Button
           onClick={onDelete}
+          aria-label={`Delete ${tournament.name}`}
           variant="secondary"
           className="flex-1 text-danger hover:text-danger hover:bg-danger/10 dark:hover:bg-danger/20"
         >
