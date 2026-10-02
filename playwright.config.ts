@@ -17,7 +17,9 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  reporter: [['list']],
+  // In CI, the github reporter turns each failing test into an annotation on
+  // the check run, so a red E2E step can be read without downloading logs.
+  reporter: process.env.CI ? [['list'], ['github']] : [['list']],
   timeout: 180_000,
   expect: { timeout: 15_000 },
   use: {
