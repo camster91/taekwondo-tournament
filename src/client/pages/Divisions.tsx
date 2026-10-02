@@ -375,6 +375,7 @@ export default function Divisions() {
     onSuccess: (result) => {
       setForceConfirm(null);
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+      queryClient.invalidateQueries({ queryKey: ['tournament-backup', id] });
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
       setResultMessage({
         title: 'Auto-generation Complete',
@@ -424,6 +425,7 @@ export default function Divisions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
+      queryClient.invalidateQueries({ queryKey: ['tournament-backup', id] });
       queryClient.invalidateQueries({ queryKey: ['tournament', id] });
       setClearConfirm(false);
       setForceConfirm(null);
