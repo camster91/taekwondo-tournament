@@ -959,6 +959,11 @@ export default function Scorekeeper() {
 
   // Match scoring view
   const division = divisions?.find((d) => d.id === selectedDivision);
+  // Penalties (gam-jeom, shido…) only apply to bouts. Judged events in the
+  // other slot (patterns / forms) don't show the penalty buttons.
+  const isCombatEvent = division?.eventType === 'patterns' || division?.eventType === 'sparring'
+    ? getEventForSlot(sportProfile.slug, division.eventType)?.isCombat ?? division.eventType === 'sparring'
+    : true;
 
   return (
     <div className="min-h-screen bg-surface-900 text-white">
@@ -1162,6 +1167,7 @@ export default function Scorekeeper() {
                 </div>
               </button>
               {/* Penalty Controls for Competitor 1 */}
+              {isCombatEvent && (
               <div className="flex flex-col gap-2" role="group" aria-label={`${getCompetitorName(currentMatch.competitor1)} penalty controls`}>
                 <button
                   onClick={(e) => { e.stopPropagation(); setPenalties1(p => p + 1); }}
@@ -1184,6 +1190,7 @@ export default function Scorekeeper() {
                   {penalties1}
                 </div>
               </div>
+              )}
             </div>
 
             <div className="text-center text-surface-400 font-bold">VS</div>
@@ -1228,6 +1235,7 @@ export default function Scorekeeper() {
                 </div>
               </button>
               {/* Penalty Controls for Competitor 2 */}
+              {isCombatEvent && (
               <div className="flex flex-col gap-2" role="group" aria-label={`${getCompetitorName(currentMatch.competitor2)} penalty controls`}>
                 <button
                   onClick={(e) => { e.stopPropagation(); setPenalties2(p => p + 1); }}
@@ -1250,6 +1258,7 @@ export default function Scorekeeper() {
                   {penalties2}
                 </div>
               </div>
+              )}
             </div>
           </div>
 

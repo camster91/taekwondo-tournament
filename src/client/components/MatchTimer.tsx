@@ -220,6 +220,7 @@ export default function MatchTimer({
             isRunning ? 'bg-yellow-700 hover:bg-yellow-800' : 'bg-green-700 hover:bg-green-800'
           } transition-colors`}
           title={isRunning ? 'Pause (Space)' : 'Start (Space)'}
+          aria-label={isRunning ? 'Pause timer' : 'Start timer'}
         >
           {isRunning ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
         </button>
@@ -228,22 +229,16 @@ export default function MatchTimer({
           onClick={resetRound}
           className="p-3 rounded-full bg-gray-600 hover:bg-gray-700 transition-colors"
           title="Reset Round"
+          aria-label="Reset round"
         >
           <RotateCcw className="h-6 w-6" />
-        </button>
-
-        <button
-          onClick={resetTimer}
-          className="p-2 rounded-lg bg-red-600 hover:bg-red-700 transition-colors text-sm px-3"
-          title="Reset Match"
-        >
-          Reset All
         </button>
 
         <button
           onClick={() => setSoundEnabled(!soundEnabled)}
           className={`p-2 rounded-lg ${soundEnabled ? 'bg-gray-600' : 'bg-gray-700'} hover:bg-gray-500 transition-colors`}
           title={soundEnabled ? 'Mute' : 'Unmute'}
+          aria-label={soundEnabled ? 'Mute timer sounds' : 'Unmute timer sounds'}
         >
           {soundEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
         </button>
@@ -252,8 +247,18 @@ export default function MatchTimer({
           onClick={() => setShowSettings(!showSettings)}
           className="p-2 rounded-lg bg-gray-600 hover:bg-gray-500 transition-colors"
           title="Settings"
+          aria-label="Timer settings"
         >
           <Settings className="h-5 w-5" />
+        </button>
+
+        {/* Kept apart from Start so it isn't tapped by mistake; it also asks first. */}
+        <button
+          onClick={resetTimer}
+          className="ml-4 rounded-lg border border-red-500/60 px-3 py-2 text-sm text-red-300 hover:bg-red-900/40 transition-colors"
+          title="Reset the whole match timer"
+        >
+          Reset timer
         </button>
       </div>
 
