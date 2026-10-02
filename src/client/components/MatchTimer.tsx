@@ -308,8 +308,8 @@ export default function MatchTimer({
         </div>
       )}
 
-      {/* Keyboard shortcut hint */}
-      <div className="text-center text-xs text-gray-400 mt-2">
+      {/* Keyboard shortcut hint (hidden on touch screens, which have no Space bar) */}
+      <div className="text-center text-xs text-gray-400 mt-2 pointer-coarse:hidden">
         Press <kbd className="px-1 bg-gray-700 text-gray-100 rounded">Space</kbd> to start/pause
       </div>
     </div>
