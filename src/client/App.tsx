@@ -64,6 +64,7 @@ const BracketEditor = lazy(() => import('./pages/BracketEditor'));
 const PublicRegister = lazy(() => import('./pages/PublicRegister'));
 const CheckRegistration = lazy(() => import('./pages/CheckRegistration'));
 const ManageRegistration = lazy(() => import('./pages/ManageRegistration'));
+const MyRegistrations = lazy(() => import('./pages/MyRegistrations'));
 const VerifyParentConsent = lazy(() => import('./pages/VerifyParentConsent'));
 const Marketing = lazy(() => import('./pages/Marketing'));
 const Legal = lazy(() => import('./pages/Legal'));
@@ -595,6 +596,7 @@ function AppRoutes() {
     location.pathname.startsWith('/register') ||
     location.pathname.startsWith('/check-registration') ||
     location.pathname.startsWith('/manage-registration') ||
+    location.pathname.startsWith('/my-registrations') ||
     location.pathname.startsWith('/legal') ||
     location.pathname === '/' ||
     location.pathname.startsWith('/login') ||
@@ -620,6 +622,7 @@ function AppRoutes() {
           <Route path="/register" element={<PublicRegister />} />
           <Route path="/check-registration" element={<CheckRegistration />} />
           <Route path="/manage-registration" element={<ManageRegistration />} />
+          <Route path="/my-registrations" element={<MyRegistrations />} />
           <Route path="/verify-parent-consent" element={<VerifyParentConsent />} />
           <Route path="/events/:orgSlug" element={<OrganizerPortal />} />
           <Route path="/events/:orgSlug/:eventSlug" element={<EventPortal />} />

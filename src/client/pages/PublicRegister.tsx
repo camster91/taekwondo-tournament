@@ -635,6 +635,10 @@ export default function PublicRegister() {
                     ) : (
                       <span>use the Manage Registration link in your confirmation email to edit or withdraw</span>
                     )}
+                    {' '}·{' '}
+                    <a href="/my-registrations" className="underline hover:no-underline">
+                      See all my registrations
+                    </a>
                   </p>
                 </div>
               )}

@@ -445,6 +445,7 @@ function EmailForm({
             <strong className="text-surface-900 dark:text-white">Registering a competitor?</strong> You don&apos;t need an account.
             Use the registration link from your tournament organizer, or{' '}
             <Link to="/register" className="font-medium text-primary-700 underline dark:text-primary-300">find an open tournament</Link>.
+            Already registered? <Link to="/my-registrations" className="font-medium text-primary-700 underline dark:text-primary-300">See my registrations</Link>.
           </span>
         </p>
       </div>

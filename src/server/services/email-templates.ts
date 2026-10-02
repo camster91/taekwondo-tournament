@@ -224,6 +224,27 @@ export function magicLinkEmail(params: {
   };
 }
 
+/** Family portal: a link to see every registration made with this email. */
+export function familyAccessEmail(params: {
+  accessUrl: string;
+  registrationCount: number;
+}): { subject: string; html: string } {
+  const safeUrl = escapeHtml(params.accessUrl);
+  const count = params.registrationCount;
+  return {
+    subject: 'Your tournament registrations',
+    html: layout(`
+      <p>Hi,</p>
+      <p>We found ${count} registration${count === 1 ? '' : 's'} made with this email address. Open the link below to see tournament details, divisions and results, or to change or withdraw an entry.</p>
+      <p style="text-align:center; margin: 24px 0;">
+        <a href="${safeUrl}" class="btn">See my registrations</a>
+      </p>
+      <p class="muted">This link works for 2 hours. You can ask for a new one at any time. If you didn't ask for this, you can ignore this email.</p>
+      <p class="muted" style="word-break:break-all;">Or copy this link: ${safeUrl}</p>
+    `, undefined),
+  };
+}
+
 export function welcomeEmail(params: {
   recipientName: string;
   role: string;

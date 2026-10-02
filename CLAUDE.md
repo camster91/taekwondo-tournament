@@ -205,6 +205,7 @@ this file is wrong.
 | `UserManagement.tsx` | `/users` | List + role/status mgmt |
 | `Profile.tsx` | `/profile` | Own profile |
 | `PublicRegister.tsx` | `/register/:tournamentId` | Self-signup form |
+| `MyRegistrations.tsx` | `/my-registrations` | Family portal: parent requests an emailed 2-hour link listing every registration made with their email (no account) |
 | `PublicScoreboard.tsx` | `/display/:tournamentId` | Public bracket view |
 | `NotFound.tsx` | `*` | 404 |
 
@@ -391,6 +392,7 @@ Judo test seed would prove the multi-sport path end-to-end.
 | `MagicLink` | `token` (32-byte hex) + 6-digit `code`, both stored as SHA-256 hashes (`src/server/utils/token-hash.ts`). |
 | `MatchAuditLog` | Every match update records previous + new state. |
 | `Invitation` | Staff invite: email, role, hashed token, `status` (pending/accepted/expired/cancelled), last delivery outcome. |
+| `FamilyAccessLink` | Family-portal link: parent email + hashed token, 2-hour expiry. |
 | `StaffAssignment` | Day-of staffing: user + duty + ring (null = whole venue) + `HH:MM` window; `status` active/withdrawn. Never grants access. |
 | `SportProfile` | Unused, see "Multi-sport". |
 
@@ -589,6 +591,17 @@ No auth. All write endpoints are rate-limited (`registrationLimiter`
 | POST | `/api/public/register` | Self-register. Body: `{ tournamentId, competitor, parentName, parentEmail, parentPhone, events }`. Sends a confirmation email (or logs to console in dev). |
 | GET | `/api/public/check-registration` | Query by `tournamentId`+`firstName`+`lastName`+`dateOfBirth`. Returns ONLY a boolean + 8-char confirmation code; rate-limited 20/15min per IP. No PII echoed back. |
 | GET | `/api/public/scoreboard/:publicSlug` | Public scoreboard. Requires a per-tournament 16-char `publicSlug` (not the tournament UUID). 404 for missing/wrong slug — indistinguishable from "tournament not found". Rate-limited 30/min per IP. |
+
+### `/api/public/family` (`src/server/routes/family-portal.ts`)
+
+No auth; the emailed token is the credential. Same reply whether or not the
+email has registrations.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| POST | `/api/public/family/request-link` | Body `{ email }`. 5/15min per IP. Emails a `/my-registrations?token=` link (dev: logged; e2e bypass returns `devAccessUrl`). |
+| POST | `/api/public/family/registrations` | Body `{ token }`. Every registration with that `parentEmail`: tournament, events, status, divisions, next match, placement. |
+| POST | `/api/public/family/registrations/:id/manage-link` | Body `{ token }`. Issues a fresh management token (the older emailed manage link stops working); 403 if the organizer revoked it. |
 
 Directors generate the slug via `POST /api/tournaments/:id/public-slug`
 and revoke it via `DELETE /api/tournaments/:id/public-slug`. Slugs
@@ -822,6 +835,8 @@ Production runs in a Docker container on the Ashbi VPS
 - `20261001_invitation_delivery_status` (Invitation delivery status + `cancelledAt`)
 - `20261001_staff_assignments` (StaffAssignment table, #192)
 - `20261002_usage_record_unique` (de-duplicates `OrganizationUsageRecord`, keeping the earliest per tournament, then adds a unique `(organizationId, tournamentId)` index)
+- `20261002_platform_settings` (`PlatformSetting`: in-app email settings, encrypted)
+- `20261003_family_access_links` (`FamilyAccessLink` table, family portal)
 
 The deploy script runs `prisma migrate deploy` automatically
 during cutover. Do NOT use `npm run db:push` on production —

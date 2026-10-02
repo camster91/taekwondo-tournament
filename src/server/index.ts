@@ -18,6 +18,7 @@ import bracketsRouter from './routes/brackets.js';
 import authRouter from './routes/auth.js';
 import publicRouter from './routes/public.js';
 import publicPortalRouter from './routes/public-portal.js';
+import familyPortalRouter from './routes/family-portal.js';
 import customDomainsRouter from './routes/custom-domains.js';
 import analyticsRouter from './routes/analytics.js';
 import invitesRouter from './routes/invites.js';
@@ -262,6 +263,7 @@ app.use('/api/auth', authRouter);
 app.get('/api/setup-status', (_req: Request, res: Response) => {
   res.redirect(307, '/api/auth/setup-status');
 });
+app.use('/api/public/family', familyPortalRouter);
 app.use('/api/public', publicRouter);
 app.use('/api/public/portal', publicPortalRouter);
 app.use('/api/competitors', competitorsRouter);
