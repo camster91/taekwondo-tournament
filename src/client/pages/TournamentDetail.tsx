@@ -32,6 +32,7 @@ import {
   Building2,
 } from 'lucide-react';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
+import CompetitorPicker from '../components/CompetitorPicker';
 import CloseButton from '../components/ui/CloseButton';
 import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -77,6 +78,7 @@ interface Competitor {
   danRank: number | null;
   weightLbs: number | null;
   schoolDojang: string | null;
+  dateOfBirth?: string | null;
 }
 
 interface Registration {
@@ -144,11 +146,7 @@ export default function TournamentDetail() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [bulkRegisterError, setBulkRegisterError] = useState<string | null>(null);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
-  const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
-  const [registerPatterns, setRegisterPatterns] = useState(true);
-  const [registerSparring, setRegisterSparring] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [modalSearch, setModalSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Registration | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedSchoolLink, setCopiedSchoolLink] = useState(false);
@@ -229,8 +227,6 @@ export default function TournamentDetail() {
         queryClient.invalidateQueries({ queryKey: ['tournament', id] }),
       ]);
       setShowAddModal(false);
-      setSelectedCompetitors([]);
-      setModalSearch('');
       window.requestAnimationFrame(() => addCompetitorsTriggerRef.current?.focus());
     },
     onError: (error) => setBulkRegisterError(error instanceof Error ? error.message : 'Failed to register competitors'),
@@ -471,13 +467,6 @@ export default function TournamentDetail() {
     const name = `${r.competitor.firstName} ${r.competitor.lastName}`.toLowerCase();
     const school = r.competitor.schoolDojang?.toLowerCase() || '';
     const query = searchQuery.toLowerCase();
-    return name.includes(query) || school.includes(query);
-  });
-
-  const filteredAvailable = availableCompetitors.filter((c: Competitor) => {
-    const name = `${c.firstName} ${c.lastName}`.toLowerCase();
-    const school = c.schoolDojang?.toLowerCase() || '';
-    const query = modalSearch.toLowerCase();
     return name.includes(query) || school.includes(query);
   });
 
@@ -1216,205 +1205,43 @@ export default function TournamentDetail() {
         isLoading={updateStatusMutation.isPending}
       />
 
-      {/* Add Competitors Modal */}
+      {/* Add Competitors: full-screen picker with filters and sorting */}
       {showAddModal && (
-        <Modal
-          isOpen={showAddModal}
+        <CompetitorPicker
+          competitors={availableCompetitors}
+          loaded={allCompetitors !== undefined}
+          tournamentDate={new Date(tournament.date)}
+          eventLabels={eventLabels}
+          pending={bulkRegisterMutation.isPending}
+          onAdd={(selection) => bulkRegisterMutation.mutate(selection)}
           onClose={() => {
-            if (bulkRegisterMutation.isPending) return;
             setShowAddModal(false);
-            setSelectedCompetitors([]);
-            setModalSearch('');
+            setBulkRegisterError(null);
+            window.requestAnimationFrame(() => addCompetitorsTriggerRef.current?.focus());
           }}
-          closeDisabled={bulkRegisterMutation.isPending}
-          title="Add Competitors"
-          size="full"
-          panelClassName="max-h-[90vh]"
-          noBodyPadding
-        >
-              <div className="p-6 border-b border-surface-200 dark:border-surface-700">
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div>
-                    <label htmlFor="tournament-search-add-competitors" className="sr-only">
-                      Search competitors to add
-                    </label>
-                    <Input
-                      id="tournament-search-add-competitors"
-                      type="text"
-                      placeholder="Search competitors..."
-                      value={modalSearch}
-                      onChange={(e) => setModalSearch(e.target.value)}
-                      leftIcon={<Search className="h-4 w-4" />}
-                      autoFocus
-                      disabled={bulkRegisterMutation.isPending}
-                    />
-                  </div>
-                  <div className="flex gap-4">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={registerPatterns}
-                        disabled={bulkRegisterMutation.isPending}
-                        onChange={(e) => setRegisterPatterns(e.target.checked)}
-                        className="rounded border-surface-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <span className="ml-2 text-sm text-surface-700 dark:text-surface-300">{eventLabels.patterns}</span>
-                    </label>
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={registerSparring}
-                        disabled={bulkRegisterMutation.isPending}
-                        onChange={(e) => setRegisterSparring(e.target.checked)}
-                        className="rounded border-surface-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <span className="ml-2 text-sm text-surface-700 dark:text-surface-300">{eventLabels.sparring}</span>
-                    </label>
-                  </div>
+          error={bulkRegisterError ? (
+            <div role="alert" aria-live="assertive" className="w-full rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger dark:border-danger/50 dark:bg-danger/20 dark:text-danger">
+              <div className="flex items-start gap-2">
+                <div className="flex-1">
+                  {bulkRegisterError} Your selections are preserved; you can try again or cancel.
                 </div>
-              </div>
-              <div className="p-4 overflow-y-auto max-h-96 bg-surface-50 dark:bg-surface-950/50">
-                {filteredAvailable.length > 0 ? (
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between mb-3">
-                      <button
-                        disabled={bulkRegisterMutation.isPending}
-                        onClick={() =>
-                          setSelectedCompetitors(
-                            selectedCompetitors.length === filteredAvailable.length
-                              ? []
-                              : filteredAvailable.map((c: Competitor) => c.id)
-                          )
-                        }
-                        className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
-                      >
-                        {selectedCompetitors.length === filteredAvailable.length
-                          ? 'Deselect All'
-                          : `Select All (${filteredAvailable.length})`}
-                      </button>
-                      {modalSearch && (
-                        <span className="text-xs text-surface-600">
-                          Showing {filteredAvailable.length} of {availableCompetitors.length}
-                        </span>
-                      )}
-                    </div>
-                    {filteredAvailable.map((c: Competitor) => (
-                      <label
-                        key={c.id}
-                        className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${
-                          selectedCompetitors.includes(c.id)
-                            ? 'bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800'
-                            : 'bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 hover:border-primary-300 dark:hover:border-primary-600'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          disabled={bulkRegisterMutation.isPending}
-                          checked={selectedCompetitors.includes(c.id)}
-                          onChange={(e) =>
-                            setSelectedCompetitors(
-                              e.target.checked
-                                ? [...selectedCompetitors, c.id]
-                                : selectedCompetitors.filter((id) => id !== c.id)
-                            )
-                          }
-                          className="rounded border-surface-300 text-primary-600 focus:ring-primary-500"
-                        />
-                        <span className="ml-3 flex-1 font-medium text-surface-900 dark:text-white">
-                          {c.firstName} {c.lastName}
-                        </span>
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-medium ${getBeltColor(
-                            c.belt
-                          )}`}
-                        >
-                          {c.belt}
-                        </span>
-                        {c.schoolDojang && (
-                          <span className="ml-2 text-sm text-surface-600 dark:text-surface-400 hidden sm:inline truncate max-w-[120px]">
-                            {c.schoolDojang}
-                          </span>
-                        )}
-                      </label>
-                    ))}
-                  </div>
-                ) : availableCompetitors.length > 0 ? (
-                  <EmptyState
-                    icon={Search}
-                    title="No matches"
-                    description={`No competitors match "${modalSearch}"`}
-                    action={{ label: 'Clear Search', onClick: () => setModalSearch('') }}
-                  />
-                ) : (
-                  <EmptyState
-                    icon={Users}
-                    title="No available competitors"
-                    description="Import competitors first, or all have been registered."
-                  />
-                )}
-              </div>
-              <div className="p-4 border-t border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-900 space-y-3">
-                {bulkRegisterError && (
-                  <div role="alert" aria-live="assertive" className="w-full rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger dark:border-danger/50 dark:bg-danger/20 dark:text-danger">
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1">
-                        {bulkRegisterError} Your selections are preserved; you can try again or cancel.
-                      </div>
-                      {tournament.organization?.plan === 'free' && bulkRegisterError.includes('limit') && (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={() => {
-                            setShowAddModal(false);
-                            navigate('/settings/billing');
-                          }}
-                          className="flex-shrink-0"
-                        >
-                          Upgrade Plan
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <span className="text-sm text-surface-600 dark:text-surface-400">
-                    <span className="font-semibold text-surface-900 dark:text-white">{selectedCompetitors.length}</span> competitors selected
-                  </span>
-                  <div className="flex gap-3 w-full sm:w-auto">
-                  <Button
-                    variant="secondary"
-                    className="flex-1 sm:flex-none"
-                    onClick={() => {
-                      if (bulkRegisterMutation.isPending) return;
-                      setShowAddModal(false);
-                      setSelectedCompetitors([]);
-                      setModalSearch('');
-                    }}
-                    disabled={bulkRegisterMutation.isPending}
-                  >
-                    Cancel
-                  </Button>
+                {tournament.organization?.plan === 'free' && bulkRegisterError.includes('limit') && (
                   <Button
                     variant="primary"
-                    className="flex-1 sm:flex-none"
-                    loading={bulkRegisterMutation.isPending}
-                    disabled={bulkRegisterMutation.isPending || selectedCompetitors.length === 0}
-                    onClick={() =>
-                      bulkRegisterMutation.mutate({
-                        competitorIds: selectedCompetitors,
-                        patterns: registerPatterns,
-                        sparring: registerSparring,
-                      })
-                    }
+                    size="sm"
+                    onClick={() => {
+                      setShowAddModal(false);
+                      navigate('/settings/billing');
+                    }}
+                    className="flex-shrink-0"
                   >
-                    {bulkRegisterMutation.isPending
-                      ? 'Adding...'
-                      : `Add ${selectedCompetitors.length} Competitors`}
+                    Upgrade Plan
                   </Button>
-                  </div>
-                </div>
+                )}
               </div>
-        </Modal>
+            </div>
+          ) : undefined}
+        />
       )}
 
       {/* Broadcast Email Modal — closes M1 from the UI audit. Director

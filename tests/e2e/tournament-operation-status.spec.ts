@@ -192,9 +192,9 @@ test('lifecycle changes retain their exact operator intent through rejection and
   const addDialog = page.getByRole('dialog', { name: 'Add Competitors' });
   await expect(addDialog).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.activeElement?.closest('[role="dialog"]') !== null)).toBe(true);
-  const competitorChoice = addDialog.locator('input[type="checkbox"]').nth(2);
+  const competitorChoice = addDialog.getByRole('checkbox', { name: /^Select / }).first();
   await competitorChoice.check();
-  const addSelected = addDialog.getByRole('button', { name: /Add 1 Competitor/ });
+  const addSelected = addDialog.getByRole('button', { name: /Add 1 Competitor/i });
   await addSelected.focus();
   await page.keyboard.press('Tab');
   await expect(addDialog.getByRole('button', { name: 'Close' })).toBeFocused();
