@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Trophy, Calendar, Users, LayoutGrid, MapPin, Search, FileText, AlertTriangle } from 'lucide-react';
@@ -64,6 +64,7 @@ export default function Tournaments() {
       setSearchParams(next, { replace: true });
     }
   };
+  const fieldId = useId();
   const [deleteTarget, setDeleteTarget] = useState<Tournament | null>(null);
   const [showDraftDialog, setShowDraftDialog] = useState(false);
   const [draftTournament, setDraftTournament] = useState<DraftTournament | null>(null);
@@ -220,6 +221,7 @@ export default function Tournaments() {
       {tournaments && tournaments.length > 0 && (
         <Input
           type="text"
+          aria-label="Search tournaments"
           placeholder="Search tournaments..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -348,9 +350,10 @@ export default function Tournaments() {
             )}
             {templates && templates.length > 0 && (
               <div>
-                <Label>Use Template (Optional)</Label>
+                <Label htmlFor={`${fieldId}-template`}>Use Template (Optional)</Label>
                 <div className="flex items-center gap-2">
                   <select
+                    id={`${fieldId}-template`}
                     value={selectedTemplateId}
                     onChange={(e) => setSelectedTemplateId(e.target.value)}
                     className="flex-1 rounded-lg border border-surface-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-100"
@@ -382,12 +385,13 @@ export default function Tournaments() {
               </div>
             )}
             <div>
-              <Label>Sport</Label>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              <Label id={`${fieldId}-sport`}>Sport</Label>
+              <div role="group" aria-labelledby={`${fieldId}-sport`} className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                 {SPORT_PROFILES.map((sport) => (
                   <button
                     key={sport.slug}
                     type="button"
+                    aria-pressed={formData.sportProfileSlug === sport.slug}
                     onClick={() => setFormData({ ...formData, sportProfileSlug: sport.slug })}
                     className={`flex flex-col items-center p-2 rounded-lg border-2 text-xs font-medium transition-colors ${
                       formData.sportProfileSlug === sport.slug
@@ -395,15 +399,16 @@ export default function Tournaments() {
                         : 'border-surface-200 dark:border-surface-700 hover:border-primary-300 text-surface-600 dark:text-surface-400'
                     }`}
                   >
-                    <span className="text-2xl mb-1">{sport.icon}</span>
+                    <span className="text-2xl mb-1" aria-hidden="true">{sport.icon}</span>
                     <span>{sport.name}</span>
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <Label>Tournament Name *</Label>
+              <Label htmlFor={`${fieldId}-name`}>Tournament Name *</Label>
               <Input
+                id={`${fieldId}-name`}
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -413,8 +418,9 @@ export default function Tournaments() {
               />
             </div>
             <div>
-              <Label>Date *</Label>
+              <Label htmlFor={`${fieldId}-date`}>Date *</Label>
               <Input
+                id={`${fieldId}-date`}
                 type="date"
                 value={formData.date}
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
@@ -422,8 +428,9 @@ export default function Tournaments() {
               />
             </div>
             <div>
-              <Label>Location</Label>
+              <Label htmlFor={`${fieldId}-location`}>Location</Label>
               <Input
+                id={`${fieldId}-location`}
                 type="text"
                 value={formData.location}
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}

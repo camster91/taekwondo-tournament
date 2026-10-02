@@ -37,14 +37,11 @@ test.describe('tournament create (admin form)', () => {
     await expect(form).toBeVisible();
 
     const uniqueName = `E2E Test Tournament ${Date.now()}`;
-    // The Tournament Name input has placeholder "e.g., Newton's Championship 2025"
-    // and is the first text input inside the form. The label has no htmlFor
-    // link, so we use placeholder as the selector.
-    await form.locator('input[placeholder*="Newton"]').fill(uniqueName);
-    // Date input — the only date input inside the form.
-    await form.locator('input[type="date"]').fill('2027-06-15');
-    // Location input has placeholder "e.g., Downtown Martial Arts Center".
-    await form.locator('input[placeholder*="Downtown"]').fill('E2E Arena');
+    // Fields are found by their visible labels, as a screen reader would.
+    await form.getByLabel('Tournament Name *').fill(uniqueName);
+    await form.getByLabel('Date *').fill('2027-06-15');
+    await form.getByLabel('Location').fill('E2E Arena');
+    await expect(form.getByRole('button', { name: 'Taekwondo' })).toHaveAttribute('aria-pressed', 'true');
 
     // Submit. The Modal renders a backdrop with z-index: 50 and a panel with
     // no explicit z-index, so the backdrop sits on top of the panel at the
