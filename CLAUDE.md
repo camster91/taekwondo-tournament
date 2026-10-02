@@ -1,5 +1,10 @@
 # Tournament Manager — Codebase Guide
 
+> **Read [docs/BUILD-PRINCIPLES.md](docs/BUILD-PRINCIPLES.md) first.** It is
+> the owner's standing brief for every change: small safe steps, ask before
+> changing data, login or payments, mobile-first plain-language UI, and use
+> the app end to end before calling anything done.
+
 This repository contains both raw tournament data (PDFs, Excel) for
 Newton's Championship 2025 (root-level directories prefixed `BB` /
 `CB` for belt division) and a full-stack multi-sport **Tournament
