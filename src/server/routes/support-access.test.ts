@@ -31,7 +31,7 @@ vi.mock('../middleware/validate.js', () => ({ validateRequest: () => (_req: any,
 vi.mock('../services/email.js', () => ({ sendEmail: (...args: any[]) => mocks.sendEmail(...args) }));
 vi.mock('./support-validation.js', () => ({
   supportChatSchema: {}, supportTicketQuerySchema: {}, supportTicketUpdateSchema: {},
-  supportConfigSchema: {}, supportConfigTestSchema: {},
+  supportConfigSchema: {}, supportConfigTestSchema: {}, bugReportSchema: {}, BUG_REPORT_SOURCE: 'bug-report',
 }));
 vi.mock('../services/operational-query.js', () => ({
   answerOperationalQuery: vi.fn(),
