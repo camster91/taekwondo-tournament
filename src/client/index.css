@@ -361,6 +361,10 @@ a:focus:not(:focus-visible) {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes slideInRight {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.96); }
   to { opacity: 1; transform: scale(1); }
@@ -378,6 +382,7 @@ a:focus:not(:focus-visible) {
 .animate-slide-up { animation: slideUp var(--duration-slow) var(--ease-out-expo) both; }
 .animate-slide-down { animation: slideDown var(--duration-base) var(--ease-out-quart) both; }
 .animate-scale-in { animation: scaleIn var(--duration-base) var(--ease-out-expo) both; }
+.animate-slide-in-right { animation: slideInRight var(--duration-base) var(--ease-out-expo) both; }
 
 .animate-in {
   animation: slideUp var(--duration-slow) var(--ease-out-expo) both;

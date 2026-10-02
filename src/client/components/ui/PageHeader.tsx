@@ -22,7 +22,7 @@ export default function PageHeader({
       className={['flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between', className].filter(Boolean).join(' ')}
     >
       <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 flex-wrap [overflow-wrap:anywhere]">
           {title}
           {count !== undefined && (
             <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-sm font-medium text-slate-700 dark:text-slate-400">
