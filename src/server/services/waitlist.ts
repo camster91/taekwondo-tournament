@@ -187,6 +187,8 @@ export interface WaitlistPromotionNotice {
   tournamentName: string;
   tournamentDate: Date;
   organizerBrandName: string | null;
+  brandPrimaryColor: string | null;
+  brandLogoUrl: string | null;
   /** Entry fee now due (cents), or null when nothing is owed. */
   paymentDueCents: number | null;
 }
@@ -233,7 +235,9 @@ export async function promoteNextWaitlisted(
               name: true,
               date: true,
               brandName: true,
-              organization: { select: { brandName: true } },
+              brandPrimaryColor: true,
+              brandLogoUrl: true,
+              organization: { select: { brandName: true, brandPrimaryColor: true, brandLogoUrl: true } },
             },
           },
         },
@@ -263,6 +267,8 @@ export async function promoteNextWaitlisted(
           tournamentName: next.tournament.name,
           tournamentDate: next.tournament.date,
           organizerBrandName: next.tournament.brandName || next.tournament.organization?.brandName || null,
+          brandPrimaryColor: next.tournament.brandPrimaryColor || next.tournament.organization?.brandPrimaryColor || null,
+          brandLogoUrl: next.tournament.brandLogoUrl || next.tournament.organization?.brandLogoUrl || null,
           paymentDueCents: 'paymentAmountCents' in payment
             ? payment.paymentAmountCents
             : next.paymentStatus === 'pending' || next.paymentStatus === 'failed'

@@ -20,6 +20,7 @@ import { Button, Card, Input, Label, Modal, PageHeader, Spinner, ConfirmDialog }
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
 import CustomDomainSettings from '../components/CustomDomainSettings';
+import OrgBrandingForm from '../components/OrgBrandingForm';
 import { saveDraft, loadDraft, clearDraft, type DraftOrganization } from '../utils/draft-storage';
 
 type Entitlements = {
@@ -40,6 +41,7 @@ type Organization = {
   _count: { tournaments: number; members: number };
   brandLogoUrl?: string | null;
   brandPrimaryColor?: string | null;
+  brandName?: string | null;
   billingSubscription?: {
     provider: string;
     status: string;
@@ -101,7 +103,7 @@ function UsageBar({ label, value, limit, icon: Icon }: {
 export default function OrganizationSettings() {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [showDelete, setShowDelete] = useState(false);
@@ -481,9 +483,18 @@ export default function OrganizationSettings() {
           <h2 className="font-semibold text-surface-900 dark:text-white">Organization branding</h2>
         </div>
         <p className="text-sm text-surface-600 dark:text-surface-300 mb-4">
-          Upload a logo that will appear on public-facing tournament pages (registration, scoreboard).
+          Your name, colour and logo appear on the pages and emails parents see: registration, the parent portal and
+          scoreboards. A tournament can still set its own in Tournament Settings.
         </p>
-        <div className="space-y-4">
+        <div className="space-y-6">
+          <OrgBrandingForm
+            organizationId={organization.id}
+            organizationName={organization.name}
+            brandName={organization.brandName}
+            brandPrimaryColor={organization.brandPrimaryColor}
+            brandLogoUrl={organization.brandLogoUrl}
+            canEdit={user?.role === 'admin' || (user?.role === 'director' && ['owner', 'admin', 'member'].includes(organization.membershipRole))}
+          />
           <div>
             <Label htmlFor="org-logo">Organization logo</Label>
             {organization.brandLogoUrl && (

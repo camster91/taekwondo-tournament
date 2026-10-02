@@ -8,6 +8,7 @@
  */
 
 import { Router } from 'express';
+import { emailBrandingFor } from '../services/email-templates.js';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import rateLimit from 'express-rate-limit';
@@ -289,6 +290,8 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
       id: true,
       plan: true,
       brandName: true, // P2.6: For email branding
+      brandPrimaryColor: true,
+      brandLogoUrl: true,
       name: true, // P2.6: Fallback for email branding
       tournaments: {
         where: {
@@ -304,6 +307,8 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
           status: true,
           settings: true,
           brandName: true,
+          brandPrimaryColor: true,
+          brandLogoUrl: true,
           organizationId: true,
           sportProfileSlug: true,
         },
@@ -548,7 +553,10 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
       ].filter(Boolean).join(' & ');
       
       // P2.6: Use org brand/name, never UUID
-      const organizerBrandName = tournament.brandName || organization.brandName || organization.name || tournament.name;
+      const emailBranding = {
+        ...emailBrandingFor({ ...tournament, organization }),
+        organizerBrandName: tournament.brandName || organization.brandName || organization.name || tournament.name,
+      };
       const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`;
       const paymentDueCents = registration.paymentStatus === 'pending' ? registration.paymentAmountCents : null;
 
@@ -575,7 +583,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
           confirmationCode: registration.id.slice(0, 8),
           waitlistPosition: registration.waitlistStatus === 'waitlisted' ? registration.waitlistPosition : null,
           paymentDueCents,
-          organizerBrandName,
+          ...emailBranding,
         });
         
         sendEmail(parentEmail, subject, html).catch((err) => {
@@ -590,7 +598,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
             tournamentDate: tournament.date,
             waitlistPosition: registration.waitlistPosition!,
             managementUrl,
-            organizerBrandName,
+            ...emailBranding,
           });
           sendEmail(parentEmail, subject, html).catch((err) => {
             console.error('[portal/register] waitlist email failed:', err);
@@ -607,7 +615,7 @@ router.post('/:orgSlug/:eventSlug/register', registrationLimiter, async (req: Re
             parentName,
             confirmationCode: registration.id.slice(0, 8),
             managementUrl,
-            organizerBrandName,
+            ...emailBranding,
             paymentDueCents,
           });
           sendEmail(parentEmail, subject, html).catch((err) => {

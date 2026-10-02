@@ -7,6 +7,8 @@ import fs from 'fs/promises';
 import crypto from 'crypto';
 import { existsSync } from 'fs';
 import { decodeStrictBase64, sniffRasterImageType, SAFE_RASTER_EXTENSIONS } from '../utils/image-sniff.js';
+import { z } from 'zod';
+import { validateRequest } from '../middleware/validate.js';
 
 const router = Router();
 
@@ -277,6 +279,45 @@ router.delete('/:orgId/logo', authenticate, requireRole('admin', 'director'), as
     console.error('Logo removal error:', error);
     return res.status(500).json({ error: 'Failed to remove logo' });
   }
+});
+
+/**
+ * PUT /api/organizations/:orgId/branding - name and colour shown to parents
+ * on public pages and in emails (the logo has its own upload route).
+ * Tournaments can still override these in Tournament Settings.
+ */
+export const organizationBrandingSchema = z.object({
+  brandName: z.string().trim().max(120).nullable(),
+  brandPrimaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Pick a colour like #1D4ED8').nullable(),
+});
+
+router.put('/:orgId/branding', authenticate, requireRole('admin', 'director'), validateRequest(organizationBrandingSchema), async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const { orgId } = req.params;
+  const organization = await prisma.organization.findUnique({ where: { id: orgId }, select: { id: true } });
+  if (!organization) return res.status(404).json({ error: 'Organization not found' });
+
+  if (req.user!.role !== 'admin') {
+    const member = await prisma.organizationMember.findUnique({
+      where: { organizationId_userId: { organizationId: orgId, userId: req.user!.id } },
+      select: { role: true },
+    });
+    if (!member) return res.status(403).json({ error: 'You do not have access to this organization' });
+    if (orgMembershipRoleLevel(member.role) < orgMembershipRoleLevel('director')) {
+      return res.status(403).json({ error: 'Insufficient organization permissions' });
+    }
+  }
+
+  const body = req.body as z.infer<typeof organizationBrandingSchema>;
+  const updated = await prisma.organization.update({
+    where: { id: orgId },
+    data: {
+      brandName: body.brandName ? body.brandName : null,
+      brandPrimaryColor: body.brandPrimaryColor ? body.brandPrimaryColor.toUpperCase() : null,
+    },
+    select: { id: true, brandName: true, brandPrimaryColor: true, brandLogoUrl: true },
+  });
+  res.json(updated);
 });
 
 export default router;
