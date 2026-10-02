@@ -1,6 +1,6 @@
-interface ResultsMatch {
-  status: string;
-}
+import { countMatchProgress, type MatchProgressLike } from '../../shared/utils/match-progress';
+
+type ResultsMatch = MatchProgressLike;
 
 interface ResultsBracket {
   status?: string;
@@ -21,8 +21,9 @@ export function calculateResultsStats(divisions: ResultsDivision[]) {
     completedDivisions: visibleDivisions.filter(
       (division) => division.bracket?.status === 'completed'
     ).length,
+    // Byes are never fought, so they aren't counted as matches.
     totalMatches: divisions.reduce(
-      (sum, division) => sum + (division.bracket?.matches?.length ?? 0),
+      (sum, division) => sum + countMatchProgress(division.bracket?.matches ?? []).total,
       0
     ),
   };

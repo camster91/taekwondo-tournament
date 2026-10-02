@@ -369,7 +369,7 @@ export default function Results() {
           accent="default"
         />
         <StatTile
-          label="Schools Competing"
+          label="Schools Placed"
           value={overallStats.schools}
           icon={<Users className="h-5 w-5" />}
           accent="success"

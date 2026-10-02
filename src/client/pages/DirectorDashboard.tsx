@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { countMatchProgress } from '../../shared/utils/match-progress';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { readAdminOperationError } from '../utils/admin-operation-error';
@@ -242,7 +243,8 @@ export default function DirectorDashboard() {
         matches.some((m) => m._divisionId === d.id && m.status === 'in_progress')
       ).length;
 
-      const completedMatches = matches.filter((m) => m.status === 'completed').length;
+      // Byes are never fought, so match counts and time estimates skip them.
+      const { total: playableMatches, completed: completedMatches } = countMatchProgress(matches);
       const inProgressMatches = matches.filter((m) => m.status === 'in_progress').length;
       const scheduledMatches = matches.filter((m) => m.status === 'ready' || m.status === 'pending').length;
 
@@ -309,18 +311,19 @@ export default function DirectorDashboard() {
 
       const divisionDetails: DivisionStats[] = divisions.map((d) => {
         const divMatches = matches.filter((m) => m._divisionId === d.id);
-        const completed = divMatches.filter((m) => m.status === 'completed').length;
+        const { total, completed } = countMatchProgress(divMatches);
         const inProgress = divMatches.filter((m) => m.status === 'in_progress').length;
-        const remaining = divMatches.length - completed;
+        const remaining = total - completed;
+        const allDone = divMatches.length > 0 && divMatches.every((m) => m.status === 'completed');
 
         return {
           id: d.id,
           name: d.name,
-          totalMatches: divMatches.length,
+          totalMatches: total,
           completedMatches: completed,
           inProgressMatches: inProgress,
           estimatedMinutesRemaining: remaining * AVERAGE_MATCH_DURATION,
-          status: completed === divMatches.length && divMatches.length > 0
+          status: allDone
             ? 'completed'
             : inProgress > 0 || completed > 0
               ? 'in_progress'
@@ -360,7 +363,7 @@ export default function DirectorDashboard() {
         warnings.push(`${longMatches.length} match(es) running longer than 10 minutes`);
       }
 
-      const remainingMatches = matches.length - completedMatches;
+      const remainingMatches = playableMatches - completedMatches;
       const estimatedTimeRemaining = remainingMatches * AVERAGE_MATCH_DURATION;
 
       return {
@@ -377,7 +380,7 @@ export default function DirectorDashboard() {
           notStarted: divisions.length - completedDivisions - inProgressDivisions,
         },
         matches: {
-          total: matches.length,
+          total: playableMatches,
           completed: completedMatches,
           inProgress: inProgressMatches,
           scheduled: scheduledMatches,

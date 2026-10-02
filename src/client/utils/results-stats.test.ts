@@ -39,4 +39,21 @@ describe('calculateResultsStats', () => {
       totalMatches: 31,
     });
   });
+
+  it('does not count auto-resolved byes as matches', () => {
+    const a = '00000000-0000-4000-8000-00000000000a';
+    const b = '00000000-0000-4000-8000-00000000000b';
+    expect(calculateResultsStats([
+      {
+        bracket: {
+          status: 'in_progress',
+          matches: [
+            { status: 'completed', notes: 'BYE', competitor1Id: a, competitor2Id: null },
+            { status: 'completed', notes: null, competitor1Id: a, competitor2Id: b },
+            { status: 'pending', notes: null, competitor1Id: null, competitor2Id: null },
+          ],
+        },
+      },
+    ]).totalMatches).toBe(2);
+  });
 });

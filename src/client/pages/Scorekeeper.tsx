@@ -21,6 +21,7 @@ import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import CloseButton from '../components/ui/CloseButton';
 import { useToast } from '../context/ToastContext';
 import { getSportProfile, getEventTypeLabel, getEventForSlot } from '../../shared/constants/sport-profiles';
+import { countMatchProgress } from '../../shared/utils/match-progress';
 import { Card, CardBody, ConfirmDialog } from '../components/ui';
 import { Button } from '../components/ui';
 import { StatTile } from '../components/ui';
@@ -268,11 +269,7 @@ export default function Scorekeeper() {
   // showed "All Matches Complete!" because no match was in 'ready' state.
   const divisionMatchCounts = useMemo(() => {
     const div = divisions?.find((d) => d.id === selectedDivision);
-    const matches = div?.bracket?.matches ?? [];
-    return {
-      total: matches.length,
-      completed: matches.filter((m) => m.status === 'completed').length,
-    };
+    return countMatchProgress(div?.bracket?.matches ?? []);
   }, [divisions, selectedDivision]);
 
   const currentMatch = readyMatches[currentMatchIndex];
@@ -967,8 +964,7 @@ export default function Scorekeeper() {
                     && (!divisionSearch || d.name.toLowerCase().includes(divisionSearch.toLowerCase())))
                   .map((division) => {
                     const readyCount = division.bracket?.matches?.filter((m) => m.status === 'ready' || m.status === 'in_progress').length || 0;
-                    const completedCount = division.bracket?.matches?.filter((m) => m.status === 'completed').length || 0;
-                    const totalCount = division.bracket?.matches?.length || 0;
+                    const { completed: completedCount, total: totalCount } = countMatchProgress(division.bracket?.matches ?? []);
 
                     return (
                       <button
