@@ -102,18 +102,20 @@ const SAMPLE_DATA = [
   },
 ];
 
+/** Sheet the example rows live on. Never imported (see excel-auto-map). */
+export const EXAMPLE_SHEET_NAME = 'Example (not imported)';
+
 /**
- * Generate Excel import template with sample data and instructions
+ * Generate the Excel import template: an empty "Competitors" sheet with
+ * just the column headings (the sheet the app imports), an example sheet
+ * showing filled-in rows, instructions and reference sheets. Keeping the
+ * examples off the import sheet means a club can paste its roster
+ * straight in without importing made-up people by mistake.
  */
 export function generateImportTemplate(): Buffer {
   const workbook = XLSX.utils.book_new();
-
-  // Create main data sheet with headers and sample data
   const headers = TEMPLATE_COLUMNS.map(col => col.header);
-  const dataSheet = XLSX.utils.json_to_sheet(SAMPLE_DATA, { header: headers });
-
-  // Set column widths
-  dataSheet['!cols'] = [
+  const columnWidths = [
     { wch: 15 }, // First Name
     { wch: 15 }, // Last Name
     { wch: 8 },  // Gender
@@ -128,17 +130,27 @@ export function generateImportTemplate(): Buffer {
     { wch: 20 }, // Special Needs
   ];
 
+  // The sheet that gets imported: headings only.
+  const dataSheet = XLSX.utils.aoa_to_sheet([headers]);
+  dataSheet['!cols'] = columnWidths;
   XLSX.utils.book_append_sheet(workbook, dataSheet, 'Competitors');
+
+  const exampleSheet = XLSX.utils.json_to_sheet(SAMPLE_DATA, { header: headers });
+  exampleSheet['!cols'] = columnWidths;
+  XLSX.utils.book_append_sheet(workbook, exampleSheet, EXAMPLE_SHEET_NAME);
 
   // Create instructions sheet
   const instructions = [
-    { 'Import Instructions': 'Martial Arts Tournament - Competitor Import Template' },
+    { 'Import Instructions': 'Competitor Import Template' },
     { 'Import Instructions': '' },
     { 'Import Instructions': 'HOW TO USE THIS TEMPLATE:' },
-    { 'Import Instructions': '1. Delete the sample data rows (rows 2-6) from the "Competitors" sheet' },
-    { 'Import Instructions': '2. Enter your competitor data, one competitor per row' },
-    { 'Import Instructions': '3. Save the file as .xlsx format' },
-    { 'Import Instructions': '4. Upload via the Import Competitors feature in the app' },
+    { 'Import Instructions': '1. Open the "Competitors" sheet. Keep the headings in row 1.' },
+    { 'Import Instructions': '2. Type or paste your competitors under the headings, one competitor per row.' },
+    { 'Import Instructions': `   Copying from another spreadsheet? Paste each column under the matching heading. See the "${EXAMPLE_SHEET_NAME}" sheet for what filled-in rows look like.` },
+    { 'Import Instructions': '3. Save the file as .xlsx.' },
+    { 'Import Instructions': '4. In the app, go to Competitors > Import and choose this file.' },
+    { 'Import Instructions': '' },
+    { 'Import Instructions': `Only the "Competitors" sheet is imported. The "${EXAMPLE_SHEET_NAME}" sheet and these instructions are ignored.` },
     { 'Import Instructions': '' },
     { 'Import Instructions': 'COLUMN REQUIREMENTS:' },
     { 'Import Instructions': '' },
