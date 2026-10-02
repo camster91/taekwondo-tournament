@@ -2,6 +2,7 @@
 import type { PrismaClient, Prisma, Match } from '@prisma/client';
 import { BracketStructure, MatchData } from './bracket-generator.js';
 import { AppError, ErrorCode } from '../utils/errors.js';
+import { BYE_NOTE, isByeMatch } from '../../shared/utils/match-progress.js';
 
 export interface AdvancementResult {
   advanced: boolean;
@@ -82,8 +83,6 @@ export interface EngineUpdate {
   };
 }
 
-const BYE_NOTE = 'BYE';
-
 /**
  * For every match number, the ordered list of feeders. Index 0 feeds
  * `competitor1`, index 1 feeds `competitor2`. Winner feeds come
@@ -134,7 +133,7 @@ export function isAutoByeMatch(m: {
   competitor1Id: string | null;
   competitor2Id: string | null;
 }): boolean {
-  return m.status === 'completed' && m.notes === BYE_NOTE && !(m.competitor1Id && m.competitor2Id);
+  return isByeMatch(m);
 }
 
 function isAutoBye(m: EngineMatch): boolean {
