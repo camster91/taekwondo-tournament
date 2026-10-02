@@ -85,6 +85,8 @@ test.describe('scorekeeper (a11y)', () => {
 
     // Find at least one division button (they're the only buttons in the list).
     const divisionButtons = page.locator('button').filter({ hasText: /ready|complete|pending/i });
+    // count() does not wait; let the division list render first.
+    await expect(divisionButtons.first()).toBeVisible();
     const count = await divisionButtons.count();
     expect(count).toBeGreaterThan(0);
 

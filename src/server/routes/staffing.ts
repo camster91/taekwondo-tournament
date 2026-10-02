@@ -92,6 +92,9 @@ async function eligibleStaff(prisma: PrismaClient, tournamentId: string): Promis
       : prisma.user.findMany({
         where: { isActive: true, organizationMembers: { none: {} } },
         select: staffUserSelect,
+        // Capped for very large legacy pools; most recently active users
+        // first, so new or current staff are never the ones cut off.
+        orderBy: { updatedAt: 'desc' },
         take: 500,
       }),
   ]);
