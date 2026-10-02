@@ -751,7 +751,7 @@ Known limits:
 | `ALLOWED_ORIGINS` | yes in prod | comma-separated origins; CORS fails closed without it |
 | `PUBLIC_APP_URL` | yes in prod | base URL for links in emails |
 | `METRICS_TOKEN` | yes in prod | bearer token for `/api/internal/metrics` |
-| `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `EMAIL_FROM_ADDRESS` | yes for email | without the key, auth runs in dev mode |
+| `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `EMAIL_FROM_ADDRESS` | yes for email (or in-app) | without a key, auth runs in dev mode. A root admin can save Mailgun settings at Admin → Email Delivery (`/admin/email`, encrypted in `PlatformSetting`); saved settings win over these vars |
 | `LOGO_STORAGE_PATH` | no | uploaded org logos; default `/app/data/logos` in prod (image `VOLUME /app/data`, mount persistent storage), `./data/logos` in dev |
 | `OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64` + build arg `VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64` | for offline scorekeeping | Ed25519 pair; see DEPLOY.md |
 | `ADMIN_SETUP_KEY` | first run only | enables `setup-admin`; remove afterwards |

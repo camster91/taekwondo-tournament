@@ -27,6 +27,7 @@ import {
   HelpCircle,
   Building2,
   LifeBuoy,
+  Mail,
   PlayCircle,
   type LucideIcon,
 } from 'lucide-react';
@@ -77,6 +78,7 @@ const AnnouncerView = lazy(() => import('./pages/AnnouncerView'));
 const Waitlist = lazy(() => import('./pages/Waitlist'));
 const Results = lazy(() => import('./pages/Results'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
+const EmailSettings = lazy(() => import('./pages/EmailSettings'));
 const Profile = lazy(() => import('./pages/Profile'));
 const DirectorDashboard = lazy(() => import('./pages/DirectorDashboard'));
 const Staffing = lazy(() => import('./pages/Staffing'));
@@ -324,6 +326,12 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
                 <NavItem
                   item={{ name: 'User Management', href: '/admin/users', icon: Shield }}
                   active={location.pathname === '/admin/users'}
+                  onClick={closeMobile}
+                  collapsed={sidebarCollapsed}
+                />
+                <NavItem
+                  item={{ name: 'Email Delivery', href: '/admin/email', icon: Mail }}
+                  active={location.pathname === '/admin/email'}
                   onClick={closeMobile}
                   collapsed={sidebarCollapsed}
                 />
@@ -744,6 +752,14 @@ function AppRoutes() {
               element={
                 <ProtectedRoute requiredRoles={['admin']}>
                   <UserManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/email"
+              element={
+                <ProtectedRoute requiredRoles={['admin']}>
+                  <EmailSettings />
                 </ProtectedRoute>
               }
             />

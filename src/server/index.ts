@@ -34,6 +34,8 @@ import staffingRouter from './routes/staffing.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { mountLargeJsonBodyRoutes } from './middleware/large-json-body.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
+import { loadSavedEmailSettings } from './services/email-settings.js';
+import adminEmailRouter from './routes/admin-email.js';
 import {
   retentionConfigFromEnv,
   startRetentionPurgeJob,
@@ -274,6 +276,7 @@ app.use('/api/sports', sportsRouter);
 app.use('/api/rules', rulesRouter);
 app.use('/api/incidents', incidentsRouter);
 app.use('/api/support', supportRouter);
+app.use('/api/admin/email-settings', adminEmailRouter);
 app.use('/api/recommendations', recommendationsRouter);
 app.use('/api/organizations', organizationsRouter);
 app.use('/api/organizations', organizationLogoRouter);
@@ -411,6 +414,7 @@ const server = app.listen(Number(PORT), '0.0.0.0', async () => {
 
   await startGracePeriodJob({ database: prisma });
 
+  await loadSavedEmailSettings(prisma);
   if (isEmailConfigured()) {
     const ok = await verifyEmailConnection();
     console.log(ok ? 'SMTP connection verified' : 'SMTP connection failed — emails will not be sent');
