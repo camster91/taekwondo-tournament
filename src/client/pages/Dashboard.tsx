@@ -196,7 +196,7 @@ export default function Dashboard() {
               <span className="live-dot" /> All systems normal
             </div>
             <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-white">
-              Welcome back
+              {tournaments && tournaments.length > 0 ? 'Welcome back' : 'Welcome'}
             </h1>
             <p className="mt-1 text-sm lg:text-base text-white/60 max-w-xl">
               {totalCompetitors > 0
