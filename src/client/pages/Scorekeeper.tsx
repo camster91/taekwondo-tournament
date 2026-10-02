@@ -1442,7 +1442,13 @@ export default function Scorekeeper() {
             >
               Record Result
             </button>
-            {resultValidationError && (
+            {/* Before a winner is picked this is a hint, not an error. */}
+            {resultValidationError && !selectedWinner && (
+              <p id="scorekeeper-result-validation" className="mt-2 text-sm text-gray-300">
+                Tap the winner&apos;s name above to choose who won.
+              </p>
+            )}
+            {resultValidationError && selectedWinner && (
               <p id="scorekeeper-result-validation" role="alert" className="mt-2 text-sm text-red-300">
                 {resultValidationError}
               </p>

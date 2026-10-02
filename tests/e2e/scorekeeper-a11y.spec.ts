@@ -153,6 +153,9 @@ test.describe('scorekeeper (a11y)', () => {
     await page.waitForLoadState('networkidle');
 
     await page.locator('button').filter({ has: page.locator('text=/\\d+ ready/i') }).first().click();
+    // Before a winner is picked, a plain hint shows instead of an error.
+    await expect(page.getByText("Tap the winner's name above to choose who won.")).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
     const competitors = page.locator('button[aria-pressed][aria-label*="select as winner"]');
     await competitors.first().click();
 
