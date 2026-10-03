@@ -5,6 +5,7 @@ import { expect, test, type Page } from '@playwright/test';
 // the real API (which would correctly sign the user out).
 async function mockDashboard(page: Page) {
   await page.route('**/api/tournaments', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route('**/api/notifications', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"notifications":[]}' }));
   await page.route('**/api/auth/onboarding', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"dismissed":true}' }));
   await page.route('**/api/competitors?limit=1', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"competitors":[],"total":0}' }));
   await page.route('**/api/analytics/dashboard', (route) => route.fulfill({
