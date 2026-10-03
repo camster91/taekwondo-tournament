@@ -14,6 +14,7 @@ import {
   PUBLIC_REGISTRATION_LIMITS,
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
+import { emailBrandingFor } from '../services/email-templates.js';
 import {
   optionalAuthenticate,
   checkTournamentAccess,
@@ -487,15 +488,19 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
           date: true,
           location: true,
           brandName: true,
+          brandPrimaryColor: true,
+          brandLogoUrl: true,
           organization: {
             select: {
               brandName: true,
+              brandPrimaryColor: true,
+              brandLogoUrl: true,
             },
           },
         },
       });
       
-      const organizerBrandName = tournamentForEmail?.brandName || tournamentForEmail?.organization?.brandName || undefined;
+      const emailBranding = emailBrandingFor(tournamentForEmail);
       const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(managementToken)}`;
       const paymentDueCents = registration.paymentStatus === 'pending' ? registration.paymentAmountCents : null;
 
@@ -523,7 +528,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
           confirmationCode: registration.id.slice(0, 8),
           waitlistPosition: registration.waitlistStatus === 'waitlisted' ? registration.waitlistPosition : null,
           paymentDueCents,
-          organizerBrandName,
+          ...emailBranding,
         });
         
         sendEmail(parentEmail, subject, html).catch((err) => {
@@ -540,7 +545,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
             tournamentDate: tournamentForEmail?.date || registration.tournament.date,
             waitlistPosition: registration.waitlistPosition!,
             managementUrl,
-            organizerBrandName,
+            ...emailBranding,
           });
           sendEmail(parentEmail, subject, html).catch((err) => {
             console.error('[public/register] waitlist email failed:', err);
@@ -558,7 +563,7 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
             parentName,
             confirmationCode: registration.id.slice(0, 8),
             managementUrl,
-            organizerBrandName,
+            ...emailBranding,
             paymentDueCents,
           });
           sendEmail(parentEmail, subject, html).catch((err) => {
@@ -1115,6 +1120,8 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
           confirmationCode: promotion.registrationId.slice(0, 8),
           managementUrl,
           organizerBrandName: promotion.organizerBrandName || undefined,
+          brandPrimaryColor: promotion.brandPrimaryColor || undefined,
+          brandLogoUrl: promotion.brandLogoUrl || undefined,
           paymentDueCents: promotion.paymentDueCents,
         });
         sendEmail(promotion.parentEmail, subject, html).catch((err) => {

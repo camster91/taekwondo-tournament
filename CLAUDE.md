@@ -907,6 +907,14 @@ and the `docker-compose.yml` container names
 (`martial-arts-tournament`, `taekwondo-db`). `MAILGUN_DOMAIN` still
 defaults to `'ashbi.ca'`.
 
+**Organizer branding (private label).** Organizations set the name, colour
+and logo parents see under Organization settings
+(`PUT /api/organizations/:orgId/branding`, logo via `logo-base64`); a
+tournament can override them in Tournament Settings. Parent emails take
+branding from `emailBrandingFor(tournament)` in `email-templates.ts`
+(tournament, then organization; colour must be `#RRGGBB`, logos become
+absolute `PUBLIC_APP_URL` links).
+
 ---
 
 ## Legacy bracket data (root-level directories)

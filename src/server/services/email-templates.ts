@@ -19,7 +19,7 @@ const BRAND_PAPER = '#FAFAF9';
 const BRAND_SLATE = '#475569';
 const BRAND_MUTED = '#94A3B8';
 
-interface BrandingOptions {
+export interface BrandingOptions {
   organizerBrandName?: string;
   brandPrimaryColor?: string;
   brandLogoUrl?: string;
@@ -38,11 +38,36 @@ function darkenColor(hex: string): string {
   return `#${toHex(darken(r))}${toHex(darken(g))}${toHex(darken(b))}`;
 }
 
+const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
+
+/** Logos are stored as /logos/... paths; emails need an absolute https URL. */
+export function absoluteEmailLogoUrl(url: string | null | undefined, appUrl = process.env.PUBLIC_APP_URL || ''): string | undefined {
+  if (!url) return undefined;
+  if (/^https:\/\//i.test(url)) return url;
+  if (url.startsWith('/') && !url.startsWith('//') && /^https?:\/\//i.test(appUrl)) return `${appUrl.replace(/\/+$/, '')}${url}`;
+  return undefined;
+}
+
+/** Organizer branding for an email: tournament overrides, then organization. */
+export function emailBrandingFor(tournament: {
+  brandName?: string | null;
+  brandPrimaryColor?: string | null;
+  brandLogoUrl?: string | null;
+  organization?: { brandName?: string | null; brandPrimaryColor?: string | null; brandLogoUrl?: string | null } | null;
+} | null | undefined): BrandingOptions {
+  return {
+    organizerBrandName: tournament?.brandName || tournament?.organization?.brandName || undefined,
+    brandPrimaryColor: tournament?.brandPrimaryColor || tournament?.organization?.brandPrimaryColor || undefined,
+    brandLogoUrl: absoluteEmailLogoUrl(tournament?.brandLogoUrl || tournament?.organization?.brandLogoUrl),
+  };
+}
+
 function layout(content: string, branding?: BrandingOptions): string {
   const displayName = branding?.organizerBrandName || 'bowin';
-  const primaryColor = branding?.brandPrimaryColor || BRAND_RED;
+  // The colour is written into CSS, so only a plain hex code is accepted.
+  const primaryColor = branding?.brandPrimaryColor && HEX_COLOR.test(branding.brandPrimaryColor) ? branding.brandPrimaryColor : BRAND_RED;
   const primaryColorDark = darkenColor(primaryColor);
-  const logoUrl = branding?.brandLogoUrl;
+  const logoUrl = absoluteEmailLogoUrl(branding?.brandLogoUrl);
   const tagline = branding?.organizerBrandName 
     ? 'Tournament Registration Confirmation'
     : 'Tournaments, run like a black belt.';
@@ -406,6 +431,8 @@ export function waitlistNotificationEmail(params: {
   waitlistPosition: number;
   managementUrl: string;
   organizerBrandName?: string;
+  brandPrimaryColor?: string;
+  brandLogoUrl?: string;
 }): { subject: string; html: string } {
   const safeCompetitorName = escapeHtml(params.competitorName);
   const safeTournamentName = escapeHtml(params.tournamentName);
@@ -433,8 +460,8 @@ export function waitlistNotificationEmail(params: {
       <p class="muted">You can withdraw from the waitlist anytime using the link above.</p>
     `, {
       organizerBrandName: params.organizerBrandName,
-      brandPrimaryColor: undefined,
-      brandLogoUrl: undefined,
+      brandPrimaryColor: params.brandPrimaryColor,
+      brandLogoUrl: params.brandLogoUrl,
     }),
   };
 }
@@ -446,6 +473,8 @@ export function waitlistPromotionEmail(params: {
   confirmationCode: string;
   managementUrl: string;
   organizerBrandName?: string;
+  brandPrimaryColor?: string;
+  brandLogoUrl?: string;
   /** Entry fee now due (cents); the parent pays through the management link. */
   paymentDueCents?: number | null;
 }): { subject: string; html: string } {
@@ -480,8 +509,8 @@ export function waitlistPromotionEmail(params: {
       <p class="muted">Please keep this email for your records. You may be asked to provide your confirmation code at check-in.</p>
     `, {
       organizerBrandName: params.organizerBrandName,
-      brandPrimaryColor: undefined,
-      brandLogoUrl: undefined,
+      brandPrimaryColor: params.brandPrimaryColor,
+      brandLogoUrl: params.brandLogoUrl,
     }),
   };
 }

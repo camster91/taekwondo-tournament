@@ -158,3 +158,42 @@ describe('resolveLogoStoragePath', () => {
     expect(LOGO_STORAGE_PATH).not.toContain('/opt/cursor');
   });
 });
+
+describe('PUT /api/organizations/:orgId/branding', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const put = (body: Record<string, unknown>) =>
+    request(makeApp()).put('/api/organizations/org-1/branding').send(body);
+
+  it('saves the name and an upper-cased colour', async () => {
+    const res = await put({ brandName: '  Newton TKD ', brandPrimaryColor: '#1d4ed8' });
+    expect(res.status).toBe(200);
+    expect(prisma.organization.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'org-1' },
+      data: { brandName: 'Newton TKD', brandPrimaryColor: '#1D4ED8' },
+    }));
+  });
+
+  it('clears both with null or blank', async () => {
+    const res = await put({ brandName: '', brandPrimaryColor: null });
+    expect(res.status).toBe(200);
+    expect(prisma.organization.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { brandName: null, brandPrimaryColor: null },
+    }));
+  });
+
+  it('rejects a colour that is not a hex code', async () => {
+    const res = await put({ brandName: 'X', brandPrimaryColor: 'red;background:url(x)' });
+    expect(res.status).toBe(400);
+    expect(prisma.organization.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses scorekeeper members', async () => {
+    prisma.organizationMember.findUnique.mockResolvedValueOnce({ role: 'scorekeeper' });
+    const res = await put({ brandName: 'X', brandPrimaryColor: '#000000' });
+    expect(res.status).toBe(403);
+    expect(prisma.organization.update).not.toHaveBeenCalled();
+  });
+});

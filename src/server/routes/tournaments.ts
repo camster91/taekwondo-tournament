@@ -1478,11 +1478,13 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
           name: true,
           date: true,
           brandName: true,
+          brandPrimaryColor: true,
+          brandLogoUrl: true,
           maxCapacity: true,
           organizationId: true,
           settings: true,
           organization: {
-            select: { brandName: true },
+            select: { brandName: true, brandPrimaryColor: true, brandLogoUrl: true },
           },
         },
       },
@@ -1568,8 +1570,8 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
 
   // Send promotion email
   if (registration.parentEmail && isEmailConfigured()) {
-    const { waitlistPromotionEmail } = await import('../services/email-templates.js');
-    const organizerBrandName = registration.tournament.brandName || registration.tournament.organization?.brandName || undefined;
+    const { waitlistPromotionEmail, emailBrandingFor } = await import('../services/email-templates.js');
+    const emailBranding = emailBrandingFor(registration.tournament);
     const managementUrl = `${process.env.PUBLIC_APP_URL || ''}/manage-registration?token=${encodeURIComponent(newManagementToken)}`;
 
     const { subject, html } = waitlistPromotionEmail({
@@ -1578,7 +1580,7 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
       tournamentDate: registration.tournament.date,
       confirmationCode: registration.id.slice(0, 8),
       managementUrl,
-      organizerBrandName,
+      ...emailBranding,
       paymentDueCents: 'paymentAmountCents' in promotionPayment
         ? promotionPayment.paymentAmountCents
         : registration.paymentStatus === 'pending' || registration.paymentStatus === 'failed'
