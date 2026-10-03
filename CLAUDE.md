@@ -466,6 +466,7 @@ All routes require auth. `?trash=true` shows soft-deleted;
 | GET | `/api/tournaments/:id/day-of` | any |
 | POST | `/api/tournaments/:id/public-slug` | admin/director (generate/rotate the 16-char public scoreboard slug) |
 | DELETE | `/api/tournaments/:id/public-slug` | admin/director (revoke — clears the slug) |
+| GET | `/api/tournaments/:id/share-links` | director (share kit: sign-up link — the org's active custom domain first, then the event page, else `/register?tournament=` — plus QR PNG data URL and iframe embed code; `services/share-links.ts`) |
 
 ### `/api/divisions` (`src/server/routes/divisions.ts`)
 
@@ -620,6 +621,19 @@ No auth. All write endpoints are rate-limited (`registrationLimiter`
 | POST | `/api/public/register` | Self-register. Body: `{ tournamentId, competitor, parentName, parentEmail, parentPhone, events }`. Sends a confirmation email (or logs to console in dev). |
 | GET | `/api/public/check-registration` | Query by `tournamentId`+`firstName`+`lastName`+`dateOfBirth`. Returns ONLY a boolean + 8-char confirmation code; rate-limited 20/15min per IP. No PII echoed back. |
 | GET | `/api/public/scoreboard/:publicSlug` | Public scoreboard. Requires a per-tournament 16-char `publicSlug` (not the tournament UUID). 404 for missing/wrong slug — indistinguishable from "tournament not found". Rate-limited 30/min per IP. |
+
+### `/api/public/host` (`src/server/routes/public-host.ts`)
+
+No auth. `GET /api/public/host` → `{ organization: { slug, name, brandPrimaryColor, brandLogoUrl } | null, hidePlatformBranding }`
+for the organizer owning the request's active custom domain (null on the app
+host). The SPA uses it so `/` and plain `/register` on a custom domain show
+that organizer's events (`HostHome` / `HostRegister` in `App.tsx`);
+`/login` is unchanged. On a custom domain `GET /api/public/tournaments` lists
+only that organizer's tournaments.
+
+Embedding: only `/register?embed=1` may be framed by other sites
+(`allowCrossOriginFraming` in the SPA fallback); every other page keeps
+helmet's same-origin framing rule.
 
 ### `/api/public/family` (`src/server/routes/family-portal.ts`)
 
@@ -946,6 +960,13 @@ names (`bowin_session`, `bowin_csrf`). Leftovers: the repository name
 and the `docker-compose.yml` container names
 (`martial-arts-tournament`, `taekwondo-db`). `MAILGUN_DOMAIN` still
 defaults to `'ashbi.ca'`.
+
+**White label (`whiteLabel` entitlement, pro plan).** When the tournament's
+organization has it, parent emails never say "bowin" (`emailBrandingFor`
+falls back to the organization name, `layout` drops the bowin footer/tagline)
+and public pages get `hidePlatformBranding: true` (`/api/public/host`, portal
+responses, `/api/public/tournaments[/:id]`) to show the organizer's name in
+the browser tab instead of "Bowin". Other plans keep the current branding.
 
 **Organizer branding (private label).** Organizations set the name, colour
 and logo parents see under Organization settings

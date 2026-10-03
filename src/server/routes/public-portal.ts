@@ -23,6 +23,7 @@ import {
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { isOrgSlugAllowedOnHost } from '../middleware/custom-domain-host.js';
+import { canHidePlatformBranding } from '../services/entitlements.js';
 import { getEventTypeLabel } from '../../shared/constants/sport-profiles.js';
 import {
   createPublicRegistration,
@@ -82,6 +83,7 @@ router.get('/:orgSlug', portalLimiter, async (req: Request, res: Response) => {
       id: true,
       name: true,
       slug: true,
+      plan: true,
       brandName: true,
       brandPrimaryColor: true,
       brandLogoUrl: true,
@@ -128,6 +130,7 @@ router.get('/:orgSlug', portalLimiter, async (req: Request, res: Response) => {
       brandPrimaryColor: organization.brandPrimaryColor || '#DC2626',
       brandLogoUrl: organization.brandLogoUrl || null,
     },
+    hidePlatformBranding: canHidePlatformBranding(organization.plan),
     events: events.map((e) => ({
       id: e.id,
       slug: e.eventSlug,
@@ -170,6 +173,7 @@ router.get('/:orgSlug/:eventSlug', portalLimiter, async (req: Request, res: Resp
       id: true,
       name: true,
       slug: true,
+      plan: true,
       brandName: true,
       brandPrimaryColor: true,
       brandLogoUrl: true,
@@ -235,6 +239,7 @@ router.get('/:orgSlug/:eventSlug', portalLimiter, async (req: Request, res: Resp
       brandPrimaryColor: organization.brandPrimaryColor || '#DC2626',
       brandLogoUrl: organization.brandLogoUrl || null,
     },
+    hidePlatformBranding: canHidePlatformBranding(organization.plan),
     event: {
       id: event.id,
       slug: event.eventSlug,
@@ -252,7 +257,7 @@ router.get('/:orgSlug/:eventSlug', portalLimiter, async (req: Request, res: Resp
       brandPrimaryColor: event.brandPrimaryColor || organization.brandPrimaryColor || '#DC2626',
       brandLogoUrl: event.brandLogoUrl || organization.brandLogoUrl || null,
       portalUrl: `/events/${orgSlug}/${eventSlug}`,
-      registerUrl: `/register/${event.id}`,
+      registerUrl: `/register?portal=${orgSlug}/${eventSlug}`,
       scoreboardUrl: event.publicSlug ? `/scoreboard/${event.publicSlug}` : null,
     },
   });

@@ -13,6 +13,7 @@ import { getSportProfile } from '../../shared/constants/sport-profiles';
 import { fetchJson, getApiFailure } from '../utils/api-status';
 import { ageOnDate } from '../utils/date-only';
 import { loadPendingCheckout, managementUrlFor, savePendingCheckout } from '../utils/pending-checkout';
+import { useOrganizerPageTitle } from '../hooks/useOrganizerPageTitle';
 import {
   parseRegistrationLegalConfig,
   parseRegistrationResult,
@@ -35,6 +36,8 @@ interface Tournament {
   brandName?: string | null;
   brandPrimaryColor?: string | null;
   brandLogoUrl?: string | null;
+  // The organizer's plan hides bowin from parents (whiteLabel)
+  hidePlatformBranding?: boolean;
   _count: { registrations: number };
   // Capacity status (#191)
   capacityStatus?: {
@@ -85,6 +88,22 @@ const TKD_BELT_OPTIONS = [
   'Brown / Double Black Stripe',
   'Black',
 ];
+
+/**
+ * Card checkout cannot run inside another website's frame (the share-kit
+ * embed), so from a frame it opens in the whole browser tab instead.
+ */
+function openCheckout(url: string) {
+  if (window.top && window.top !== window.self) {
+    try {
+      window.top.location.href = url;
+      return;
+    } catch {
+      if (window.open(url, '_blank', 'noopener')) return;
+    }
+  }
+  window.location.href = url;
+}
 
 export default function PublicRegister() {
   const [searchParams] = useSearchParams();
@@ -161,6 +180,10 @@ export default function PublicRegister() {
   const selectedTournament = useMemo(
     () => tournaments.find((t) => t.id === formData.tournamentId),
     [tournaments, formData.tournamentId]
+  );
+  useOrganizerPageTitle(
+    selectedTournament ? `Register for ${selectedTournament.name}` : null,
+    selectedTournament?.hidePlatformBranding,
   );
 
   // Real-time age-band preview. Mirrors the server's DEFAULT_AGE_GROUPS
@@ -256,7 +279,7 @@ export default function PublicRegister() {
     // Portal mode: fetch event from portal API
     if (portalOrgSlug && portalEventSlug) {
       const [eventResult, legalResult] = await Promise.allSettled([
-        fetchJson<{ event: { id: string; name: string; date: string; location: string | null; status: string; registrationFee: string | null; tournamentFeeCents?: number | null; brandName?: string; brandPrimaryColor?: string; brandLogoUrl?: string | null; sportProfileSlug?: string | null; } }>(
+        fetchJson<{ hidePlatformBranding?: boolean; event: { id: string; name: string; date: string; location: string | null; status: string; registrationFee: string | null; tournamentFeeCents?: number | null; brandName?: string; brandPrimaryColor?: string; brandLogoUrl?: string | null; sportProfileSlug?: string | null; } }>(
           fetch,
           `/api/public/portal/${portalOrgSlug}/${portalEventSlug}`
         ).then((data) => {
@@ -275,6 +298,7 @@ export default function PublicRegister() {
             brandName: data.event.brandName,
             brandPrimaryColor: data.event.brandPrimaryColor,
             brandLogoUrl: data.event.brandLogoUrl,
+            hidePlatformBranding: data.hidePlatformBranding === true,
             _count: { registrations: 0 },
           }] as Tournament[];
         }),
@@ -492,7 +516,7 @@ export default function PublicRegister() {
         // The management token is returned only once; keep it for the
         // success/cancel page so the parent can still pay, edit or withdraw.
         savePendingCheckout(parsedResult.registration);
-        window.location.href = parsedResult.checkoutUrl;
+        openCheckout(parsedResult.checkoutUrl);
         return;
       }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canCreateTournament,
+  canHidePlatformBranding,
   canOpenPublicRegistration,
   getPlanEntitlements,
   normalizePlan,
@@ -22,6 +23,7 @@ describe('plan entitlements', () => {
       maxRings: 1,
       publicRegistration: false,
       eventOperations: false,
+      whiteLabel: false,
     });
     expect(canCreateTournament('free', 0)).toBe(true);
     expect(canCreateTournament('free', 1)).toBe(false);
@@ -36,6 +38,7 @@ describe('plan entitlements', () => {
       maxRings: 6,
       publicRegistration: true,
       eventOperations: true,
+      whiteLabel: false,
     });
     expect(canCreateTournament('pilot', 4)).toBe(true);
     expect(canCreateTournament('pilot', 5)).toBe(false);
@@ -46,5 +49,14 @@ describe('plan entitlements', () => {
     expect(getPlanEntitlements('starter').maxTournaments).toBe(10);
     expect(getPlanEntitlements('pro').maxTournaments).toBe(100);
     expect(getPlanEntitlements('pro').maxRings).toBe(32);
+  });
+
+  it('hides bowin branding from parents only on the pro plan', () => {
+    expect(canHidePlatformBranding('pro')).toBe(true);
+    expect(canHidePlatformBranding('starter')).toBe(false);
+    expect(canHidePlatformBranding('pilot')).toBe(false);
+    expect(canHidePlatformBranding('free')).toBe(false);
+    expect(canHidePlatformBranding('unknown-plan')).toBe(false);
+    expect(canHidePlatformBranding(null)).toBe(false);
   });
 });

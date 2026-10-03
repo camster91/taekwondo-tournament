@@ -16,6 +16,8 @@ import {
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { emailBrandingFor } from '../services/email-templates.js';
 import { effectiveBrandColor, publicOrganizerBranding } from '../services/organizer-branding.js';
+import { canHidePlatformBranding } from '../services/entitlements.js';
+import { getResolvedOrg } from '../middleware/custom-domain-host.js';
 import {
   optionalAuthenticate,
   checkTournamentAccess,
@@ -106,6 +108,8 @@ router.get('/legal-config', (_req: Request, res: Response) => {
 // Get open tournaments (status = 'registration')
 router.get('/tournaments', async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  // On an organizer's custom domain, list only that organizer's tournaments.
+  const hostOrg = getResolvedOrg(res);
 
   const tournaments = await prisma.tournament.findMany({
     where: {
@@ -114,6 +118,7 @@ router.get('/tournaments', async (req: Request, res: Response) => {
         gte: new Date(), // Only future tournaments
       },
       deletedAt: null, // Exclude soft-deleted tournaments
+      ...(hostOrg?.isCustomDomain && hostOrg.resolvedOrgId ? { organizationId: hostOrg.resolvedOrgId } : {}),
     },
     select: {
       id: true,
@@ -133,6 +138,7 @@ router.get('/tournaments', async (req: Request, res: Response) => {
           brandName: true,
           brandPrimaryColor: true,
           brandLogoUrl: true,
+          plan: true,
         },
       },
       _count: {
@@ -151,6 +157,7 @@ router.get('/tournaments', async (req: Request, res: Response) => {
       brandName: t.brandName || t.organization?.brandName || t.name,
       brandPrimaryColor: effectiveBrandColor(t.brandPrimaryColor, t.organization?.brandPrimaryColor) || '#DC2626',
       brandLogoUrl: t.brandLogoUrl || t.organization?.brandLogoUrl || null,
+      hidePlatformBranding: canHidePlatformBranding(t.organization?.plan),
       // Don't expose organization object to public API
       organization: undefined,
       organizationId: undefined,
@@ -190,6 +197,7 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
           brandName: true,
           brandPrimaryColor: true,
           brandLogoUrl: true,
+          plan: true,
         },
       },
     },
@@ -220,6 +228,8 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
     brandLogoUrl: tournament.brandLogoUrl || tournament.organization?.brandLogoUrl || null,
     // Capacity status (no PII exposed - just counts)
     capacityStatus,
+    // Organizer's plan hides bowin from parents (whiteLabel)
+    hidePlatformBranding: canHidePlatformBranding(tournament.organization?.plan),
     // Don't expose organization object to public API
     organization: undefined,
     organizationId: undefined,
@@ -496,6 +506,8 @@ router.post('/register', registrationLimiter, async (req: Request, res: Response
               brandName: true,
               brandPrimaryColor: true,
               brandLogoUrl: true,
+              name: true,
+              plan: true,
             },
           },
         },
@@ -1136,6 +1148,7 @@ router.delete('/registrations/:token', manageUpdateLimiter, async (req: Request,
           organizerBrandName: promotion.organizerBrandName || undefined,
           brandPrimaryColor: promotion.brandPrimaryColor || undefined,
           brandLogoUrl: promotion.brandLogoUrl || undefined,
+          hidePlatformBranding: promotion.hidePlatformBranding,
           paymentDueCents: promotion.paymentDueCents,
         });
         sendEmail(promotion.parentEmail, subject, html).catch((err) => {

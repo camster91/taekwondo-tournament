@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { Routes, Route, Link, useLocation, useNavigate, useParams, Navigate } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, useNavigate, useParams, useSearchParams, Navigate } from 'react-router-dom';
 import {
   Trophy,
   ClipboardList,
@@ -45,6 +45,7 @@ import Spinner from './components/ui/Spinner';
 import { BowinLogo } from './components/brand/BowinLogo';
 import { CommandPalette, useCommandPalette } from './components/CommandPalette';
 import DemoDataDisclosure from './components/DemoDataDisclosure';
+import { useHostOrganization } from './hooks/useHostOrganization';
 
 // All page components are loaded lazily so the initial bundle ships
 // only the App shell + chrome. A director who only opens Scorekeeper
@@ -106,6 +107,27 @@ function PageFallback() {
       <Spinner size="lg" />
     </div>
   );
+}
+
+// On an organizer's custom domain the home page shows that organizer's
+// events instead of the bowin marketing page.
+function HostHome() {
+  const host = useHostOrganization();
+  if (host.status === 'loading') return <PageFallback />;
+  return host.organization ? <OrganizerPortal orgSlug={host.organization.slug} /> : <Marketing />;
+}
+
+// /register with a tournament (or event page) picked opens the form; plain
+// /register on a custom domain lists that organizer's events, elsewhere the
+// form with every open tournament.
+function HostRegister() {
+  const [searchParams] = useSearchParams();
+  const hasTarget = searchParams.has('tournament') || searchParams.has('portal')
+    || searchParams.has('payment') || searchParams.has('registration');
+  const host = useHostOrganization(!hasTarget);
+  if (hasTarget) return <PublicRegister />;
+  if (host.status === 'loading') return <PageFallback />;
+  return host.organization ? <OrganizerPortal orgSlug={host.organization.slug} /> : <PublicRegister />;
 }
 
 function isIsolatedDemoHost(): boolean {
@@ -592,6 +614,8 @@ function AppRoutes() {
     location.pathname.startsWith('/check-registration') ||
     location.pathname.startsWith('/manage-registration') ||
     location.pathname.startsWith('/my-registrations') ||
+    // Organizer event pages (also the custom-domain home) are public.
+    location.pathname.startsWith('/events/') ||
     location.pathname.startsWith('/legal') ||
     location.pathname === '/' ||
     location.pathname.startsWith('/login') ||
@@ -611,10 +635,10 @@ function AppRoutes() {
       <Suspense fallback={<PageFallback />}>
         {showDemoNotice && <DemoDataNotice />}
         <Routes>
-          <Route path="/" element={<Marketing />} />
+          <Route path="/" element={<HostHome />} />
           <Route path="/legal/privacy" element={<Legal kind="privacy" />} />
           <Route path="/legal/terms" element={<Legal kind="terms" />} />
-          <Route path="/register" element={<PublicRegister />} />
+          <Route path="/register" element={<HostRegister />} />
           <Route path="/check-registration" element={<CheckRegistration />} />
           <Route path="/manage-registration" element={<ManageRegistration />} />
           <Route path="/my-registrations" element={<MyRegistrations />} />

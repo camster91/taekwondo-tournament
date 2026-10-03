@@ -35,6 +35,7 @@ import {
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import CompetitorPicker from '../components/CompetitorPicker';
 import TournamentImportModal from '../components/TournamentImportModal';
+import ShareKitPanel from '../components/ShareKitPanel';
 import CloseButton from '../components/ui/CloseButton';
 import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -143,6 +144,7 @@ export default function TournamentDetail() {
   const { hasRole } = useAuth();
   // Check-in writes need scorekeeper+ access; viewers would only get 403s.
   const canCheckIn = hasRole(['admin', 'director', 'scorekeeper']);
+  const canShare = hasRole(['admin', 'director']);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -821,6 +823,11 @@ export default function TournamentDetail() {
           </div>
         </div>
       </div>
+
+      {/* Share kit — sign-up link (organizer's own address when set up),
+          QR code and website code. Directors only: the endpoint needs
+          director access. */}
+      {canShare && <ShareKitPanel tournamentId={tournament.id} tournamentName={tournament.name} />}
 
       {/* Usage Banner - show for free/starter plans when approaching limit */}
       {tournament.organization && ['free', 'starter'].includes(tournament.organization.plan) && (

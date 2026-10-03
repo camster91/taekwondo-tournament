@@ -132,3 +132,9 @@ first-round matches change; later rounds re-sync. Changing the bracket size
   invite problems) with an unread badge.
 - 18: Admins can sort open bug reports with AI on Support Tickets when an AI
   key is set; suggestions are not stored, a priority is applied on request.
+
+## Done on 2026-10-03 (private label)
+Custom-domain home: an organizer's own web address opens on their events
+(`/` and `/register`), sign-in unchanged; share kit on the tournament page
+(sign-up link, QR code, website embed code); "bowin" hidden from parent
+emails and page titles on the pro plan (`whiteLabel`).

@@ -22,6 +22,20 @@ interface PosterOptions {
 }
 
 /**
+ * A black-on-white QR code as a PNG data URL (also used by the share kit).
+ */
+export function qrCodeDataUrl(url: string): Promise<string> {
+  return QRCode.toDataURL(url, {
+    width: 400,
+    margin: 2,
+    color: {
+      dark: '#000000',
+      light: '#FFFFFF',
+    },
+  });
+}
+
+/**
  * Generate a QR code poster PDF with registration and scoreboard links.
  * Returns a Buffer containing the PDF document.
  */
@@ -79,14 +93,7 @@ export async function generateQRPoster(options: PosterOptions): Promise<Buffer> 
   doc.text('Scan to register for this tournament', 4.25, 2.9, { align: 'center' });
 
   // Generate registration QR code
-  const registrationQR = await QRCode.toDataURL(options.registrationUrl, {
-    width: 400,
-    margin: 2,
-    color: {
-      dark: '#000000',
-      light: '#FFFFFF',
-    },
-  });
+  const registrationQR = await qrCodeDataUrl(options.registrationUrl);
 
   // Add registration QR code
   doc.addImage(registrationQR, 'PNG', 2.25, 3.2, 4, 4);
@@ -110,14 +117,7 @@ export async function generateQRPoster(options: PosterOptions): Promise<Buffer> 
   doc.text('Scan to view live match results', 4.25, 9.15, { align: 'center' });
 
   // Generate scoreboard QR code
-  const scoreboardQR = await QRCode.toDataURL(options.scoreboardUrl, {
-    width: 400,
-    margin: 2,
-    color: {
-      dark: '#000000',
-      light: '#FFFFFF',
-    },
-  });
+  const scoreboardQR = await qrCodeDataUrl(options.scoreboardUrl);
 
   // Add scoreboard QR code
   doc.addImage(scoreboardQR, 'PNG', 2.25, 9.45, 4, 4);

@@ -60,6 +60,7 @@ vi.mock('../middleware/auth.js', () => ({
 vi.mock('../services/entitlements.js', () => ({
   canAddRegistration: vi.fn(() => true),
   getPlanEntitlements: vi.fn(() => ({ maxCompetitors: 1000 })),
+  canHidePlatformBranding: vi.fn(() => false),
 }));
 vi.mock('../services/public-display-heartbeat.js', () => ({
   recordPublicDisplayHeartbeat: vi.fn(),

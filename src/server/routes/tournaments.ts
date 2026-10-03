@@ -38,7 +38,8 @@ import { promotedRegistrationPaymentData } from '../services/public-registration
 import { isParentalConsentPending } from '../services/parental-consent-verification.js';
 import { loadTournamentAttention } from '../services/tournament-attention.js';
 import { answerOperationalQuery } from '../services/operational-query.js';
-import { generateQRPoster } from '../services/qr-poster.js';
+import { generateQRPoster, qrCodeDataUrl } from '../services/qr-poster.js';
+import { buildShareLinks } from '../services/share-links.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
 import { recordTournamentUsage } from '../services/usage-metering.js';
 import {
@@ -763,7 +764,8 @@ router.get('/:id/qr-poster', authenticate, requireTournamentAccess('viewer'), as
       : `${publicUrl}/scoreboard/${tournament.publicSlug}`;
   } else {
     // Legacy UUID-based URLs (backward compatible)
-    registrationUrl = `${publicUrl}/register/${tournament.id}`;
+    // (/register/:id has no client route; the form reads ?tournament=)
+    registrationUrl = `${publicUrl}/register?tournament=${encodeURIComponent(tournament.id)}`;
     scoreboardUrl = `${publicUrl}/display/${tournament.id}?key=${encodeURIComponent(tournament.publicSlug)}`;
   }
 
@@ -780,6 +782,58 @@ router.get('/:id/qr-poster', authenticate, requireTournamentAccess('viewer'), as
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${tournament.name.replace(/[^a-z0-9]/gi, '_')}_QR_Poster.pdf"`);
   res.send(pdfBuffer);
+});
+
+// Share kit for directors: the registration link to hand out (the
+// organizer's active custom domain when there is one), a QR code image for
+// it, and an iframe snippet for the organizer's own website.
+// GET /api/tournaments/:id/share-links
+router.get('/:id/share-links', authenticate, requireTournamentAccess('director'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const id = getParam(req.params.id);
+
+  const tournament = await prisma.tournament.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      eventSlug: true,
+      portalPublished: true,
+      publicSlug: true,
+      organizationId: true,
+      organization: { select: { slug: true } },
+    },
+  });
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+
+  const customDomain = tournament.organizationId
+    ? await prisma.customDomain.findFirst({
+      where: { organizationId: tournament.organizationId, status: 'active' },
+      orderBy: { activatedAt: 'asc' },
+      select: { hostname: true },
+    })
+    : null;
+
+  const links = buildShareLinks({
+    publicAppUrl: publicAppUrlFromEnv(process.env),
+    tournamentId: tournament.id,
+    tournamentName: tournament.name,
+    portalPublished: tournament.portalPublished,
+    eventSlug: tournament.eventSlug,
+    orgSlug: tournament.organization?.slug ?? null,
+    customDomainHostname: customDomain?.hostname ?? null,
+  });
+
+  res.json({
+    ...links,
+    qrCodeDataUrl: await qrCodeDataUrl(links.registerUrl),
+    registrationOpen: tournament.status === 'registration',
+    // The printable poster also carries the live-results QR, which needs the public slug.
+    posterAvailable: Boolean(tournament.publicSlug),
+  });
 });
 
 // Clone a tournament as a template for next year. Deep-copies settings
@@ -1489,7 +1543,7 @@ router.post('/:id/registrations/:regId/promote', authenticate, requireTournament
           organizationId: true,
           settings: true,
           organization: {
-            select: { brandName: true, brandPrimaryColor: true, brandLogoUrl: true },
+            select: { brandName: true, brandPrimaryColor: true, brandLogoUrl: true, name: true, plan: true },
           },
         },
       },

@@ -1,4 +1,5 @@
 import { effectiveBrandColor } from './organizer-branding.js';
+import { canHidePlatformBranding } from './entitlements.js';
 
 export function escapeHtml(str: string): string {
   return str
@@ -25,6 +26,8 @@ export interface BrandingOptions {
   organizerBrandName?: string;
   brandPrimaryColor?: string;
   brandLogoUrl?: string;
+  /** Plan with the whiteLabel entitlement: never mention bowin. */
+  hidePlatformBranding?: boolean;
 }
 
 /**
@@ -50,27 +53,56 @@ export function absoluteEmailLogoUrl(url: string | null | undefined, appUrl = pr
   return undefined;
 }
 
-/** Organizer branding for an email: tournament overrides, then organization. */
+/**
+ * Organizer branding for an email: tournament overrides, then organization.
+ * When the organization's plan includes whiteLabel, the email never says
+ * "bowin": it falls back to the organization's own name.
+ */
 export function emailBrandingFor(tournament: {
   brandName?: string | null;
   brandPrimaryColor?: string | null;
   brandLogoUrl?: string | null;
-  organization?: { brandName?: string | null; brandPrimaryColor?: string | null; brandLogoUrl?: string | null } | null;
+  organization?: {
+    brandName?: string | null;
+    brandPrimaryColor?: string | null;
+    brandLogoUrl?: string | null;
+    name?: string | null;
+    plan?: string | null;
+  } | null;
 } | null | undefined): BrandingOptions {
+  const hidePlatformBranding = canHidePlatformBranding(tournament?.organization?.plan);
   return {
-    organizerBrandName: tournament?.brandName || tournament?.organization?.brandName || undefined,
+    organizerBrandName: tournament?.brandName
+      || tournament?.organization?.brandName
+      || (hidePlatformBranding ? tournament?.organization?.name || undefined : undefined),
     brandPrimaryColor: effectiveBrandColor(tournament?.brandPrimaryColor, tournament?.organization?.brandPrimaryColor) || undefined,
     brandLogoUrl: absoluteEmailLogoUrl(tournament?.brandLogoUrl || tournament?.organization?.brandLogoUrl),
+    ...(hidePlatformBranding ? { hidePlatformBranding: true } : {}),
+  };
+}
+
+/**
+ * Branding for an email a parent receives. A white-label organizer without
+ * a brand name is shown as the tournament name instead of "bowin".
+ */
+function parentEmailBranding(params: BrandingOptions & { tournamentName: string }): BrandingOptions {
+  return {
+    organizerBrandName: params.organizerBrandName
+      || (params.hidePlatformBranding ? params.tournamentName : undefined),
+    brandPrimaryColor: params.brandPrimaryColor,
+    brandLogoUrl: params.brandLogoUrl,
+    hidePlatformBranding: params.hidePlatformBranding,
   };
 }
 
 function layout(content: string, branding?: BrandingOptions): string {
-  const displayName = branding?.organizerBrandName || 'bowin';
+  const hidePlatform = branding?.hidePlatformBranding === true;
+  const displayName = branding?.organizerBrandName || (hidePlatform ? 'Tournament registration' : 'bowin');
   // The colour is written into CSS, so only a plain hex code is accepted.
   const primaryColor = branding?.brandPrimaryColor && HEX_COLOR.test(branding.brandPrimaryColor) ? branding.brandPrimaryColor : BRAND_RED;
   const primaryColorDark = darkenColor(primaryColor);
   const logoUrl = absoluteEmailLogoUrl(branding?.brandLogoUrl);
-  const tagline = branding?.organizerBrandName 
+  const tagline = branding?.organizerBrandName || hidePlatform
     ? 'Tournament Registration Confirmation'
     : 'Tournaments, run like a black belt.';
   
@@ -189,7 +221,7 @@ function layout(content: string, branding?: BrandingOptions): string {
       ${content}
     </div>
     <div class="footer">
-      <p>${branding?.organizerBrandName ? escapeHtml(branding.organizerBrandName) : 'bowin &middot; tournament management for martial arts schools'}</p>
+      <p>${branding?.organizerBrandName ? escapeHtml(branding.organizerBrandName) : hidePlatform ? '' : 'bowin &middot; tournament management for martial arts schools'}</p>
     </div>
   </div>
 </body>
@@ -317,6 +349,7 @@ export function registrationConfirmationEmail(params: {
   organizerBrandName?: string;
   brandPrimaryColor?: string;
   brandLogoUrl?: string;
+  hidePlatformBranding?: boolean;
   /** Unpaid entry fee (cents) at the time of registration. */
   paymentDueCents?: number | null;
 }): { subject: string; html: string } {
@@ -356,11 +389,7 @@ export function registrationConfirmationEmail(params: {
       </p>
       <p class="muted">You can use the link above to update details or withdraw this registration before the tournament starts.</p>
       <p class="muted">Please keep this email for your records. You may be asked to provide your confirmation code at check-in.</p>
-    `, {
-      organizerBrandName: params.organizerBrandName,
-      brandPrimaryColor: params.brandPrimaryColor,
-      brandLogoUrl: params.brandLogoUrl,
-    }),
+    `, parentEmailBranding(params)),
   };
 }
 
@@ -380,6 +409,7 @@ export function parentalConsentVerificationEmail(params: {
   organizerBrandName?: string;
   brandPrimaryColor?: string;
   brandLogoUrl?: string;
+  hidePlatformBranding?: boolean;
 }): { subject: string; html: string } {
   const greeting = params.parentName ? `Hi ${escapeHtml(params.parentName)},` : 'Hi,';
   const safeCompetitorName = escapeHtml(params.competitorName);
@@ -417,11 +447,7 @@ export function parentalConsentVerificationEmail(params: {
       <p class="muted">The link opens a page where you confirm consent with one click. This verification link expires in 48 hours. If you did not register your child for this tournament, please disregard this email.</p>
       <p class="muted" style="word-break:break-all;">Or copy this link: ${safeVerificationUrl}</p>
       ${manageSection}
-    `, {
-      organizerBrandName: params.organizerBrandName,
-      brandPrimaryColor: params.brandPrimaryColor,
-      brandLogoUrl: params.brandLogoUrl,
-    }),
+    `, parentEmailBranding(params)),
   };
 }
 
@@ -435,6 +461,7 @@ export function waitlistNotificationEmail(params: {
   organizerBrandName?: string;
   brandPrimaryColor?: string;
   brandLogoUrl?: string;
+  hidePlatformBranding?: boolean;
 }): { subject: string; html: string } {
   const safeCompetitorName = escapeHtml(params.competitorName);
   const safeTournamentName = escapeHtml(params.tournamentName);
@@ -460,11 +487,7 @@ export function waitlistNotificationEmail(params: {
         <a href="${safeManagementUrl}" class="btn">Manage Registration</a>
       </p>
       <p class="muted">You can withdraw from the waitlist anytime using the link above.</p>
-    `, {
-      organizerBrandName: params.organizerBrandName,
-      brandPrimaryColor: params.brandPrimaryColor,
-      brandLogoUrl: params.brandLogoUrl,
-    }),
+    `, parentEmailBranding(params)),
   };
 }
 
@@ -477,6 +500,7 @@ export function waitlistPromotionEmail(params: {
   organizerBrandName?: string;
   brandPrimaryColor?: string;
   brandLogoUrl?: string;
+  hidePlatformBranding?: boolean;
   /** Entry fee now due (cents); the parent pays through the management link. */
   paymentDueCents?: number | null;
 }): { subject: string; html: string } {
@@ -509,11 +533,7 @@ export function waitlistPromotionEmail(params: {
         <a href="${safeManagementUrl}" class="btn">${paymentDue ? 'Complete Payment' : 'View Registration'}</a>
       </p>
       <p class="muted">Please keep this email for your records. You may be asked to provide your confirmation code at check-in.</p>
-    `, {
-      organizerBrandName: params.organizerBrandName,
-      brandPrimaryColor: params.brandPrimaryColor,
-      brandLogoUrl: params.brandLogoUrl,
-    }),
+    `, parentEmailBranding(params)),
   };
 }
 
