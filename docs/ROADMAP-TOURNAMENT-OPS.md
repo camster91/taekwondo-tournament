@@ -75,3 +75,8 @@ Tour fixed; form labels; restore deleted tournaments; backup panel refresh;
 byes left out of match counts; Results empty state; Scorekeeper hint;
 first-run setup key; decimal scores; clean import template; Scorekeeper
 polish; "Report a bug" button.
+
+## Done on 2026-10-03
+Organizer branding (logo, name, colour) on the family portal, manage
+registration, registration lookup and parent scoreboard pages; the
+organization's colour now shows when a tournament has not picked its own.

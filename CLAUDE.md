@@ -600,7 +600,7 @@ email has registrations.
 | Method | Path | Notes |
 |--------|------|-------|
 | POST | `/api/public/family/request-link` | Body `{ email }`. 5/15min per IP. Emails a `/my-registrations?token=` link (dev: logged; e2e bypass returns `devAccessUrl`). |
-| POST | `/api/public/family/registrations` | Body `{ token }`. Every registration with that `parentEmail`: tournament, events, status, divisions, next match, placement. |
+| POST | `/api/public/family/registrations` | Body `{ token }`. Every registration with that `parentEmail`: tournament (with organizer name, colour, logo), events, status, divisions, next match, placement. |
 | POST | `/api/public/family/registrations/:id/manage-link` | Body `{ token }`. Issues a fresh management token (the older emailed manage link stops working); 403 if the organizer revoked it. |
 
 Directors generate the slug via `POST /api/tournaments/:id/public-slug`
@@ -913,7 +913,15 @@ and logo parents see under Organization settings
 tournament can override them in Tournament Settings. Parent emails take
 branding from `emailBrandingFor(tournament)` in `email-templates.ts`
 (tournament, then organization; colour must be `#RRGGBB`, logos become
-absolute `PUBLIC_APP_URL` links).
+absolute `PUBLIC_APP_URL` links). Parent pages (family portal, manage
+registration, registration lookup, parent scoreboard) show it through
+`src/client/components/OrganizerBrandHeader.tsx`, which only accepts `#RRGGBB`
+colours and same-site/https logos and picks white or dark text by contrast
+(`src/client/utils/organizer-branding.ts`). Server side,
+`publicOrganizerBranding` / `effectiveBrandColor` in
+`src/server/services/organizer-branding.ts` resolve it; a tournament colour
+equal to the column default `#DC2626` counts as "not overridden", so the
+organization's colour wins.
 
 ---
 

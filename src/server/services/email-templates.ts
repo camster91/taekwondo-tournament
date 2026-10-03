@@ -1,3 +1,5 @@
+import { effectiveBrandColor } from './organizer-branding.js';
+
 export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -57,7 +59,7 @@ export function emailBrandingFor(tournament: {
 } | null | undefined): BrandingOptions {
   return {
     organizerBrandName: tournament?.brandName || tournament?.organization?.brandName || undefined,
-    brandPrimaryColor: tournament?.brandPrimaryColor || tournament?.organization?.brandPrimaryColor || undefined,
+    brandPrimaryColor: effectiveBrandColor(tournament?.brandPrimaryColor, tournament?.organization?.brandPrimaryColor) || undefined,
     brandLogoUrl: absoluteEmailLogoUrl(tournament?.brandLogoUrl || tournament?.organization?.brandLogoUrl),
   };
 }

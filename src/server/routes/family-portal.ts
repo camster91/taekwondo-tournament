@@ -27,6 +27,7 @@ import {
   normalizeFamilyEmail,
   registrationStatusFor,
 } from '../services/family-portal.js';
+import { publicOrganizerBranding } from '../services/organizer-branding.js';
 
 const router = Router();
 
@@ -125,7 +126,9 @@ router.post('/registrations', viewLimiter, async (req: Request, res: Response) =
           sportProfileSlug: true,
           publicSlug: true,
           brandName: true,
-          organization: { select: { name: true, brandName: true } },
+          brandPrimaryColor: true,
+          brandLogoUrl: true,
+          organization: { select: { name: true, brandName: true, brandPrimaryColor: true, brandLogoUrl: true } },
         },
       },
       assignments: {
@@ -167,6 +170,7 @@ router.post('/registrations', viewLimiter, async (req: Request, res: Response) =
     registrations: registrations.map((reg) => {
       const t = reg.tournament;
       const slug = t.sportProfileSlug;
+      const branding = publicOrganizerBranding(t);
       return {
         id: reg.id,
         confirmationCode: reg.id.slice(0, 8),
@@ -185,7 +189,9 @@ router.post('/registrations', viewLimiter, async (req: Request, res: Response) =
           date: t.date,
           location: t.location,
           status: t.status,
-          organizer: t.brandName || t.organization?.brandName || t.organization?.name || null,
+          organizer: branding.organizerName,
+          brandPrimaryColor: branding.brandPrimaryColor,
+          brandLogoUrl: branding.brandLogoUrl,
           liveResultsUrl: t.publicSlug ? `/display/${t.id}?key=${encodeURIComponent(t.publicSlug)}` : null,
         },
         divisions: reg.assignments.map(({ division }) => {

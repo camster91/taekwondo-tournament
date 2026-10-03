@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { promotedRegistrationPaymentData } from './public-registration.js';
+import { effectiveBrandColor } from './organizer-branding.js';
 import {
   generateManagementToken,
   getManagementTokenExpiry,
@@ -267,7 +268,7 @@ export async function promoteNextWaitlisted(
           tournamentName: next.tournament.name,
           tournamentDate: next.tournament.date,
           organizerBrandName: next.tournament.brandName || next.tournament.organization?.brandName || null,
-          brandPrimaryColor: next.tournament.brandPrimaryColor || next.tournament.organization?.brandPrimaryColor || null,
+          brandPrimaryColor: effectiveBrandColor(next.tournament.brandPrimaryColor, next.tournament.organization?.brandPrimaryColor),
           brandLogoUrl: next.tournament.brandLogoUrl || next.tournament.organization?.brandLogoUrl || null,
           paymentDueCents: 'paymentAmountCents' in payment
             ? payment.paymentAmountCents

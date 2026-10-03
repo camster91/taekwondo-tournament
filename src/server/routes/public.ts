@@ -15,6 +15,7 @@ import {
 } from './public-validation.js';
 import { sendEmail, isEmailConfigured } from '../services/email.js';
 import { emailBrandingFor } from '../services/email-templates.js';
+import { effectiveBrandColor, publicOrganizerBranding } from '../services/organizer-branding.js';
 import {
   optionalAuthenticate,
   checkTournamentAccess,
@@ -148,7 +149,7 @@ router.get('/tournaments', async (req: Request, res: Response) => {
       settings: publicRegistrationSettings(t.settings),
       // Resolve effective branding: tournament overrides org, org overrides defaults
       brandName: t.brandName || t.organization?.brandName || t.name,
-      brandPrimaryColor: t.brandPrimaryColor || t.organization?.brandPrimaryColor || '#DC2626',
+      brandPrimaryColor: effectiveBrandColor(t.brandPrimaryColor, t.organization?.brandPrimaryColor) || '#DC2626',
       brandLogoUrl: t.brandLogoUrl || t.organization?.brandLogoUrl || null,
       // Don't expose organization object to public API
       organization: undefined,
@@ -215,7 +216,7 @@ router.get('/tournaments/:id', async (req: Request, res: Response) => {
     settings: publicRegistrationSettings(tournament.settings),
     // Resolve effective branding with org fallback
     brandName: tournament.brandName || tournament.organization?.brandName || tournament.name,
-    brandPrimaryColor: tournament.brandPrimaryColor || tournament.organization?.brandPrimaryColor || '#DC2626',
+    brandPrimaryColor: effectiveBrandColor(tournament.brandPrimaryColor, tournament.organization?.brandPrimaryColor) || '#DC2626',
     brandLogoUrl: tournament.brandLogoUrl || tournament.organization?.brandLogoUrl || null,
     // Capacity status (no PII exposed - just counts)
     capacityStatus,
@@ -776,7 +777,18 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
       competitor: {
         select: { firstName: true, lastName: true, dateOfBirth: true, gender: true, belt: true, schoolDojang: true },
       },
-      tournament: { select: { id: true, name: true, date: true, status: true } },
+      tournament: {
+        select: {
+          id: true,
+          name: true,
+          date: true,
+          status: true,
+          brandName: true,
+          brandPrimaryColor: true,
+          brandLogoUrl: true,
+          organization: { select: { name: true, brandName: true, brandPrimaryColor: true, brandLogoUrl: true } },
+        },
+      },
     },
   });
 
@@ -822,6 +834,8 @@ router.get('/registrations/:token', manageLimiter, async (req: Request, res: Res
       tournamentName: registration.tournament.name,
       tournamentDate: registration.tournament.date,
       tournamentStatus: registration.tournament.status,
+      // Organizer name, colour and logo for the page header (no org ids).
+      ...publicOrganizerBranding(registration.tournament),
       checkedIn: registration.checkedIn,
       // Lets the parent finish an unpaid entry fee (e.g. after an abandoned
       // Checkout or a waitlist promotion) via POST /checkout.

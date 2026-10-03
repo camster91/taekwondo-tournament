@@ -16,6 +16,7 @@ import { Button, Card, CardBody, Input } from '../components/ui';
 import { getScoreboardUnavailableMessage } from '../utils/scoreboard-availability';
 import { resolveParentScoreboardState } from '../utils/parent-scoreboard-state';
 import { fetchJson } from '../utils/api-status';
+import OrganizerBrandHeader from '../components/OrganizerBrandHeader';
 import { buildParentMatchView, describeParentMatchTransition, filterParentMatches, parseParentScoreboardPayload, readParentFavorites, writeParentFavorites } from '../utils/parent-live-finder';
 import { getEventTypeLabel } from '../../shared/constants/sport-profiles';
 
@@ -54,6 +55,11 @@ interface Tournament {
   location: string | null;
   status: string;
   sportProfileSlug?: string | null;
+  // Resolved by the server: tournament branding, then organization; the
+  // name falls back to the tournament name when nothing is set.
+  brandName?: string | null;
+  brandPrimaryColor?: string | null;
+  brandLogoUrl?: string | null;
 }
 
 export default function ParentScoreboard() {
@@ -174,6 +180,15 @@ export default function ParentScoreboard() {
     <div className="min-h-screen bg-surface-50 dark:bg-surface-950">
       {/* Header - tournament context */}
       <header className="bg-white dark:bg-surface-900 border-b border-surface-200 dark:border-surface-700 sticky top-0 z-10">
+        {tournament && (
+          <OrganizerBrandHeader
+            name={tournament.brandName && tournament.brandName !== tournament.name ? tournament.brandName : null}
+            color={tournament.brandPrimaryColor}
+            logoUrl={tournament.brandLogoUrl}
+            compact
+            contentClassName="max-w-2xl mx-auto"
+          />
+        )}
         <div className="max-w-2xl mx-auto px-4 py-3">
           <Link
             to="/"
