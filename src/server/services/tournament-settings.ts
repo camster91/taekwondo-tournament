@@ -10,7 +10,7 @@ export interface TournamentWeightClassInput {
   displayOrder?: number;
 }
 
-export const TOURNAMENT_RULE_KEYS = new Set(['version', 'beltGroups', 'ageBands', 'weights', 'divisions', 'brackets', 'events', 'overrides']);
+export const TOURNAMENT_RULE_KEYS = new Set(['version', 'beltGroups', 'ageBands', 'weights', 'divisions', 'brackets', 'events', 'overrides', 'fairness']);
 export const RESERVED_OPERATION_SETTINGS_KEYS = new Set(['canonicalSchedule', 'scheduleOperations']);
 
 export function stripReservedOperationSettings(incoming: Record<string, unknown>): Record<string, unknown> {

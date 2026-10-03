@@ -17,6 +17,11 @@ describe('saveTournamentSettingsAtomic', () => {
     expect(stripReservedOperationSettingsFromRaw(JSON.stringify({ display: {}, canonicalSchedule: { oldDivisionIds: true }, scheduleOperations: { stale: true } }))).toBe(JSON.stringify({ display: {} }));
     expect(stripReservedOperationSettingsFromRaw(JSON.stringify({ canonicalSchedule: {}, scheduleOperations: {} }))).toBeNull();
   });
+  it('treats fairness as a rules key', () => {
+    const current = JSON.stringify({ rings: { count: 2 }, fairness: { splitBySimilarity: true } });
+    expect(mergeSetupSettings(current, { rings: { count: 3 }, fairness: { splitBySimilarity: false } })).toEqual({ rings: { count: 3 }, fairness: { splitBySimilarity: true } });
+    expect(mergeRulesSettings(current, { fairness: { heightTieBreak: true } })).toEqual({ rings: { count: 2 }, fairness: { heightTieBreak: true } });
+  });
   it('commits settings and replacement classes through one transaction', async () => {
     const tx = {
       tournament: { findUniqueOrThrow: vi.fn().mockResolvedValue({ settings: JSON.stringify({ version: 1, events: { patterns: {} } }) }), update: vi.fn().mockResolvedValue({ id: 't1' }) },

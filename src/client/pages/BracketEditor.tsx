@@ -13,11 +13,15 @@ import {
   X,
   ArrowLeftRight,
   Move,
+
+  AlertTriangle,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import Spinner from '../components/ui/Spinner';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
+import SpecialNeedsNote from '../components/SpecialNeedsNote';
+import { specialNeedsText } from '../utils/special-needs';
 import { useToast } from '../context/ToastContext';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
@@ -32,10 +36,12 @@ interface Competitor {
   firstName: string;
   lastName: string;
   schoolDojang: string | null;
+  specialNeeds?: string | null;
 }
 
 interface Registration {
   id: string;
+  specialNeeds?: string | null;
   competitor: Competitor;
 }
 
@@ -134,6 +140,9 @@ export default function BracketEditor() {
   }>();
   const queryClient = useQueryClient();
   const { addToast } = useToast();
+  const { user } = useAuth();
+  // Special-needs notes are for directors only (#15).
+  const showSpecialNeeds = user?.role === 'admin' || user?.role === 'director';
 
   // Real-time WebSocket updates for bracket collaboration (P2-7)
   const { connectionError: liveUpdatesError, reconnect: reconnectLiveUpdates } = useBracketWebSocket({
@@ -885,7 +894,9 @@ export default function BracketEditor() {
             </div>
           )}
           <div className="flex flex-wrap gap-2">
-            {division.assignments.map((a, i) => (
+            {division.assignments.map((a, i) => {
+              const note = showSpecialNeeds ? specialNeedsText(a.registration.specialNeeds, a.registration.competitor.specialNeeds) : null;
+              return (
               <span
                 key={a.id}
                 className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-surface-100 dark:bg-surface-700 text-surface-900 dark:text-surface-100 gap-2"
@@ -893,6 +904,12 @@ export default function BracketEditor() {
                 <span className="font-medium mr-1">{i + 1}.</span>
                 {a.registration.competitor.firstName}{' '}
                 {a.registration.competitor.lastName}
+                {note && (
+                  <span title={note} className="text-amber-700 dark:text-amber-300">
+                    <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span className="sr-only">Has special needs</span>
+                  </span>
+                )}
                 {a.registration.competitor.schoolDojang && (
                   <span className="ml-1 text-surface-600 dark:text-surface-400 text-xs">
                     ({a.registration.competitor.schoolDojang})
@@ -911,8 +928,24 @@ export default function BracketEditor() {
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               </span>
-            ))}
+              );
+            })}
           </div>
+          {showSpecialNeeds && (() => {
+            const notes = division.assignments.flatMap((a) => {
+              const note = specialNeedsText(a.registration.specialNeeds, a.registration.competitor.specialNeeds);
+              return note ? [{ id: a.id, name: `${a.registration.competitor.firstName} ${a.registration.competitor.lastName}`, note }] : [];
+            });
+            if (notes.length === 0) return null;
+            return (
+              <section aria-label="Special needs" className="mt-4 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 dark:border-amber-500/30 dark:bg-amber-900/20">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300 mb-1">Special needs</h3>
+                <div className="space-y-1">
+                  {notes.map((n) => <SpecialNeedsNote key={n.id} name={n.name} note={n.note} />)}
+                </div>
+              </section>
+            );
+          })()}
         </CardBody>
       </Card>
 

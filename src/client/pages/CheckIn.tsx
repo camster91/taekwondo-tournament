@@ -42,6 +42,8 @@ import {
   updateSearchParams,
 } from '../utils/url-state';
 import ConnectionStatusBanner from '../components/ui/ConnectionStatusBanner';
+import SpecialNeedsNote from '../components/SpecialNeedsNote';
+import { specialNeedsText } from '../utils/special-needs';
 import DirectorOverrideDialog, { type DirectorOverrideParams } from '../components/DirectorOverrideDialog';
 
 interface Registration {
@@ -55,6 +57,7 @@ interface Registration {
   checkInWeight: number | null;
   /** Minor self-registration whose parent has not confirmed the consent email. */
   parentalConsentPending?: boolean;
+  specialNeeds?: string | null;
   competitor: {
     id: string;
     firstName: string;
@@ -63,6 +66,7 @@ interface Registration {
     belt: string;
     schoolDojang: string | null;
     weightLbs: number | null;
+    specialNeeds?: string | null;
   };
 }
 
@@ -78,6 +82,8 @@ export default function CheckIn() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { user, isOfflineSession } = useAuth();
+  // Special-needs notes are for directors only (#15).
+  const canSeeSpecialNeeds = user?.role === 'admin' || user?.role === 'director';
   const venueSnapshots = useMemo(browserVenueDataSnapshotStore, []);
   const [cachedSnapshotAt, setCachedSnapshotAt] = useState<string | null>(null);
   const offlineOperations = useOfflineOperations(tournamentId, 'check_in');
@@ -696,6 +702,10 @@ export default function CheckIn() {
                       {registration.competitor.belt}
                       {registration.ageAtTournament && ` • Age ${registration.ageAtTournament}`}
                     </div>
+                    {canSeeSpecialNeeds && (() => {
+                      const note = specialNeedsText(registration.specialNeeds, registration.competitor.specialNeeds);
+                      return note ? <SpecialNeedsNote note={note} className="mt-1" /> : null;
+                    })()}
                     <div className="flex gap-2 mt-2">
                       {registration.patterns && (
                         <span className="text-xs px-2 py-1 bg-info/10 text-info rounded">

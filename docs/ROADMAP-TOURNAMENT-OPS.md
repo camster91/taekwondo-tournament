@@ -40,12 +40,8 @@ edits; bracket corrections with undo; Excel import with column auto-detection.
 | # | What | Size |
 |---|------|------|
 | 1 | Make every rule in the rules editor actually do something (several settings such as "avoid same school in round 1", seeding strategy, bye placement, merge direction, belts per division, target class size are saved but not used), or hide the ones that don't | M |
-| 2 | "Auto" weight classes: sort a group by weight and cut it into Light / Middle / Heavy of similar size, with a maximum weight gap | M |
-| 3 | Split big divisions by weight (sparring) or age/belt (patterns) instead of dealing people out, then balance schools inside each part | S–M |
-| 4 | Hard fairness limits per age band (max weight gap, max age gap): block merges that break them and highlight the unfair pairs | M |
-| 5 | Separate age bands for colour belts and black belts (as the old sheets did) | S |
 | 6 | Stripe-level belt grouping and configurable dan groups | M |
-| 7 | Host-school balance: treat "Newtons TKD" and "Newtons TKD (Markham)" as one school (school aliases), spread a big school across the bracket, and warn when one school fills most of a division | M |
+| 7 | Host-school balance: spread a big school across the bracket (school aliases and the "one school fills a division" warning are done, see below) | S |
 | 8 | Show the number of same-school first-round fights per bracket and for the whole tournament | S |
 
 ### 2. Picking competitors and slots
@@ -69,9 +65,27 @@ edits; bracket corrections with undo; Excel import with column auto-detection.
 | # | What | Size |
 |---|------|------|
 | 15 | Show Special Needs on divisions (option for a separate division) | S |
-| 16 | Use height as an optional tie-break in sparring splits | S |
 | 17 | The bell icon in the top bar does nothing; wire it to real notifications or remove it | S |
 | 18 | Bug reports: an optional AI pass that groups and ranks new "bug-report" support tickets | S–M |
+
+| 16 | Use height as an optional tie-break in sparring splits | S |
+
+## Done on 2026-10-03: fair divisions (items 2, 3, 4, 5, 7 in part, 16)
+All opt-in under Tournament Settings → Categorization + Brackets; the
+default rules give the same divisions as before.
+- **2** Weight classes "Auto": each sparring group is sorted by weight and cut
+  into Light / Middle / Heavy (up to "Most classes per group") of similar size.
+- **3** "Keep similar people together when a division is too big": sparring
+  splits by weight, patterns by age (or belt when splitting by belt).
+- **4** "Hard limits by age" (most weight / age difference): merges that break
+  a limit are blocked, automatic weight classes and splits keep to it, and the
+  preview names the two people furthest apart in any division over a limit.
+- **5** "Black belts use their own age bands" (11 & under, 12-13, ... editable).
+- **7** School names match regardless of capitals, spaces and punctuation;
+  organizer aliases ("Newtons TKD (Markham)" is "Newtons TKD") count as one
+  school when spreading schools, plus an optional "one school is at least N%
+  of a division" warning. Shared helper: `src/shared/utils/school.ts`.
+- **16** "Use height when weights are the same" (sparring ordering).
 
 ## Done on 2026-10-02 (for reference)
 Tour fixed; form labels; restore deleted tournaments; backup panel refresh;
@@ -107,3 +121,14 @@ first-round matches change; later rounds re-sync. Changing the bracket size
   is used when brackets are made; double stays the default.
 - #14 Schedule → "Print by ring": a ring-by-time grid using the bracket
   sheet names and the folder each sheet is in.
+
+## Done on 2026-10-03 (small items)
+- 15: Special-needs notes show for directors on the Divisions page (per
+  division, expandable), in the bracket editor and on check-in. Not done: a
+  one-click "separate division" option (`Division.isSpecialNeeds` exists but
+  nothing uses it yet).
+- 17: The bell lists real notifications (new registrations, waitlist,
+  staffing gaps near the event, your own staff jobs, open support requests,
+  invite problems) with an unread badge.
+- 18: Admins can sort open bug reports with AI on Support Tickets when an AI
+  key is set; suggestions are not stored, a priority is applied on request.

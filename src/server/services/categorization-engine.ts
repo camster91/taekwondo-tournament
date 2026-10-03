@@ -14,6 +14,7 @@ import {
   getEffectiveAgeBand,
   getWeightClasses,
 } from '../../shared/constants/tournament-rules.js';
+import { createSchoolResolver, dominantSchool, type SchoolResolver } from '../../shared/utils/school.js';
 
 export interface CategorizationConfig {
   divisionThreshold: number;
@@ -58,6 +59,7 @@ export interface RegistrationWithCompetitor {
   sparring: boolean;
   ageAtTournament: number | null;
   weightAtRegistration: number | null;
+  heightAtRegistration?: number | null;
   manualDivisionId: string | null;
   competeWithOlder?: boolean;
   competitor: {
@@ -68,6 +70,7 @@ export interface RegistrationWithCompetitor {
     gender: string;
     schoolDojang?: string | null;
     weightLbs?: number | null;
+    heightInches?: number | null;
     danRank?: number | null;
     dateOfBirth?: Date | string | null;
   };
@@ -282,12 +285,14 @@ export function previewCategorization(
   // Merge small divisions if enabled
   if (config.enableSmartMerging) {
     const beforeCount = finalGroups.length;
-    finalGroups = smartMergeDivisions(finalGroups, config);
+    finalGroups = smartMergeDivisions(finalGroups, config, warnings);
     const mergedCount = beforeCount - finalGroups.length;
     if (mergedCount > 0) {
       warnings.push(`Merged ${mergedCount} small adjacent divisions`);
     }
   }
+
+  const schools = schoolResolverFor(config);
 
   // Convert to preview format
   const divisions: PreviewDivision[] = finalGroups
@@ -296,7 +301,7 @@ export function previewCategorization(
       // Collect any validation warnings (large age spread,
       // large weight spread, etc.) — these don't fail the preview,
       // just surface as warnings.
-      const warningsForGroup = validateGroup(group);
+      const warningsForGroup = [...validateGroup(group), ...fairnessWarnings(group, config, schools)];
       if (warningsForGroup.length > 0) {
         warnings.push(...warningsForGroup.map((w) => `${group.name}: ${w}`));
       }
@@ -403,8 +408,9 @@ export async function autoCategorize(
 
   // Merge small divisions if enabled
   if (config.enableSmartMerging) {
-    finalGroups = smartMergeDivisions(finalGroups, config);
+    finalGroups = smartMergeDivisions(finalGroups, config, warnings);
   }
+  const schools = schoolResolverFor(config);
 
   // Wrap all DB mutations in a transaction
   let divisionCount = 0;
@@ -429,7 +435,7 @@ export async function autoCategorize(
 
       // Collect validation warnings (large spreads, etc.) — these
       // don't fail the auto-categorize, just surface as warnings.
-      const warningsForGroup = validateGroup(group);
+      const warningsForGroup = [...validateGroup(group), ...fairnessWarnings(group, config, schools)];
       if (warningsForGroup.length > 0) {
         warnings.push(...warningsForGroup.map((w) => `${group.name}: ${w}`));
       }
@@ -532,8 +538,11 @@ function categorizeBeltLevel(
   ] as const) {
     if (genderRegs.length === 0) continue;
 
-    // Determine age bands: rules > useBlackBeltAgeGroups flag > DEFAULT
+    // Determine age bands: black-belt bands (BB only) > custom >
+    // rules > useBlackBeltAgeGroups flag > DEFAULT
     const ageGroups: AgeGroup[] = (() => {
+      const blackBeltBands = config.rules?.ageBands.blackBeltBands;
+      if (beltLevel === 'BB' && blackBeltBands && blackBeltBands.length > 0) return blackBeltBands;
       if (config.customAgeGroups) return config.customAgeGroups;
       if (config.rules) {
         return rules.ageBands.customBands ?? (rules.ageBands.preset === 'blackBelt' ? BB_AGE_GROUPS : DEFAULT_AGE_GROUPS);
@@ -576,7 +585,7 @@ function categorizeBeltLevel(
           }
         } else {
           // Sparring - split by weight class
-          const weightGroups = groupByWeightClass(ageRegs, gender, ageGroup, config.customWeightClasses);
+          const weightGroups = weightGroupsFor(ageRegs, gender, ageGroup, config);
           for (const weightGroup of weightGroups) {
             groups.push(
               createDivisionGroup(
@@ -618,7 +627,7 @@ function categorizeBeltLevel(
           // Sparring - first group by belt, then by weight
           const beltGroups = groupByBeltColor(ageRegs);
           for (const beltGroup of beltGroups) {
-            const weightGroups = groupByWeightClass(beltGroup.registrations, gender, ageGroup, config.customWeightClasses);
+            const weightGroups = weightGroupsFor(beltGroup.registrations, gender, ageGroup, config);
             for (const weightGroup of weightGroups) {
               groups.push(
                 createDivisionGroup(
@@ -920,20 +929,27 @@ function splitDivision(
   const numDivisions = Math.ceil(count / threshold);
   const perDivision = Math.ceil(count / numDivisions);
 
+  // Opt-in: keep people who are alike together (weight / age / belt).
+  if (config?.rules?.fairness?.splitBySimilarity) {
+    return similarSplitDivision(group, numDivisions, config);
+  }
+
   // Use smart splitting if enabled
   if (config?.enableSmartSplitting) {
     return smartSplitDivision(group, numDivisions, perDivision, config);
   }
 
-  // Default: Sort by school to distribute evenly
-  const sorted = [...group.registrations].sort((a, b) =>
-    (a.competitor.schoolDojang || '').localeCompare(b.competitor.schoolDojang || '')
-  );
+  // Default: Sort by school to distribute evenly. Spellings of one
+  // school ("Newtons TKD" / "newtons tkd") and organizer aliases count
+  // as the same school.
+  const resolver = schoolResolverFor(config);
+  const schoolOf = (reg: RegistrationWithCompetitor) => resolver.key(reg.competitor.schoolDojang) || 'Unknown';
+  const sorted = [...group.registrations].sort((a, b) => schoolOf(a).localeCompare(schoolOf(b)));
 
   // Interleave by school
   const schools = new Map<string, RegistrationWithCompetitor[]>();
   for (const reg of sorted) {
-    const school = reg.competitor.schoolDojang || 'Unknown';
+    const school = schoolOf(reg);
     if (!schools.has(school)) {
       schools.set(school, []);
     }
@@ -983,6 +999,7 @@ function smartSplitDivision(
   config: CategorizationConfig
 ): DivisionGroup[] {
   const eventType = group.eventType as 'patterns' | 'sparring';
+  const resolver = schoolResolverFor(config);
 
   // Calculate estimated skill for each competitor
   const withSkill = group.registrations.map((reg) => ({
@@ -992,7 +1009,7 @@ function smartSplitDivision(
       reg.competitor.danRank ?? null,
       eventType
     ),
-    school: reg.competitor.schoolDojang || 'Unknown',
+    school: resolver.key(reg.competitor.schoolDojang) || 'Unknown',
   }));
 
   // Sort by skill descending
@@ -1036,7 +1053,7 @@ function smartSplitDivision(
         ? div.totalSkill / div.registrations.length
         : 0;
       const sameSchoolCount = div.schools.has(school)
-        ? div.registrations.filter(r => (r.competitor.schoolDojang || 'Unknown') === school).length
+        ? div.registrations.filter(r => (resolver.key(r.competitor.schoolDojang) || 'Unknown') === school).length
         : 0;
 
       const skillBalance = 1000 - avgSkill; // Lower avg = higher score
@@ -1083,7 +1100,9 @@ function smartSplitDivision(
  */
 export function smartMergeDivisions(
   groups: DivisionGroup[],
-  config: CategorizationConfig
+  config: CategorizationConfig,
+  // Collects a note for each merge a fairness limit blocked.
+  notes?: string[]
 ): DivisionGroup[] {
   if (!config.enableSmartMerging) return groups;
 
@@ -1114,7 +1133,7 @@ export function smartMergeDivisions(
       // Check next group (prefer merging with older age group)
       if (i + 1 < sorted.length && !processed.has(i + 1)) {
         const next = sorted[i + 1];
-        if (canMerge(current, next)) {
+        if (canMerge(current, next) && mergeKeepsFairnessLimits(current, next, config, notes)) {
           mergeCandidate = next;
           mergeIndex = i + 1;
         }
@@ -1128,7 +1147,11 @@ export function smartMergeDivisions(
         const prev = merged[merged.length - 1];
         // Don't undo a split: stay within the division threshold.
         const combined = prev.registrations.length + current.registrations.length;
-        if (combined <= config.divisionThreshold && canMerge(prev, current)) {
+        if (
+          combined <= config.divisionThreshold &&
+          canMerge(prev, current) &&
+          mergeKeepsFairnessLimits(prev, current, config, notes)
+        ) {
           merged[merged.length - 1] = mergeTwoDivisions(prev, current, config.eventTypeLabels);
           processed.add(i);
           continue;
@@ -1369,4 +1392,331 @@ export function validateGroup(group: DivisionGroup): string[] {
   }
 
   return warnings;
+}
+
+// ─── Fair divisions (opt-in via rules.fairness / weights.strategy) ─────
+
+const weightOf = (r: RegistrationWithCompetitor): number =>
+  r.weightAtRegistration || r.competitor.weightLbs || 0;
+
+const heightOf = (r: RegistrationWithCompetitor): number | null =>
+  r.heightAtRegistration ?? r.competitor.heightInches ?? null;
+
+const fullName = (r: RegistrationWithCompetitor): string =>
+  `${r.competitor.firstName} ${r.competitor.lastName}`.trim();
+
+const formatNumber = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+
+const years = (n: number): string => `${n} year${n === 1 ? '' : 's'}`;
+
+/** School resolver with the tournament's organizer aliases. */
+function schoolResolverFor(config?: CategorizationConfig): SchoolResolver {
+  return createSchoolResolver(config?.rules?.fairness?.schoolAliases);
+}
+
+/**
+ * The hard limits for a division covering ages [ageMin, ageMax]: every
+ * configured limit whose age range overlaps it applies, and the
+ * strictest value wins (a merged 6-9 division keeps the 6-7 limit).
+ */
+export function fairnessLimitFor(
+  ageMin: number,
+  ageMax: number,
+  config?: CategorizationConfig,
+): { maxWeightGapLbs?: number; maxAgeGapYears?: number } {
+  const result: { maxWeightGapLbs?: number; maxAgeGapYears?: number } = {};
+  for (const limit of config?.rules?.fairness?.limits ?? []) {
+    if (limit.ageMax < ageMin || limit.ageMin > ageMax) continue;
+    if (limit.maxWeightGapLbs !== undefined) {
+      result.maxWeightGapLbs = Math.min(result.maxWeightGapLbs ?? Infinity, limit.maxWeightGapLbs);
+    }
+    if (limit.maxAgeGapYears !== undefined) {
+      result.maxAgeGapYears = Math.min(result.maxAgeGapYears ?? Infinity, limit.maxAgeGapYears);
+    }
+  }
+  return result;
+}
+
+/**
+ * Cut a sorted list of values into contiguous parts of similar size.
+ *
+ * Uses at least `parts` parts, and more when needed so that no part's
+ * spread (last - first) exceeds `maxSpread`. Among equally balanced
+ * cuts it prefers cutting at the biggest jumps between neighbours.
+ * Returns the size of each part, in order.
+ */
+export function partitionSorted(values: number[], parts: number, maxSpread = Infinity): number[] {
+  const n = values.length;
+  if (n === 0) return [];
+
+  // Fewest parts that respect the spread (greedy left to right).
+  let needed = 1;
+  let start = 0;
+  for (let i = 1; i < n; i++) {
+    if (values[i] - values[start] > maxSpread) {
+      needed++;
+      start = i;
+    }
+  }
+  const k = Math.min(n, Math.max(1, Math.floor(parts) || 1, needed));
+  if (k === 1) return [n];
+
+  const ideal = n / k;
+  // Size balance dominates; the jump at a cut only breaks ties.
+  const SIZE_WEIGHT = 1e6;
+  const cost: number[][] = Array.from({ length: k + 1 }, () => new Array<number>(n + 1).fill(Infinity));
+  const from: number[][] = Array.from({ length: k + 1 }, () => new Array<number>(n + 1).fill(-1));
+  cost[0][0] = 0;
+  for (let j = 1; j <= k; j++) {
+    for (let end = j; end <= n - (k - j); end++) {
+      for (let s = end - 1; s >= j - 1; s--) {
+        if (values[end - 1] - values[s] > maxSpread) break;
+        if (cost[j - 1][s] === Infinity) continue;
+        const size = end - s;
+        const cutBonus = s > 0 ? values[s] - values[s - 1] : 0;
+        const total = cost[j - 1][s] + (size - ideal) ** 2 * SIZE_WEIGHT - cutBonus;
+        if (total < cost[j][end]) {
+          cost[j][end] = total;
+          from[j][end] = s;
+        }
+      }
+    }
+  }
+
+  const sizes: number[] = [];
+  let end = n;
+  for (let j = k; j >= 1; j--) {
+    const s = from[j][end];
+    if (s < 0) return [n]; // unreachable: k >= needed is always feasible
+    sizes.unshift(end - s);
+    end = s;
+  }
+  return sizes;
+}
+
+/** Plain class names for an automatic cut into `count` weight classes. */
+export function autoWeightClassNames(count: number): string[] {
+  if (count <= 1) return [];
+  if (count === 2) return ['Light', 'Heavy'];
+  if (count === 3) return ['Light', 'Middle', 'Heavy'];
+  if (count === 4) return ['Feather', 'Light', 'Middle', 'Heavy'];
+  return Array.from({ length: count }, (_, i) => `Weight ${i + 1}`);
+}
+
+/** Lightest first; with the height tie-break, shorter first among equal weights. */
+function sortByWeight(
+  registrations: RegistrationWithCompetitor[],
+  heightTieBreak: boolean,
+): RegistrationWithCompetitor[] {
+  return [...registrations].sort((a, b) => {
+    const byWeight = weightOf(a) - weightOf(b);
+    if (byWeight !== 0 || !heightTieBreak) return byWeight;
+    const ha = heightOf(a);
+    const hb = heightOf(b);
+    if (ha == null || hb == null) return ha == null ? (hb == null ? 0 : 1) : -1;
+    return ha - hb;
+  });
+}
+
+function sliceBySizes<T>(items: T[], sizes: number[]): T[][] {
+  const out: T[][] = [];
+  let at = 0;
+  for (const size of sizes) {
+    out.push(items.slice(at, at + size));
+    at += size;
+  }
+  return out;
+}
+
+/**
+ * "Auto" weight classes: sort the group by weight and cut it into up to
+ * `maxClasses` classes (default 3: Light / Middle / Heavy) of about
+ * `targetClassSize` people, relative to the group itself (no fixed
+ * tables). A fairness weight limit for the age band adds classes until
+ * no class spans more than the limit.
+ */
+export function autoWeightClasses(
+  registrations: RegistrationWithCompetitor[],
+  options: {
+    maxClasses?: number;
+    targetClassSize?: number;
+    skipIfSmallerThan?: number;
+    maxWeightGapLbs?: number;
+    heightTieBreak?: boolean;
+  } = {},
+): Array<{ weightClass: string | undefined; registrations: RegistrationWithCompetitor[] }> {
+  if (registrations.length === 0) return [];
+  const sorted = sortByWeight(registrations, options.heightTieBreak ?? false);
+  const target = Math.max(1, options.targetClassSize ?? 4);
+  const maxClasses = Math.max(1, options.maxClasses ?? 3);
+  const wanted = sorted.length < (options.skipIfSmallerThan ?? 4)
+    ? 1
+    : Math.min(maxClasses, Math.ceil(sorted.length / target));
+  const sizes = partitionSorted(sorted.map(weightOf), wanted, options.maxWeightGapLbs ?? Infinity);
+  const names = autoWeightClassNames(sizes.length);
+  return sliceBySizes(sorted, sizes).map((regs, i) => ({ weightClass: names[i], registrations: regs }));
+}
+
+/** Sparring weight grouping for one age band: auto classes or weight tables. */
+function weightGroupsFor(
+  registrations: RegistrationWithCompetitor[],
+  gender: 'M' | 'F',
+  ageGroup: AgeGroup,
+  config: CategorizationConfig,
+): Array<{ weightClass: string | undefined; registrations: RegistrationWithCompetitor[] }> {
+  const rules = config.rules;
+  if (rules?.weights.strategy !== 'auto') {
+    return groupByWeightClass(registrations, gender, ageGroup, config.customWeightClasses);
+  }
+  return autoWeightClasses(registrations, {
+    maxClasses: rules.weights.autoMaxClasses,
+    targetClassSize: rules.weights.targetClassSize,
+    skipIfSmallerThan: rules.weights.skipIfDivisionSmallerThan,
+    maxWeightGapLbs: fairnessLimitFor(ageGroup.min, ageGroup.max, config).maxWeightGapLbs,
+    heightTieBreak: rules.fairness?.heightTieBreak,
+  });
+}
+
+/**
+ * Split a too-big division into parts of people who are alike instead
+ * of dealing them out: sparring by weight (height breaks ties when
+ * enabled), patterns by age then belt (belt then age when the rules
+ * split by belt). Fairness limits add parts when one would be too wide.
+ */
+function similarSplitDivision(
+  group: DivisionGroup,
+  numDivisions: number,
+  config: CategorizationConfig,
+): DivisionGroup[] {
+  const limit = fairnessLimitFor(group.ageMin, group.ageMax, config);
+  let sorted: RegistrationWithCompetitor[];
+  let values: number[];
+  let maxSpread = Infinity;
+
+  if (group.eventType === 'sparring') {
+    sorted = sortByWeight(group.registrations, config.rules?.fairness?.heightTieBreak ?? false);
+    values = sorted.map(weightOf);
+    maxSpread = limit.maxWeightGapLbs ?? Infinity;
+  } else {
+    const beltRank = (r: RegistrationWithCompetitor) =>
+      getInitialSkillEstimate(r.competitor.belt, r.competitor.danRank ?? null, 'patterns');
+    const age = (r: RegistrationWithCompetitor) => r.ageAtTournament ?? 0;
+    const beltFirst = config.rules?.divisions.splitBy === 'belt';
+    sorted = [...group.registrations].sort((a, b) =>
+      beltFirst
+        ? beltRank(a) - beltRank(b) || age(a) - age(b)
+        : age(a) - age(b) || beltRank(a) - beltRank(b)
+    );
+    values = sorted.map(beltFirst ? beltRank : age);
+    if (!beltFirst) maxSpread = limit.maxAgeGapYears ?? Infinity;
+  }
+
+  const parts = sliceBySizes(sorted, partitionSorted(values, numDivisions, maxSpread));
+  if (parts.length === 1) return [group];
+  return parts.map((registrations, i) => ({
+    ...group,
+    key: `${group.key}-DIV${i + 1}`,
+    name: `${group.name} DIV${i + 1}`,
+    registrations,
+  }));
+}
+
+/** Pairs in a division whose difference in `valueOf` is over `limit`. */
+function pairsOverLimit(
+  registrations: RegistrationWithCompetitor[],
+  valueOf: (r: RegistrationWithCompetitor) => number | null,
+  limit: number,
+): { count: number; low: RegistrationWithCompetitor; high: RegistrationWithCompetitor; gap: number } | null {
+  const measured = registrations
+    .map((r) => ({ r, v: valueOf(r) }))
+    .filter((x): x is { r: RegistrationWithCompetitor; v: number } => x.v != null)
+    .sort((a, b) => a.v - b.v);
+  if (measured.length < 2) return null;
+  const low = measured[0];
+  const high = measured[measured.length - 1];
+  if (high.v - low.v <= limit) return null;
+  let count = 0;
+  for (let i = 0; i < measured.length; i++) {
+    for (let j = i + 1; j < measured.length; j++) {
+      if (measured[j].v - measured[i].v > limit) count++;
+    }
+  }
+  return { count, low: low.r, high: high.r, gap: high.v - low.v };
+}
+
+/**
+ * Fairness problems in a division, in plain words naming the people
+ * furthest apart: weight gap (sparring) and age gap over the limit for
+ * its ages, and one school filling too much of it.
+ */
+export function fairnessWarnings(
+  group: Pick<DivisionGroup, 'eventType' | 'ageMin' | 'ageMax' | 'registrations'>,
+  config?: CategorizationConfig,
+  resolver: SchoolResolver = schoolResolverFor(config),
+  options: { includeSchoolShare?: boolean } = {},
+): string[] {
+  const warnings: string[] = [];
+  const limit = fairnessLimitFor(group.ageMin, group.ageMax, config);
+  const more = (count: number) =>
+    count > 1 ? ` (${count - 1} more pair${count - 1 === 1 ? '' : 's'} over the limit)` : '';
+
+  if (group.eventType === 'sparring' && limit.maxWeightGapLbs !== undefined) {
+    const over = pairsOverLimit(group.registrations, (r) => weightOf(r) || null, limit.maxWeightGapLbs);
+    if (over) {
+      warnings.push(
+        `Weight gap over the limit: ${fullName(over.low)} (${formatNumber(weightOf(over.low))} lb) and ` +
+        `${fullName(over.high)} (${formatNumber(weightOf(over.high))} lb) are ${formatNumber(over.gap)} lb apart ` +
+        `(limit ${formatNumber(limit.maxWeightGapLbs)} lb)${more(over.count)}`
+      );
+    }
+  }
+
+  if (limit.maxAgeGapYears !== undefined) {
+    const over = pairsOverLimit(group.registrations, (r) => r.ageAtTournament, limit.maxAgeGapYears);
+    if (over) {
+      warnings.push(
+        `Age gap over the limit: ${fullName(over.low)} (${over.low.ageAtTournament}) and ` +
+        `${fullName(over.high)} (${over.high.ageAtTournament}) are ${years(over.gap)} apart ` +
+        `(limit ${years(limit.maxAgeGapYears)})${more(over.count)}`
+      );
+    }
+  }
+
+  const sharePercent = config?.rules?.fairness?.schoolShareWarningPercent ?? 0;
+  if (options.includeSchoolShare !== false && sharePercent > 0 && group.registrations.length >= 3) {
+    const top = dominantSchool(group.registrations.map((r) => r.competitor.schoolDojang), sharePercent / 100, resolver);
+    if (top) {
+      warnings.push(`${top.count} of ${top.total} competitors are from ${top.label}`);
+    }
+  }
+
+  return warnings;
+}
+
+/**
+ * Whether merging two divisions keeps the fairness limits for the
+ * merged ages. A blocked merge adds a note naming the pair that would
+ * be too far apart.
+ */
+export function mergeKeepsFairnessLimits(
+  a: DivisionGroup,
+  b: DivisionGroup,
+  config: CategorizationConfig,
+  notes?: string[],
+): boolean {
+  if (!config.rules?.fairness?.limits.length) return true;
+  const problems = fairnessWarnings(
+    {
+      eventType: a.eventType,
+      ageMin: Math.min(a.ageMin, b.ageMin),
+      ageMax: Math.max(a.ageMax, b.ageMax),
+      registrations: [...a.registrations, ...b.registrations],
+    },
+    config,
+    undefined,
+    { includeSchoolShare: false },
+  );
+  if (problems.length === 0) return true;
+  notes?.push(`Kept "${a.name}" and "${b.name}" apart. ${problems[0]}`);
+  return false;
 }

@@ -65,6 +65,8 @@ import { Select } from '../components/ui';
 import { StatTile } from '../components/ui';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { downloadBlob, fetchAuthenticatedBlob } from '../utils/authenticated-export';
+import { specialNeedsByDivision, specialNeedsText, type SpecialNeedsEntry } from '../utils/special-needs';
+import SpecialNeedsNote from '../components/SpecialNeedsNote';
 import DivisionMoveCompetitorModal from './DivisionMoveCompetitor';
 import DivisionExceptionDialog, {
   type DivisionExceptionParams,
@@ -166,11 +168,13 @@ interface AssignmentRow {
   registrationId: string;
   registration: {
     id: string;
+    specialNeeds?: string | null;
     competitor: {
       firstName: string;
       lastName: string;
       belt?: string | null;
       schoolDojang?: string | null;
+      specialNeeds?: string | null;
     };
   };
 }
@@ -187,13 +191,16 @@ interface RegistrationRow {
   // index signature below).
   patterns?: boolean;
   sparring?: boolean;
+  specialNeeds?: string | null;
   competitor: {
     firstName: string;
     lastName: string;
     belt?: string | null;
     schoolDojang?: string | null;
     weightLbs?: number | null;
+    specialNeeds?: string | null;
   };
+  assignments?: Array<{ division: { id: string } }>;
 }
 
 /**
@@ -269,7 +276,7 @@ export default function Divisions() {
 
   const getEventLabel = (eventType: string) => getEventTypeLabel(sportProfile.slug, eventType);
 
-  const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions } = useQuery<Division[]>({
+  const { data: divisions, isLoading, isError: divisionsError, refetch: retryDivisions, dataUpdatedAt: divisionsQueryUpdatedAt } = useQuery<Division[]>({
     queryKey: ['divisions', id],
     queryFn: async () => {
       const res = await fetch(`/api/divisions/tournament/${id}`, { headers: getAuthHeaders() });
@@ -628,15 +635,29 @@ export default function Divisions() {
   });
 
   // All tournament registrations (for the unassigned list)
-  const { data: allRegistrations } = useQuery<RegistrationRow[]>({
+  const { data: allRegistrations, dataUpdatedAt: registrationsUpdatedAt } = useQuery<RegistrationRow[]>({
     queryKey: ['tournament-registrations', id],
     queryFn: async () => {
       const res = await fetch(`/api/tournaments/${id}/registrations`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('Failed to fetch registrations');
       return res.json();
     },
-    enabled: !!assignTarget,
+    // Also loaded without the modal open: the division rows show who has
+    // special-needs notes (#15).
+    enabled: !!id,
   });
+
+  // Keep those notes in step when divisions are regenerated or edited.
+  useEffect(() => {
+    if (registrationsUpdatedAt && divisionsQueryUpdatedAt > registrationsUpdatedAt) {
+      void queryClient.invalidateQueries({ queryKey: ['tournament-registrations', id] });
+    }
+  }, [divisionsQueryUpdatedAt, registrationsUpdatedAt, id, queryClient]);
+
+  const specialNeedsMap = useMemo(
+    () => specialNeedsByDivision(allRegistrations ?? []),
+    [allRegistrations],
+  );
 
   // Currently-assigned registration IDs for the open division
   const assignedRegistrationIds = useMemo(
@@ -1401,6 +1422,7 @@ export default function Divisions() {
                         key={div.id}
                         div={div}
                         tournamentId={id || ''}
+                        specialNeeds={specialNeedsMap.get(div.id)}
                         onManageCompetitors={() => setAssignTarget(div)}
                         onSplit={() => setSplitTarget(div)}
                         onDelete={() => setDeleteTarget(div)}
@@ -1824,6 +1846,10 @@ function AssignedList({
               <p className="text-xs text-surface-600 dark:text-surface-400 truncate">
                 {c.belt}{c.schoolDojang && ` · ${c.schoolDojang}`}
               </p>
+              {(() => {
+                const note = specialNeedsText(a.registration.specialNeeds, c.specialNeeds);
+                return note ? <SpecialNeedsNote note={note} className="mt-0.5" /> : null;
+              })()}
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -1942,6 +1968,7 @@ function BackupRestoreCard({ tournamentId, hasDivisions }: { tournamentId: strin
 function SortableDivisionRow({
   div,
   tournamentId,
+  specialNeeds,
   onManageCompetitors,
   onSplit,
   onDelete,
@@ -1951,6 +1978,8 @@ function SortableDivisionRow({
 }: {
   div: Division;
   tournamentId: string;
+  /** Competitors in this division with a special-needs note (directors only). */
+  specialNeeds?: SpecialNeedsEntry[];
   onManageCompetitors: () => void;
   onSplit: () => void;
   onDelete: () => void;
@@ -2006,6 +2035,19 @@ function SortableDivisionRow({
             {div.ageMin}-{div.ageMax} years
             {div.weightClass && ` • ${div.weightClass}`}
           </p>
+          {specialNeeds && specialNeeds.length > 0 && (
+            <details className="mt-1 group" data-testid="division-special-needs">
+              <summary className="cursor-pointer text-xs font-medium text-amber-800 dark:text-amber-300 inline-flex items-center gap-1">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                {specialNeeds.length} with special needs
+              </summary>
+              <div className="mt-1 space-y-1 pl-1">
+                {specialNeeds.map((entry) => (
+                  <SpecialNeedsNote key={entry.registrationId} name={entry.name} note={entry.note} />
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
