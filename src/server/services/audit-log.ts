@@ -21,7 +21,8 @@ export type AuditAction =
   | 'legal_hold_released'
   | 'email_settings_saved'
   | 'email_settings_cleared'
-  | 'tournament_spreadsheet_import';
+  | 'tournament_spreadsheet_import'
+  | 'registrations_added_over_capacity';
 
 export interface AuditLogOptions {
   userId: string;

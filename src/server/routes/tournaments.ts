@@ -42,6 +42,7 @@ import { generateQRPoster, qrCodeDataUrl } from '../services/qr-poster.js';
 import { buildShareLinks } from '../services/share-links.js';
 import { publicAppUrlFromEnv } from '../services/production-config.js';
 import { recordTournamentUsage } from '../services/usage-metering.js';
+import { applyBulkRegistration, BulkRegistrationNotFoundError } from '../services/bulk-registration.js';
 import {
   applyScheduleCorrection,
   buildScheduleImpact,
@@ -134,6 +135,8 @@ const bulkRegistrationSchema = z.object({
   competitorIds: z.array(z.string()).min(1, 'At least one competitor required'),
   patterns: z.boolean().optional(),
   sparring: z.boolean().optional(),
+  // Director override: add everyone as registered even past capacity.
+  overCapacity: z.boolean().optional(),
 });
 
 const registrationUpdateSchema = z.object({
@@ -1722,7 +1725,7 @@ router.post('/:id/registrations', authenticate, requireTournamentAccess('directo
 // Bulk register competitors (requires authentication + admin/director role)
 router.post('/:id/registrations/bulk', authenticate, requireTournamentAccess('director'), validateRequest(bulkRegistrationSchema), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { competitorIds, patterns, sparring } = req.body;
+  const { competitorIds, patterns, sparring, overCapacity } = req.body;
 
   const tournament = await prisma.tournament.findUnique({
     where: { id: getParam(req.params.id) },
@@ -1766,39 +1769,60 @@ router.post('/:id/registrations/bulk', authenticate, requireTournamentAccess('di
     }
   }
 
-  // Closes B28: wrap the upserts in a $transaction so a mid-loop
-  // failure (e.g. DB connection drop, constraint violation) rolls
-  // back the partial state. The previous Promise.all without a
-  // transaction could leave 25 of 30 kids registered with no
-  // signal of which ones failed.
-  const registrations = await prisma.$transaction(
-    competitors.map((competitor) => {
-      const ageAtTournament = calculateAge(competitor.dateOfBirth, tournament.date);
-      return prisma.registration.upsert({
-        where: {
-          tournamentId_competitorId: {
-            tournamentId: getParam(req.params.id),
-            competitorId: competitor.id,
-          },
-        },
-        update: {
-          patterns: patterns ?? false,
-          sparring: sparring ?? false,
-          ageAtTournament,
-        },
-        create: {
-          tournamentId: getParam(req.params.id),
-          competitorId: competitor.id,
-          patterns: patterns ?? false,
-          sparring: sparring ?? false,
-          weightAtRegistration: competitor.weightLbs,
-          ageAtTournament,
-        },
-      });
-    })
-  );
+  // One transaction under the tournament row lock (like public
+  // registration and the spreadsheet import): free spots first, then the
+  // waiting list, else skipped with a reason. `overCapacity` is a
+  // deliberate director override and is audited. A mid-way failure rolls
+  // everything back (B28).
+  const competitorById = new Map(competitors.map((c) => [c.id, c]));
+  const ordered = [...new Set<string>(competitorIds)]
+    .map((competitorId) => competitorById.get(competitorId))
+    .filter((c): c is (typeof competitors)[number] => !!c);
+  let result;
+  try {
+    result = await applyBulkRegistration(prisma, {
+      tournament: { id: tournament.id, date: tournament.date },
+      competitors: ordered,
+      patterns: patterns ?? false,
+      sparring: sparring ?? false,
+      overCapacity: overCapacity === true,
+    });
+  } catch (err) {
+    if (err instanceof BulkRegistrationNotFoundError) return res.status(404).json({ error: 'Tournament not found' });
+    throw err;
+  }
 
-  res.json({ registered: registrations.length });
+  if (result.addedOverCapacity > 0) {
+    const authReq = req as AuthenticatedRequest;
+    await createAuditLog(prisma, {
+      userId: authReq.user!.id,
+      action: 'registrations_added_over_capacity',
+      details: {
+        tournamentId: tournament.id,
+        tournamentName: tournament.name,
+        maxCapacity: result.maxCapacity,
+        addedOverCapacity: result.addedOverCapacity,
+        added: result.added,
+      },
+      ipAddress: getClientIp(authReq),
+      userAgent: getUserAgent(authReq),
+      organizationId: tournament.organizationId || undefined,
+      tournamentId: tournament.id,
+    }).catch((err) => {
+      console.error('[audit-log] registrations_added_over_capacity event failed:', err);
+    });
+  }
+
+  res.json({
+    // Rows written (new, waitlisted or updated), as before.
+    registered: result.added + result.waitlisted + result.updated,
+    added: result.added,
+    waitlisted: result.waitlisted,
+    updated: result.updated,
+    addedOverCapacity: result.addedOverCapacity,
+    skippedCount: result.skipped.length,
+    skipped: result.skipped,
+  });
 });
 
 const CHECK_IN_UPDATE_FIELDS = new Set(['checkedIn', 'checkInTime', 'checkInWeight']);

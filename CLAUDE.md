@@ -456,7 +456,7 @@ All routes require auth. `?trash=true` shows soft-deleted;
 | POST | `/api/tournaments/:id/rules/reset` | admin/director |
 | GET | `/api/tournaments/:id/registrations` | any |
 | POST | `/api/tournaments/:id/registrations` | admin/director |
-| POST | `/api/tournaments/:id/registrations/bulk` | admin/director |
+| POST | `/api/tournaments/:id/registrations/bulk` | admin/director. Applies capacity under the tournament row lock (`services/bulk-registration.ts`): free spots first, then the waiting list, else skipped with a reason; `overCapacity: true` adds everyone (audited `registrations_added_over_capacity`). Returns `{ registered, added, waitlisted, updated, addedOverCapacity, skippedCount, skipped }`; plan limit still 402. |
 | POST | `/api/tournaments/:id/import` | director (`src/server/routes/tournament-import.ts`). Spreadsheet straight into the tournament: body `{ fileBase64, columnMapping?, sheetName?, headerRow?, commit? }`, 40 MB body. Preview by default (counts: new/matched competitors, registrations, waitlisted, skipped rows with reasons); `commit: true` writes in one locked transaction. Y/Yes/X/1 in an event column enters that slot; event columns found by the sport's event names. Reuses same-tenant competitors by name + DOB without changing them; capacity/waitlist + plan limit (402) apply. UI: "Import from spreadsheet" on the tournament page (`TournamentImportModal.tsx`). |
 | PUT | `/api/tournaments/:id/registrations/:regId` | admin/director |
 | DELETE | `/api/tournaments/:id/registrations/:regId` | admin/director |

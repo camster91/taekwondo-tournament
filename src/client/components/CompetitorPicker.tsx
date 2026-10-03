@@ -19,6 +19,7 @@ import {
   type PickerFilters,
   type PickerSortKey,
 } from '../utils/competitor-picker';
+import { bulkCapacityNotice, type CapacitySnapshot } from '../utils/bulk-capacity';
 
 interface CompetitorPickerProps {
   competitors: PickerCompetitor[];
@@ -29,7 +30,9 @@ interface CompetitorPickerProps {
   pending: boolean;
   /** Shown above the footer when adding failed. */
   error?: ReactNode;
-  onAdd: (selection: { competitorIds: string[]; patterns: boolean; sparring: boolean }) => void;
+  /** Tournament capacity; null/undefined when there is no limit. */
+  capacity?: CapacitySnapshot | null;
+  onAdd: (selection: { competitorIds: string[]; patterns: boolean; sparring: boolean; overCapacity?: boolean }) => void;
   onClose: () => void;
 }
 
@@ -51,6 +54,7 @@ export default function CompetitorPicker({
   eventLabels,
   pending,
   error,
+  capacity,
   onAdd,
   onClose,
 }: CompetitorPickerProps) {
@@ -89,6 +93,8 @@ export default function CompetitorPicker({
     else { setSortKey(key); setSortDir('asc'); }
   };
   const close = () => { if (!pending) onClose(); };
+  const capacityNotice = bulkCapacityNotice(selected.size, capacity);
+  const canSubmit = !pending && selected.size > 0 && (patterns || sparring);
 
   // Rendered into <body> so it sits above the app sidebar and isn't
   // positioned inside the page's animated wrapper.
@@ -279,6 +285,11 @@ export default function CompetitorPicker({
           {/* Footer */}
           <div className="space-y-3 border-t border-surface-200 bg-white px-4 py-3 dark:border-surface-700 dark:bg-surface-900 lg:px-6">
             {error}
+            {capacityNotice && (
+              <p role="status" className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-surface-800 dark:border-warning/50 dark:bg-warning/20 dark:text-surface-100">
+                {capacityNotice}
+              </p>
+            )}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <fieldset className="flex flex-wrap items-center gap-4">
                 <legend className="sr-only">Register selected competitors for</legend>
@@ -297,10 +308,19 @@ export default function CompetitorPicker({
                   <span className="font-semibold text-surface-900 dark:text-white">{selected.size}</span> selected
                 </span>
                 <Button variant="secondary" onClick={close} disabled={pending}>Cancel</Button>
+                {capacityNotice && (
+                  <Button
+                    variant="secondary"
+                    disabled={!canSubmit}
+                    onClick={() => onAdd({ competitorIds: [...selected], patterns, sparring, overCapacity: true })}
+                  >
+                    Add anyway (over capacity)
+                  </Button>
+                )}
                 <Button
                   variant="primary"
                   loading={pending}
-                  disabled={pending || selected.size === 0 || (!patterns && !sparring)}
+                  disabled={!canSubmit}
                   onClick={() => onAdd({ competitorIds: [...selected], patterns, sparring })}
                 >
                   {pending ? 'Adding…' : `Add ${selected.size} competitor${selected.size === 1 ? '' : 's'}`}
