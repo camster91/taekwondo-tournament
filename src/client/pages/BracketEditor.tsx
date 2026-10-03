@@ -47,6 +47,7 @@ interface Registration {
 import type { ApiMatch } from '../../shared/contracts';
 import { downloadBlob } from '../utils/authenticated-export';
 import { countSameSchoolFirstRound, describeSameSchoolFights } from '../../shared/utils/same-school';
+import { createSchoolResolver, type SchoolAlias } from '../../shared/utils/school';
 import { entryMatchNumbers, isSlotEditableMatch, type SlotStructure } from '../../shared/utils/bracket-slots';
 
 type SlotNumber = 1 | 2;
@@ -432,6 +433,19 @@ export default function BracketEditor() {
     enabled: !!division && !!tournamentId,
   });
 
+  // The organizer's school aliases, so the team-mates count below treats
+  // "Newtons" and "Newton TKD" as one school when listed as aliases.
+  const { data: schoolAliases } = useQuery<SchoolAlias[]>({
+    queryKey: ['tournament-school-aliases', tournamentId],
+    queryFn: async () => {
+      const r = await fetch(`/api/tournaments/${tournamentId}/rules`, { headers: getAuthHeaders() });
+      if (!r.ok) return [];
+      const rules = await r.json() as { fairness?: { schoolAliases?: SchoolAlias[] } };
+      return rules.fairness?.schoolAliases ?? [];
+    },
+    enabled: !!tournamentId,
+  });
+
   const [showAddPicker, setShowAddPicker] = useState(false);
   const addCompetitorMutation = useMutation({
     mutationFn: async (registrationId: string) => {
@@ -713,7 +727,7 @@ export default function BracketEditor() {
     if (match.competitor2Id && match.competitor2) schoolByRegistration.set(match.competitor2Id, match.competitor2.competitor.schoolDojang);
   }
   const sameSchool = division.bracket
-    ? countSameSchoolFirstRound(division.bracket.format, division.bracket.matches ?? [], (registrationId) => schoolByRegistration.get(registrationId))
+    ? countSameSchoolFirstRound(division.bracket.format, division.bracket.matches ?? [], (registrationId) => schoolByRegistration.get(registrationId), createSchoolResolver(schoolAliases))
     : null;
   const sameSchoolMatchLabels = sameSchool
     ? sameSchool.matches.map((entry) => {

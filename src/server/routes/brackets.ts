@@ -7,10 +7,13 @@ import {
   bracketRulesEnabled,
   generateEliminationBracket,
   loadRuleSeeding,
+  schoolResolverForSettings,
   usesTournamentRules,
 } from '../services/bracket-seeding.js';
 import { countSameSchoolFirstRound } from '../../shared/utils/same-school.js';
 import { matchSpecialNeeds } from '../../shared/utils/special-needs.js';
+
+import type { SchoolResolver } from '../../shared/utils/school.js';
 import {
   handleByeMatches,
   getBracketPlacements,
@@ -62,6 +65,7 @@ type MatchSlot = { id: string; competitor: { schoolDojang: string | null } } | n
 /**
  * Add `sameSchoolFirstRound` (first-round fights between team-mates; null
  * for round robin) to a bracket loaded with its matches' competitors.
+ * `schools` is the tournament's resolver (organizer school aliases).
  */
 function withSameSchoolFirstRound<B extends {
   format: string;
@@ -74,7 +78,7 @@ function withSameSchoolFirstRound<B extends {
     competitor1: MatchSlot;
     competitor2: MatchSlot;
   }>;
-}>(bracket: B) {
+}>(bracket: B, schools: SchoolResolver) {
   const schoolOf = new Map<string, string | null>();
   for (const match of bracket.matches) {
     for (const slot of [match.competitor1, match.competitor2]) {
@@ -83,7 +87,7 @@ function withSameSchoolFirstRound<B extends {
   }
   return {
     ...bracket,
-    sameSchoolFirstRound: countSameSchoolFirstRound(bracket.format, bracket.matches, (id) => schoolOf.get(id)),
+    sameSchoolFirstRound: countSameSchoolFirstRound(bracket.format, bracket.matches, (id) => schoolOf.get(id), schools),
   };
 }
 
@@ -345,7 +349,9 @@ router.post('/division/:divisionId/generate', authenticate, bracketRebuildLimite
   // (closes P2-7: real-time bracket collaboration)
   broadcastBracketRegenerated(divisionId);
 
-  res.json(completeBracket ? withSameSchoolFirstRound(completeBracket) : completeBracket);
+  res.json(completeBracket
+    ? withSameSchoolFirstRound(completeBracket, schoolResolverForSettings(divisionMeta.tournament?.settings))
+    : completeBracket);
 });
 
 // Get bracket for division (requires authentication)
@@ -356,7 +362,7 @@ router.get('/division/:divisionId', authenticate, async (req: Request, res: Resp
   // check before returning any competitor PII (closes S6 + B34).
   const divMeta = await prisma.division.findUnique({
     where: { id: getParam(req.params.divisionId) },
-    select: { tournamentId: true, deletedAt: true },
+    select: { tournamentId: true, deletedAt: true, tournament: { select: { settings: true } } },
   });
   if (!divMeta || divMeta.deletedAt) {
     return res.status(404).json({ error: 'Division not found' });
@@ -392,15 +398,18 @@ router.get('/division/:divisionId', authenticate, async (req: Request, res: Resp
     return res.status(404).json({ error: 'Bracket not found' });
   }
 
-  res.json(withSameSchoolFirstRound(bracket));
+  res.json(withSameSchoolFirstRound(bracket, schoolResolverForSettings(divMeta.tournament?.settings)));
 });
 
 // Same-school ("team-mates") first-round fights per bracket and for the
 // whole tournament, for the Divisions page. No names, only counts.
 router.get('/tournament/:tournamentId/same-school-first-round', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = getParam(req.params.tournamentId);
+  const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { settings: true } });
+  const schools = schoolResolverForSettings(tournament?.settings);
   const divisions = await prisma.division.findMany({
-    where: { tournamentId: getParam(req.params.tournamentId), deletedAt: null, bracket: { isNot: null } },
+    where: { tournamentId, deletedAt: null, bracket: { isNot: null } },
     select: {
       id: true,
       bracket: {
@@ -432,7 +441,7 @@ router.get('/tournament/:tournamentId/same-school-first-round', authenticate, re
   const perDivision: Array<{ divisionId: string; count: number; fights: number; unavoidable: number }> = [];
   for (const division of divisions) {
     if (!division.bracket) continue;
-    const summary = countSameSchoolFirstRound(division.bracket.format, division.bracket.matches, (id) => schoolOf.get(id));
+    const summary = countSameSchoolFirstRound(division.bracket.format, division.bracket.matches, (id) => schoolOf.get(id), schools);
     if (!summary) continue;
     total += summary.count;
     perDivision.push({ divisionId: division.id, count: summary.count, fights: summary.fights, unavoidable: summary.unavoidable });

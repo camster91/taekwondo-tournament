@@ -3,9 +3,11 @@
 // The old spreadsheet macro counted how many first-round bouts paired two
 // competitors from the same school; directors use that number to judge a
 // draw. Shared by the server (bracket API responses) and the client
-// (Divisions page, bracket editor) so both count the same way.
+// (Divisions page, bracket editor) so both count the same way. Pass the
+// tournament's school resolver (organizer aliases) so "same school" means
+// what it means for divisions; without one only spelling is normalised.
 
-import { normalizeSchoolName } from './school.js';
+import { createSchoolResolver, normalizeSchoolName, type SchoolResolver } from './school.js';
 
 /**
  * School name used for comparisons (the app-wide `normalizeSchoolName`:
@@ -46,12 +48,15 @@ export function hasEliminationFirstRound(format: string | null | undefined): boo
 /**
  * Count same-school first-round fights in an elimination bracket.
  * Returns null for round robin and pool play, where everyone meets
- * anyway. `schoolOf` maps a registration id to its school name.
+ * anyway. `schoolOf` maps a registration id to its school name; `schools`
+ * (from `createSchoolResolver(rules.fairness.schoolAliases)`) decides which
+ * names are one school.
  */
 export function countSameSchoolFirstRound(
   format: string | null | undefined,
   matches: FirstRoundMatchLike[],
   schoolOf: (registrationId: string) => string | null | undefined,
+  schools: SchoolResolver = createSchoolResolver(null),
 ): SameSchoolFirstRound | null {
   if (!hasEliminationFirstRound(format)) return null;
   // Round-1 matches live in `winners`; a 2-person single elimination
@@ -66,14 +71,14 @@ export function countSameSchoolFirstRound(
   const perSchool = new Map<string, number>();
   for (const match of firstRound) {
     const rawSchool = schoolOf(match.competitor1Id!) ?? '';
-    const a = normalizeSchool(rawSchool);
-    const b = normalizeSchool(schoolOf(match.competitor2Id!));
+    const a = schools.key(rawSchool);
+    const b = schools.key(schoolOf(match.competitor2Id!));
     for (const school of [a, b]) {
       if (school) perSchool.set(school, (perSchool.get(school) ?? 0) + 1);
     }
     if (a && a === b) {
       result.count++;
-      result.matches.push({ matchNumber: match.matchNumber, school: rawSchool.trim() });
+      result.matches.push({ matchNumber: match.matchNumber, school: schools.label(rawSchool) });
     }
   }
   const largest = Math.max(0, ...perSchool.values());

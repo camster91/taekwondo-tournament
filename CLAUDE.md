@@ -718,6 +718,10 @@ to `generateEliminationFromSlots`, so match numbers, links and `positions`
 are unchanged. Other strategies (`manual`, `skill_based`, ...) keep the old
 path. Same-school first-round fights are counted by
 `src/shared/utils/same-school.ts` (Divisions page, bracket editor, API).
+Both the rules seeding and these counts compare schools through the
+tournament's alias resolver (`schoolResolverForSettings` →
+`createSchoolResolver(rules.fairness.schoolAliases)`), as divisions do; the
+legacy `school_spread` generator keeps its plain-name comparison.
 
 Advancement (`match-advancement.ts`) is driven by a pure
 `computeBracketSync`: every downstream slot is derived from one fixed
