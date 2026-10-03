@@ -127,3 +127,35 @@ export function classicZipPath(
   taken.add(path.toLowerCase());
   return path;
 }
+
+export interface FittedText {
+  text: string;
+  fontSize: number;
+  /** True when the text still did not fit at `minSize` and was cut with "…". */
+  truncated: boolean;
+}
+
+/**
+ * Fit text into `maxWidth` by shrinking the font (from `maxSize` down to
+ * `minSize`) instead of cutting names at a fixed length. Only when it
+ * still does not fit at `minSize` is it cut with "…". `measure` returns
+ * the width of `text` at `fontSize` (with jsPDF:
+ * `doc.getStringUnitWidth(t) * size / doc.internal.scaleFactor`). Width
+ * grows in step with the font size, so one measurement picks the size.
+ */
+export function fitTextToWidth(
+  text: string,
+  maxWidth: number,
+  measure: (text: string, fontSize: number) => number,
+  maxSize: number,
+  minSize = 6,
+): FittedText {
+  const width = measure(text, maxSize);
+  if (width <= maxWidth) return { text, fontSize: maxSize, truncated: false };
+  // Quarter-point steps, rounded down so the result always fits.
+  const size = Math.floor(((maxSize * maxWidth) / width) * 4) / 4;
+  if (size >= minSize) return { text, fontSize: size, truncated: false };
+  let cut = text;
+  while (cut.length > 1 && measure(`${cut.trimEnd()}…`, minSize) > maxWidth) cut = cut.slice(0, -1);
+  return { text: `${cut.trimEnd()}…`, fontSize: minSize, truncated: true };
+}

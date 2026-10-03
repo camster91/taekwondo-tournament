@@ -6,12 +6,15 @@ import {
   classicZipPath,
 } from '../../shared/utils/classic-paper.js';
 import {
+  buildClassicLosersSide,
   buildClassicRounds,
   generateClassicBracketPDF,
   type ClassicSlot,
   type TournamentInfo,
 } from './pdf-export.js';
 import { createZip } from '../utils/zip.js';
+import { tournamentDefaultBracketFormat } from './bracket-formats.js';
+import type { BracketStructure } from './bracket-generator.js';
 
 /**
  * Loads divisions and turns each into a classic paper sheet (see
@@ -46,6 +49,15 @@ function toSlot(reg: RegistrationWithCompetitor | null | undefined): ClassicSlot
   };
 }
 
+function parseStructure(json: string | null | undefined): BracketStructure | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as BracketStructure;
+  } catch {
+    return null;
+  }
+}
+
 export interface ClassicSheetFile {
   divisionId: string;
   /** "CB Females Sparring/<division>.pdf" */
@@ -71,6 +83,7 @@ export async function buildClassicSheets(
       location: true,
       brandName: true,
       sportProfileSlug: true,
+      settings: true,
       divisions: {
         where: { deletedAt: null, ...(divisionId ? { id: divisionId } : {}) },
         orderBy: [{ eventType: 'asc' }, { beltLevel: 'asc' }, { gender: 'asc' }, { displayOrder: 'asc' }, { name: 'asc' }],
@@ -93,6 +106,7 @@ export async function buildClassicSheets(
           bracket: {
             select: {
               format: true,
+              structure: true,
               matches: {
                 select: {
                   bracketType: true,
@@ -118,6 +132,7 @@ export async function buildClassicSheets(
     brandName: tournament.brandName,
   };
 
+  const defaultFormat = tournamentDefaultBracketFormat(tournament.settings);
   const taken = new Set<string>();
   const files: ClassicSheetFile[] = [];
   for (const division of tournament.divisions) {
@@ -140,12 +155,21 @@ export async function buildClassicSheets(
         }
       : null;
 
+    // Double elimination: the losers' side prints as a second page once
+    // the bracket exists (2 people have no losers' side).
+    const losers = bracket
+      ? buildClassicLosersSide(parseStructure(division.bracket?.structure), bracket.matches)
+      : null;
+    const losersLater = !bracket && defaultFormat === 'double_elim' && entrants.length >= 3;
+
     const eventLabel = getEventTypeLabel(tournament.sportProfileSlug, division.eventType);
     const pdf = generateClassicBracketPDF(info, {
       title: classicHeaderTitle(division, eventLabel),
       divisionName: division.name,
       beltRange: beltRangeLabel(division),
       rounds: buildClassicRounds(bracket, entrants),
+      losers,
+      footerNote: losersLater ? "Double elimination: losers' side prints once the bracket is made." : null,
     });
     files.push({
       divisionId: division.id,

@@ -20,6 +20,7 @@ interface TournamentSchedule {
  * Printable ring-by-time schedule. Division names match the paper
  * bracket sheets, and each entry names the folder its sheet is in
  * (e.g. "CB Females Sparring"), so the table can find the right sheet.
+ * Names are never cut: they wrap, and print a size smaller on paper.
  */
 export default function SchedulePrint() {
   const { id } = useParams<{ id: string }>();
@@ -93,7 +94,7 @@ export default function SchedulePrint() {
                       {items.map((d) => (
                         <li key={d.divisionId} className="px-4 py-3">
                           <p className="text-sm font-semibold text-surface-900 dark:text-white">{d.startTime}–{d.endTime}</p>
-                          <p className="text-sm text-surface-900 dark:text-white">{d.divisionName}</p>
+                          <p className="text-sm text-surface-900 dark:text-white break-words">{d.divisionName}</p>
                           <p className="text-xs text-surface-600 dark:text-surface-400">{d.competitorCount} competitors · sheet in {sheetFolder(d)}</p>
                         </li>
                       ))}
@@ -106,7 +107,7 @@ export default function SchedulePrint() {
 
           {/* Wider screens and paper: rings across, times down. */}
           <div className="hidden sm:block print:block overflow-x-auto">
-            <table className="w-full border-collapse text-sm" aria-label="Ring schedule by time">
+            <table className="w-full border-collapse text-sm print:text-xs" aria-label="Ring schedule by time">
               <thead>
                 <tr>
                   <th scope="col" className="border border-surface-300 dark:border-surface-600 px-2 py-1 text-left text-surface-900 dark:text-white w-20">Time</th>
@@ -123,7 +124,7 @@ export default function SchedulePrint() {
                       <td key={ring} className="border border-surface-300 dark:border-surface-600 px-2 py-1">
                         {(row.cells[ring] ?? []).map((d) => (
                           <div key={d.divisionId} className="mb-1 last:mb-0">
-                            <p className="font-medium text-surface-900 dark:text-white">{d.divisionName}</p>
+                            <p className="font-medium text-surface-900 dark:text-white break-words">{d.divisionName}</p>
                             <p className="text-xs text-surface-600 dark:text-surface-400">
                               until {d.endTime} · {d.competitorCount} competitors · sheet in {sheetFolder(d)}
                             </p>

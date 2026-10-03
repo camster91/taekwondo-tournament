@@ -1,7 +1,8 @@
 // PDF Export service for tournament brackets
 import { jsPDF } from 'jspdf';
-import { firstRoundSeedPairs } from './bracket-generator.js';
-import { ordinal } from '../../shared/utils/classic-paper.js';
+import { firstRoundSeedPairs, type BracketStructure } from './bracket-generator.js';
+import { buildFeederMap } from './match-advancement.js';
+import { fitTextToWidth, ordinal, type FittedText } from '../../shared/utils/classic-paper.js';
 
 /**
  * Convert hex color to RGB array for jsPDF
@@ -1145,7 +1146,8 @@ export function generateBatchBracketsPDF(
 // elimination tree (16 → 8 → 4 → 2 → winner, or the 8/4/2 sheet for
 // smaller divisions), header like "SPARRING Females 10 - 11 Heavy",
 // each slot "Name / School" (plus dan for black belts), 1st/2nd/3rd
-// boxes on the right and the belt or dan range in the footer.
+// boxes on the right and the belt or dan range in the footer. Double
+// elimination adds a losers' side page; trees over 32 split over pages.
 
 export interface ClassicSlot {
   id: string;
@@ -1190,9 +1192,10 @@ export function classicSheetCapacity(entrants: number): number {
 /**
  * Geometry of a classic sheet. Pure so the slot positions can be unit
  * tested: each slot in a later column sits exactly halfway between the
- * two slots that feed it.
+ * two slots that feed it. `placementSize` is the whole tree's size when
+ * this is the final page of a split sheet (it decides the 3rd boxes).
  */
-export function classicBracketLayout(capacity: number): ClassicLayout {
+export function classicBracketLayout(capacity: number, placementSize = capacity): ClassicLayout {
   const size = classicSheetCapacity(capacity);
   const slotColumns = Math.round(Math.log2(size));
   const columnCount = slotColumns + 1; // + winner column
@@ -1211,7 +1214,7 @@ export function classicBracketLayout(capacity: number): ClassicLayout {
     x += width;
   }
 
-  const labels = size >= 4 ? ['1st', '2nd', '3rd', '3rd'] : ['1st', '2nd'];
+  const labels = Math.max(size, placementSize) >= 4 ? ['1st', '2nd', '3rd', '3rd'] : ['1st', '2nd'];
   const boxHeight = 46;
   const gap = 22;
   const placementBoxes = labels.map((label, i) => ({
@@ -1333,11 +1336,31 @@ export function classicEmptyColumns(first: Array<ClassicSlot | null>): Array<Arr
   return columns;
 }
 
-function fitText(doc: jsPDF, text: string, maxWidth: number): string {
-  if (doc.getTextWidth(text) <= maxWidth) return text;
-  let cut = text;
-  while (cut.length > 1 && doc.getTextWidth(`${cut}...`) > maxWidth) cut = cut.slice(0, -1);
-  return `${cut.trimEnd()}...`;
+// ---- Fitting text: shrink first, cut with "…" only below the minimum ----
+
+/** Smallest font on a classic sheet; below this a name is cut with "…". */
+export const CLASSIC_MIN_FONT = 6;
+/** Base font for a one-line name on the tree; never smaller before fitting. */
+export const CLASSIC_NAME_FONT = 8;
+
+function fittedText(doc: jsPDF, text: string, maxWidth: number, maxSize: number, minSize = CLASSIC_MIN_FONT): FittedText {
+  const scale = doc.internal.scaleFactor;
+  return fitTextToWidth(text, maxWidth, (t, size) => (doc.getStringUnitWidth(t) * size) / scale, maxSize, minSize);
+}
+
+/** Draw text at `maxSize`, shrunk to fit `maxWidth` (set the font family/style first). */
+function drawFitted(
+  doc: jsPDF,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  maxSize: number,
+  options?: { align?: 'left' | 'right' | 'center' },
+): void {
+  const fitted = fittedText(doc, text, maxWidth, maxSize);
+  doc.setFontSize(fitted.fontSize);
+  doc.text(fitted.text, x, y, options);
 }
 
 /** "School · 2nd Dan" under a name. */
@@ -1348,6 +1371,208 @@ export function classicSlotDetail(slot: ClassicSlot): string {
   return parts.join(' - ');
 }
 
+// ---- Big sheets: split the tree so names stay readable ----
+
+/** Least room between two slot lines for an 8pt name on one line. */
+export const CLASSIC_MIN_SLOT_HEIGHT = 12;
+
+export interface ClassicTreePage {
+  /** First-column slots on this page (its own sheet size). */
+  capacity: number;
+  /** Column of the whole tree this page starts at (0 = first round). */
+  columnOffset: number;
+  /** Which block of slots this page draws, top to bottom. */
+  part: number;
+  /** "(n of total)" in the header; null when the tree fits on one page. */
+  pageNumber: number | null;
+  totalPages: number;
+  /** The page with the final and the 1st/2nd/3rd boxes. */
+  hasFinal: boolean;
+}
+
+/**
+ * How a winners tree is spread over pages. Up to 32 first-round slots
+ * fit one legal page with 8pt names. A bigger tree is cut into equal
+ * blocks (top half / bottom half, ...) of at most 32, each block on its
+ * own page down to its winner, and one last page plays those block
+ * winners through to the champion.
+ */
+export function classicTreePages(capacity: number): ClassicTreePage[] {
+  const size = classicSheetCapacity(capacity);
+  const height = CLASSIC_BOTTOM - CLASSIC_TOP;
+  let parts = 1;
+  while (parts < size / 2 && height / (size / parts) < CLASSIC_MIN_SLOT_HEIGHT) parts *= 2;
+  if (parts === 1) {
+    return [{ capacity: size, columnOffset: 0, part: 0, pageNumber: null, totalPages: 1, hasFinal: true }];
+  }
+  const partSize = size / parts;
+  const totalPages = parts + 1;
+  const pages: ClassicTreePage[] = Array.from({ length: parts }, (_, part) => ({
+    capacity: partSize, columnOffset: 0, part, pageNumber: part + 1, totalPages, hasFinal: false,
+  }));
+  pages.push({
+    capacity: parts, columnOffset: Math.round(Math.log2(partSize)), part: 0,
+    pageNumber: totalPages, totalPages, hasFinal: true,
+  });
+  return pages;
+}
+
+/** The columns one tree page draws, cut out of the whole tree. */
+export function classicPageColumns<T>(columns: T[][], page: ClassicTreePage): T[][] {
+  const count = Math.round(Math.log2(page.capacity)) + 1;
+  return Array.from({ length: count }, (_, c) => {
+    const per = page.capacity / 2 ** c;
+    return (columns[page.columnOffset + c] ?? []).slice(page.part * per, (page.part + 1) * per);
+  });
+}
+
+// ---- Double elimination: the losers' side page ----
+
+export interface ClassicLosersSlot {
+  /** Where this person comes from, e.g. "Loser of M3"; null when nothing feeds it. */
+  feeder: string | null;
+  competitor: ClassicSlot | null;
+}
+
+export interface ClassicLosersMatch {
+  matchNumber: number;
+  /** Heading above the box ("Grand final", "Reset match (if needed)"). */
+  title?: string;
+  /** Small line under the box, e.g. when the reset is played. */
+  note?: string;
+  slots: [ClassicLosersSlot, ClassicLosersSlot];
+  winner: ClassicSlot | null;
+}
+
+export interface ClassicLosersSide {
+  /** Losers rounds, left to right. */
+  rounds: Array<{ label: string; matches: ClassicLosersMatch[] }>;
+  /** Grand final, then the reset match when the bracket has one. */
+  finals: ClassicLosersMatch[];
+}
+
+/**
+ * The losers' side of a double elimination bracket, from the stored
+ * structure: each losers match with its feeders ("Loser of M3",
+ * "Winner of M9") so officials can fill it in by hand, plus the grand
+ * final and the reset. Names and winners come from the matches when
+ * known. Null when there is no losers bracket (2 people, single
+ * elimination, round robin).
+ */
+export function buildClassicLosersSide(
+  structure: BracketStructure | null | undefined,
+  matches: ClassicMatchInput[],
+): ClassicLosersSide | null {
+  const losers = structure?.losers ?? [];
+  const finals = structure?.finals ?? [];
+  if (!structure || losers.length === 0 || finals.length === 0) return null;
+
+  const feeders = buildFeederMap(structure);
+  const rows = new Map(matches.map((m) => [m.matchNumber, m]));
+  const toMatch = (matchNumber: number, labels?: [string, string]): ClassicLosersMatch => {
+    const row = rows.get(matchNumber);
+    const fs = feeders.get(matchNumber) ?? [];
+    const feeder = (i: number): string | null => {
+      if (labels) return labels[i];
+      const f = fs[i];
+      if (!f) return null;
+      return `${f.outcome === 'winner' ? 'Winner' : 'Loser'} of M${f.source}`;
+    };
+    return {
+      matchNumber,
+      slots: [
+        { feeder: feeder(0), competitor: row?.competitor1 ?? null },
+        { feeder: feeder(1), competitor: row?.competitor2 ?? null },
+      ],
+      winner: row?.winner ?? null,
+    };
+  };
+
+  const roundNumbers = [...new Set(losers.map((m) => m.round))].sort((a, b) => a - b);
+  const rounds = roundNumbers.map((round, i) => ({
+    label: i === roundNumbers.length - 1 ? "Losers' final" : `Losers round ${i + 1}`,
+    matches: losers
+      .filter((m) => m.round === round)
+      .sort((a, b) => a.matchNumber - b.matchNumber)
+      .map((m) => toMatch(m.matchNumber)),
+  }));
+
+  const grandNumber = structure.positions?.grandFinals ?? finals[0].matchNumber;
+  const resetNumber = structure.positions ? structure.positions.reset : (finals[1]?.matchNumber ?? null);
+  const grand = { ...toMatch(grandNumber), title: 'Grand final' };
+  const finalsOut: ClassicLosersMatch[] = [grand];
+  if (resetNumber != null && resetNumber !== grandNumber) {
+    const from = `From M${grandNumber}`;
+    const losersChampion = grand.slots[1].feeder;
+    finalsOut.push({
+      ...toMatch(resetNumber, [from, from]),
+      title: 'Reset match (if needed)',
+      note: losersChampion
+        ? `Only if the ${losersChampion.charAt(0).toLowerCase()}${losersChampion.slice(1)} wins M${grandNumber}`
+        : `Only if the losers' side winner wins M${grandNumber}`,
+    });
+  }
+  return { rounds, finals: finalsOut };
+}
+
+export interface ClassicLosersBox {
+  matchNumber: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ClassicLosersLayout {
+  columns: Array<{ x: number; width: number; label: string; boxes: ClassicLosersBox[] }>;
+  page: { width: number; height: number };
+  top: number;
+  bottom: number;
+}
+
+const LOSERS_GAP = 10;
+const LOSERS_MAX_BOX = 44;
+const LOSERS_FINALS_WEIGHT = 1.6;
+
+/**
+ * Geometry of the losers' side page. Pure so it can be unit tested: one
+ * column per losers round, then a wider column for the grand final and
+ * reset; boxes are spread evenly down each column and never overlap.
+ */
+export function classicLosersLayout(side: ClassicLosersSide): ClassicLosersLayout {
+  const left = CLASSIC_LEFT;
+  const right = CLASSIC_PAGE.width - CLASSIC_LEFT;
+  const groups = [
+    ...side.rounds.map((r) => ({ label: r.label, numbers: r.matches.map((m) => m.matchNumber), weight: 1 })),
+    { label: 'Final', numbers: side.finals.map((m) => m.matchNumber), weight: LOSERS_FINALS_WEIGHT },
+  ];
+  const totalWeight = groups.reduce((sum, g) => sum + g.weight, 0);
+  const unit = (right - left - LOSERS_GAP * (groups.length - 1)) / totalWeight;
+  const height = CLASSIC_BOTTOM - CLASSIC_TOP;
+
+  let x = left;
+  const columns = groups.map((g, c) => {
+    const width = unit * g.weight;
+    const isFinals = c === groups.length - 1;
+    // The finals boxes carry a heading and a note, so leave them room.
+    const spacing = height / Math.max(1, g.numbers.length);
+    const boxHeight = Math.min(LOSERS_MAX_BOX, spacing - (isFinals ? 30 : 6));
+    const boxes = g.numbers.map((matchNumber, j) => ({
+      matchNumber,
+      x,
+      y: CLASSIC_TOP + (j + 0.5) * spacing - boxHeight / 2,
+      width,
+      height: boxHeight,
+    }));
+    const column = { x, width, label: g.label, boxes };
+    x += width + LOSERS_GAP;
+    return column;
+  });
+  return { columns, page: CLASSIC_PAGE, top: CLASSIC_TOP, bottom: CLASSIC_BOTTOM };
+}
+
+// ---- Drawing ----
+
 export interface ClassicBracketSheet {
   /** e.g. "SPARRING Females 10 - 11 Heavy" */
   title: string;
@@ -1355,11 +1580,46 @@ export interface ClassicBracketSheet {
   /** e.g. "Colour belts: Blue and Red" — printed in the footer. */
   beltRange: string;
   rounds: ClassicRounds;
+  /** Double elimination: drawn as a second page. */
+  losers?: ClassicLosersSide | null;
+  /** Extra footer line, e.g. that the losers' side comes later. */
+  footerNote?: string | null;
 }
 
-function drawClassicSheet(doc: jsPDF, tournament: TournamentInfo, sheet: ClassicBracketSheet): void {
-  const layout = classicBracketLayout(sheet.rounds.columns[0].length);
-  const { width: pageWidth, height: pageHeight } = layout.page;
+function drawClassicHeader(doc: jsPDF, tournament: TournamentInfo, title: string, subtitle: string): void {
+  const pageWidth = CLASSIC_PAGE.width;
+  doc.setTextColor(0);
+  doc.setFont('helvetica', 'bold');
+  drawFitted(doc, tournament.brandName || tournament.name, CLASSIC_LEFT, 26, 380, 12);
+  doc.setFont('helvetica', 'normal');
+  drawFitted(doc, [tournament.date, tournament.location].filter(Boolean).join(' - '), CLASSIC_LEFT, 40, 380, 9);
+  doc.setFont('helvetica', 'bold');
+  drawFitted(doc, title, pageWidth - CLASSIC_LEFT, 30, 560, 18, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  drawFitted(doc, subtitle, pageWidth - CLASSIC_LEFT, 44, 560, 9, { align: 'right' });
+}
+
+function drawClassicFooter(doc: jsPDF, sheet: ClassicBracketSheet): void {
+  const { width: pageWidth, height: pageHeight } = CLASSIC_PAGE;
+  // Footer: belt / dan range, plus a note when no bracket exists yet.
+  doc.setTextColor(0);
+  doc.setFont('helvetica', 'bold');
+  drawFitted(doc, sheet.beltRange, CLASSIC_LEFT, pageHeight - 14, 600, 11);
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7);
+  doc.setTextColor(110);
+  const note = sheet.rounds.draft
+    ? 'Draft order - brackets not made yet'
+    : `Printed ${new Date().toLocaleDateString()}`;
+  doc.text(note, pageWidth - CLASSIC_LEFT, pageHeight - 14, { align: 'right' });
+  if (sheet.footerNote) doc.text(sheet.footerNote, pageWidth - CLASSIC_LEFT, pageHeight - 23, { align: 'right' });
+  doc.setTextColor(0);
+}
+
+function drawClassicTreePage(doc: jsPDF, tournament: TournamentInfo, sheet: ClassicBracketSheet, page: ClassicTreePage): void {
+  const fullSize = sheet.rounds.columns[0].length;
+  const layout = classicBracketLayout(page.capacity, fullSize);
+  const columns = classicPageColumns(sheet.rounds.columns, page);
   const bandTop = layout.bracketTop - 18;
   const bandHeight = layout.bracketBottom - layout.bracketTop + 30;
 
@@ -1371,19 +1631,8 @@ function drawClassicSheet(doc: jsPDF, tournament: TournamentInfo, sheet: Classic
   doc.rect(CLASSIC_BOXES_X - 6, bandTop, CLASSIC_BOXES_WIDTH + 12, bandHeight, 'F');
 
   // Header: organizer on the left, division title on the right.
-  doc.setTextColor(0);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text(fitText(doc, tournament.brandName || tournament.name, 380), CLASSIC_LEFT, 26);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(fitText(doc, [tournament.date, tournament.location].filter(Boolean).join(' - '), 380), CLASSIC_LEFT, 40);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.text(fitText(doc, sheet.title, 560), pageWidth - CLASSIC_LEFT, 30, { align: 'right' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(fitText(doc, sheet.divisionName, 560), pageWidth - CLASSIC_LEFT, 44, { align: 'right' });
+  const title = page.pageNumber ? `${sheet.title} (${page.pageNumber} of ${page.totalPages})` : sheet.title;
+  drawClassicHeader(doc, tournament, title, sheet.divisionName);
 
   // Tree lines: a line per slot, and a bar joining each pair.
   doc.setDrawColor(0);
@@ -1397,18 +1646,27 @@ function drawClassicSheet(doc: jsPDF, tournament: TournamentInfo, sheet: Classic
     }
   });
 
-  // Names on the lines.
+  // Names on the lines: shrunk to fit the column, never cut at a fixed length.
   const height = layout.bracketBottom - layout.bracketTop;
   layout.columns.forEach((col, c) => {
     const twoLines = height / col.slotYs.length >= 26;
-    const slots = sheet.rounds.columns[c] ?? [];
+    const slots = columns[c] ?? [];
     const maxWidth = col.width - 8;
     col.slotYs.forEach((y, j) => {
       const slot = slots[j];
+      if (!slot && c === 0 && page.columnOffset > 0) {
+        // Final page of a split sheet: say which page each slot comes from.
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(7);
+        doc.setTextColor(130);
+        doc.text(`Winner of page ${j + 1}`, col.x + 4, y - 3);
+        doc.setTextColor(0);
+        return;
+      }
       if (!slot) {
         // Mark a first-round bye so nobody writes a name there.
         const partner = slots[j % 2 === 0 ? j + 1 : j - 1];
-        if (c === 0 && partner) {
+        if (c === 0 && page.columnOffset === 0 && partner) {
           doc.setFont('helvetica', 'italic');
           doc.setFontSize(7);
           doc.setTextColor(130);
@@ -1420,19 +1678,25 @@ function drawClassicSheet(doc: jsPDF, tournament: TournamentInfo, sheet: Classic
       const detail = classicSlotDetail(slot);
       doc.setFont('helvetica', 'bold');
       if (twoLines) {
-        doc.setFontSize(9);
-        doc.text(fitText(doc, slot.name, maxWidth), col.x + 4, y - (detail ? 12 : 3));
+        drawFitted(doc, slot.name, col.x + 4, y - (detail ? 12 : 3), maxWidth, 9);
         if (detail) {
           doc.setFont('helvetica', 'normal');
-          doc.setFontSize(7);
-          doc.text(fitText(doc, detail, maxWidth), col.x + 4, y - 3);
+          drawFitted(doc, detail, col.x + 4, y - 3, maxWidth, 7);
         }
       } else {
-        doc.setFontSize(7);
-        doc.text(fitText(doc, detail ? `${slot.name} (${detail})` : slot.name, maxWidth), col.x + 4, y - 2);
+        drawFitted(doc, detail ? `${slot.name} (${detail})` : slot.name, col.x + 4, y - 2, maxWidth, CLASSIC_NAME_FONT);
       }
     });
   });
+
+  if (!page.hasFinal) {
+    // A block of a split sheet: say where its winner goes.
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text(`Winner goes on to page ${page.totalPages}`, CLASSIC_BOXES_X, 120);
+    drawClassicFooter(doc, sheet);
+    return;
+  }
 
   // 1st / 2nd / 3rd boxes.
   const { placements } = sheet.rounds;
@@ -1446,31 +1710,105 @@ function drawClassicSheet(doc: jsPDF, tournament: TournamentInfo, sheet: Classic
     doc.text(box.label, box.x + 6, box.y + 13);
     const slot = placed[i];
     if (slot) {
-      doc.setFontSize(9);
-      doc.text(fitText(doc, slot.name, box.width - 12), box.x + 6, box.y + 28);
+      drawFitted(doc, slot.name, box.x + 6, box.y + 28, box.width - 12, 9);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
-      doc.text(fitText(doc, classicSlotDetail(slot), box.width - 12), box.x + 6, box.y + 39);
+      drawFitted(doc, classicSlotDetail(slot), box.x + 6, box.y + 39, box.width - 12, 7);
     }
   });
 
-  // Footer: belt / dan range, plus a note when no bracket exists yet.
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(fitText(doc, sheet.beltRange, 600), CLASSIC_LEFT, pageHeight - 14);
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(7);
-  doc.setTextColor(110);
-  const note = sheet.rounds.draft
-    ? 'Draft order - brackets not made yet'
-    : `Printed ${new Date().toLocaleDateString()}`;
-  doc.text(note, pageWidth - CLASSIC_LEFT, pageHeight - 14, { align: 'right' });
-  doc.setTextColor(0);
+  drawClassicFooter(doc, sheet);
 }
 
-/** One classic sheet as its own legal-landscape PDF. */
+function drawClassicLosersPage(doc: jsPDF, tournament: TournamentInfo, sheet: ClassicBracketSheet, side: ClassicLosersSide): void {
+  const layout = classicLosersLayout(side);
+  const byNumber = new Map([...side.rounds.flatMap((r) => r.matches), ...side.finals].map((m) => [m.matchNumber, m]));
+  const bandTop = layout.top - 18;
+  const bandHeight = layout.bottom - layout.top + 30;
+
+  doc.setFillColor(242, 242, 242);
+  layout.columns.forEach((col, c) => {
+    if (c % 2 === 0) doc.rect(col.x, bandTop, col.width, bandHeight, 'F');
+  });
+
+  drawClassicHeader(doc, tournament, `${sheet.title} — Losers' side`, sheet.divisionName);
+
+  const labelWidth = 22;
+  layout.columns.forEach((col) => {
+    doc.setTextColor(0);
+    doc.setFont('helvetica', 'bold');
+    drawFitted(doc, col.label, col.x + 2, bandTop + 10, col.width - 4, 8);
+
+    for (const box of col.boxes) {
+      const match = byNumber.get(box.matchNumber);
+      if (!match) continue;
+      // White box: match number on the left, two slots on the right.
+      doc.setDrawColor(0);
+      doc.setLineWidth(0.8);
+      doc.setFillColor(255, 255, 255);
+      doc.rect(box.x, box.y, box.width, box.height, 'FD');
+      doc.line(box.x + labelWidth, box.y, box.x + labelWidth, box.y + box.height);
+      doc.line(box.x + labelWidth, box.y + box.height / 2, box.x + box.width, box.y + box.height / 2);
+      doc.setTextColor(0);
+      doc.setFont('helvetica', 'bold');
+      drawFitted(doc, `M${match.matchNumber}`, box.x + 2, box.y + box.height / 2 + 2.5, labelWidth - 4, 7);
+
+      if (match.title) {
+        doc.setFont('helvetica', 'bold');
+        drawFitted(doc, match.title, box.x, box.y - 4, box.width, 8);
+      }
+      if (match.note) {
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(90);
+        drawFitted(doc, match.note, box.x, box.y + box.height + 9, box.width, 7);
+        doc.setTextColor(0);
+      }
+
+      const slotHeight = box.height / 2;
+      const textX = box.x + labelWidth + 3;
+      const textWidth = box.width - labelWidth - 6;
+      match.slots.forEach((s, i) => {
+        const bottom = box.y + slotHeight * (i + 1);
+        const won = Boolean(match.winner && s.competitor && match.winner.id === s.competitor.id);
+        const nameWidth = won ? textWidth - 9 : textWidth;
+        // Feeder in small print at the top, leaving room to write the name;
+        // in a tight box it only shows while the name is unknown.
+        const roomy = slotHeight >= 18;
+        if (s.feeder && (roomy || !s.competitor)) {
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(110);
+          drawFitted(doc, s.feeder, textX, roomy ? bottom - slotHeight + 7 : bottom - 4, textWidth, roomy ? 6 : 7);
+          doc.setTextColor(0);
+        }
+        if (s.competitor) {
+          doc.setFont('helvetica', won ? 'bold' : 'normal');
+          drawFitted(doc, s.competitor.name, textX, bottom - 3, nameWidth, CLASSIC_NAME_FONT);
+          if (won) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7);
+            doc.text('W', box.x + box.width - 3, bottom - 3, { align: 'right' });
+          }
+        }
+      });
+    }
+  });
+
+  drawClassicFooter(doc, sheet);
+}
+
+/**
+ * One classic sheet as its own legal-landscape PDF: the winners tree
+ * (over several pages when it is too big for 8pt names), then the
+ * losers' side page for double elimination.
+ */
 export function generateClassicBracketPDF(tournament: TournamentInfo, sheet: ClassicBracketSheet): jsPDF {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'legal' });
-  drawClassicSheet(doc, tournament, sheet);
+  classicTreePages(sheet.rounds.columns[0].length).forEach((page, i) => {
+    if (i > 0) doc.addPage('legal', 'landscape');
+    drawClassicTreePage(doc, tournament, sheet, page);
+  });
+  if (sheet.losers) {
+    doc.addPage('legal', 'landscape');
+    drawClassicLosersPage(doc, tournament, sheet, sheet.losers);
+  }
   return doc;
 }

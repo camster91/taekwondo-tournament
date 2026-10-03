@@ -517,7 +517,7 @@ Mutations are scorekeeper+ (or admin/director for generate/reset).
 | GET | `/api/brackets/tournament/:tournamentId/certificates` | viewer+ |
 | GET | `/api/brackets/tournament/:tournamentId/school-report` | viewer+ |
 | GET | `/api/brackets/tournament/:tournamentId/same-school-first-round` | viewer+ (`{ total, divisions: [{ divisionId, count, fights, unavoidable }] }`, counts only) |
-| GET | `/api/brackets/division/:divisionId/classic-pdf` | viewer+ (paper bracket like the old sheets: legal landscape, single-elim 2/4/8/16/32 tree, belt/dan footer; draft seed order before brackets exist) |
+| GET | `/api/brackets/division/:divisionId/classic-pdf` | viewer+ (paper bracket like the old sheets: legal landscape, single-elim 2/4/8/16/32 tree, belt/dan footer; draft seed order before brackets exist; double elim adds a "Losers' side" page with feeder labels, grand final and reset; trees over 32 split into blocks plus a final page; names shrink to fit (min 6pt) before "…"; layout helpers in `pdf-export.ts`, `fitTextToWidth` in `shared/utils/classic-paper.ts`) |
 | GET | `/api/brackets/tournament/:tournamentId/classic-zip` | viewer+ (every non-empty division's paper bracket, folders like `CB Females Sparring/`; ZIP written with `src/server/utils/zip.ts`, no dependency) |
 
 Bracket format: `generate` / `generate-all` use the body's `format`, else
