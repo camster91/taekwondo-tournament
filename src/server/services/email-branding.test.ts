@@ -11,6 +11,13 @@ describe('email branding', () => {
     })).toEqual({ organizerBrandName: 'Newton TKD', brandPrimaryColor: '#1D4ED8', brandLogoUrl: 'https://cdn.example.com/l.png' });
   });
 
+  it('lets the organization colour win over the untouched tournament default', () => {
+    expect(emailBrandingFor({
+      brandPrimaryColor: '#DC2626',
+      organization: { brandPrimaryColor: '#1D4ED8' },
+    }).brandPrimaryColor).toBe('#1D4ED8');
+  });
+
   it('makes stored /logos paths absolute and drops anything else', () => {
     expect(absoluteEmailLogoUrl('/logos/acme.png', 'https://tkd.example.com/')).toBe('https://tkd.example.com/logos/acme.png');
     expect(absoluteEmailLogoUrl('/logos/acme.png', '')).toBeUndefined();

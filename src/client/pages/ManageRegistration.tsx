@@ -30,6 +30,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Label from '../components/ui/Label';
 import Select from '../components/ui/Select';
+import OrganizerBrandHeader from '../components/OrganizerBrandHeader';
 import { classifyWithdrawalResponse } from '../utils/registration-withdrawal';
 import { fetchJson, getApiFailure } from '../utils/api-status';
 import { formatDateOnly } from '../utils/date-only';
@@ -307,6 +308,14 @@ export default function ManageRegistration() {
             <ArrowLeft className="h-4 w-4 mr-1" />
             Look up another registration
           </button>
+
+          <OrganizerBrandHeader
+            name={registration.organizerName}
+            color={registration.brandPrimaryColor}
+            logoUrl={registration.brandLogoUrl}
+            label="Hosted by"
+            className="mb-3 rounded-lg"
+          />
 
           {/* Tournament context */}
           <div className="mb-4 p-4 rounded-lg bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-700">

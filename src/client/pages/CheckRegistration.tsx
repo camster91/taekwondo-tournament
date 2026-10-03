@@ -16,7 +16,19 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Label from '../components/ui/Label';
 import OperationStatus from '../components/ui/OperationStatus';
+import OrganizerBrandHeader from '../components/OrganizerBrandHeader';
 import { fetchJson, getApiFailure } from '../utils/api-status';
+
+interface PublicTournamentOption {
+  id: string;
+  name: string;
+  date: string;
+  // Branding is already resolved by the server (tournament, then organization).
+  // brandName falls back to the tournament name when nothing is set.
+  brandName?: string | null;
+  brandPrimaryColor?: string | null;
+  brandLogoUrl?: string | null;
+}
 
 interface LookupResult {
   registered: boolean;
@@ -35,10 +47,14 @@ export default function CheckRegistration() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<LookupResult | null>(null);
-  const [tournaments, setTournaments] = useState<{ id: string; name: string; date: string }[]>([]);
+  const [tournaments, setTournaments] = useState<PublicTournamentOption[]>([]);
   const [tournamentsLoading, setTournamentsLoading] = useState(true);
   const [tournamentsError, setTournamentsError] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  const selectedTournament = tournaments.find((t) => t.id === tournamentId) ?? null;
+  const organizerName = selectedTournament?.brandName && selectedTournament.brandName !== selectedTournament.name
+    ? selectedTournament.brandName
+    : null;
 
   // Load open tournaments so the parent doesn't have to paste a UUID
   const loadTournaments = useCallback(async () => {
@@ -47,7 +63,7 @@ export default function CheckRegistration() {
     try {
       const data = await fetchJson<unknown>(fetch, '/api/public/tournaments');
       if (!Array.isArray(data)) throw new Error('Invalid tournament response');
-      setTournaments(data as { id: string; name: string; date: string }[]);
+      setTournaments(data as PublicTournamentOption[]);
     } catch {
       setTournaments([]);
       setTournamentsError('Tournament choices are unavailable right now.');
@@ -150,6 +166,15 @@ export default function CheckRegistration() {
                     </option>
                   ))}
                 </select>
+                {selectedTournament && (
+                  <OrganizerBrandHeader
+                    name={organizerName}
+                    color={selectedTournament.brandPrimaryColor}
+                    logoUrl={selectedTournament.brandLogoUrl}
+                    label="Hosted by"
+                    className="mt-2 rounded-lg"
+                  />
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

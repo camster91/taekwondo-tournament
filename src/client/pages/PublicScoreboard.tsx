@@ -16,6 +16,7 @@ import {
   getStaleBannerMessage,
 } from '../utils/scoreboard-availability';
 import { fetchJson } from '../utils/api-status';
+import { safeBrandColor, safeBrandLogoUrl } from '../utils/organizer-branding';
 
 // Use shared API contracts instead of local interfaces
 import type { ApiDivision, ApiMatch } from '../../shared/contracts';
@@ -272,10 +273,10 @@ export default function PublicScoreboard() {
       <div className="bg-gradient-to-r from-surface-900 via-primary-950 to-surface-900 border-b border-white/5">
         <div className="px-4 md:px-8 lg:px-12 py-4 md:py-5 lg:py-6 flex items-center justify-between">
           <div className="flex items-center gap-4 md:gap-6">
-            {tournament?.brandLogoUrl ? (
-              <img src={tournament.brandLogoUrl} alt={`${tournament.brandName || tournament.name} logo`} className="h-12 w-auto md:h-14 lg:h-16" />
+            {safeBrandLogoUrl(tournament?.brandLogoUrl) ? (
+              <img src={safeBrandLogoUrl(tournament?.brandLogoUrl)!} alt={`${tournament?.brandName || tournament?.name} logo`} className="h-12 w-auto md:h-14 lg:h-16" />
             ) : (
-              <Trophy className="h-12 w-12 md:h-14 md:w-14 lg:h-16 lg:w-16" style={{ color: tournament?.brandPrimaryColor || '#DC2626' }} />
+              <Trophy className="h-12 w-12 md:h-14 md:w-14 lg:h-16 lg:w-16" style={{ color: safeBrandColor(tournament?.brandPrimaryColor) }} />
             )}
             <div>
               <div className="flex items-center gap-2 md:gap-3">

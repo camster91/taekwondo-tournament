@@ -32,6 +32,15 @@ describe('managed registration response', () => {
     expect(() => parseManagedRegistrationResponse(payload)).toThrow('Registration status could not be verified');
   });
 
+  it('accepts optional organizer branding and drops malformed values', () => {
+    const branded = { ...registration, organizerName: 'Newtons TKD', brandPrimaryColor: '#1D4ED8', brandLogoUrl: '/logos/n.png' };
+    expect(parseManagedRegistrationResponse({ registration: branded })).toEqual({ registration: branded });
+    expect(parseManagedRegistrationResponse({ registration: { ...registration, organizerName: null } }))
+      .toEqual({ registration: { ...registration, organizerName: null } });
+    expect(parseManagedRegistrationResponse({ registration: { ...registration, organizerName: 7, brandLogoUrl: {} } }))
+      .toEqual({ registration: { ...registration, organizerName: null, brandLogoUrl: null } });
+  });
+
   it('accepts a returning competitor whose profile the organizer keeps', () => {
     const locked = { ...registration, gender: null, belt: null, school: null, profileEditable: false };
     expect(parseManagedRegistrationResponse({ registration: locked })).toEqual({ registration: locked });

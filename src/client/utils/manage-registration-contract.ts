@@ -27,6 +27,10 @@ export interface ManagedRegistration {
   paymentAmountCents?: number | null;
   waitlistStatus?: string | null;
   waitlistPosition?: number | null;
+  /** Organizer branding for the page header (optional; older servers omit it). */
+  organizerName?: string | null;
+  brandPrimaryColor?: string | null;
+  brandLogoUrl?: string | null;
 }
 
 /** Payment states in which the parent can (re)start the entry-fee checkout. */
@@ -80,7 +84,13 @@ export function parseManagedRegistrationResponse(value: unknown): { registration
     && isoDate(item.tournamentDate) && typeof item.tournamentStatus === 'string' && TOURNAMENT_STATUSES.has(item.tournamentStatus)
     && typeof item.checkedIn === 'boolean';
   if (!valid) throw new Error('Registration status could not be verified');
-  return { registration: item as unknown as ManagedRegistration };
+  // Branding is cosmetic: a missing or odd value never blocks the page, it is
+  // just dropped (the header component checks colour and logo again).
+  const branding: Record<string, string | null> = {};
+  for (const key of ['organizerName', 'brandPrimaryColor', 'brandLogoUrl'] as const) {
+    if (key in item) branding[key] = typeof item[key] === 'string' ? item[key] as string : null;
+  }
+  return { registration: { ...item, ...branding } as unknown as ManagedRegistration };
 }
 
 export function normalizeManagedRegistrationUpdate(value: Partial<ManagedRegistration>): ManagedRegistrationUpdate {

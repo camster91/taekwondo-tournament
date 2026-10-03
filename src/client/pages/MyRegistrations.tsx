@@ -10,6 +10,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Label from '../components/ui/Label';
 import OperationStatus from '../components/ui/OperationStatus';
+import OrganizerBrandHeader from '../components/OrganizerBrandHeader';
 import { formatDateOnly } from '../utils/date-only';
 
 const TOKEN_KEY = 'bowin_family_link';
@@ -37,6 +38,8 @@ interface FamilyRegistration {
     location: string | null;
     status: string;
     organizer: string | null;
+    brandPrimaryColor?: string | null;
+    brandLogoUrl?: string | null;
     liveResultsUrl: string | null;
   };
   divisions: FamilyDivision[];
@@ -217,15 +220,18 @@ export default function MyRegistrations() {
               </Card>
             )}
             {registrations!.map((reg) => (
-              <Card key={reg.id}>
-                <CardBody className="space-y-3">
+              <Card key={reg.id} padded={false} className="overflow-hidden">
+                <OrganizerBrandHeader
+                  name={reg.tournament.organizer}
+                  color={reg.tournament.brandPrimaryColor}
+                  logoUrl={reg.tournament.brandLogoUrl}
+                  label="Hosted by"
+                />
+                <CardBody className="space-y-3 p-6">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <h2 className="text-lg font-semibold text-surface-900 dark:text-white [overflow-wrap:anywhere]">{reg.competitorName}</h2>
                       <p className="text-sm font-medium text-surface-700 dark:text-surface-200 [overflow-wrap:anywhere]">{reg.tournament.name}</p>
-                      {reg.tournament.organizer && (
-                        <p className="text-xs text-surface-600 dark:text-surface-400">Hosted by {reg.tournament.organizer}</p>
-                      )}
                     </div>
                     <span className="rounded-full bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-700 dark:bg-primary-950 dark:text-primary-300">
                       {STATUS_LABEL[reg.status]}
