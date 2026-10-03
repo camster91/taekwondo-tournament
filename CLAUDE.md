@@ -198,6 +198,7 @@ this file is wrong.
 | `Divisions.tsx` | `/tournaments/:id/divisions` | Auto-categorize + manage + PDF export |
 | `BracketEditor.tsx` | `/tournaments/:id/divisions/:divId/bracket` | Visual editor |
 | `Schedule.tsx` | `/tournaments/:id/schedule` | Ring/time schedule |
+| `SchedulePrint.tsx` | `/tournaments/:id/schedule/print` | Printable ring-by-time grid; names each division's paper-bracket folder |
 | `CheckIn.tsx` | `/tournaments/:id/checkin` | Day-of competitor check-in |
 | `Scorekeeper.tsx` | `/tournaments/:id/scorekeeper` | Real-time match scoring |
 | `Results.tsx` | `/tournaments/:id/results` | Placements + CSV/Excel/PDF export |
@@ -453,6 +454,7 @@ All routes require auth. `?trash=true` shows soft-deleted;
 | GET | `/api/tournaments/:id/registrations` | any |
 | POST | `/api/tournaments/:id/registrations` | admin/director |
 | POST | `/api/tournaments/:id/registrations/bulk` | admin/director |
+| POST | `/api/tournaments/:id/import` | director (`src/server/routes/tournament-import.ts`). Spreadsheet straight into the tournament: body `{ fileBase64, columnMapping?, sheetName?, headerRow?, commit? }`, 40 MB body. Preview by default (counts: new/matched competitors, registrations, waitlisted, skipped rows with reasons); `commit: true` writes in one locked transaction. Y/Yes/X/1 in an event column enters that slot; event columns found by the sport's event names. Reuses same-tenant competitors by name + DOB without changing them; capacity/waitlist + plan limit (402) apply. UI: "Import from spreadsheet" on the tournament page (`TournamentImportModal.tsx`). |
 | PUT | `/api/tournaments/:id/registrations/:regId` | admin/director |
 | DELETE | `/api/tournaments/:id/registrations/:regId` | admin/director |
 | GET | `/api/tournaments/:id/weight-classes` | any |
@@ -508,6 +510,13 @@ Mutations are scorekeeper+ (or admin/director for generate/reset).
 | GET | `/api/brackets/division/:divisionId/certificate/:place` | viewer+ |
 | GET | `/api/brackets/tournament/:tournamentId/certificates` | viewer+ |
 | GET | `/api/brackets/tournament/:tournamentId/school-report` | viewer+ |
+| GET | `/api/brackets/division/:divisionId/classic-pdf` | viewer+ (paper bracket like the old sheets: legal landscape, single-elim 2/4/8/16/32 tree, belt/dan footer; draft seed order before brackets exist) |
+| GET | `/api/brackets/tournament/:tournamentId/classic-zip` | viewer+ (every non-empty division's paper bracket, folders like `CB Females Sparring/`; ZIP written with `src/server/utils/zip.ts`, no dependency) |
+
+Bracket format: `generate` / `generate-all` use the body's `format`, else
+the tournament default `defaultBracketFormat` (`double_elim` | `single_elim`)
+in `Tournament.settings` (Tournament Settings → "Bracket type"), else
+`double_elim`. See `tournamentDefaultBracketFormat` in `bracket-formats.ts`.
 
 ### `/api/competitors` (`src/server/routes/competitors.ts`)
 

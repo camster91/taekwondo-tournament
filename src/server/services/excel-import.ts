@@ -63,8 +63,10 @@ const IMPORT_BATCH_SIZE = 100;
 const IMPORT_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 60_000 } as const;
 
 /** A row that passed validation and is ready to be written. */
-interface PreparedRow {
+export interface PreparedImportRow {
   rowNum: number;
+  /** Index of the source row in the array passed to prepareImportRows. */
+  sourceIndex: number;
   firstName: string;
   lastName: string;
   gender: 'M' | 'F';
@@ -91,57 +93,28 @@ function spreadsheetRowNumber(row: ExcelRow, index: number): number {
   return typeof tagged === 'number' ? tagged + 1 : index + 2;
 }
 
-export async function importFromExcel(
-  prisma: PrismaClient,
+/**
+ * Validate and normalise spreadsheet rows (no database access). Rows that
+ * cannot become a competitor come back in `errors` with a plain reason;
+ * the rest are ready to match or create. Shared by the registry import
+ * and the tournament import. Assumes the required-column guard passed.
+ */
+export function prepareImportRows(
   rows: ExcelRow[],
-  // Caller-provided mapping. `gender` / `belt` / `weight` and either
-  // `firstName` + `lastName` or a combined `name` column are required;
-  // everything else is optional because not every upload carries a DOB
-  // column or a school column.
   mapping: Partial<ColumnMapping>,
-  options: ImportOptions = {}
-): Promise<ImportResult> {
-  const matchScope = options.matchScope ?? 'none';
-  if (rows.length > MAX_IMPORT_ROWS) {
-    throw new AppError(`Import limited to ${MAX_IMPORT_ROWS} rows`, ErrorCode.IMPORT_FAILED, 400, {
-      recoverable: true,
-      suggestion: `Split the file into parts of at most ${MAX_IMPORT_ROWS} rows.`,
-    });
-  }
-
-  // Required-field guard. Throwing here keeps the existing per-row
-  // error reporting downstream (`result.errors.push(...)`) untouched —
-  // a missing required mapping is a hard failure for the whole import,
-  // not a per-row error.
+): { prepared: PreparedImportRow[]; errors: Array<{ row: number; message: string }> } {
   const firstNameCol = mapping.firstName || undefined;
   const lastNameCol = mapping.lastName || undefined;
-  const genderCol = mapping.gender;
-  const beltCol = mapping.belt;
-  const weightCol = mapping.weight;
-  const hasNameColumns = Boolean((firstNameCol && lastNameCol) || mapping.name);
-  if (!hasNameColumns || !genderCol || !beltCol || !weightCol) {
-    throw new AppError(
-      'Mapping is missing required columns: firstName and lastName (or a combined name column), gender, belt, weight',
-      ErrorCode.VALIDATION_ERROR,
-      400,
-    );
-  }
-
-  const result: ImportResult = {
-    imported: 0,
-    updated: 0,
-    skipped: 0,
-    errors: [],
-  };
-
-  // Phase 1: validate every row (no database access).
-  const prepared: PreparedRow[] = [];
+  const genderCol = mapping.gender ?? '';
+  const beltCol = mapping.belt ?? '';
+  const weightCol = mapping.weight ?? '';
+  const prepared: PreparedImportRow[] = [];
+  const errors: Array<{ row: number; message: string }> = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowNum = spreadsheetRowNumber(row, i);
     const skip = (message: string) => {
-      result.errors.push({ row: rowNum, message });
-      result.skipped++;
+      errors.push({ row: rowNum, message });
     };
 
     let firstName = firstNameCol ? collapseSpaces(String(row[firstNameCol] || '')) : '';
@@ -209,6 +182,7 @@ export async function importFromExcel(
 
     prepared.push({
       rowNum,
+      sourceIndex: i,
       firstName,
       lastName,
       gender,
@@ -223,11 +197,62 @@ export async function importFromExcel(
     });
   }
 
+  return { prepared, errors };
+}
+
+export async function importFromExcel(
+  prisma: PrismaClient,
+  rows: ExcelRow[],
+  // Caller-provided mapping. `gender` / `belt` / `weight` and either
+  // `firstName` + `lastName` or a combined `name` column are required;
+  // everything else is optional because not every upload carries a DOB
+  // column or a school column.
+  mapping: Partial<ColumnMapping>,
+  options: ImportOptions = {}
+): Promise<ImportResult> {
+  const matchScope = options.matchScope ?? 'none';
+  if (rows.length > MAX_IMPORT_ROWS) {
+    throw new AppError(`Import limited to ${MAX_IMPORT_ROWS} rows`, ErrorCode.IMPORT_FAILED, 400, {
+      recoverable: true,
+      suggestion: `Split the file into parts of at most ${MAX_IMPORT_ROWS} rows.`,
+    });
+  }
+
+  // Required-field guard. Throwing here keeps the existing per-row
+  // error reporting downstream (`result.errors.push(...)`) untouched —
+  // a missing required mapping is a hard failure for the whole import,
+  // not a per-row error.
+  const firstNameCol = mapping.firstName || undefined;
+  const lastNameCol = mapping.lastName || undefined;
+  const genderCol = mapping.gender;
+  const beltCol = mapping.belt;
+  const weightCol = mapping.weight;
+  const hasNameColumns = Boolean((firstNameCol && lastNameCol) || mapping.name);
+  if (!hasNameColumns || !genderCol || !beltCol || !weightCol) {
+    throw new AppError(
+      'Mapping is missing required columns: firstName and lastName (or a combined name column), gender, belt, weight',
+      ErrorCode.VALIDATION_ERROR,
+      400,
+    );
+  }
+
+  const result: ImportResult = {
+    imported: 0,
+    updated: 0,
+    skipped: 0,
+    errors: [],
+  };
+
+  // Phase 1: validate every row (no database access).
+  const { prepared, errors } = prepareImportRows(rows, mapping);
+  result.errors.push(...errors);
+  result.skipped += errors.length;
+
   // Phase 2: write in batches. Each batch commits on its own; if one fails
   // (Postgres aborts the whole transaction on the first error), its rows are
   // retried one by one so good rows still land and the failing row gets its
   // real error.
-  const writeRow = async (tx: Prisma.TransactionClient, row: PreparedRow): Promise<'imported' | 'updated'> => {
+  const writeRow = async (tx: Prisma.TransactionClient, row: PreparedImportRow): Promise<'imported' | 'updated'> => {
     // Check for existing competitor (by name + exact DOB).
     // Closes B7: case-insensitive match so a parent who
     // imported "Minho Kim" doesn't create a new row when

@@ -21,8 +21,8 @@ export const TEMPLATE_COLUMNS: TemplateColumn[] = [
   { header: 'Weight (lbs)', key: 'weight', required: true, example: '85', note: 'Required for Sparring events' },
   { header: 'Height', key: 'height', required: false, example: "4'8\"", note: 'Optional, format: 5\'10" or inches' },
   { header: 'School/Dojang', key: 'school', required: true, example: 'Tiger TKD Academy' },
-  { header: 'Patterns', key: 'patterns', required: false, example: 'Y', note: 'Y or blank' },
-  { header: 'Sparring', key: 'sparring', required: false, example: 'Y', note: 'Y or blank' },
+  { header: 'Patterns', key: 'patterns', required: false, example: 'Y', note: 'Y (or Yes, X, 1) to enter; blank if not' },
+  { header: 'Sparring', key: 'sparring', required: false, example: 'Y', note: 'Y (or Yes, X, 1) to enter; blank if not' },
   { header: 'Special Needs', key: 'specialNeeds', required: false, example: '', note: 'Optional notes' },
 ];
 
@@ -148,7 +148,8 @@ export function generateImportTemplate(): Buffer {
     { 'Import Instructions': '2. Type or paste your competitors under the headings, one competitor per row.' },
     { 'Import Instructions': `   Copying from another spreadsheet? Paste each column under the matching heading. See the "${EXAMPLE_SHEET_NAME}" sheet for what filled-in rows look like.` },
     { 'Import Instructions': '3. Save the file as .xlsx.' },
-    { 'Import Instructions': '4. In the app, go to Competitors > Import and choose this file.' },
+    { 'Import Instructions': '4. In the app, open your tournament and choose "Import from spreadsheet" to add everyone straight to it,' },
+    { 'Import Instructions': '   or go to Competitors > Import to add them to your competitor list only.' },
     { 'Import Instructions': '' },
     { 'Import Instructions': `Only the "Competitors" sheet is imported. The "${EXAMPLE_SHEET_NAME}" sheet and these instructions are ignored.` },
     { 'Import Instructions': '' },
@@ -177,7 +178,8 @@ export function generateImportTemplate(): Buffer {
   instructions.push({ 'Import Instructions': '  or MM/DD/YYYY (e.g., 03/15/2015)' });
   instructions.push({ 'Import Instructions': '' });
   instructions.push({ 'Import Instructions': 'EVENTS:' });
-  instructions.push({ 'Import Instructions': '  Enter "Y" in Patterns and/or Sparring columns to register for those events' });
+  instructions.push({ 'Import Instructions': '  Enter "Y" (or Yes, X, 1) in the Patterns and/or Sparring column to enter that event' });
+  instructions.push({ 'Import Instructions': '  Other sports: rename these two columns to your events (e.g. Kata and Kumite)' });
   instructions.push({ 'Import Instructions': '  Leave blank if not participating in that event' });
   instructions.push({ 'Import Instructions': '' });
   instructions.push({ 'Import Instructions': 'TIPS:' });

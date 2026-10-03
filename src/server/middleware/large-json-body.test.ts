@@ -32,6 +32,7 @@ function buildApp(role: string) {
   };
   app.post('/api/competitors/import', echo);
   app.post('/api/competitors/auto-map', echo);
+  app.post('/api/tournaments/:id/import', echo);
   app.post('/api/organizations/:orgId/logo-base64', echo);
   app.post('/api/other', echo);
   return { app, findUnique };
@@ -46,7 +47,7 @@ function tokenFor(userId: string, role: string) {
 describe('mountLargeJsonBodyRoutes', () => {
   it('rejects anonymous callers with 401 before parsing a large body', async () => {
     const { app } = buildApp('admin');
-    for (const path of ['/api/competitors/import', '/api/competitors/auto-map']) {
+    for (const path of ['/api/competitors/import', '/api/competitors/auto-map', '/api/tournaments/t-1/import']) {
       const res = await request(app).post(path).send(twoMegabyteBody);
       expect(res.status).toBe(401);
     }
@@ -64,7 +65,7 @@ describe('mountLargeJsonBodyRoutes', () => {
   it('accepts >1 MB bodies on import and auto-map for directors', async () => {
     const { app } = buildApp('director');
     const token = tokenFor('director-1', 'director');
-    for (const path of ['/api/competitors/import', '/api/competitors/auto-map']) {
+    for (const path of ['/api/competitors/import', '/api/competitors/auto-map', '/api/tournaments/t-1/import']) {
       const res = await request(app).post(path).set('Authorization', `Bearer ${token}`).send(twoMegabyteBody);
       expect(res.status).toBe(200);
       expect(res.body.bytes).toBeGreaterThan(2 * 1024 * 1024);

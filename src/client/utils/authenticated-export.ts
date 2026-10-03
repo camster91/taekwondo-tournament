@@ -23,6 +23,12 @@ export async function fetchAuthenticatedBlob(
     const signature = new TextDecoder().decode(await blob.slice(0, 5).arrayBuffer());
     if (signature !== '%PDF-') throw new Error('Export did not contain a valid PDF');
   }
+  if (expectedContentType.toLowerCase() === 'application/zip') {
+    const signature = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+    if (signature[0] !== 0x50 || signature[1] !== 0x4b || signature[2] !== 0x03 || signature[3] !== 0x04) {
+      throw new Error('Export did not contain a valid ZIP file');
+    }
+  }
   if (expectedContentType.toLowerCase() === 'application/json') {
     try {
       JSON.parse(await blob.text());

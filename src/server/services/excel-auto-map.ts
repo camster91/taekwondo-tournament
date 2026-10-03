@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import type { ColumnMapping, ExcelCellValue, ExcelRow } from './excel-import.js';
 import { MAX_IMPORT_ROWS, parseDateOfBirth } from './excel-import.js';
 import { AppError, ErrorCode } from '../utils/errors.js';
+import { getEventForSlot, type EventSlot } from '../../shared/constants/sport-profiles.js';
 
 /** Highest header row (1-indexed) a caller may name for an import. */
 export const MAX_HEADER_ROW = 20;
@@ -142,6 +143,12 @@ export function resolveImportSheet(
   return { sheetName, headerRow };
 }
 
+/** The trimmed, non-empty labels on `headerRow` (1-indexed) of a sheet. */
+export function sheetHeaders(workbook: XLSX.WorkBook, sheetName: string, headerRow: number): string[] {
+  const row = sheetMatrix(workbook.Sheets[sheetName])[headerRow - 1] || [];
+  return row.map((c) => String(c ?? '').trim()).filter(Boolean);
+}
+
 /**
  * Rows of `sheetName` as objects keyed by the header row's labels. Each row
  * keeps SheetJS's non-enumerable `__rowNum__` (0-based sheet row) so import
@@ -238,7 +245,11 @@ function tryParseHeightInches(v: ExcelCellValue): number | null {
  * Pass a Buffer (from multer or fs.readFile) of an .xlsx or .xlsm.
  */
 export function autoDetectMapping(buffer: Buffer): AutoMapResult {
-  const workbook = readUploadedWorkbook(buffer);
+  return autoDetectMappingFromWorkbook(readUploadedWorkbook(buffer));
+}
+
+/** {@link autoDetectMapping} for a workbook that is already parsed. */
+export function autoDetectMappingFromWorkbook(workbook: XLSX.WorkBook): AutoMapResult {
   const availableSheets = workbook.SheetNames;
   const warnings: string[] = [];
 
@@ -386,6 +397,67 @@ export function autoDetectMapping(buffer: Buffer): AutoMapResult {
     sampleRow,
     rowCount,
   };
+}
+
+/** Header words that mean a forms / non-combat event column. */
+const FORMS_EVENT_ALIASES = ['patterns', 'pattern', 'forms', 'form', 'kata', 'poomsae', 'poomse', 'hyung', 'tul'];
+/** Header words that mean a fighting event column. */
+const COMBAT_EVENT_ALIASES = ['sparring', 'spar', 'kyorugi', 'kumite', 'fighting', 'fight', 'bout', 'combat'];
+
+const words = (s: string): string[] => s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+
+/**
+ * How well a header names an event, 0 = not at all. Whole words only:
+ * "Patterns (Y/N)" and "Enter Kata?" match, "Formal name" does not.
+ */
+function scoreEventHeader(header: string, aliases: string[]): number {
+  const h = words(header);
+  if (h.length === 0) return 0;
+  for (let i = 0; i < aliases.length; i++) {
+    const a = words(aliases[i]);
+    if (a.length === 0) continue;
+    if (h.join(' ') === a.join(' ')) return 100 - i;
+    for (let start = 0; start + a.length <= h.length; start++) {
+      if (a.every((w, j) => h[start + j] === w)) return 70 - i;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Find the two event columns of a tournament spreadsheet. Each storage
+ * slot is looked up by the sport's own event name first (e.g. "Kata" /
+ * "Kumite" for Karate, "Randori" for Judo), then by the usual words for
+ * that kind of event (forms or fighting). A header is used for one slot
+ * only; `exclude` lists headers already mapped to other fields.
+ */
+export function detectEventColumns(
+  headers: string[],
+  sportSlug: string | null | undefined,
+  exclude: Iterable<string> = [],
+): Partial<Record<EventSlot, string>> {
+  const taken = new Set(exclude);
+  const candidates: Array<{ slot: EventSlot; header: string; score: number }> = [];
+  for (const slot of ['patterns', 'sparring'] as const) {
+    const event = getEventForSlot(sportSlug, slot);
+    if (!event) continue; // single-event sport: no second slot
+    const aliases = [event.name, event.id, ...(event.isCombat ? COMBAT_EVENT_ALIASES : FORMS_EVENT_ALIASES)];
+    for (const header of headers) {
+      if (taken.has(header)) continue;
+      const score = scoreEventHeader(header, aliases);
+      if (score > 0) candidates.push({ slot, header, score });
+    }
+  }
+  // Best matches claim their header first, so "Kata" goes to the slot
+  // named Kata even when the other slot would also accept it.
+  candidates.sort((a, b) => b.score - a.score);
+  const result: Partial<Record<EventSlot, string>> = {};
+  for (const { slot, header } of candidates) {
+    if (result[slot] || taken.has(header)) continue;
+    result[slot] = header;
+    taken.add(header);
+  }
+  return result;
 }
 
 function emptyConfidence(): Record<keyof ColumnMapping, number> {

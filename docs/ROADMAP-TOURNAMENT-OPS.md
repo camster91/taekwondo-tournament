@@ -55,12 +55,15 @@ edits; bracket corrections with undo; Excel import with column auto-detection.
 | 10 | ~~Move people between bracket slots across matches, and add/remove a bye slot, without clearing the bracket~~ Done (see below) | M–L |
 | 11 | Import straight into a tournament: rows marked Y for Patterns/Sparring become registrations for those events | M |
 
+| 10 | Move people between bracket slots across matches, and add/remove a bye slot, without clearing the bracket | M–L |
+| 11 | ~~Import straight into a tournament: rows marked Y for Patterns/Sparring become registrations for those events~~ Done (see below) | M |
+
 ### 3. Paper that matches what people know
 | # | What | Size |
 |---|------|------|
-| 12 | "Classic" bracket PDF matching the old sheets (legal landscape, single elimination 16/8/4/2, belt/dan range footer, dan per slot, 1st/2nd/3rd boxes) and a ZIP of all brackets organised like the old folders | M |
-| 13 | Tournament-level default bracket format (the old events used single elimination; the app defaults to double) | S |
-| 14 | Printable ring-by-time schedule using the same division names as the bracket PDFs | S |
+| ~~12~~ | Done 2026-10-03 — see below | M |
+| ~~13~~ | Done 2026-10-03 — see below | S |
+| ~~14~~ | Done 2026-10-03 — see below | S |
 
 ### 4. Smaller items
 | # | What | Size |
@@ -87,3 +90,20 @@ swap people across matches; "Take out (make a bye)" empties a spot and
 "Place" puts someone without a spot into an empty one. Only unplayed
 first-round matches change; later rounds re-sync. Changing the bracket size
 (e.g. 8 to 16 spots) still needs Reseed.
+
+- #11 Import straight into a tournament: "Import from spreadsheet" on the
+  tournament page. Y/Yes/X/1 in an event column (found by the sport's event
+  names, e.g. Kata/Kumite) registers that event; a preview shows new and
+  matched competitors, registrations, waiting list and skipped rows before
+  anything is saved. Existing competitors are reused, never changed.
+
+- #12 Paper brackets: a "Classic" sheet per division (legal landscape,
+  single-elimination 2/4/8/16/32 tree, "SPARRING Females 10 - 11 Heavy"
+  header, "Name / School · dan" per slot, 1st/2nd/3rd boxes, belt or dan
+  range footer). Winners fill in for single elimination; other formats
+  print the starting names. "Paper brackets" on Divisions (one division or
+  a ZIP of all, in `CB Females Sparring/` style folders) and Results.
+- #13 Tournament Settings → "Bracket type" (double or single elimination)
+  is used when brackets are made; double stays the default.
+- #14 Schedule → "Print by ring": a ring-by-time grid using the bracket
+  sheet names and the folder each sheet is in.

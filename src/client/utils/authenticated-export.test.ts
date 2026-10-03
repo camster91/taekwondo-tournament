@@ -21,7 +21,15 @@ describe('authenticated export transport', () => {
     expect(JSON.parse(await blob.text())).toEqual({ organization: 'test' });
   });
 
+  it('accepts a ZIP export', async () => {
+    const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]);
+    const response = new Response(new Blob([zip]), { status: 200, headers: { 'content-type': 'application/zip' } });
+    const blob = await fetchAuthenticatedBlob(vi.fn().mockResolvedValue(response), '/export', 'application/zip', {});
+    expect(blob.size).toBe(7);
+  });
+
   it.each([
+    [new Response(new Blob(['not a zip']), { status: 200, headers: { 'content-type': 'application/zip' } }), 'application/zip', 'valid ZIP'],
     [new Response('{"error":"Export unavailable"}', { status: 503, headers: { 'content-type': 'application/json' } }), 'application/pdf', 'Export unavailable'],
     [new Response('', { status: 200, headers: { 'content-type': 'application/pdf' } }), 'application/pdf', 'empty'],
     [new Response('<html>proxy</html>', { status: 200, headers: { 'content-type': 'text/html' } }), 'application/pdf', 'unexpected'],

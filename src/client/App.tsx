@@ -60,6 +60,7 @@ const TournamentDetail = lazy(() => import('./pages/TournamentDetail'));
 const TournamentSettings = lazy(() => import('./pages/TournamentSettings'));
 const Divisions = lazy(() => import('./pages/Divisions'));
 const Schedule = lazy(() => import('./pages/Schedule'));
+const SchedulePrint = lazy(() => import('./pages/SchedulePrint'));
 const BracketEditor = lazy(() => import('./pages/BracketEditor'));
 const PublicRegister = lazy(() => import('./pages/PublicRegister'));
 const CheckRegistration = lazy(() => import('./pages/CheckRegistration'));
@@ -720,6 +721,14 @@ function AppRoutes() {
               element={
                 <ProtectedRoute requiredRoles={['admin', 'director']}>
                   <Schedule />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tournaments/:id/schedule/print"
+              element={
+                <ProtectedRoute requiredRoles={['admin', 'director', 'scorekeeper', 'viewer']}>
+                  <SchedulePrint />
                 </ProtectedRoute>
               }
             />

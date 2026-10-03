@@ -30,9 +30,11 @@ import {
   CheckCircle2,
   Shield,
   Building2,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import CompetitorPicker from '../components/CompetitorPicker';
+import TournamentImportModal from '../components/TournamentImportModal';
 import CloseButton from '../components/ui/CloseButton';
 import { StatsSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -144,6 +146,9 @@ export default function TournamentDetail() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  // The spreadsheet import creates competitors: admins and directors only.
+  const canImport = hasRole(['admin', 'director']);
   const [bulkRegisterError, setBulkRegisterError] = useState<string | null>(null);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -933,6 +938,12 @@ export default function TournamentDetail() {
                 <Plus className="h-4 w-4 mr-2" />
                 Add Competitors
               </Button>
+              {canImport && (
+                <Button variant="secondary" size="sm" onClick={() => setShowImportModal(true)}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" aria-hidden="true" />
+                  Import from spreadsheet
+                </Button>
+              )}
             </div>
           }
         />
@@ -1242,6 +1253,14 @@ export default function TournamentDetail() {
               </div>
             </div>
           ) : undefined}
+        />
+      )}
+
+      {showImportModal && (
+        <TournamentImportModal
+          tournamentId={tournament.id}
+          eventLabels={eventLabels}
+          onClose={() => setShowImportModal(false)}
         />
       )}
 

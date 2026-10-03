@@ -37,6 +37,27 @@ export function bracketFormatError(format: unknown): string | null {
 }
 
 /**
+ * Formats a director can pick as the tournament-wide default in
+ * Tournament Settings (stored as `defaultBracketFormat` in
+ * Tournament.settings JSON). Double elimination stays the default.
+ */
+export const TOURNAMENT_DEFAULT_BRACKET_FORMATS = ['double_elim', 'single_elim'] as const;
+export type TournamentDefaultBracketFormat = typeof TOURNAMENT_DEFAULT_BRACKET_FORMATS[number];
+
+/** The tournament's default format; anything missing or unknown means double elimination. */
+export function tournamentDefaultBracketFormat(settings: string | null | undefined): TournamentDefaultBracketFormat {
+  if (!settings) return 'double_elim';
+  try {
+    const value = (JSON.parse(settings) as { defaultBracketFormat?: unknown } | null)?.defaultBracketFormat;
+    return (TOURNAMENT_DEFAULT_BRACKET_FORMATS as readonly unknown[]).includes(value)
+      ? (value as TournamentDefaultBracketFormat)
+      : 'double_elim';
+  } catch {
+    return 'double_elim';
+  }
+}
+
+/**
  * Generate a round-robin schedule.
  * n competitors → n(n-1)/2 matches. Uses the "circle method" so each
  * round has at most ⌈n/2⌉ matches and every competitor plays once per round.

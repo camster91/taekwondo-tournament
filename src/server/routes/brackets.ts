@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
 import { generateBracket, generateSingleElimination, type BracketStructure } from '../services/bracket-generator.js';
-import { generateRoundRobin, bracketFormatError, POOL_PLAY_UNAVAILABLE } from '../services/bracket-formats.js';
+import { generateRoundRobin, bracketFormatError, POOL_PLAY_UNAVAILABLE, tournamentDefaultBracketFormat } from '../services/bracket-formats.js';
 import {
   handleByeMatches,
   getBracketPlacements,
@@ -22,6 +22,7 @@ import {
   type DivisionInfo,
   type TournamentInfo,
 } from '../services/pdf-export.js';
+import { buildClassicSheets, zipClassicSheets } from '../services/classic-brackets.js';
 import {
   authenticate,
   requireTournamentAccess,
@@ -158,7 +159,7 @@ router.post('/division/:divisionId/generate', authenticate, bracketRebuildLimite
   // Per-tournament access: resolve division → tournamentId first.
   const divisionMeta = await prisma.division.findUnique({
     where: { id: divisionId },
-    select: { tournamentId: true, bracket: { select: { id: true } } },
+    select: { tournamentId: true, bracket: { select: { id: true } }, tournament: { select: { settings: true } } },
   });
   if (!divisionMeta) {
     return res.status(404).json({ error: 'Division not found' });
@@ -174,9 +175,14 @@ router.post('/division/:divisionId/generate', authenticate, bracketRebuildLimite
     });
   }
 
-  // format: 'double_elim' (default) | 'single_elim' | 'round_robin'.
+  // format: 'double_elim' | 'single_elim' | 'round_robin'. Without one,
+  // the tournament's default from Tournament Settings is used (double
+  // elimination unless the director picked single elimination).
   // pool_play is rejected (no finals stage), as is any unknown format.
-  const { seedingStrategy = 'school_spread', format = 'double_elim' } = req.body;
+  const {
+    seedingStrategy = 'school_spread',
+    format = tournamentDefaultBracketFormat(divisionMeta.tournament?.settings),
+  } = req.body;
   const formatError = bracketFormatError(format);
   if (formatError) {
     return res.status(400).json({ error: formatError });
@@ -1034,12 +1040,17 @@ router.post('/division/:divisionId/reset', authenticate, bracketRebuildLimiter, 
 // Generate brackets for all divisions in tournament (requires authentication + admin/director role)
 router.post('/tournament/:tournamentId/generate-all', authenticate, bracketRebuildLimiter, requireTournamentAccess('director'), async (req: Request, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  // format defaults to double_elim (matches the historical behavior of this route).
+  // format defaults to the tournament's default from Tournament Settings
+  // (double_elim unless the director picked single elimination).
   // Per-division format can also come from req.body.formats[divisionId] for callers
   // that want to specify per-division.
+  const tournamentSettings = await prisma.tournament.findUnique({
+    where: { id: getParam(req.params.tournamentId) },
+    select: { settings: true },
+  });
   const {
     seedingStrategy = 'school_spread',
-    format: defaultFormat = 'double_elim',
+    format: defaultFormat = tournamentDefaultBracketFormat(tournamentSettings?.settings),
     formats = {},
   } = req.body;
 
@@ -1503,6 +1514,56 @@ router.get('/tournament/:tournamentId/results/pdf', authenticate, requireTournam
     `attachment; filename="${tournament.name.replace(/[^a-z0-9]/gi, '_')}_results.pdf"`
   );
   res.send(Buffer.from(pdfBuffer));
+});
+
+// Classic paper bracket for one division (legal landscape, like the
+// old event sheets). Works before brackets are made: entrants are then
+// laid out in draft seed order.
+router.get('/division/:divisionId/classic-pdf', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.divisionId);
+
+  const divisionMeta = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { tournamentId: true },
+  });
+  if (!divisionMeta) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, divisionMeta.tournamentId, 'viewer');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+
+  const [file] = await buildClassicSheets(prisma, divisionMeta.tournamentId, divisionId);
+  if (!file) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+  const fileName = file.path.split('/').pop() || 'bracket.pdf';
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName.replace(/[^a-z0-9. _()-]/gi, '_')}"`);
+  res.send(file.pdf);
+});
+
+// Every division's classic sheet in one ZIP, in folders like the old
+// event ("CB Females Sparring/<division>.pdf").
+router.get('/tournament/:tournamentId/classic-zip', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const tournamentId = getParam(req.params.tournamentId);
+  const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId }, select: { name: true } });
+  if (!tournament) {
+    return res.status(404).json({ error: 'Tournament not found' });
+  }
+  const files = await buildClassicSheets(prisma, tournamentId);
+  if (files.length === 0) {
+    return res.status(404).json({ error: 'No divisions with competitors yet' });
+  }
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${tournament.name.replace(/[^a-z0-9]/gi, '_')}_classic_brackets.zip"`
+  );
+  res.send(zipClassicSheets(files));
 });
 
 // Generate certificate for a single placement
