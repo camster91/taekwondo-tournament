@@ -44,6 +44,7 @@ import { broadcastMatchUpdate, broadcastBracketRegenerated } from '../services/w
 import { createBracketWriteLimiter, createBracketRebuildLimiter } from '../middleware/bracket-rate-limit.js';
 import { getEventTypeLabel } from '../../shared/constants/sport-profiles.js';
 import { decideMatchResultWrite, matchResultSchema, type MatchResultRequest } from '../services/match-result-guard.js';
+import { planSlotEdit, parseBracketStructure, type SlotEdit } from '../services/bracket-slots.js';
 
 const router = Router();
 
@@ -728,6 +729,100 @@ router.post('/match/:matchId/swap', authenticate, bracketWriteLimiter, async (re
   res.json(updated);
 });
 
+// Move people between first-round spots, take someone out (their spot
+// becomes a BYE), or put a division member into an empty spot — without
+// clearing the bracket. Director only. Only unplayed first-round matches
+// can change; later rounds are re-derived by the advancement engine and
+// a change that would alter a started/finished match is refused (409).
+const slotRefSchema = z.object({
+  matchId: z.string().min(1).max(100),
+  slot: z.union([z.literal(1), z.literal(2)]),
+});
+const slotEditSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('move'), registrationId: z.string().min(1).max(100), from: slotRefSchema, to: slotRefSchema }),
+  z.object({ action: z.literal('remove'), registrationId: z.string().min(1).max(100), from: slotRefSchema }),
+  z.object({ action: z.literal('place'), registrationId: z.string().min(1).max(100), to: slotRefSchema }),
+]);
+
+router.post('/division/:divisionId/slots', authenticate, bracketWriteLimiter, validateRequest(slotEditSchema), async (req: AuthenticatedRequest, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const divisionId = getParam(req.params.divisionId);
+
+  const divisionMeta = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { tournamentId: true, deletedAt: true, bracket: { select: { id: true } } },
+  });
+  if (!divisionMeta || divisionMeta.deletedAt) {
+    return res.status(404).json({ error: 'Division not found' });
+  }
+  const access = await checkTournamentAccess(req, prisma, divisionMeta.tournamentId, 'director');
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+  if (!divisionMeta.bracket) {
+    return res.status(404).json({ error: 'This division has no bracket yet.' });
+  }
+  const bracketId = divisionMeta.bracket.id;
+  const change = req.body as SlotEdit;
+  const user = req.user;
+
+  await prisma.$transaction(async (tx) => {
+    await lockBracket(tx, bracketId);
+    const bracket = await tx.bracket.findUnique({ where: { id: bracketId }, include: { matches: true } });
+    if (!bracket) {
+      throw new AppError('Bracket not found', ErrorCode.BRACKET_NOT_FOUND, 404, { recoverable: false });
+    }
+    const assignments = await tx.divisionAssignment.findMany({ where: { divisionId }, select: { registrationId: true } });
+    const plan = planSlotEdit(
+      parseBracketStructure(bracket.structure),
+      bracket.matches,
+      change,
+      new Set(assignments.map((a) => a.registrationId)),
+    );
+
+    for (const u of plan.updates) {
+      await tx.match.update({ where: { id: u.id }, data: u.data });
+    }
+    await tx.bracket.update({ where: { id: bracketId }, data: { structure: JSON.stringify(plan.structure) } });
+
+    const what = change.action === 'move'
+      ? 'Moved to another first-round spot'
+      : change.action === 'remove'
+        ? 'Taken out of the bracket (spot is now a BYE)'
+        : 'Put into an empty first-round spot';
+    for (const entry of plan.entryChanges) {
+      await tx.matchAuditLog.create({
+        data: {
+          matchId: entry.matchId,
+          action: `slot_${change.action}`,
+          previousState: JSON.stringify(entry.before),
+          newState: JSON.stringify(entry.after),
+          userId: user?.id,
+          userEmail: user?.email,
+          reason: `${what}: registration ${change.registrationId}; ${summarizeBracketUpdates(plan.downstream)}`,
+        },
+      });
+    }
+  });
+
+  broadcastBracketRegenerated(divisionId);
+
+  const updated = await prisma.bracket.findUnique({
+    where: { id: bracketId },
+    include: {
+      matches: {
+        include: {
+          competitor1: { include: { competitor: true } },
+          competitor2: { include: { competitor: true } },
+          winner: { include: { competitor: true } },
+        },
+        orderBy: [{ bracketType: 'asc' }, { roundNumber: 'asc' }, { matchNumber: 'asc' }],
+      },
+    },
+  });
+  res.json(updated);
+});
+
 // Get match audit log (requires authentication + tournament access;
 // closes S8 — the audit log leaks scorekeeper emails + prior match
 // state across orgs without this check).
@@ -805,6 +900,16 @@ router.post('/match/:matchId/undo', authenticate, bracketWriteLimiter, async (re
     });
     if (!lastLog) {
       return { error: { status: 404, body: { error: 'No changes to undo' } } } as const;
+    }
+    if (lastLog.action.startsWith('slot_')) {
+      // A spot change is not a result; "undoing" it here would restore
+      // an old status/winner onto the new pairing. Move people back.
+      return {
+        error: {
+          status: 409,
+          body: { error: 'The last change here moved people between spots, not a result. Move them back in the bracket editor instead.' },
+        },
+      } as const;
     }
     const timeSinceChange = Date.now() - lastLog.createdAt.getTime();
     if (timeSinceChange > UNDO_WINDOW_MS) {
