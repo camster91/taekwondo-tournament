@@ -694,6 +694,17 @@ triggers split), `eventTypeLabels`, `customWeightClasses`,
 `enableSmartSplitting/Merging`. Sport-specific labels come from
 `getSportProfile(tournament.sportProfileSlug)`.
 
+**Fair divisions (opt-in, rules JSON):** `rules.weights.strategy: 'auto'`
+cuts each sparring group by weight into similar-size classes
+(`autoMaxClasses`, `targetClassSize`); `rules.ageBands.blackBeltBands` gives
+black belts their own bands; `rules.fairness` (`FairDivisionRules` in
+`tournament-rules.ts`, stored under the `fairness` settings key) holds
+`splitBySimilarity`, `heightTieBreak`, per-age `limits` (max weight/age gap:
+block merges, bound auto classes and splits, warn naming the furthest pair),
+`schoolAliases` and `schoolShareWarningPercent`. School matching for
+fairness goes through `src/shared/utils/school.ts` (`createSchoolResolver`).
+Defaults leave categorization unchanged.
+
 **Fixed:** sparring registrations with no weight are excluded from
 auto-categorization with a warning (they used to be treated as 0 lbs
 and land in the lightest class). The weight boundary is

@@ -23,7 +23,12 @@ import {
   type BracketRules,
   type WeightClassRuleConfig,
   type EventRules,
+  type FairDivisionRules,
+  type FairnessLimit,
+  DEFAULT_FAIR_DIVISION_RULES,
 } from '../../shared/constants/tournament-rules';
+import { PHYSICAL_THRESHOLDS } from '../../shared/constants/fairness-config';
+import type { SchoolAlias } from '../../shared/utils/school';
 import { DEFAULT_AGE_GROUPS, BB_AGE_GROUPS, type AgeGroup } from '../../shared/constants/age-groups';
 import { DEFAULT_WEIGHT_CLASSES, type WeightClassConfig } from '../../shared/constants/weight-classes';
 
@@ -79,6 +84,9 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
     setLocal(next);
     onChange(next);
   };
+
+  const fairness: FairDivisionRules = local.fairness ?? DEFAULT_FAIR_DIVISION_RULES;
+  const updateFairness = (patch: Partial<FairDivisionRules>) => update('fairness', { ...fairness, ...patch });
 
   const applyPreset = (preset: string) => {
     const groups = BELT_PRESETS[preset];
@@ -196,6 +204,23 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
             onChange={(bands) => update('ageBands', { ...local.ageBands, customBands: bands })}
           />
         )}
+        <div className="mt-4 border-t border-gray-200 pt-4">
+          <Checkbox
+            label="Black belts use their own age bands"
+            help="Like the old sheets: black belts 11 & under, 12-13, 14-15, 16-17, 18-35, 36+, while colour belts keep the bands above."
+            checked={Boolean(local.ageBands.blackBeltBands?.length)}
+            onChange={(on) => update('ageBands', { ...local.ageBands, blackBeltBands: on ? BB_AGE_GROUPS : undefined })}
+          />
+          {Boolean(local.ageBands.blackBeltBands?.length) && (
+            <div className="mt-3 sm:ml-7" data-testid="black-belt-age-bands">
+              <CustomAgeBands
+                value={local.ageBands.blackBeltBands ?? BB_AGE_GROUPS}
+                onChange={(bands) => update('ageBands', { ...local.ageBands, blackBeltBands: bands.length > 0 ? bands : undefined })}
+                namePrefix="Black belt band"
+              />
+            </div>
+          )}
+        </div>
         <div className="mt-3 flex items-center gap-3">
           <label className="text-sm font-medium text-gray-700">Min competitors in same age (by-year mode):</label>
           <input
@@ -221,7 +246,7 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
           />
           <Radio
             label="Auto"
-            sub="Compute classes from competitor count, target N per class"
+            sub="Sort each group by weight and cut it into Light / Middle / Heavy of similar size"
             checked={local.weights.strategy === 'auto'}
             onChange={() => update('weights', { ...local.weights, strategy: 'auto' })}
           />
@@ -246,16 +271,32 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
           </div>
         )}
         {local.weights.strategy === 'auto' && (
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-gray-700">Target competitors per class:</label>
-            <input
-              type="number"
-              min={2}
-              max={20}
-              value={local.weights.targetClassSize ?? 4}
-              onChange={(e) => update('weights', { ...local.weights, targetClassSize: parseInt(e.target.value) || 4 })}
-              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-            />
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <label htmlFor="auto-weight-target" className="text-sm font-medium text-gray-700">Target competitors per class:</label>
+              <input
+                id="auto-weight-target"
+                type="number"
+                min={2}
+                max={20}
+                value={local.weights.targetClassSize ?? 4}
+                onChange={(e) => update('weights', { ...local.weights, targetClassSize: parseInt(e.target.value) || 4 })}
+                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label htmlFor="auto-weight-max-classes" className="text-sm font-medium text-gray-700">Most classes per group:</label>
+              <input
+                id="auto-weight-max-classes"
+                type="number"
+                min={1}
+                max={8}
+                value={local.weights.autoMaxClasses ?? 3}
+                onChange={(e) => update('weights', { ...local.weights, autoMaxClasses: Math.min(8, Math.max(1, parseInt(e.target.value) || 3)) })}
+                className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+              />
+              <span className="text-xs text-gray-600">3 = Light / Middle / Heavy. A weight limit below can add more.</span>
+            </div>
           </div>
         )}
         <div className="mt-3 flex items-center gap-3">
@@ -328,6 +369,54 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
             checked={local.divisions.allowCrossTierMerge}
             onChange={(v) => update('divisions', { ...local.divisions, allowCrossTierMerge: v })}
           />
+        </div>
+      </Section>
+
+      {/* Fair divisions */}
+      <Section title="Fair Divisions" subtitle="Keep matchups fair: similar sizes, ages and schools. Everything here is off until you turn it on.">
+        <div className="space-y-5" data-testid="fair-divisions">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Checkbox
+              label="Keep similar people together when a division is too big"
+              help="Sparring is split by weight, patterns by age (or by belt if you split by belt). When off, people are dealt out evenly."
+              checked={fairness.splitBySimilarity}
+              onChange={(v) => updateFairness({ splitBySimilarity: v })}
+            />
+            <Checkbox
+              label="Use height when weights are the same"
+              help="When two sparring competitors weigh the same, the shorter one goes in the lighter group."
+              checked={fairness.heightTieBreak}
+              onChange={(v) => updateFairness({ heightTieBreak: v })}
+            />
+          </div>
+
+          <FairnessLimitsEditor
+            value={fairness.limits}
+            onChange={(limits) => updateFairness({ limits })}
+          />
+
+          <SchoolAliasEditor
+            value={fairness.schoolAliases}
+            onChange={(schoolAliases) => updateFairness({ schoolAliases })}
+          />
+
+          <div>
+            <label htmlFor="school-share-warning" className="block text-sm font-medium text-gray-900 mb-1">
+              Warn when one school is at least this % of a division
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="school-share-warning"
+                type="number"
+                min={0}
+                max={100}
+                value={fairness.schoolShareWarningPercent}
+                onChange={(e) => updateFairness({ schoolShareWarningPercent: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+                className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm"
+              />
+              <span className="text-xs text-gray-600">0 = off. Checked for divisions of 3 or more.</span>
+            </div>
+          </div>
         </div>
       </Section>
 
@@ -551,13 +640,14 @@ function BeltGroupEditor({ group, onChange, onRemove }: { group: BeltGroup; onCh
   );
 }
 
-function CustomAgeBands({ value, onChange }: { value: AgeGroup[]; onChange: (v: AgeGroup[]) => void }) {
+function CustomAgeBands({ value, onChange, namePrefix = 'Age band' }: { value: AgeGroup[]; onChange: (v: AgeGroup[]) => void; namePrefix?: string }) {
   return (
     <div className="space-y-2">
       {value.map((b, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={i} className="flex flex-wrap items-center gap-2">
           <input
             type="number"
+            aria-label={`${namePrefix} ${i + 1} youngest age`}
             value={b.min}
             onChange={(e) => { const next = [...value]; next[i] = { ...b, min: parseInt(e.target.value) || 0 }; onChange(next); }}
             className="w-16 px-2 py-1 border rounded text-sm"
@@ -566,6 +656,7 @@ function CustomAgeBands({ value, onChange }: { value: AgeGroup[]; onChange: (v: 
           <span>to</span>
           <input
             type="number"
+            aria-label={`${namePrefix} ${i + 1} oldest age`}
             value={b.max}
             onChange={(e) => { const next = [...value]; next[i] = { ...b, max: parseInt(e.target.value) || 0 }; onChange(next); }}
             className="w-16 px-2 py-1 border rounded text-sm"
@@ -573,12 +664,13 @@ function CustomAgeBands({ value, onChange }: { value: AgeGroup[]; onChange: (v: 
           />
           <input
             type="text"
+            aria-label={`${namePrefix} ${i + 1} name`}
             value={b.label}
             onChange={(e) => { const next = [...value]; next[i] = { ...b, label: e.target.value }; onChange(next); }}
-            className="flex-1 px-2 py-1 border rounded text-sm"
+            className="flex-1 min-w-0 px-2 py-1 border rounded text-sm"
             placeholder="Label (e.g. '4-5')"
           />
-          <button type="button" onClick={() => onChange(value.filter((_, j) => j !== i))} className="text-red-600 text-sm">Remove</button>
+          <button type="button" aria-label={`Remove ${namePrefix.toLowerCase()} ${i + 1}`} onClick={() => onChange(value.filter((_, j) => j !== i))} className="text-red-600 text-sm">Remove</button>
         </div>
       ))}
       <button type="button" onClick={() => onChange([...value, { min: 4, max: 5, label: '4-5' }])} className="text-sm text-blue-600">+ Add band</button>
@@ -655,6 +747,148 @@ function EventRuleEditor<T extends PatternRule | SparringRule>({
           />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Suggested limits: one per standard age band, from the sparring weight guide. */
+function suggestedLimits(): FairnessLimit[] {
+  return DEFAULT_AGE_GROUPS.map((band) => ({
+    ageMin: band.min,
+    ageMax: band.max,
+    maxWeightGapLbs: PHYSICAL_THRESHOLDS.weight[band.label],
+  }));
+}
+
+function FairnessLimitsEditor({ value, onChange }: { value: FairnessLimit[]; onChange: (v: FairnessLimit[]) => void }) {
+  const set = (i: number, patch: Partial<FairnessLimit>) => {
+    const next = [...value];
+    next[i] = { ...next[i], ...patch };
+    onChange(next);
+  };
+  const positive = (raw: string): number | undefined => {
+    const n = parseFloat(raw);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+  return (
+    <div>
+      <h4 className="text-sm font-semibold text-gray-900">Hard limits by age</h4>
+      <p className="text-xs text-gray-600 mb-2">
+        Small divisions are never merged if that would break a limit, and any division that still breaks one is listed
+        with the two people furthest apart. Automatic weight classes also keep to the weight limit. Leave a box empty for no limit.
+      </p>
+      <div className="space-y-2">
+        {value.map((limit, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2 text-sm border border-gray-200 rounded p-2" data-testid="fairness-limit">
+            <span className="text-gray-700">Ages</span>
+            <input
+              type="number" min={0} max={120}
+              aria-label={`Limit ${i + 1} youngest age`}
+              value={limit.ageMin}
+              onChange={(e) => set(i, { ageMin: parseInt(e.target.value) || 0 })}
+              className="w-16 px-2 py-1 border border-gray-300 rounded"
+            />
+            <span className="text-gray-700">to</span>
+            <input
+              type="number" min={0} max={120}
+              aria-label={`Limit ${i + 1} oldest age`}
+              value={limit.ageMax}
+              onChange={(e) => set(i, { ageMax: parseInt(e.target.value) || 0 })}
+              className="w-16 px-2 py-1 border border-gray-300 rounded"
+            />
+            <span className="text-gray-700">· most weight difference</span>
+            <input
+              type="number" min={1} max={500}
+              aria-label={`Limit ${i + 1} most weight difference in pounds`}
+              value={limit.maxWeightGapLbs ?? ''}
+              onChange={(e) => set(i, { maxWeightGapLbs: positive(e.target.value) })}
+              className="w-20 px-2 py-1 border border-gray-300 rounded"
+            />
+            <span className="text-gray-700">lb · most age difference</span>
+            <input
+              type="number" min={0} max={100}
+              aria-label={`Limit ${i + 1} most age difference in years`}
+              value={limit.maxAgeGapYears ?? ''}
+              onChange={(e) => {
+                const n = parseInt(e.target.value);
+                set(i, { maxAgeGapYears: Number.isFinite(n) && n >= 0 ? n : undefined });
+              }}
+              className="w-16 px-2 py-1 border border-gray-300 rounded"
+            />
+            <span className="text-gray-700">years</span>
+            <button
+              type="button"
+              aria-label={`Remove limit ${i + 1}`}
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+              className="ml-auto text-red-600 hover:text-red-800 text-sm"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-3">
+        <button type="button" onClick={() => onChange([...value, { ageMin: 4, ageMax: 99 }])} className="text-sm text-blue-600 hover:text-blue-800">
+          + Add limit
+        </button>
+        {value.length === 0 && (
+          <button type="button" onClick={() => onChange(suggestedLimits())} className="text-sm text-blue-600 hover:text-blue-800">
+            Use suggested weight limits
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SchoolAliasEditor({ value, onChange }: { value: SchoolAlias[]; onChange: (v: SchoolAlias[]) => void }) {
+  const set = (i: number, patch: Partial<SchoolAlias>) => {
+    const next = [...value];
+    next[i] = { ...next[i], ...patch };
+    onChange(next);
+  };
+  return (
+    <div>
+      <h4 className="text-sm font-semibold text-gray-900">Same school, different names</h4>
+      <p className="text-xs text-gray-600 mb-2">
+        Capitals, spaces and punctuation are already ignored (&ldquo;Newton&rsquo;s TKD&rdquo; is &ldquo;newtons tkd&rdquo;).
+        Add names that are still the same school, such as a branch, so they are kept apart like one school.
+        Rows missing either name are not saved.
+      </p>
+      <div className="space-y-2">
+        {value.map((entry, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2 text-sm" data-testid="school-alias">
+            <input
+              type="text"
+              aria-label={`School name ${i + 1} as typed`}
+              value={entry.alias}
+              placeholder="e.g. Newtons TKD (Markham)"
+              onChange={(e) => set(i, { alias: e.target.value })}
+              className="flex-1 min-w-[10rem] px-2 py-1 border border-gray-300 rounded"
+            />
+            <span className="text-gray-700">is the same school as</span>
+            <input
+              type="text"
+              aria-label={`School name ${i + 1} belongs to`}
+              value={entry.school}
+              placeholder="e.g. Newtons TKD"
+              onChange={(e) => set(i, { school: e.target.value })}
+              className="flex-1 min-w-[10rem] px-2 py-1 border border-gray-300 rounded"
+            />
+            <button
+              type="button"
+              aria-label={`Remove school name ${i + 1}`}
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+              className="text-red-600 hover:text-red-800 text-sm"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={() => onChange([...value, { alias: '', school: '' }])} className="mt-2 text-sm text-blue-600 hover:text-blue-800">
+        + Add school name
+      </button>
     </div>
   );
 }

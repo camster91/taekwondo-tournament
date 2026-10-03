@@ -6,6 +6,7 @@
 // competitors, 8 age bands, 2 tiers, 4 weight classes per age band).
 
 import type { AgeGroup } from './age-groups.js';
+import type { SchoolAlias } from '../utils/school.js';
 import { DEFAULT_AGE_GROUPS, BB_AGE_GROUPS } from './age-groups.js';
 import { DEFAULT_WEIGHT_CLASSES, type WeightClassConfig } from './weight-classes.js';
 
@@ -59,6 +60,11 @@ export interface AgeBandConfig {
   // For 'byYear' mode: minimum 2 competitors in the same age before
   // they get their own division, otherwise they merge with adjacent age.
   yearMinDivisionSize?: number;
+  // Optional age bands used only for black belts (the old sheets used
+  // 11 & under, 12-13, 14-15, 16-17, 18-35, 36+ for black belts and the
+  // colour-belt bands for everyone else). Unset = black belts use the
+  // same bands as colour belts.
+  blackBeltBands?: AgeGroup[];
 }
 
 export const DEFAULT_AGE_BAND_CONFIG: AgeBandConfig = {
@@ -83,6 +89,9 @@ export interface WeightClassRuleConfig {
   customClasses?: WeightClassConfig[];
   // For very small divisions (4 or fewer), skip weight classing entirely
   skipIfDivisionSmallerThan?: number;
+  // For 'auto' strategy: the most classes a group is cut into before a
+  // fairness weight limit asks for more (3 = Light / Middle / Heavy).
+  autoMaxClasses?: number;
 }
 
 export const DEFAULT_WEIGHT_CONFIG: WeightClassRuleConfig = {
@@ -187,6 +196,42 @@ export const DEFAULT_EVENT_RULES: EventRules = {
   },
 };
 
+// ─── Fair divisions (opt-in) ────────────────────────────────────────────
+// Hard limits for one range of ages. A division whose age band overlaps
+// [ageMin, ageMax] must keep its weight and age spread within these (the
+// strictest overlapping limit wins).
+export interface FairnessLimit {
+  ageMin: number;
+  ageMax: number;
+  // Heaviest minus lightest in one sparring division, in lb.
+  maxWeightGapLbs?: number;
+  // Oldest minus youngest in one division, in whole years.
+  maxAgeGapYears?: number;
+}
+
+export interface FairDivisionRules {
+  // Split a too-big division into people who are alike (sparring: by
+  // weight; patterns: by age then belt) instead of dealing them out.
+  splitBySimilarity: boolean;
+  // Use height to order people of the same weight (sparring).
+  heightTieBreak: boolean;
+  // Hard weight/age limits per age range. Merges that would break one are
+  // blocked, and divisions that still break one are listed as warnings.
+  limits: FairnessLimit[];
+  // Different spellings that are the same school.
+  schoolAliases: SchoolAlias[];
+  // Warn when one school is at least this % of a division (0 = off).
+  schoolShareWarningPercent: number;
+}
+
+export const DEFAULT_FAIR_DIVISION_RULES: FairDivisionRules = {
+  splitBySimilarity: false,
+  heightTieBreak: false,
+  limits: [],
+  schoolAliases: [],
+  schoolShareWarningPercent: 0,
+};
+
 // ─── Master rules object ────────────────────────────────────────────────
 export interface TournamentRules {
   version: number;            // schema version, bump when shape changes
@@ -196,6 +241,8 @@ export interface TournamentRules {
   divisions: DivisionRules;
   brackets: BracketRules;
   events: EventRules;
+  // Opt-in fairness settings (all off by default).
+  fairness?: FairDivisionRules;
   // Per-event, per-tier overrides
   // e.g. overrides: { sparring: { BB: { minDivisionSize: 3 } } }
   overrides?: Record<string, Record<string, Partial<DivisionRules>>>;
@@ -209,6 +256,7 @@ export const DEFAULT_TOURNAMENT_RULES: TournamentRules = {
   divisions: DEFAULT_DIVISION_RULES,
   brackets: DEFAULT_BRACKET_RULES,
   events: DEFAULT_EVENT_RULES,
+  fairness: DEFAULT_FAIR_DIVISION_RULES,
 };
 
 // ─── Type-safe accessors ────────────────────────────────────────────────
@@ -229,6 +277,60 @@ function sanitizeDivisionRules(divisions: DivisionRules): DivisionRules {
   };
 }
 
+function optionalNumber(value: unknown, min: number, max: number): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined;
+  return Math.min(max, Math.max(min, value));
+}
+
+function sanitizeAgeBands(value: unknown): AgeGroup[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const bands = value
+    .filter((b): b is AgeGroup => Boolean(b) && typeof b === 'object')
+    .map((b) => {
+      const min = clampInt(b.min, 0, 120, 0);
+      const max = Math.max(min, clampInt(b.max, 0, 120, min));
+      const label = typeof b.label === 'string' && b.label.trim() ? b.label.trim().slice(0, 40) : `${min}-${max}`;
+      return { min, max, label };
+    })
+    .slice(0, 30);
+  return bands.length > 0 ? bands : undefined;
+}
+
+/**
+ * Fairness settings come from a director's PUT; keep only known fields,
+ * clamp numbers and cap list sizes so a bad save cannot break sorting.
+ */
+export function sanitizeFairDivisionRules(value: unknown): FairDivisionRules {
+  const raw = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as Record<string, unknown>;
+  const limits = (Array.isArray(raw.limits) ? raw.limits : [])
+    .filter((l): l is Record<string, unknown> => Boolean(l) && typeof l === 'object')
+    .map((l) => {
+      const ageMin = clampInt(l.ageMin, 0, 120, 0);
+      const limit: FairnessLimit = { ageMin, ageMax: Math.max(ageMin, clampInt(l.ageMax, 0, 120, 120)) };
+      const weight = optionalNumber(l.maxWeightGapLbs, 1, 500);
+      const age = optionalNumber(l.maxAgeGapYears, 0, 100);
+      if (weight !== undefined) limit.maxWeightGapLbs = weight;
+      if (age !== undefined) limit.maxAgeGapYears = Math.round(age);
+      return limit;
+    })
+    .slice(0, 30);
+  const schoolAliases = (Array.isArray(raw.schoolAliases) ? raw.schoolAliases : [])
+    .filter((a): a is Record<string, unknown> => Boolean(a) && typeof a === 'object')
+    .map((a) => ({
+      alias: typeof a.alias === 'string' ? a.alias.trim().slice(0, 120) : '',
+      school: typeof a.school === 'string' ? a.school.trim().slice(0, 120) : '',
+    }))
+    .filter((a) => a.alias && a.school)
+    .slice(0, 300);
+  return {
+    splitBySimilarity: raw.splitBySimilarity === true,
+    heightTieBreak: raw.heightTieBreak === true,
+    limits,
+    schoolAliases,
+    schoolShareWarningPercent: clampInt(raw.schoolShareWarningPercent, 0, 100, 0),
+  };
+}
+
 export function parseTournamentRules(json: string | null | undefined): TournamentRules {
   if (!json) return DEFAULT_TOURNAMENT_RULES;
   try {
@@ -238,14 +340,25 @@ export function parseTournamentRules(json: string | null | undefined): Tournamen
       ...DEFAULT_TOURNAMENT_RULES,
       ...parsed,
       beltGroups: parsed.beltGroups ?? DEFAULT_BELT_GROUPS,
-      ageBands: { ...DEFAULT_AGE_BAND_CONFIG, ...parsed.ageBands },
-      weights: { ...DEFAULT_WEIGHT_CONFIG, ...parsed.weights },
+      ageBands: {
+        ...DEFAULT_AGE_BAND_CONFIG,
+        ...parsed.ageBands,
+        blackBeltBands: sanitizeAgeBands(parsed.ageBands?.blackBeltBands),
+      },
+      weights: {
+        ...DEFAULT_WEIGHT_CONFIG,
+        ...parsed.weights,
+        ...(parsed.weights?.autoMaxClasses !== undefined
+          ? { autoMaxClasses: clampInt(parsed.weights.autoMaxClasses, 1, 8, 3) }
+          : {}),
+      },
       divisions: sanitizeDivisionRules({ ...DEFAULT_DIVISION_RULES, ...parsed.divisions }),
       brackets: { ...DEFAULT_BRACKET_RULES, ...parsed.brackets },
       events: {
         patterns: { ...DEFAULT_EVENT_RULES.patterns, ...parsed.events?.patterns },
         sparring: { ...DEFAULT_EVENT_RULES.sparring, ...parsed.events?.sparring },
       },
+      fairness: sanitizeFairDivisionRules(parsed.fairness),
     };
   } catch {
     return DEFAULT_TOURNAMENT_RULES;
