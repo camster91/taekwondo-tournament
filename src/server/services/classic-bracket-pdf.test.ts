@@ -1,14 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import {
+  buildClassicLosersSide,
   buildClassicRounds,
   classicBracketLayout,
+  classicLosersLayout,
+  classicPageColumns,
   classicSheetCapacity,
   classicSlotDetail,
+  classicTreePages,
+  CLASSIC_MIN_SLOT_HEIGHT,
   generateClassicBracketPDF,
   type ClassicMatchInput,
   type ClassicSlot,
 } from './pdf-export.js';
 import { tournamentDefaultBracketFormat } from './bracket-formats.js';
+import { generateBracket, type BracketStructure, type CompetitorSeed } from './bracket-generator.js';
 import { createZip, crc32 } from '../utils/zip.js';
 import { inflateRawSync } from 'zlib';
 
@@ -131,6 +137,128 @@ describe('generateClassicBracketPDF', () => {
     expect(doc.internal.pageSize.getWidth()).toBeCloseTo(1008, 0);
     expect(doc.internal.pageSize.getHeight()).toBeCloseTo(612, 0);
     expect(Buffer.from(doc.output('arraybuffer')).subarray(0, 5).toString()).toBe('%PDF-');
+  });
+});
+
+describe('classicTreePages', () => {
+  it.each([2, 4, 8, 16, 32])('keeps the %i sheet on one page with room for 8pt names', (size) => {
+    const pages = classicTreePages(size);
+    expect(pages).toHaveLength(1);
+    expect(pages[0]).toMatchObject({ capacity: size, pageNumber: null, hasFinal: true });
+    const { columns, bracketTop, bracketBottom } = classicBracketLayout(size);
+    expect((bracketBottom - bracketTop) / columns[0].slotYs.length).toBeGreaterThanOrEqual(CLASSIC_MIN_SLOT_HEIGHT);
+  });
+
+  it('splits a 64 sheet into top and bottom halves plus a final page', () => {
+    const pages = classicTreePages(64);
+    expect(pages.map((p) => [p.capacity, p.columnOffset, p.part, p.pageNumber, p.totalPages, p.hasFinal])).toEqual([
+      [32, 0, 0, 1, 3, false],
+      [32, 0, 1, 2, 3, false],
+      [2, 5, 0, 3, 3, true],
+    ]);
+    for (const page of pages) {
+      const { columns, bracketTop, bracketBottom } = classicBracketLayout(page.capacity);
+      expect((bracketBottom - bracketTop) / columns[0].slotYs.length).toBeGreaterThanOrEqual(CLASSIC_MIN_SLOT_HEIGHT);
+    }
+  });
+
+  it('gives each page its own block of the tree', () => {
+    const tree = [64, 32, 16, 8, 4, 2, 1].map((n, c) => Array.from({ length: n }, (_, j) => `${c}:${j}`));
+    const [top, bottom, final] = classicTreePages(64).map((page) => classicPageColumns(tree, page));
+    expect(top.map((c) => c.length)).toEqual([32, 16, 8, 4, 2, 1]);
+    expect(top[0][0]).toBe('0:0');
+    expect(top[5]).toEqual(['5:0']);
+    expect(bottom[0][0]).toBe('0:32');
+    expect(bottom[5]).toEqual(['5:1']);
+    expect(final).toEqual([['5:0', '5:1'], ['6:0']]);
+  });
+
+  it('keeps 3rd place boxes on the final page of a split sheet', () => {
+    expect(classicBracketLayout(2, 64).placementBoxes.map((b) => b.label)).toEqual(['1st', '2nd', '3rd', '3rd']);
+  });
+});
+
+describe('losers side (double elimination)', () => {
+  const seeds = (n: number): CompetitorSeed[] =>
+    Array.from({ length: n }, (_, i) => ({ registrationId: `r${i + 1}`, name: `Player ${i + 1}`, school: `School ${i + 1}` }));
+  const inputs = (structure: BracketStructure, known: Record<number, Partial<ClassicMatchInput>> = {}): ClassicMatchInput[] =>
+    [
+      ...structure.winners.map((m) => ({ ...m, bracketType: 'winners' })),
+      ...structure.losers.map((m) => ({ ...m, bracketType: 'losers' })),
+      ...structure.finals.map((m) => ({ ...m, bracketType: 'finals' })),
+    ].map((m) => ({
+      bracketType: m.bracketType, roundNumber: m.round, matchNumber: m.matchNumber,
+      competitor1: null, competitor2: null, winner: null, ...known[m.matchNumber],
+    }));
+
+  it('labels every losers match with where its people come from, plus the grand final and reset', () => {
+    const structure = generateBracket(seeds(8), 'random');
+    const side = buildClassicLosersSide(structure, inputs(structure))!;
+    expect(side.rounds.map((r) => r.label)).toEqual(['Losers round 1', 'Losers round 2', 'Losers round 3', "Losers' final"]);
+    expect(side.rounds.flatMap((r) => r.matches.map((m) => m.matchNumber))).toEqual(structure.losers.map((m) => m.matchNumber).sort((a, b) => a - b));
+    const first = side.rounds[0].matches[0];
+    expect(first.slots.map((s) => s.feeder)).toEqual(['Loser of M1', 'Loser of M2']);
+    // Drop-down match: losers' survivor first, then the loser dropping from the winners' side.
+    expect(side.rounds[1].matches[0].slots.map((s) => s.feeder)).toEqual(['Winner of M8', 'Loser of M6']);
+
+    const [grand, reset] = side.finals;
+    expect(grand).toMatchObject({ matchNumber: structure.positions.grandFinals, title: 'Grand final' });
+    expect(grand.slots.map((s) => s.feeder)).toEqual([`Winner of M${structure.positions.winnersFinal}`, `Winner of M${structure.positions.losersFinal}`]);
+    expect(reset.matchNumber).toBe(structure.positions.reset);
+    expect(reset.note).toBe(`Only if the winner of M${structure.positions.losersFinal} wins M${structure.positions.grandFinals}`);
+  });
+
+  it('fills in names and winners already known', () => {
+    const structure = generateBracket(seeds(4), 'random');
+    const [a, b] = [slot(1), slot(2)];
+    const losersOne = structure.losers[0].matchNumber;
+    const side = buildClassicLosersSide(structure, inputs(structure, { [losersOne]: { competitor1: a, competitor2: b, winner: b } }))!;
+    const match = side.rounds[0].matches[0];
+    expect(match.slots.map((s) => s.competitor?.id)).toEqual(['r1', 'r2']);
+    expect(match.winner?.id).toBe('r2');
+  });
+
+  it('has no losers side for 2 people or single elimination', () => {
+    expect(buildClassicLosersSide(generateBracket(seeds(2), 'random'), [])).toBeNull();
+    expect(buildClassicLosersSide(null, [])).toBeNull();
+    expect(buildClassicLosersSide({ winners: [], losers: [], finals: [], competitorCount: 0, positions: { winnersFinal: null, losersFinal: null, grandFinals: null, reset: null } }, [])).toBeNull();
+  });
+
+  it.each([4, 8, 16, 32, 64])('lays out the %i bracket on one page without overlapping boxes', (n) => {
+    const structure = generateBracket(seeds(n), 'random');
+    const layout = classicLosersLayout(buildClassicLosersSide(structure, [])!);
+    expect(layout.columns).toHaveLength(new Set(structure.losers.map((m) => m.round)).size + 1);
+    expect(layout.columns.flatMap((c) => c.boxes)).toHaveLength(structure.losers.length + structure.finals.length);
+    layout.columns.forEach((col, c) => {
+      if (c > 0) expect(col.x).toBeGreaterThan(layout.columns[c - 1].x + layout.columns[c - 1].width);
+      expect(col.x + col.width).toBeLessThanOrEqual(layout.page.width);
+      col.boxes.forEach((box, j) => {
+        expect(box.height).toBeGreaterThanOrEqual(20);
+        expect(box.y).toBeGreaterThanOrEqual(layout.top);
+        expect(box.y + box.height).toBeLessThanOrEqual(layout.bottom);
+        if (j > 0) expect(box.y).toBeGreaterThan(col.boxes[j - 1].y + col.boxes[j - 1].height);
+      });
+    });
+  });
+});
+
+describe('generateClassicBracketPDF pages', () => {
+  const info = { name: 'Open', date: '2027-05-01' };
+  const sheet = (rounds: ReturnType<typeof buildClassicRounds>) => ({ title: 'SPARRING Males 12 - 14', divisionName: 'Div', beltRange: 'Black belts', rounds });
+
+  it('adds the losers side as a second page for double elimination', () => {
+    const structure = generateBracket(Array.from({ length: 8 }, (_, i) => ({ registrationId: `r${i + 1}`, name: `P${i}`, school: 'S' })), 'random');
+    const doc = generateClassicBracketPDF(info, {
+      ...sheet(buildClassicRounds(null, Array.from({ length: 8 }, (_, i) => slot(i + 1)))),
+      losers: buildClassicLosersSide(structure, []),
+    });
+    expect(doc.getNumberOfPages()).toBe(2);
+  });
+
+  it('prints a 32 sheet on one page and a 64 sheet on three', () => {
+    const entrants = (n: number) => Array.from({ length: n }, (_, i) => ({ ...slot(i + 1), name: `Alexandra Montgomery-Fitzgerald ${i}` }));
+    expect(generateClassicBracketPDF(info, sheet(buildClassicRounds(null, entrants(32)))).getNumberOfPages()).toBe(1);
+    expect(generateClassicBracketPDF(info, sheet(buildClassicRounds(null, entrants(40)))).getNumberOfPages()).toBe(3);
   });
 });
 

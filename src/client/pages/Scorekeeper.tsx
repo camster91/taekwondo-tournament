@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import MatchTimer from '../components/MatchTimer';
 import SpecialNeedsBadge from '../components/SpecialNeedsBadge';
+import MatchNoteButton from '../components/MatchNoteButton';
+import type { SpecialNeedsEntry } from '../utils/special-needs';
 import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import CloseButton from '../components/ui/CloseButton';
 import { useToast } from '../context/ToastContext';
@@ -209,6 +211,21 @@ export default function Scorekeeper() {
   }, [divisions, selectedDivision]);
 
   const currentMatch = readyMatches[currentMatchIndex];
+  // Special-needs notes for only the match on screen (viewers can't see them).
+  const currentMatchId = currentMatch?.id;
+  const { data: matchNotes } = useQuery<{ competitors: SpecialNeedsEntry[] }>({
+    queryKey: ['match-special-needs', currentMatchId],
+    queryFn: async () => {
+      const res = await fetch(`/api/brackets/match/${currentMatchId}/special-needs`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to load notes');
+      return res.json();
+    },
+    enabled: Boolean(currentMatchId && user && user.role !== 'viewer'),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const noteFor = (registrationId: string | undefined) =>
+    matchNotes?.competitors.find((entry) => entry.registrationId === registrationId);
   const resultValidationError = useMemo(
     () => validateResult(resultType, selectedWinner, currentMatch, score1, score2),
     [currentMatch, resultType, score1, score2, selectedWinner],
@@ -1129,13 +1146,14 @@ export default function Scorekeeper() {
           <div className="p-4 space-y-4">
             {/* Competitor 1 */}
             <div className="flex gap-3">
+              <div className="flex-1 min-w-0">
               <button
                 onClick={() => { if (currentMatch.competitor1) setSelectedWinner(currentMatch.competitor1.id); }}
                 disabled={!currentMatch.competitor1}
                 aria-pressed={selectedWinner === currentMatch.competitor1?.id}
                 data-winner-select
                 aria-label={`${getCompetitorName(currentMatch.competitor1)} — select as winner (press 1)`}
-                className={`flex-1 p-6 rounded-xl text-left transition-all ${
+                className={`w-full p-6 rounded-xl text-left transition-all ${
                   selectedWinner === currentMatch.competitor1?.id
                     ? 'bg-green-800 ring-4 ring-green-400'
                     : 'bg-surface-800 hover:bg-surface-700'
@@ -1145,14 +1163,9 @@ export default function Scorekeeper() {
                   <div className="min-w-0 flex-1">
                     <div className="text-2xl font-bold">{getCompetitorName(currentMatch.competitor1)}</div>
                     <div className="text-surface-300 mt-1">{getCompetitorSchool(currentMatch.competitor1)}</div>
-                    {currentMatch.competitor1 && (
+                    {currentMatch.competitor1?.competeWithOlder && (
                       <div className="mt-2">
-                        <SpecialNeedsBadge
-                          competitorNotes={currentMatch.competitor1.competitor.specialNeeds}
-                          registrationNotes={currentMatch.competitor1.specialNeeds}
-                          competeWithOlder={currentMatch.competitor1.competeWithOlder}
-                          size="md"
-                        />
+                        <SpecialNeedsBadge competeWithOlder size="md" />
                       </div>
                     )}
                     {penalties1 > 0 && (
@@ -1166,6 +1179,11 @@ export default function Scorekeeper() {
                   )}
                 </div>
               </button>
+              {(() => {
+                const entry = noteFor(currentMatch.competitor1?.id);
+                return entry ? <MatchNoteButton key={`${currentMatch.id}-${entry.registrationId}`} name={entry.name} note={entry.note} /> : null;
+              })()}
+              </div>
               {/* Penalty Controls for Competitor 1 */}
               {isCombatEvent && (
               <div className="flex flex-col gap-2" role="group" aria-label={`${getCompetitorName(currentMatch.competitor1)} penalty controls`}>
@@ -1197,13 +1215,14 @@ export default function Scorekeeper() {
 
             {/* Competitor 2 */}
             <div className="flex gap-3">
+              <div className="flex-1 min-w-0">
               <button
                 onClick={() => { if (currentMatch.competitor2) setSelectedWinner(currentMatch.competitor2.id); }}
                 disabled={!currentMatch.competitor2}
                 aria-pressed={selectedWinner === currentMatch.competitor2?.id}
                 data-winner-select
                 aria-label={`${getCompetitorName(currentMatch.competitor2)} — select as winner (press 2)`}
-                className={`flex-1 p-6 rounded-xl text-left transition-all ${
+                className={`w-full p-6 rounded-xl text-left transition-all ${
                   selectedWinner === currentMatch.competitor2?.id
                     ? 'bg-green-800 ring-4 ring-green-400'
                     : 'bg-surface-800 hover:bg-surface-700'
@@ -1213,14 +1232,9 @@ export default function Scorekeeper() {
                   <div className="min-w-0 flex-1">
                     <div className="text-2xl font-bold">{getCompetitorName(currentMatch.competitor2)}</div>
                     <div className="text-surface-300 mt-1">{getCompetitorSchool(currentMatch.competitor2)}</div>
-                    {currentMatch.competitor2 && (
+                    {currentMatch.competitor2?.competeWithOlder && (
                       <div className="mt-2">
-                        <SpecialNeedsBadge
-                          competitorNotes={currentMatch.competitor2.competitor.specialNeeds}
-                          registrationNotes={currentMatch.competitor2.specialNeeds}
-                          competeWithOlder={currentMatch.competitor2.competeWithOlder}
-                          size="md"
-                        />
+                        <SpecialNeedsBadge competeWithOlder size="md" />
                       </div>
                     )}
                     {penalties2 > 0 && (
@@ -1234,6 +1248,11 @@ export default function Scorekeeper() {
                   )}
                 </div>
               </button>
+              {(() => {
+                const entry = noteFor(currentMatch.competitor2?.id);
+                return entry ? <MatchNoteButton key={`${currentMatch.id}-${entry.registrationId}`} name={entry.name} note={entry.note} /> : null;
+              })()}
+              </div>
               {/* Penalty Controls for Competitor 2 */}
               {isCombatEvent && (
               <div className="flex flex-col gap-2" role="group" aria-label={`${getCompetitorName(currentMatch.competitor2)} penalty controls`}>

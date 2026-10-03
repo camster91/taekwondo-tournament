@@ -10,6 +10,7 @@ import {
   planFirstRound,
   rankCompetitors,
   resolveBracketRules,
+  schoolResolverForSettings,
   usesTournamentRules,
   withSeedFacts,
 } from './bracket-seeding.js';
@@ -22,6 +23,7 @@ import {
 import { computeBracketSync, isBracketComplete, type EngineMatch } from './match-advancement.js';
 import { buildProposedBracketCorrection } from './bracket-correction.js';
 import { countSameSchoolFirstRound } from '../../shared/utils/same-school.js';
+import { createSchoolResolver, type SchoolResolver } from '../../shared/utils/school.js';
 import { DEFAULT_BRACKET_RULES, type BracketRules } from '../../shared/constants/tournament-rules.js';
 
 // ─── helpers ───────────────────────────────────────────────────────────
@@ -99,9 +101,9 @@ function firstRound(structure: BracketStructure) {
     .sort((a, b) => a.matchNumber - b.matchNumber);
 }
 
-function sameSchoolSummary(structure: BracketStructure, competitors: CompetitorSeed[]) {
+function sameSchoolSummary(structure: BracketStructure, competitors: CompetitorSeed[], schools?: SchoolResolver) {
   const schoolOf = new Map(competitors.map((c) => [c.registrationId, c.school]));
-  return countSameSchoolFirstRound('double_elim', toRows(structure), (id) => schoolOf.get(id))!;
+  return countSameSchoolFirstRound('double_elim', toRows(structure), (id) => schoolOf.get(id), schools)!;
 }
 
 // ─── rules parsing ─────────────────────────────────────────────────────
@@ -496,6 +498,10 @@ describe('without the bracket-rules switch on, brackets are made as before', () 
   })();
   const savedTruthyString = JSON.stringify({ brackets: { applySeedingRules: 'true', round1Pairing: 'adjacent' } });
   const switchOn = JSON.stringify({ brackets: { applySeedingRules: true, round1Pairing: 'adjacent' } });
+  // School aliases with the switch off: the old generator ignores them.
+  const aliasesSwitchOff = JSON.stringify({
+    fairness: { schoolAliases: [{ alias: 'Tiger Dojang', school: 'Newtons TKD' }, { alias: 'Dragon Club', school: 'Newtons TKD' }] },
+  });
 
   it('only an explicit switch-on enables the bracket rules', () => {
     expect(bracketRulesEnabled(null)).toBe(false);
@@ -514,7 +520,7 @@ describe('without the bracket-rules switch on, brackets are made as before', () 
 
   for (let n = 2; n <= 17; n++) {
     it(`N=${n}: generate and reseed give the pre-change layout byte for byte`, async () => {
-      for (const settings of [null, '{}', JSON.stringify({ divisions: { minDivisionSize: 3 } }), savedSwitchOff, savedLegacy, savedTruthyString]) {
+      for (const settings of [null, '{}', JSON.stringify({ divisions: { minDivisionSize: 3 } }), savedSwitchOff, savedLegacy, savedTruthyString, aliasesSwitchOff]) {
         const seeding = await loadRuleSeeding(fakeDb(settings, n), 'div');
         expect(seeding).toBeNull();
         // generate / generate-all
@@ -575,5 +581,102 @@ describe('bracket corrections (reseed) follow the rules too', () => {
     expect(buildProposedBracketCorrection(snapshot, config, seeding)).toEqual(proposal);
     // Without seeding input the long-standing strategy is used.
     expect(buildProposedBracketCorrection(snapshot, config).structure?.seedingInfo?.strategy).toBe('school_spread');
+  });
+});
+
+// ─── school aliases ─────────────────────────────────────────────────────
+
+describe('school aliases decide who is a team-mate', () => {
+  const aliases = [{ alias: 'Newton TKD', school: 'Newtons' }];
+  const withAliases = createSchoolResolver(aliases);
+  // Newtons under two spellings, plus two other clubs. Adjacent pairing
+  // puts the two spellings together in matches 1 and 3.
+  const spellings = ['Newton TKD', 'Newtons', 'Tiger Dojang', 'Dragon Club', 'Newtons', 'Newton TKD', 'Dragon Club', 'Tiger Dojang'];
+
+  it('two spellings listed as aliases count as one school', () => {
+    const competitors = field(4, (i) => (i % 2 === 0 ? 'Newton TKD' : 'Newtons'));
+    const off = rules({ avoidSameSchoolRound1: false, round1Pairing: 'adjacent' });
+    expect(planFirstRound(competitors, off, 'k').sameSchoolFights).toBe(0);
+    expect(planFirstRound(competitors, off, 'k', withAliases).sameSchoolFights).toBe(2);
+    const structure = generateEliminationFromRules(competitors, 'double_elim', off, 'k', withAliases);
+    expect(structure.seedingInfo?.sameSchoolFirstRound).toBe(2);
+    expect(sameSchoolSummary(structure, competitors).count).toBe(0);
+    expect(sameSchoolSummary(structure, competitors, withAliases).count).toBe(2);
+  });
+
+  it('round 1 keeps alias team-mates apart', () => {
+    const competitors = field(8, (i) => spellings[i]);
+    for (const r1 of ['split', 'balanced', 'adjacent'] as const) {
+      const withoutAliasesPlan = generateEliminationFromRules(competitors, 'double_elim', rules({ round1Pairing: r1 }), 'k');
+      const plan = generateEliminationFromRules(competitors, 'double_elim', rules({ round1Pairing: r1 }), 'k', withAliases);
+      const summary = sameSchoolSummary(plan, competitors, withAliases);
+      expect(summary.count, r1).toBe(0);
+      expect(plan.seedingInfo?.sameSchoolFirstRound).toBe(0);
+      // Without the aliases only the spellings are kept apart.
+      expect(sameSchoolSummary(withoutAliasesPlan, competitors).count).toBe(0);
+    }
+    // ...so alias team-mates can still meet.
+    const adjacent = generateEliminationFromRules(competitors, 'double_elim', rules({ round1Pairing: 'adjacent' }), 'k');
+    expect(sameSchoolSummary(adjacent, competitors, withAliases).count).toBe(2);
+  });
+
+  it('no aliases gives exactly the same plans as before', () => {
+    const mixes: Array<(i: number) => string> = [
+      (i) => `School ${i}`,
+      (i) => (i % 2 === 0 ? "Newton's  TKD" : 'newtons tkd'),
+      (i) => (i % 3 === 0 ? 'Newtons TKD' : `Club ${i % 4}`),
+      (i) => spellings[i % spellings.length],
+    ];
+    for (let n = 2; n <= 16; n++) {
+      for (const mix of mixes) {
+        const competitors = field(n, mix);
+        for (const r1 of ['split', 'balanced', 'adjacent'] as const) {
+          const r = rules({ round1Pairing: r1 });
+          const before = planFirstRound(competitors, r, 'k');
+          expect(planFirstRound(competitors, r, 'k', createSchoolResolver(null))).toEqual(before);
+          expect(planFirstRound(competitors, r, 'k', createSchoolResolver([]))).toEqual(before);
+          expect(planFirstRound(competitors, r, 'k', schoolResolverForSettings(JSON.stringify({ brackets: r })))).toEqual(before);
+        }
+      }
+    }
+  });
+
+  it('loads the aliases with the bracket rules (generate, generate-all, reseed)', async () => {
+    const settings = JSON.stringify({
+      brackets: { applySeedingRules: true, round1Pairing: 'adjacent' },
+      fairness: { schoolAliases: aliases },
+    });
+    const competitors = field(8, (i) => spellings[i]);
+    const db = {
+      division: {
+        findUnique: async () => ({
+          id: 'div',
+          eventType: 'sparring',
+          tournament: { settings },
+          assignments: competitors.map((c, i) => ({
+            registrationId: c.registrationId,
+            registration: {
+              seeding: null,
+              experienceScore: null,
+              competitor: { id: `c${i}`, belt: 'Blue', beltStripe: null, danRank: null, yearsTraining: null },
+            },
+          })),
+        }),
+      },
+      competitorRating: { findMany: async () => [] },
+    } as never;
+    const seeding = await loadRuleSeeding(db, 'div');
+    expect(seeding?.schools?.key('Newton TKD')).toBe('newtons');
+    const structure = generateEliminationBracket(competitors, 'double_elim', 'school_spread', seeding);
+    expect(sameSchoolSummary(structure, competitors, withAliases).count).toBe(0);
+    const snapshot = {
+      tournamentId: 't', divisionId: 'div', divisionName: 'D', bracket: null,
+      matchAuditCount: 0, matchupHistoryCount: 0, matchAuditRows: [], matchupHistoryRows: [],
+      assignments: competitors.map((c) => ({
+        registrationId: c.registrationId, seedPosition: null, firstName: 'F', lastName: c.registrationId, school: c.school,
+      })),
+    };
+    const proposal = buildProposedBracketCorrection(snapshot, { format: 'double_elim', seedingStrategy: 'school_spread' }, seeding);
+    expect(sameSchoolSummary(proposal.structure!, competitors, withAliases).count).toBe(0);
   });
 });

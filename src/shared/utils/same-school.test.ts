@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { countSameSchoolFirstRound, describeSameSchoolFights, normalizeSchool } from './same-school';
+import { createSchoolResolver } from './school';
 
 const match = (matchNumber: number, a: string | null, b: string | null, roundNumber = 1, bracketType = 'winners') =>
   ({ matchNumber, roundNumber, bracketType, competitor1Id: a, competitor2Id: b });
@@ -42,6 +43,28 @@ describe('countSameSchoolFirstRound', () => {
     ], schoolOf)!;
     expect(result.unavoidable).toBe(2);
     expect(result.count).toBe(2);
+  });
+
+  it('counts organizer aliases as one school', () => {
+    const aliased: Record<string, string> = { n1: 'Newton TKD', n2: 'Newtons', n3: 'Newtons (Markham)', t1: 'Tiger Dojang' };
+    const matches = [match(1, 'n1', 'n2'), match(2, 'n3', 't1')];
+    const schools = createSchoolResolver([
+      { alias: 'Newton TKD', school: 'Newtons' },
+      { alias: 'Newtons (Markham)', school: 'Newtons' },
+    ]);
+    expect(countSameSchoolFirstRound('double_elim', matches, (id) => aliased[id])!.count).toBe(0);
+    const result = countSameSchoolFirstRound('double_elim', matches, (id) => aliased[id], schools)!;
+    expect(result.count).toBe(1);
+    expect(result.matches).toEqual([{ matchNumber: 1, school: 'Newtons' }]);
+    // 3 of the 4 places are Newtons over 2 fights: one fight is unavoidable.
+    expect(result.unavoidable).toBe(1);
+  });
+
+  it('without aliases counts exactly as before', () => {
+    const matches = [match(1, 'a1', 'a2'), match(2, 'b1', 'b2'), match(3, 'a3', 'b1'), match(4, 'x', 'y')];
+    const before = countSameSchoolFirstRound('double_elim', matches, schoolOf);
+    expect(countSameSchoolFirstRound('double_elim', matches, schoolOf, createSchoolResolver(null))).toEqual(before);
+    expect(countSameSchoolFirstRound('double_elim', matches, schoolOf, createSchoolResolver([]))).toEqual(before);
   });
 
   it('returns null for round robin and pool play', () => {

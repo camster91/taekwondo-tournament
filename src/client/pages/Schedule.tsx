@@ -26,6 +26,7 @@ import { DataTable, TableHead, TableBody } from '../components/ui';
 import ScheduleOptimizationReview from '../components/schedule/ScheduleOptimizationReview';
 import { isScheduleConditionBufferDirty, type ScheduleRecommendationRecord } from '../utils/schedule-recommendation';
 import { useTournamentEventLabels } from '../hooks/useTournamentEventLabels';
+import { fitTextToWidth } from '../../shared/utils/classic-paper';
 
 interface ScheduledDivision {
   divisionId: string;
@@ -533,7 +534,16 @@ export default function Schedule() {
           }
 
           doc.text(`${div.startTime}-${div.endTime}`, leftMargin, y);
-          doc.text(div.divisionName.substring(0, 35), leftMargin + colWidths[0], y);
+          // Shrink a long division name to fit its column instead of cutting it.
+          const name = fitTextToWidth(
+            div.divisionName,
+            colWidths[1] - 6,
+            (text, size) => (doc.getStringUnitWidth(text) * size) / doc.internal.scaleFactor,
+            9,
+          );
+          doc.setFontSize(name.fontSize);
+          doc.text(name.text, leftMargin + colWidths[0], y);
+          doc.setFontSize(9);
           doc.text(
             eventLabel(div.eventType),
             leftMargin + colWidths[0] + colWidths[1],

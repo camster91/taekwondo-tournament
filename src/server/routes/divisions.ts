@@ -23,6 +23,7 @@ import {
 import { z } from 'zod';
 import { validateRequest } from '../middleware/validate.js';
 import { sameEventAssignmentWhere } from '../services/division-assignment-rules.js';
+import { fairnessLimitConflict, hasFairnessLimits, manualMergeLimitBreaks } from '../services/manual-merge-fairness.js';
 
 const router = Router();
 
@@ -152,7 +153,10 @@ const divisionUpdateSchema = z.object({
 // Match slots are Registration rows. Scoring/results views only need the
 // competitor and bracket data, so never ship guardian contact details,
 // payment identifiers or the management-token hash to every viewer.
+// Special-needs notes stay out too: the scorekeeper fetches them for the
+// match being scored (GET /api/brackets/match/:matchId/special-needs).
 const MATCH_SLOT_REGISTRATION_OMIT = {
+  specialNeeds: true,
   parentName: true,
   parentEmail: true,
   parentPhone: true,
@@ -183,8 +187,8 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
         include: {
           matches: {
             include: {
-              competitor1: { omit: MATCH_SLOT_REGISTRATION_OMIT, include: { competitor: true } },
-              competitor2: { omit: MATCH_SLOT_REGISTRATION_OMIT, include: { competitor: true } },
+              competitor1: { omit: MATCH_SLOT_REGISTRATION_OMIT, include: { competitor: { omit: { specialNeeds: true } } } },
+              competitor2: { omit: MATCH_SLOT_REGISTRATION_OMIT, include: { competitor: { omit: { specialNeeds: true } } } },
             },
             orderBy: [{ roundNumber: 'asc' }, { matchNumber: 'asc' }],
           },
@@ -431,7 +435,8 @@ router.post('/tournament/:tournamentId/preview', authenticate, requireTournament
   }
 
   const preview = previewCategorization(registrations, categorizationConfig);
-  res.json(preview);
+  // The page notes when weight classes are made automatically.
+  res.json({ ...preview, weightStrategy: categorizationConfig.rules?.weights.strategy });
 });
 
 // Check if regenerating divisions would lose data (requires authentication)
@@ -999,7 +1004,7 @@ router.post('/:id/split', authenticate, async (req: AuthenticatedRequest, res: R
 // Merge multiple divisions (requires authentication + admin/director role)
 router.post('/merge', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const prisma: PrismaClient = req.app.locals.prisma;
-  const { sourceDivisionIds, targetDivisionId, auditReason } = req.body;
+  const { sourceDivisionIds, targetDivisionId, auditReason, confirmOverLimit } = req.body;
 
   if (!Array.isArray(sourceDivisionIds) || sourceDivisionIds.length === 0) {
     return res.status(400).json({ error: 'sourceDivisionIds must be a non-empty array' });
@@ -1016,6 +1021,9 @@ router.post('/merge', authenticate, async (req: AuthenticatedRequest, res: Respo
       name: true,
       tournamentId: true,
       deletedAt: true,
+      eventType: true,
+      ageMin: true,
+      ageMax: true,
       bracket: {
         select: {
           id: true,
@@ -1113,6 +1121,33 @@ router.post('/merge', authenticate, async (req: AuthenticatedRequest, res: Respo
       'Regenerate brackets after merge, or clear brackets before merging',
       `${activeBrackets.length} division(s) have completed or in-progress matches`,
     ));
+  }
+
+  // Fairness limits (rules.fairness.limits): warn, don't block. Without
+  // `confirmOverLimit: true` a merge that breaks one gets a 409 naming
+  // the pair furthest apart. No limits set: no extra work.
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: targetDivision.tournamentId },
+    select: { settings: true },
+  });
+  const rules = parseTournamentRules(tournament?.settings ?? null);
+  if (hasFairnessLimits(rules)) {
+    const assignments = await prisma.divisionAssignment.findMany({
+      where: { divisionId: { in: [targetDivisionId, ...sourceDivisionIds] } },
+      select: { registration: { include: { competitor: true } } },
+    });
+    const conflict = fairnessLimitConflict(
+      manualMergeLimitBreaks(
+        targetDivision,
+        sourceDivisions,
+        assignments.map((a) => a.registration),
+        rules,
+      ),
+      confirmOverLimit === true,
+    );
+    if (conflict) {
+      return res.status(409).json(conflict);
+    }
   }
 
   // Perform merge in a transaction

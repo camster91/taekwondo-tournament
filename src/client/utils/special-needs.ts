@@ -2,27 +2,13 @@
 // tournament (Registration.specialNeeds) and the competitor may have a
 // permanent one (Competitor.specialNeeds); public sign-up writes the same
 // text to both. Directors see one combined line. Never shown on public pages.
+// The combining rule lives in shared/ so the server's scorekeeper endpoint
+// uses the same one.
+import { specialNeedsText, type MatchSpecialNeedsEntry } from '../../shared/utils/special-needs';
 
-function clean(value: string | null | undefined): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
+export { specialNeedsText };
 
-/** One readable line, or null when there is nothing to show. */
-export function specialNeedsText(
-  registrationNotes: string | null | undefined,
-  competitorNotes: string | null | undefined,
-): string | null {
-  const forEvent = clean(registrationNotes);
-  const onFile = clean(competitorNotes);
-  if (forEvent && onFile && forEvent.toLowerCase() !== onFile.toLowerCase()) return `${forEvent} · ${onFile}`;
-  return forEvent || onFile || null;
-}
-
-export interface SpecialNeedsEntry {
-  registrationId: string;
-  name: string;
-  note: string;
-}
+export type SpecialNeedsEntry = MatchSpecialNeedsEntry;
 
 interface RegistrationWithNotes {
   id: string;

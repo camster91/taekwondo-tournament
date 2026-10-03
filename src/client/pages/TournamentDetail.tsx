@@ -52,6 +52,8 @@ import { Modal } from '../components/ui';
 import OperationStatus, { type OperationState } from '../components/ui/OperationStatus';
 import { readAdminOperationError } from '../utils/admin-operation-error';
 import { getEventTypeLabels } from '../../shared/constants/sport-profiles';
+import { useToast } from '../context/ToastContext';
+import { bulkAddSummary, type BulkAddResult, type CapacitySnapshot } from '../utils/bulk-capacity';
 
 interface Tournament {
   id: string;
@@ -61,6 +63,7 @@ interface Tournament {
   status: string;
   publicSlug?: string | null;
   sportProfileSlug?: string | null;
+  maxCapacity?: number | null;
   _count: {
     registrations: number;
     divisions: number;
@@ -146,6 +149,7 @@ export default function TournamentDetail() {
   const canCheckIn = hasRole(['admin', 'director', 'scorekeeper']);
   const canShare = hasRole(['admin', 'director']);
   const queryClient = useQueryClient();
+  const { addToast } = useToast();
   const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -206,12 +210,26 @@ export default function TournamentDetail() {
     enabled: showAddModal,
   });
 
+  // Only fetched when the tournament has a capacity limit: the picker
+  // then says how many go to the waiting list or won't be added.
+  const hasCapacityLimit = !!tournament?.maxCapacity;
+  const { data: capacity } = useQuery<CapacitySnapshot>({
+    queryKey: ['tournament-capacity', id],
+    queryFn: async () => {
+      const res = await fetch(`/api/tournaments/${id}/capacity`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch capacity');
+      return res.json();
+    },
+    enabled: showAddModal && hasCapacityLimit,
+  });
+
   const bulkRegisterMutation = useMutation({
     mutationFn: async (data: {
       competitorIds: string[];
       patterns: boolean;
       sparring: boolean;
-    }) => {
+      overCapacity?: boolean;
+    }): Promise<BulkAddResult> => {
       const res = await fetch(`/api/tournaments/${id}/registrations/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -228,11 +246,14 @@ export default function TournamentDetail() {
       return res.json();
     },
     onMutate: () => setBulkRegisterError(null),
-    onSuccess: async () => {
+    onSuccess: async (result, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['registrations', id] }),
         queryClient.invalidateQueries({ queryKey: ['tournament', id] }),
+        queryClient.invalidateQueries({ queryKey: ['tournament-capacity', id] }),
       ]);
+      const summary = bulkAddSummary(result ?? {}, variables.competitorIds.length);
+      addToast(summary.message, summary.tone);
       setShowAddModal(false);
       window.requestAnimationFrame(() => addCompetitorsTriggerRef.current?.focus());
     },
@@ -963,9 +984,9 @@ export default function TournamentDetail() {
               <div className="md:hidden p-4 space-y-3">
                 {filteredRegistrations.map((reg) => (
                   <div key={reg.id}>
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <div className="font-semibold text-surface-900 dark:text-white">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-surface-900 dark:text-white [overflow-wrap:anywhere]">
                           {reg.competitor.firstName} {reg.competitor.lastName}
                         </div>
                         <span
@@ -1232,6 +1253,7 @@ export default function TournamentDetail() {
           tournamentDate={new Date(tournament.date)}
           eventLabels={eventLabels}
           pending={bulkRegisterMutation.isPending}
+          capacity={hasCapacityLimit ? capacity : null}
           onAdd={(selection) => bulkRegisterMutation.mutate(selection)}
           onClose={() => {
             setShowAddModal(false);

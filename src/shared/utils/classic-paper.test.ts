@@ -5,6 +5,7 @@ import {
   classicFolderName,
   classicHeaderTitle,
   classicZipPath,
+  fitTextToWidth,
   genderPlural,
   ordinal,
   safeFileName,
@@ -72,5 +73,37 @@ describe('classic paper naming', () => {
   it('spells ordinals', () => {
     expect([1, 2, 3, 4, 11, 12, 13, 21, 22].map(ordinal)).toEqual(['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd']);
     expect(genderPlural('F')).toBe('Females');
+  });
+});
+
+describe('fitTextToWidth', () => {
+  // Fake font: every character is 0.5em wide.
+  const measure = (text: string, size: number) => text.length * size * 0.5;
+
+  it('keeps the full size when the text fits', () => {
+    expect(fitTextToWidth('Jo Lee', 100, measure, 8)).toEqual({ text: 'Jo Lee', fontSize: 8, truncated: false });
+  });
+
+  it('shrinks a long name instead of cutting it', () => {
+    const name = 'Alexandra Montgomery-Fitzgerald'; // 31 chars: 124 wide at 8pt
+    const fitted = fitTextToWidth(name, 100, measure, 8);
+    expect(fitted.text).toBe(name);
+    expect(fitted.truncated).toBe(false);
+    expect(fitted.fontSize).toBeLessThan(8);
+    expect(fitted.fontSize).toBeGreaterThanOrEqual(6);
+    expect(measure(fitted.text, fitted.fontSize)).toBeLessThanOrEqual(100);
+  });
+
+  it('cuts with "…" only when it still does not fit at the minimum size', () => {
+    const name = 'A'.repeat(60); // 180 wide at 6pt
+    const fitted = fitTextToWidth(name, 60, measure, 8, 6);
+    expect(fitted.fontSize).toBe(6);
+    expect(fitted.truncated).toBe(true);
+    expect(fitted.text.endsWith('…')).toBe(true);
+    expect(measure(fitted.text, 6)).toBeLessThanOrEqual(60);
+  });
+
+  it('honours a custom minimum', () => {
+    expect(fitTextToWidth('A'.repeat(30), 100, measure, 9, 7).fontSize).toBe(7);
   });
 });

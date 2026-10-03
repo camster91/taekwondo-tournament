@@ -14,6 +14,9 @@
 //                          1 v 5 top half v bottom half, 1 v 2 adjacent).
 //   avoidSameSchoolRound1  swap people between first-round matches so
 //                          team-mates do not fight first, when possible.
+//                          "Same school" uses the organizer's school
+//                          aliases (rules.fairness.schoolAliases), as
+//                          divisions do.
 //
 // Everything is deterministic: ties and "random" draws use a hash of a
 // draw key (the division id) and the registration id, so the same
@@ -41,7 +44,7 @@ import {
   parseTournamentRules,
   type BracketRules,
 } from '../../shared/constants/tournament-rules.js';
-import { normalizeSchool } from '../../shared/utils/same-school.js';
+import { createSchoolResolver, type SchoolResolver } from '../../shared/utils/school.js';
 
 // ─── Rules ─────────────────────────────────────────────────────────────
 
@@ -156,11 +159,23 @@ export interface FirstRoundPlan {
   sameSchoolFights: number;
 }
 
-const schoolKey = (c: CompetitorSeed | null) => (c ? normalizeSchool(c.school) : '');
-const isSameSchool = (unit: Unit) => {
-  const a = schoolKey(unit[0]);
-  return a !== '' && unit[1] !== null && a === schoolKey(unit[1]);
-};
+/**
+ * The tournament's school resolver: normalised spelling plus the
+ * organizer's aliases (rules.fairness.schoolAliases). With no aliases it
+ * compares exactly like `normalizeSchoolName`.
+ */
+export function schoolResolverForSettings(settings: string | null | undefined): SchoolResolver {
+  return createSchoolResolver(parseTournamentRules(settings).fairness?.schoolAliases);
+}
+
+function schoolHelpers(schools: SchoolResolver) {
+  const schoolKey = (c: CompetitorSeed | null) => (c ? schools.key(c.school) : '');
+  const isSameSchool = (unit: Unit) => {
+    const a = schoolKey(unit[0]);
+    return a !== '' && unit[1] !== null && a === schoolKey(unit[1]);
+  };
+  return { schoolKey, isSameSchool };
+}
 
 /**
  * Remove same-school first-round pairs by swapping one competitor with a
@@ -171,7 +186,8 @@ const isSameSchool = (unit: Unit) => {
  * swaps the one closest in rank is used, keeping the seeding intact as
  * far as possible. Byes are left alone (`fixed` units).
  */
-function separateSchools(units: Unit[], fixed: number, rankOf: Map<string, number>): void {
+function separateSchools(units: Unit[], fixed: number, rankOf: Map<string, number>, schools: SchoolResolver): void {
+  const { schoolKey, isSameSchool } = schoolHelpers(schools);
   const rank = (c: CompetitorSeed) => rankOf.get(c.registrationId) ?? 0;
   const stuck = new Set<number>();
   for (let guard = 0; guard < (units.length + 1) ** 2; guard++) {
@@ -211,12 +227,14 @@ function separateSchools(units: Unit[], fixed: number, rankOf: Map<string, numbe
 
 /**
  * Lay out round 1 from the bracket rules. Needs at least 2 competitors
- * (smaller divisions have no first round).
+ * (smaller divisions have no first round). `schools` decides which school
+ * names are team-mates (default: spelling only, no aliases).
  */
 export function planFirstRound(
   competitors: CompetitorSeed[],
   rulesInput: Partial<BracketRules> | null | undefined,
   drawKey: string,
+  schools: SchoolResolver = createSchoolResolver(null),
 ): FirstRoundPlan {
   const rules = resolveBracketRules(rulesInput);
   const count = competitors.length;
@@ -252,7 +270,7 @@ export function planFirstRound(
     else contested.push([rest[i], rest[rest.length - 1 - i]]);
   }
   const units: Unit[] = [...byeTakers.map((c): Unit => [c, null]), ...contested];
-  if (rules.avoidSameSchoolRound1) separateSchools(units, byeTakers.length, rankOf);
+  if (rules.avoidSameSchoolRound1) separateSchools(units, byeTakers.length, rankOf, schools);
 
   // Where each match goes on the sheet. Match `matchOfSeed[j]` is the one
   // standard seeding gives seed j, so the strongest matches are spread
@@ -279,6 +297,7 @@ export function planFirstRound(
     slots[2 * m + 1] = unit[1];
   });
 
+  const { isSameSchool } = schoolHelpers(schools);
   return { slots, ranked, sameSchoolFights: units.filter(isSameSchool).length };
 }
 
@@ -292,11 +311,12 @@ export function generateEliminationFromRules(
   format: 'double_elim' | 'single_elim',
   rulesInput: Partial<BracketRules> | null | undefined,
   drawKey: string,
+  schools?: SchoolResolver,
 ): BracketStructure {
   if (competitors.length < 2) {
     return trivialBracket(competitors);
   }
-  const plan = planFirstRound(competitors, rulesInput, drawKey);
+  const plan = planFirstRound(competitors, rulesInput, drawKey, schools);
   const structure = generateEliminationFromSlots(plan.slots, format);
   const fights = plan.slots.length / 2 - (plan.slots.length - competitors.length);
   structure.seedingInfo = {
@@ -345,6 +365,8 @@ export interface RuleSeedingInput {
   /** Draw key for ties and random draws (the division id). */
   drawKey: string;
   facts: Map<string, SeedFacts>;
+  /** Which school names are team-mates (the organizer's school aliases). */
+  schools?: SchoolResolver;
 }
 
 /**
@@ -417,6 +439,7 @@ export async function loadRuleSeeding(db: SeedingDb, divisionId: string): Promis
     rules: resolveBracketRules(parseTournamentRules(division.tournament.settings).brackets),
     drawKey: division.id,
     facts,
+    schools: schoolResolverForSettings(division.tournament.settings),
   };
 }
 
@@ -437,7 +460,7 @@ export function generateEliminationBracket(
   seeding: RuleSeedingInput | null | undefined,
 ): BracketStructure {
   if (seeding && usesTournamentRules(seedingStrategy)) {
-    return generateEliminationFromRules(withSeedFacts(competitors, seeding.facts), format, seeding.rules, seeding.drawKey);
+    return generateEliminationFromRules(withSeedFacts(competitors, seeding.facts), format, seeding.rules, seeding.drawKey, seeding.schools);
   }
   return format === 'single_elim'
     ? generateSingleElimination(competitors, seedingStrategy)

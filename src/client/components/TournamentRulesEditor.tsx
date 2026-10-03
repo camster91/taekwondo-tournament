@@ -246,7 +246,7 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
           />
           <Radio
             label="Auto"
-            sub="Sort each group by weight and cut it into Light / Middle / Heavy of similar size"
+            sub="Auto makes groups of similar size from the people who registered."
             checked={local.weights.strategy === 'auto'}
             onChange={() => update('weights', { ...local.weights, strategy: 'auto' })}
           />

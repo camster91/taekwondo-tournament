@@ -43,6 +43,12 @@ test.describe('classic paper', () => {
 
   test.afterAll(async () => {
     try {
+      // The DE test makes a bracket; its matches must go before the tournament.
+      const matchIds = (await prisma.match.findMany({ where: { bracket: { division: { tournamentId } } }, select: { id: true } })).map((m) => m.id);
+      await prisma.matchAuditLog.deleteMany({ where: { matchId: { in: matchIds } } });
+      await prisma.matchupHistory.deleteMany({ where: { tournamentId } });
+      await prisma.match.deleteMany({ where: { id: { in: matchIds } } });
+      await prisma.bracket.deleteMany({ where: { division: { tournamentId } } });
       await prisma.tournament.deleteMany({ where: { id: tournamentId } });
       await prisma.competitor.deleteMany({ where: { id: { in: competitorIds } } });
       await prisma.user.deleteMany({ where: { id: userId } });
@@ -65,7 +71,10 @@ test.describe('classic paper', () => {
     await sheetButton.click();
     const sheet = await sheetDownload;
     expect(sheet.suggestedFilename()).toMatch(/Blue_Red Belts Females Sparring Heavy E2E .*\.pdf$/);
-    expect(readFileSync((await sheet.path())!).subarray(0, 5).toString()).toBe('%PDF-');
+    const sheetBytes = readFileSync((await sheet.path())!);
+    expect(sheetBytes.subarray(0, 5).toString()).toBe('%PDF-');
+    // Double elimination is the default; before the bracket exists only the winners' page prints.
+    expect(sheetBytes.toString('latin1')).toContain("losers' side prints once the bracket is made");
     await expect(page.getByRole('status').filter({ hasText: 'Paper bracket download started' })).toBeVisible();
 
     const zipButton = page.getByRole('button', { name: 'Download paper brackets for every division (ZIP)' });
@@ -111,5 +120,22 @@ test.describe('classic paper', () => {
     await expect(page.getByText(divisionName).filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByText(/sheet in CB Females Sparring/).filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Print' })).toBeEnabled();
+  });
+
+  // Last: making the bracket cannot be undone for this division.
+  test("a double elimination paper bracket adds the losers' side page", async ({ page }) => {
+    const csrf = (await page.context().cookies()).find((c) => c.name === 'bowin_csrf')?.value ?? '';
+    const generated = await page.request.post(`/api/brackets/division/${divisionId}/generate`, {
+      headers: { 'X-CSRF-Token': csrf },
+      data: { format: 'double_elim' },
+    });
+    expect([200, 201, 409]).toContain(generated.status()); // 409: made on an earlier retry
+
+    const pdf = await page.request.get(`/api/brackets/division/${divisionId}/classic-pdf`);
+    expect(pdf.ok()).toBe(true);
+    const text = (await pdf.body()).toString('latin1');
+    expect(text.match(/\/Type \/Page\b(?!s)/g)).toHaveLength(2);
+    expect(text).toContain("Losers' side");
+    expect(text).toContain('Loser of M1');
   });
 });

@@ -456,7 +456,7 @@ All routes require auth. `?trash=true` shows soft-deleted;
 | POST | `/api/tournaments/:id/rules/reset` | admin/director |
 | GET | `/api/tournaments/:id/registrations` | any |
 | POST | `/api/tournaments/:id/registrations` | admin/director |
-| POST | `/api/tournaments/:id/registrations/bulk` | admin/director |
+| POST | `/api/tournaments/:id/registrations/bulk` | admin/director. Applies capacity under the tournament row lock (`services/bulk-registration.ts`): free spots first, then the waiting list, else skipped with a reason; `overCapacity: true` adds everyone (audited `registrations_added_over_capacity`). Returns `{ registered, added, waitlisted, updated, addedOverCapacity, skippedCount, skipped }`; plan limit still 402. |
 | POST | `/api/tournaments/:id/import` | director (`src/server/routes/tournament-import.ts`). Spreadsheet straight into the tournament: body `{ fileBase64, columnMapping?, sheetName?, headerRow?, commit? }`, 40 MB body. Preview by default (counts: new/matched competitors, registrations, waitlisted, skipped rows with reasons); `commit: true` writes in one locked transaction. Y/Yes/X/1 in an event column enters that slot; event columns found by the sport's event names. Reuses same-tenant competitors by name + DOB without changing them; capacity/waitlist + plan limit (402) apply. UI: "Import from spreadsheet" on the tournament page (`TournamentImportModal.tsx`). |
 | PUT | `/api/tournaments/:id/registrations/:regId` | admin/director |
 | DELETE | `/api/tournaments/:id/registrations/:regId` | admin/director |
@@ -487,6 +487,7 @@ unless noted.
 | DELETE | `/api/divisions/:id/assign/:assignmentId` | scorekeeper+ |
 | POST | `/api/divisions/:id/move` | scorekeeper+ |
 | POST | `/api/divisions/:id/split` | admin/director |
+| POST | `/api/divisions/merge` | director. Body `{ sourceDivisionIds, targetDivisionId, auditReason, confirmOverLimit? }`. If the merged group breaks a fairness limit, 409 `{ code: 'FAIRNESS_LIMIT', message, details }` naming the furthest pair; the page asks "Merge anyway" and resends with `confirmOverLimit: true` (`services/manual-merge-fairness.ts`). |
 | DELETE | `/api/divisions/tournament/:tournamentId/all` | admin/director (gated) |
 | GET | `/api/divisions/tournament/:tournamentId/backup` | |
 | POST | `/api/divisions/tournament/:tournamentId/restore` | admin/director |
@@ -505,6 +506,7 @@ Mutations are scorekeeper+ (or admin/director for generate/reset).
 | POST | `/api/brackets/match/:matchId/swap` | scorekeeper+ |
 | POST | `/api/brackets/division/:divisionId/slots` | director. Body `{ action: "move" \| "remove" \| "place", registrationId, from?, to? }` (`{ matchId, slot: 1\|2 }`). Moves a person between first-round spots (swaps if taken), takes them out (spot becomes a BYE) or puts a division member into an empty spot, without clearing the bracket. Unplayed first-round matches only; later rounds re-sync via `computeBracketSync` (409 if a started match would change). Audited as `slot_*` in `MatchAuditLog`; match undo refuses those. Logic: `services/bracket-slots.ts`. |
 | GET | `/api/brackets/match/:matchId/audit` | any |
+| GET | `/api/brackets/match/:matchId/special-needs` | scorekeeper+ (`{ competitors: [{ registrationId, name, note }] }`, only this match's two people with a note; the Scorekeeper "Note" badge. Match lists no longer carry `specialNeeds`) |
 | POST | `/api/brackets/match/:matchId/undo` | scorekeeper+ |
 | POST | `/api/brackets/division/:divisionId/reset` | scorekeeper+ |
 | POST | `/api/brackets/tournament/:tournamentId/generate-all` | admin/director |
@@ -515,7 +517,7 @@ Mutations are scorekeeper+ (or admin/director for generate/reset).
 | GET | `/api/brackets/tournament/:tournamentId/certificates` | viewer+ |
 | GET | `/api/brackets/tournament/:tournamentId/school-report` | viewer+ |
 | GET | `/api/brackets/tournament/:tournamentId/same-school-first-round` | viewer+ (`{ total, divisions: [{ divisionId, count, fights, unavoidable }] }`, counts only) |
-| GET | `/api/brackets/division/:divisionId/classic-pdf` | viewer+ (paper bracket like the old sheets: legal landscape, single-elim 2/4/8/16/32 tree, belt/dan footer; draft seed order before brackets exist) |
+| GET | `/api/brackets/division/:divisionId/classic-pdf` | viewer+ (paper bracket like the old sheets: legal landscape, single-elim 2/4/8/16/32 tree, belt/dan footer; draft seed order before brackets exist; double elim adds a "Losers' side" page with feeder labels, grand final and reset; trees over 32 split into blocks plus a final page; names shrink to fit (min 6pt) before "…"; layout helpers in `pdf-export.ts`, `fitTextToWidth` in `shared/utils/classic-paper.ts`) |
 | GET | `/api/brackets/tournament/:tournamentId/classic-zip` | viewer+ (every non-empty division's paper bracket, folders like `CB Females Sparring/`; ZIP written with `src/server/utils/zip.ts`, no dependency) |
 
 Bracket format: `generate` / `generate-all` use the body's `format`, else
@@ -716,6 +718,10 @@ to `generateEliminationFromSlots`, so match numbers, links and `positions`
 are unchanged. Other strategies (`manual`, `skill_based`, ...) keep the old
 path. Same-school first-round fights are counted by
 `src/shared/utils/same-school.ts` (Divisions page, bracket editor, API).
+Both the rules seeding and these counts compare schools through the
+tournament's alias resolver (`schoolResolverForSettings` →
+`createSchoolResolver(rules.fairness.schoolAliases)`), as divisions do; the
+legacy `school_spread` generator keeps its plain-name comparison.
 
 Advancement (`match-advancement.ts`) is driven by a pure
 `computeBracketSync`: every downstream slot is derived from one fixed
@@ -754,7 +760,7 @@ cuts each sparring group by weight into similar-size classes
 black belts their own bands; `rules.fairness` (`FairDivisionRules` in
 `tournament-rules.ts`, stored under the `fairness` settings key) holds
 `splitBySimilarity`, `heightTieBreak`, per-age `limits` (max weight/age gap:
-block merges, bound auto classes and splits, warn naming the furthest pair),
+block automatic merges (manual merges warn first), bound auto classes and splits, warn naming the furthest pair),
 `schoolAliases` and `schoolShareWarningPercent`. School matching for
 fairness goes through `src/shared/utils/school.ts` (`createSchoolResolver`).
 Defaults leave categorization unchanged.
