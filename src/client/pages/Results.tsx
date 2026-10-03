@@ -258,9 +258,10 @@ export default function Results() {
             <div className="flex items-center">
               <Link
                 to={`/tournaments/${tournamentId}`}
+                aria-label="Back to tournament"
                 className="mr-3 text-surface-600 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-300"
               >
-                <ChevronLeft className="h-6 w-6" />
+                <ChevronLeft className="h-6 w-6" aria-hidden="true" />
               </Link>
               <div>
                 <h1 className="text-xl font-bold text-surface-900 dark:text-white">Tournament Results</h1>
@@ -416,6 +417,7 @@ export default function Results() {
       {/* Filters */}
       <div className="px-4 pb-2 flex gap-2 flex-wrap">
         <Select
+          aria-label="Filter by event"
           value={filterEvent}
           onChange={(e) => setFilterEvent(e.target.value as 'all' | 'patterns' | 'sparring')}
           className="text-sm"
