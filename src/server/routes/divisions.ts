@@ -152,7 +152,10 @@ const divisionUpdateSchema = z.object({
 // Match slots are Registration rows. Scoring/results views only need the
 // competitor and bracket data, so never ship guardian contact details,
 // payment identifiers or the management-token hash to every viewer.
+// Special-needs notes stay out too: the scorekeeper fetches them for the
+// match being scored (GET /api/brackets/match/:matchId/special-needs).
 const MATCH_SLOT_REGISTRATION_OMIT = {
+  specialNeeds: true,
   parentName: true,
   parentEmail: true,
   parentPhone: true,
@@ -183,8 +186,8 @@ router.get('/tournament/:tournamentId', authenticate, requireTournamentAccess('v
         include: {
           matches: {
             include: {
-              competitor1: { omit: MATCH_SLOT_REGISTRATION_OMIT, include: { competitor: true } },
-              competitor2: { omit: MATCH_SLOT_REGISTRATION_OMIT, include: { competitor: true } },
+              competitor1: { omit: MATCH_SLOT_REGISTRATION_OMIT, include: { competitor: { omit: { specialNeeds: true } } } },
+              competitor2: { omit: MATCH_SLOT_REGISTRATION_OMIT, include: { competitor: { omit: { specialNeeds: true } } } },
             },
             orderBy: [{ roundNumber: 'asc' }, { matchNumber: 'asc' }],
           },

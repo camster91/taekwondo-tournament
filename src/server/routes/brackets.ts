@@ -10,6 +10,7 @@ import {
   usesTournamentRules,
 } from '../services/bracket-seeding.js';
 import { countSameSchoolFirstRound } from '../../shared/utils/same-school.js';
+import { matchSpecialNeeds } from '../../shared/utils/special-needs.js';
 import {
   handleByeMatches,
   getBracketPlacements,
@@ -370,14 +371,17 @@ router.get('/division/:divisionId', authenticate, async (req: Request, res: Resp
     return res.status(access.status || 403).json({ error: access.error });
   }
 
+  // Viewer-level read: special-needs notes stay out (scorekeepers fetch
+  // them per match from /match/:matchId/special-needs).
+  const slot = { omit: { specialNeeds: true }, include: { competitor: { omit: { specialNeeds: true } } } } as const;
   const bracket = await prisma.bracket.findUnique({
     where: { divisionId: getParam(req.params.divisionId) },
     include: {
       matches: {
         include: {
-          competitor1: { include: { competitor: true } },
-          competitor2: { include: { competitor: true } },
-          winner: { include: { competitor: true } },
+          competitor1: slot,
+          competitor2: slot,
+          winner: slot,
         },
         orderBy: [{ bracketType: 'asc' }, { roundNumber: 'asc' }, { matchNumber: 'asc' }],
       },
@@ -949,6 +953,44 @@ router.get('/match/:matchId/audit', authenticate, async (req: Request, res: Resp
   });
 
   res.json(logs);
+});
+
+// Special-needs notes for the two people in one match, for the scorekeeper
+// running it. Scorekeeper level or above; viewers get 403. Only this match's
+// competitors, only those with a note. Never used by public routes.
+router.get('/match/:matchId/special-needs', authenticate, async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+
+  const slotSelect = {
+    select: {
+      id: true,
+      specialNeeds: true,
+      competitor: { select: { firstName: true, lastName: true, specialNeeds: true } },
+    },
+  } as const;
+  const match = await prisma.match.findUnique({
+    where: { id: getParam(req.params.matchId) },
+    select: {
+      bracket: { select: { division: { select: { tournamentId: true, deletedAt: true } } } },
+      competitor1: slotSelect,
+      competitor2: slotSelect,
+    },
+  });
+  if (!match || match.bracket.division.deletedAt) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+  const access = await checkTournamentAccess(
+    req as AuthenticatedRequest,
+    prisma,
+    match.bracket.division.tournamentId,
+    'scorekeeper'
+  );
+  if (!access.ok) {
+    return res.status(access.status || 403).json({ error: access.error });
+  }
+
+  res.set('Cache-Control', 'no-store');
+  res.json({ competitors: matchSpecialNeeds([match.competitor1, match.competitor2]) });
 });
 
 // Undo last match change

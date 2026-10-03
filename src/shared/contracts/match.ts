@@ -24,8 +24,10 @@ export type BracketType = z.infer<typeof bracketTypeSchema>;
  * A competitor slot within a match — either populated with a competitor
  * or null when TBD (advancement not yet determined).
  * 
- * Extended fields (specialNeeds, competeWithOlder) are used by scorekeeper
- * to display competitor notes and registration preferences.
+ * competeWithOlder is shown on the scorekeeper screen. specialNeeds is no
+ * longer sent in match lists (the scorekeeper fetches notes per match from
+ * /api/brackets/match/:matchId/special-needs); it stays optional so older
+ * cached venue snapshots still parse.
  */
 export const matchCompetitorSlotSchema = z.object({
   id: z.string().uuid(),

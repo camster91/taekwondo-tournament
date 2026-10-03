@@ -505,6 +505,7 @@ Mutations are scorekeeper+ (or admin/director for generate/reset).
 | POST | `/api/brackets/match/:matchId/swap` | scorekeeper+ |
 | POST | `/api/brackets/division/:divisionId/slots` | director. Body `{ action: "move" \| "remove" \| "place", registrationId, from?, to? }` (`{ matchId, slot: 1\|2 }`). Moves a person between first-round spots (swaps if taken), takes them out (spot becomes a BYE) or puts a division member into an empty spot, without clearing the bracket. Unplayed first-round matches only; later rounds re-sync via `computeBracketSync` (409 if a started match would change). Audited as `slot_*` in `MatchAuditLog`; match undo refuses those. Logic: `services/bracket-slots.ts`. |
 | GET | `/api/brackets/match/:matchId/audit` | any |
+| GET | `/api/brackets/match/:matchId/special-needs` | scorekeeper+ (`{ competitors: [{ registrationId, name, note }] }`, only this match's two people with a note; the Scorekeeper "Note" badge. Match lists no longer carry `specialNeeds`) |
 | POST | `/api/brackets/match/:matchId/undo` | scorekeeper+ |
 | POST | `/api/brackets/division/:divisionId/reset` | scorekeeper+ |
 | POST | `/api/brackets/tournament/:tournamentId/generate-all` | admin/director |
