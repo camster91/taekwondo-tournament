@@ -1,204 +1,55 @@
-# Production deployment
+# Bowin deployment and recovery
 
-The supported production topology is the full-stack Docker image plus PostgreSQL, deployed to an Ashbi VPS (187.77.26.99) via `scripts/deploy-production.sh`. The Node process serves both the Vite build and `/api`; do not deploy the Vite client separately unless an explicit same-origin API gateway is configured.
+Updated 2026-10-03 from repository configuration and owner-supplied operational facts.
+No live infrastructure was inspected during this cleanup.
 
-**Deployment methods:** the same `Dockerfile` serves two paths.
+## Live deployment
 
-- **Coolify** (or any platform that builds a Dockerfile and injects environment variables): see [Coolify](#coolify) below.
-- **VPS script**: immutable, rollback-safe manual deployment via `scripts/deploy-production.sh`. The script requires a clean worktree on a commit with a green `Build` check, uploads a verified source archive to the VPS, builds a Docker image on-host, validates a private candidate container, performs a stopped-write cutover with automatic database backup, runs `prisma migrate deploy`, and automatically rolls back if health checks fail.
+Coolify application **bowin-tkd** serves https://tkd.ashbi.ca and automatically deploys
+on every push to `main`. Merging to main is a production deployment; obtain Cameron's
+explicit approval before pushes, merges or deploys.
 
-Whichever path you use, deploy only commits on `main` whose `Build` check passed.
+The live configuration is [`docker-compose.rebuild-staging.yml`](../docker-compose.rebuild-staging.yml).
+The staging label does not mean a separate test environment. Both Node services build
+from `./replacement` using its runtime Docker target and the supplied `SOURCE_COMMIT`.
+PostgreSQL 16 must become healthy, then the `migrate` service runs SQL migrations;
+the `app` service starts only after migration succeeds. The live database is
+`bowin_rebuild_staging`, stored in the `bowin_rebuild_staging_database_v2` Compose volume
+(Coolify prefixes the deployed volume name). Preserve this data during configuration changes.
 
-## Required configuration
+Coolify supplies database connection/configuration, canonical `APP_ORIGIN`, setup token
+and source revision. Manage values through the operator configuration; never copy
+secrets into docs, logs or commits. Never point the rebuild at the old `taekwondo` DB.
+Traefik routes the production hostname through Coolify's application route.
 
-- `NODE_ENV=production`
-- `DATABASE_URL`: PostgreSQL connection string with a unique production password
-- `JWT_SECRET`: at least 32 random characters
-- `METRICS_TOKEN`: at least 32 random characters used only by the private `/api/internal/metrics` collector
-- `ADMIN_SETUP_KEY`: random bootstrap key; remove it after the first administrator is created
-- `ALLOWED_ORIGINS`: comma-separated HTTPS application origins
-- `PUBLIC_APP_URL`: canonical HTTPS origin used in sign-in and registration-management emails
-- `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`: verified production email configuration
-- `RETENTION_PURGE_ENABLED=true`: enables the destructive soft-delete purge only after the retention policy is approved
-- `SOFT_DELETE_RETENTION_DAYS`: whole days before soft-deleted competitors, tournaments, divisions, and incidents are permanently purged (default `7` when enabled)
-- `RETENTION_PURGE_DRY_RUN=true`: with the purge enabled, only count and log what would be purged (nothing is deleted). Recommended for the first runs after enabling.
+Readiness is `GET /api/health/ready`; it checks database access and includes the source
+revision. After an approved release, verify HTTPS readiness, expected full revision,
+sign-in and an authenticated tournament journey. Green CI alone is not a live ship gate.
 
-Every purge run, real or dry, is recorded in the `RetentionPurgeRun` table (cutoff and per-type counts). Records under **legal hold** are never purged or hard-deleted: admins set a hold with `PUT /api/tournaments/:id/legal-hold` or `PUT /api/competitors/:id/legal-hold` and body `{ "hold": true, "reason": "..." }` (release with `{ "hold": false }`). A tournament hold also protects its divisions, incidents and every competitor registered in it; `DELETE /api/tournaments/:id?hard=true` and `DELETE /api/competitors/:id/purge` return 409 for held records.
-- `REGISTRATION_CONSENT_VERSION`: identifier for the approved notice/terms presented during registration (production default `2026-08-24`); change it whenever the notice or terms change
-- `PRIVACY_NOTICE_URL`, `TOURNAMENT_TERMS_URL`: links shown on the registration form; default to the in-app `/legal/privacy` and `/legal/terms`. Production refuses to start if either is set to a non-HTTPS absolute URL
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_STARTER_PRICE_ID`, `STRIPE_PRO_PRICE_ID`: configure all four to enable self-service billing; omit them for a managed-invoice pilot
-
-- `LOGO_STORAGE_PATH`: directory for uploaded organization logos (default `/app/data/logos` in the image). The image runs as `node` with `/app/data` created node-owned and declared a `VOLUME`; mount persistent storage there (the VPS scripts mount the named volumes `bowin-production-data` / `bowin-staging-data` / `bowin-demo-data`, `docker-compose.yml` mounts `app_data`). Without a persistent mount, logos disappear on every redeploy.
-- `SENTRY_DSN`, `SENTRY_ENVIRONMENT`: optional server error tracking (Sentry/GlitchTip)
-- `STRIPE_PER_EVENT_SMALL_PRICE_ID`, `STRIPE_PER_EVENT_MEDIUM_PRICE_ID`, `STRIPE_PER_EVENT_LARGE_PRICE_ID`: optional one-time per-event price IDs
-
-The VPS scripts rebuild the container env from an allowlist (`ALLOWED_ENV` in each `scripts/deploy-*.sh`) of the previous container's variables; a runtime variable missing from that list is silently dropped on the next deploy, so add new ones there too.
-
-**Build-time (client) variables.** Vite inlines `VITE_*` values into the bundle during `docker build`, so they are Docker build arguments, not runtime variables: `VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64`, `VITE_SENTRY_DSN`, `VITE_SENTRY_ENVIRONMENT`, `VITE_CRISP_WEBSITE_ID`, `VITE_POSTHOG_KEY`, `VITE_TUTORIAL_QUICKSTART_URL`, `VITE_TUTORIAL_IMPORT_URL`, `VITE_TUTORIAL_RUN_EVENT_URL`. Setting them only at container runtime has no effect; changing one requires a rebuild.
-
-Keep `ENABLE_DEV_AUTH`, `ENABLE_DEMO_LOGIN`, `ENABLE_E2E_AUTH_BYPASS`, and `RATE_LIMIT_DISABLED` unset in production. `POSTGRES_PASSWORD` is mandatory when using `docker-compose.yml`.
-
-### Isolated public showcase
-
-The public showcase is a separate deployment profile, never a customer or mixed-use production database. It requires both `ENABLE_DEMO_LOGIN=1` and `DEMO_ISOLATED_DATA=1`; `DEMO_RATE_LIMIT_MAX` defaults to 30 sign-ins per IP per 15 minutes. Production fails closed by leaving the demo route unmounted when the isolation attestation is absent.
-
-Offline Check-In and Scorekeeper reopening requires an environment-specific
-Ed25519 key pair. Provide the PKCS8 DER private key as
-`OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64` at runtime and the matching SPKI DER
-public key as the Docker build argument
-`VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64`. Never reuse the example E2E keys
-or expose the private key. If either half is absent or mismatched, ordinary
-online authentication continues but offline identity restoration fails closed.
-
-After migrations and readiness succeed, reset only the marker-protected fabricated tenant with:
-
-```sh
-DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 npm run demo:reset:production
-```
-
-The command additionally requires `DEMO_ISOLATED_DATA=1` in its environment. It refuses an absent or mismatched attestation and will not replace an organization whose canonical slug lacks the expected marker. Never persist `DEMO_RESET_CONFIRM` as a normal application secret.
-
-Automatic retention is deliberately disabled by default. Verify a backup and obtain operator/legal approval before enabling it; expired records are deleted at startup and then once per day and cannot be restored from the Trash view.
-
-## Release sequence
-
-1. **CI:** the commit must be on `main` with a green `Build` check (typecheck, lint, unit tests, audit, build, fresh-migration drift check, and Playwright on four browsers). `deploy-production.sh` enforces this; on Coolify, deploy from `main` only.
-2. **Review security advisories:** Check `npm audit` output and bounded exceptions documented in `SECURITY.md` or `docs/ADVISORY-TRACKING-*.md`.
-3. **Staging validation (recommended):** Deploy to staging VPS via `scripts/deploy-staging.sh` against a database restored from production snapshot. Run smoke tests.
-4. **Production deploy:** Execute `scripts/deploy-production.sh` from a clean worktree. The script:
-   - Uploads immutable source archive to VPS with SHA256 verification
-   - Builds Docker image on VPS
-   - Validates health checks on candidate container
-   - Performs stopped-write cutover with automatic DB backup
-   - Runs `prisma migrate deploy` to apply pending migrations
-   - Starts new live container on same port
-   - Automatically rolls back (DB + container) if health checks fail
-5. **Post-deploy verification (VPS ship gate):** The script validates `/api/health/ready` both internally and via public URL. Additionally verify:
-   - Admin sign-in works
-   - Invitation email sends
-   - Tournament creation succeeds
-   - Public registration form renders
-   - Registration-management token link works
-   - Check-in and scoring flows work
-6. **Rollback readiness:** Previous container is renamed to `taekwondo-tournament-rollback` and DB backup is at `/var/backups/taekwondo/pre-{timestamp}-{SHA}.dump`. Manual rollback procedure is documented in `scripts/deploy-production.sh` comments (< 5 minute RTO).
+[`docker-compose.rebuild-production.json`](../docker-compose.rebuild-production.json)
+is preparation for checked immutable images and separate provisioning, migration-owner
+and runtime roles. It is not the live deployment. The rebuild image checks do not yet
+establish that Coolify deploys only their checked digest.
 
 ## Rollback
 
-Application rollback means redeploying the previous immutable image. Database rollback is restore-based because Prisma production migrations are forward-only. Never restore over the live database without first retaining a snapshot of the failed state. Validate tenant counts and a representative tournament after restoration.
+Coolify retains previous images. An approved rollback uses the previous known-good
+images/release through Coolify, followed by readiness/revision and authenticated workflow
+checks. Keep app and migration image identities together. Previous images alone do not
+undo database migrations: check schema compatibility before rollback and restore data
+only through an approved, rehearsed recovery plan. A timed live rollback drill remains open.
 
-### Automatic Rollback (Fail-Closed)
+## Backups
 
-The deploy script performs automatic rollback if:
-1. Candidate container health check fails (before cutover)
-2. New release internal health check fails (after cutover)
-3. New release public health check fails (after cutover)
-4. Database migrations fail
-5. Deployed image SHA doesn't match expected revision
+Nightly local backups of `bowin_rebuild_staging` run at **03:25 America/Toronto (ET)**
+through `/usr/local/sbin/bowin-rebuild-backup.sh` and
+`/etc/cron.d/bowin-rebuild-backup`. Dumps are age-encrypted under
+`/var/lib/bowin-backups` with **14-day retention**.
 
-Automatic rollback sequence:
-1. Stop new failing container
-2. Restore database from pre-deploy backup (if migrations were applied)
-3. Rename rollback container back to live
-4. Start previous release container
-5. Verify health checks pass on restored release
-6. Exit with status 90 (CRITICAL failure) if rollback fails
+There is **no off-host copy yet**. A freshness alert, isolated decrypt-and-restore drill,
+and agreed recovery point/time objectives remain required. A restore drill must verify
+migrations, accounts, latest accepted scores and publication before any live recovery.
+Do not expose encryption keys or backup contents, and do not use the live database for drills.
 
-### Manual Rollback Procedure
-
-If post-deploy issues are found after the automatic cutover succeeded:
-
-```bash
-# On the VPS (187.77.26.99):
-
-# 1. Stop the failing release
-docker stop taekwondo-tournament
-
-# 2. Restore database from backup (if migrations were applied)
-BACKUP_FILE=/var/backups/taekwondo/pre-<timestamp>-<sha>.dump
-docker exec -i markup-postgres pg_restore -U markup -d postgres --clean --create < $BACKUP_FILE
-
-# 3. Swap containers
-docker rename taekwondo-tournament-rollback taekwondo-tournament
-docker start taekwondo-tournament
-
-# 4. Verify health
-curl https://tkd.ashbi.ca/api/health/ready
-
-# 5. Check deployment records
-ls -lh /opt/bowin-production-releases/deployments/
-cat /opt/bowin-production-releases/deployments/<timestamp>-<sha>.json
-```
-
-**Rollback time target:** < 5 minutes
-- Container swap: ~10 seconds (stop + rename + start)
-- DB restore: 2-4 minutes (depends on backup size)
-- Automatic rollback during deploy: ~2 minutes total
-
-**Deployment evidence:** Each successful deployment creates a JSON record at `/opt/bowin-production-releases/deployments/<timestamp>-<sha>.json` containing:
-- Git revision SHA
-- Deployment timestamp (UTC)
-- Deployer identity (user@host)
-- Docker image ID
-- Backup file path
-- Rollback container name
-- Public URL
-- Health check status
-
-This evidence is recorded without exposing secrets and enables audit trails for compliance.
-
-## GitHub CI and VPS deployment
-
-**CI:** GitHub Actions runs on pushes to `main`. Workflows include:
-- `.github/workflows/ci.yml`: lint, typecheck, unit tests, E2E tests (Playwright), build verification
-- `.github/workflows/build-and-push.yml`: multi-arch Docker image build (amd64 + arm64) and push to `ghcr.io/camster91/taekwondo-tournament`. Runs only after `CI Build` **succeeds** for a push to `main` (a `workflow_run` trigger), and builds that exact commit. Version tags (`v*`) also publish.
-
-**Artifact publishing (fail-closed):**
-- Only immutable tags: `ghcr.io/camster91/taekwondo-tournament:main-<sha>` for main, `:<version>` / `:<version>-<sha>` for version tags
-- Content digest: `@sha256:<digest>` (pinned to exact build output)
-- No mutable `:main` or `:latest` pointers (removed; nothing in this repo pulls them)
-- **IMPORTANT:** Pull requests and red CI runs do NOT publish artifacts
-
-**Deployment:** Production deployment is **manual-only** via `scripts/deploy-production.sh` executed from a developer's local machine (requires SSH key for VPS). There is NO automated GitHub Actions deployment workflow. The script performs an immutable, rollback-safe deploy with automatic health-check validation.
-
-**Deploy preflight:** before uploading anything, the script refuses to deploy unless the local `HEAD` is on `origin/main` **and** the GitHub `Build` check for that commit concluded `success` (looked up with `gh`, or `curl` + `GITHUB_TOKEN` + `jq`). If GitHub can't be reached, `BOWIN_ALLOW_UNVERIFIED_CI="<reason>"` overrides the CI lookup only; the reason, the CI result and the previous live revision are written to the deployment record.
-
-**Deployment artifact source:** VPS production deployment builds Docker images from **immutable git source archives** (SHA-verified tar.gz), NOT from pre-built GHCR images. The GHCR images published by CI are for local testing and non-production deployments only. This ensures production deployments are:
-- Reproducible from source at any time
-- Independent of external registry availability
-- Verifiable via git SHA and archive checksum
-- Protected from supply-chain attacks on published images
-
-**VPS access:** Deployment requires SSH access to the Ashbi VPS (187.77.26.99) with the appropriate SSH key (`BOWIN_PRODUCTION_SSH_KEY` env var, defaults to `/c/Users/camst/.ssh/id_ed25519_hostinger`). Environment variables for the live container are preserved from the previous deployment and updated only for changed legal/consent fields.
-
-**Traefik reverse proxy:** The VPS runs Traefik for TLS termination and routing. Public URL `tkd.ashbi.ca` routes to `127.0.0.1:{LIVE_PORT}` where `{LIVE_PORT}` is the port allocated to the `taekwondo-tournament` container. Custom domain support (PR #256) requires dynamic Traefik configuration to route tenant-specific hostnames.
-
-## Coolify
-
-The image is self-contained: it serves the SPA and `/api` from one Node process, runs `prisma migrate deploy` before starting, and declares a Docker `HEALTHCHECK` on `/api/health/ready`. CI proves this on every commit with `scripts/container-smoke.sh` (build, boot on an empty database, check the endpoints); you can run the same script locally before switching Coolify on.
-
-**Application**
-- Build pack: **Dockerfile** (repository root). Port: **3001** (or set `PORT` and use that).
-- Branch: `main`. Enable automatic deploys only after branch protection requires the `Build` check, so a red commit can never reach production.
-- Health check path: `/api/health/ready` (returns 503 until the database answers).
-- Build variables (Coolify: tick "Build Variable" so they reach `docker build`): `VITE_OFFLINE_CAPABILITY_PUBLIC_KEY_BASE64` (public half of the offline key pair; baked into the client bundle), and optionally `VITE_SENTRY_DSN`, `VITE_SENTRY_ENVIRONMENT`, `VITE_CRISP_WEBSITE_ID`, `VITE_TUTORIAL_QUICKSTART_URL`, `VITE_TUTORIAL_IMPORT_URL`, `VITE_TUTORIAL_RUN_EVENT_URL` (see [build-time variables](#required-configuration)). Enable Coolify's "Include source commit in build" so `SOURCE_COMMIT` reaches the build; `/api/health` then reports the running revision (or pass `BUILD_SHA` yourself).
-- Runtime variables: everything under [Required configuration](#required-configuration), plus `OFFLINE_CAPABILITY_PRIVATE_KEY_BASE64`. Mark secrets as secret; never commit them.
-- Persistent storage: add a volume mount with destination **`/app/data`** (uploaded organization logos live in `/app/data/logos`, `LOGO_STORAGE_PATH`). Without it the upload directory is ephemeral and every redeploy loses the logos.
-
-**Database**
-- A Coolify PostgreSQL 16 resource on the same network. Set `DATABASE_URL` to its internal connection string.
-- Enable Coolify's scheduled backups for it (and an off-host destination such as S3). A deploy that applies migrations cannot be rolled back without a backup: take one before deploying a release that lists new migrations in `CHANGELOG.md`.
-
-**Scaling**
-- Run one replica. The auth cache, rate limits and WebSocket fan-out are per process; the background jobs (retention purge, billing grace period) are safe to run in more than one process but gain nothing from it.
-
-**Rollback**
-- Redeploy the previous image from Coolify's deployment history. If that release predates a migration, the extra columns/tables are ignored by the old code (all migrations here are additive). If a migration must be reverted, restore the pre-deploy backup.
-
-**Public demo (#164)**
-- A separate Coolify application and database, never the production ones. Set `ENABLE_DEMO_LOGIN=1` and `DEMO_ISOLATED_DATA=1` only there, with its own `JWT_SECRET` and offline key pair.
-- Reset the fabricated data with a Coolify scheduled task in that application, for example nightly: `DEMO_RESET_CONFIRM=bowin-resettable-showcase-v1 npm run demo:reset:production`. The confirmation lives in the task command, not in the environment.
-
-**After the first deploy**
-1. Create the first administrator: set `ADMIN_SETUP_KEY`, call `POST /api/auth/setup-admin`, then remove the key.
-2. Run the post-deploy checks in [Release sequence](#release-sequence) step 5.
-
+Historical root-app backup/deploy instructions in other retained docs are recovery
+references only. This page is the current rebuild deployment runbook.
