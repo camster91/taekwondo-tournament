@@ -21,7 +21,7 @@ export default function PageHeader({
     <div
       className={['flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between', className].filter(Boolean).join(' ')}
     >
-      <div className="min-w-0">
+      <div className="min-w-0 sm:flex-1 sm:min-w-[12rem]">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 flex-wrap [overflow-wrap:anywhere]">
           {title}
           {count !== undefined && (
@@ -36,8 +36,9 @@ export default function PageHeader({
           </p>
         )}
       </div>
+      {/* Buttons wrap rather than squeezing the title to nothing. */}
       {actions && (
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           {actions}
         </div>
       )}
