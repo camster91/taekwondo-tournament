@@ -1,71 +1,52 @@
-# Launch status
+# Bowin launch status
 
-The one current status page for Bowin. It replaces the dated ship plans and
-handoff notes now in [`docs/archive/`](archive/). GitHub issues hold the detail;
-this page says what is finished and what is left before real events.
+Updated 2026-10-03. The active rebuild is [`replacement/`](../replacement/README.md),
+live at https://tkd.ashbi.ca through Coolify **bowin-tkd**. Every `main` push deploys
+production. The parked root application is recoverable at `old-app-final`.
+This status reflects source review and owner-supplied deployment evidence, not a
+new live verification. The rebuild is live but not ready to call finished for real events.
 
-**Last updated:** 2026-10-01
+## Implemented
 
-## Product
+One-time owner/organization setup; password authentication and cookie sessions;
+owner, organizer and scorekeeper access; one-use staff invitation links; tournament
+creation; manual divisions, competitor entry, assignment and check-in; seeded
+single-elimination sparring with byes and winner advancement; scored-final patterns
+with shared ranks; ring bookings with overlap checks; explicit public result
+publication/withdrawal using public aliases; transactional mutation audit records.
+The UI is plain JavaScript and the database has six separate SQL migrations.
 
-### Requested discard and rebuild
+These are manual workflows. There is no automatic categorization, double elimination,
+clock/penalty automation, paid registration or offline scoring. Public results include
+the organization name but currently inherit Bowin header/footer branding.
 
-The replacement under `replacement/` is new code with a separate migration history
-and isolated `bowin_rebuild_` database. Its implemented API slices and remaining
-browser/product work are described in [the replacement README](../replacement/README.md).
-The replacement is incomplete and has not replaced production. Its checked-image
-pipeline is separate from the root application's legacy CI/build/deploy path.
+## Remaining priorities
 
-The feature table below describes the existing root application, retained as a
-recovery reference; it does not establish that the requested replacement contains
-all those features or has passed its launch checklist.
+**P0 — before real events:**
 
-Everything needed to run a Taekwondo tournament is built and covered by
-automated tests (unit, Postgres integration, and Playwright on Chromium,
-Firefox, WebKit and mobile Chrome):
+- Recovery: nightly encrypted local backups now run at 03:25 ET with 14-day retention;
+  off-host copies, decrypt/restore rehearsal, freshness alerts and agreed RPO/RTO remain.
+- Deployment: enforce checked releases, rehearse rollback, separate runtime/migration
+  privileges, and preserve live data when changing the staging-labelled deployment.
+- Safe operations: registration edits/moves/withdrawals, late-entry and event lifecycle,
+  audited result corrections, password recovery and staff access removal.
+- Trust and usability: approved privacy/terms/minor-data procedures, organizer-only
+  public branding, event-local schedule entry, mobile/accessibility acceptance.
+- Event resilience: printable paper fallback, proven monitoring/alert delivery and a
+  signed two-ring venue rehearsal covering expiry, outages, corrections and recovery.
 
-| Area | State |
-|------|-------|
-| Accounts | Magic-link sign-in, HttpOnly session cookie + CSRF, session revocation on logout/role change/deactivation, staff invitations with delivery status and recovery |
-| Organizations | Multi-tenant isolation, per-tournament access grants, branded public pages, custom domains, templates |
-| Registration | Staff entry, Excel/CSV import with auto-mapping, public self-registration with parental consent, capacity + waitlist, optional Stripe entry fees, confirmation emails, self-service registration management |
-| Divisions & brackets | Auto-categorization, manual moves/splits/merges, DE/SE brackets with byes and seeding, correctable results with audit history |
-| Event day | Check-in with weigh-in, offline-capable scorekeeper, director control room, ring schedule with delay propagation, ring staffing with coverage warnings and staff run sheets, public scoreboard, printable brackets/certificates/school reports |
-| Compliance | Privacy/terms pages, consent versioning, GDPR export and account deletion, retention purge with dry run and legal hold |
-| Operations | Health/readiness probes, Prometheus-style metrics, backup scripts with freshness check, fail-closed CI and deploy gates |
+**P1 — complete organizer workflows:** bulk import/division assistance, optional public
+registration, email delivery, refreshing public displays, ring-scoped staff operations,
+reviewed connectivity recovery, broader browser/security/load QA and clearer onboarding.
 
-Experimental: non-Taekwondo sport profiles (see README).
+**P2 — after reliable supervised events:** billing/customer lifecycle, isolated demo,
+broader competition rules/formats and advanced scheduling/localization.
 
-## Deploying
+## Owner and design decisions
 
-One Docker image plus PostgreSQL. Coolify settings and the environment variable
-list are in [DEPLOY.md](DEPLOY.md#coolify); the VPS script path is documented
-there too. Deploy only commits on `main` with a green `Build` check.
-
-## Operator checklist before the first real event
-
-These cannot be done in code. Each links to the issue that tracks it.
-
-**Accounts and services**
-- [ ] Production environment variables set (see DEPLOY.md), including a fresh `JWT_SECRET`, `METRICS_TOKEN` and offline key pair.
-- [ ] Mailgun domain verified (SPF/DKIM); send one real staff invitation and one registration confirmation to a test inbox (#46).
-- [ ] Billing: either configure Stripe products, prices and the webhook, or run the pilot on manual plans (admin sets the plan).
-- [ ] Legal sign-off on the privacy notice, terms and consent version (#167).
-
-**Safety drills**
-- [ ] Backups scheduled with an off-host copy; one restore rehearsed and timed (#165).
-- [ ] One rollback rehearsed: redeploy the previous image and confirm health (#119, #292).
-- [ ] Alerts wired: `/api/health/ready` uptime check, metrics scrape, backup freshness (#165).
-
-**Rehearsal**
-- [ ] Fabricated venue rehearsal on the production build: sign in → import competitors → generate divisions and brackets → check in → score on two rings (one offline for 5 minutes) → publish results (#166).
-- [ ] Manual screen-reader and keyboard pass on the event-day screens (#128).
-- [ ] Printed brackets and paper score sheets packed as a fallback; on-call window agreed.
-
-**Optional**
-- [ ] Isolated public demo environment (#164): separate database and hostname, `ENABLE_DEMO_LOGIN=1` and `DEMO_ISOLATED_DATA=1` there only.
-- [ ] Retention purge: approve the retention period, review a dry run (`RETENTION_PURGE_DRY_RUN=true`), then enable (#121).
-
-## Not in scope for the pilot
-
-SSO, SMS/push notifications, native mobile apps, and federation certification.
+Cameron must approve pilot scope/rules, deployment and database transition strategy,
+recovery objectives/off-host destination, legal/privacy policy, support contacts and
+rehearsal/release gates. Bianca must approve organizer-only identity and review mobile,
+desktop and public-result states. Existing market/support plans remain proposals until
+approved against rebuild behavior. See [deployment](DEPLOY.md),
+[market launch plan](MARKET-LAUNCH-PLAN.md) and [pilot support plan](PILOT-SUPPORT-PLAN.md).

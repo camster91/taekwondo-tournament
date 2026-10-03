@@ -1,7 +1,8 @@
 # Fresh Bowin implementation
 
 This is new code and a new migration history for the requested discard/rebuild.
-The existing root implementation, Git history and old database are recovery references.
+The retired root implementation is recoverable at tag `old-app-final`; Git history
+and the old database remain recovery references.
 This package never imports existing application modules or runs old migrations.
 
 Implemented slices include one-time owner setup, password/session authentication,
@@ -50,7 +51,7 @@ completion cannot write its audit, including rollback of the division status.
 
 The complete rebuild still requires public/self-service registration where enabled,
 registration edits/withdrawals, production HTTPS/browser acceptance, and complete replacement-host recovery. This foundation is
-not a completed rebuild or a live release. Existing API integration tests against
+live at https://tkd.ashbi.ca, but is not a completed rebuild. Existing API integration tests against
 fresh isolated PostgreSQL prove invite/session/tenant/role and registration boundaries,
 the three-competitor final and concurrent score submission rejection. Domain tests
 exercise all 2â€“256 bracket sizes, verifying every entrant appears exactly once and
@@ -60,7 +61,9 @@ Full release handoff and complete replacement-host recovery remain required.
 Use `npm ci`, `npm test`, and `npm run migrate` with a dedicated disposable database.
 Runtime configuration: DATABASE_URL, REBUILD_DATABASE_NAME, APP_ORIGIN, SETUP_TOKEN,
 and a full RELEASE_SHA. Never use production/archive database connections for tests.
-Coolify configuration and checked immutable-image releases follow candidate validation.
+Coolify app `bowin-tkd` already auto-deploys `main` using
+`docker-compose.rebuild-staging.yml` (context `./replacement`). Its staging-labelled
+database is the live database. Checked immutable-image deployment remains preparation.
 
 ## Checked replacement images
 
@@ -92,11 +95,10 @@ Draft receipt records preserve publication metadata; they do not themselves pres
 backup data or guarantee registry retention. Publication and VPS registry access
 remain unverified until exercised against the actual registry and account.
 
-The existing root application's build/publication workflow is a legacy path and
-does not publish this replacement image. No replacement production promotion,
-default-branch change, secret enrollment, live routing change or database reset is
-part of these image checks. A reviewed Coolify consumer and recovery handoff remain
-required before enabling production automation.
+The retired root application's build/publication workflows have been removed.
+These image checks do not change live routing or reset the database. Coolify already
+auto-deploys main to production through the staging Compose; adopting a checked
+immutable-image consumer and completing the recovery handoff remain required.
 
 The browser tournament desk serves setup/sign-in, tournaments, divisions, competitor
 entry and division assignment/check-in, explicit bracket seed ordering and sparring
