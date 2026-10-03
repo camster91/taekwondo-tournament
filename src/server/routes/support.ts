@@ -15,6 +15,7 @@ import { escapeHtml } from '../services/email-templates.js';
 import {
   BUG_REPORT_SOURCE,
   bugReportSchema,
+  bugTriageSchema,
   supportChatSchema,
   supportTicketQuerySchema,
   supportTicketUpdateSchema,
@@ -28,6 +29,7 @@ import {
   testSupportProviderConnection,
   type SupportConfigAuditEntry,
 } from '../services/support-provider.js';
+import { BugTriageError, MAX_TRIAGE_TICKETS, runBugTriage } from '../services/bug-triage.js';
 
 interface SupportChatMessage {
   role: 'user' | 'assistant';
@@ -824,6 +826,45 @@ router.post(
       openAiBaseUrl: req.body.openAiBaseUrl || saved.openAiBaseUrl,
     });
     res.status(result.ok ? 200 : result.category === 'configuration' ? 400 : 502).json(result);
+  },
+);
+
+// Optional AI pass over open bug reports (#18). Admin only, and only when
+// an AI key is configured (the Support Tickets page hides the button
+// otherwise). Returns suggestions; nothing is saved.
+router.post(
+  '/bug-reports/triage',
+  authenticate,
+  requireRole('admin'),
+  chatLimiter,
+  validateRequest(bugTriageSchema),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const prisma: PrismaClient = req.app.locals.prisma;
+    if (!req.user?.id) return res.status(401).json({ error: 'Authentication required.' });
+    const config = await resolveSupportConfig(prisma, req.user.id);
+    if (!config.openAiApiKey) {
+      return res.status(409).json({ error: 'AI sorting is not set up. Add an AI key in support settings first.' });
+    }
+    const tickets = await prisma.supportTicket.findMany({
+      where: { source: BUG_REPORT_SOURCE, status: 'open' },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_TRIAGE_TICKETS,
+      select: { id: true, subject: true, lastUserMessage: true, page: true, priority: true, createdAt: true },
+    });
+    try {
+      const result = await runBugTriage(
+        tickets.map((t) => ({ id: t.id, subject: t.subject, message: t.lastUserMessage, page: t.page })),
+        config,
+      );
+      res.json({
+        ...result,
+        tickets: tickets.map((t) => ({ id: t.id, subject: t.subject, priority: t.priority, createdAt: t.createdAt })),
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      if (error instanceof BugTriageError) return res.status(error.status).json({ error: error.message });
+      throw error;
+    }
   },
 );
 

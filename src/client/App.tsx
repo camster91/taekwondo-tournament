@@ -18,7 +18,6 @@ import {
   Calendar,
   LayoutGrid,
   Activity,
-  Bell,
   Settings as SettingsIcon,
   ExternalLink,
   Trash2,
@@ -38,6 +37,7 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import SupportChatWidget from './components/SupportChatWidget';
 import ReportBugButton from './components/ReportBugButton';
+import NotificationBell from './components/NotificationBell';
 import LiveChatWidget from './components/LiveChatWidget';
 import Tour from './components/Tour';
 import CloseButton from './components/ui/CloseButton';
@@ -543,13 +543,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
             {user && <ReportBugButton />}
 
             {/* Notification bell */}
-            <button
-              className="p-2 text-surface-600 hover:text-surface-900 dark:text-surface-400 dark:hover:text-white rounded-md hover:bg-surface-100 dark:hover:bg-surface-800"
-              aria-label="Notifications"
-              title="Notifications"
-            >
-              <Bell className="h-4 w-4" />
-            </button>
+            {user && <NotificationBell />}
           </div>
         </header>
 

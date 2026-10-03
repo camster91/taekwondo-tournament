@@ -31,7 +31,7 @@ vi.mock('../middleware/validate.js', () => ({ validateRequest: () => (_req: any,
 vi.mock('../services/email.js', () => ({ sendEmail: (...args: any[]) => mocks.sendEmail(...args) }));
 vi.mock('./support-validation.js', () => ({
   supportChatSchema: {}, supportTicketQuerySchema: {}, supportTicketUpdateSchema: {},
-  supportConfigSchema: {}, supportConfigTestSchema: {}, bugReportSchema: {}, BUG_REPORT_SOURCE: 'bug-report',
+  supportConfigSchema: {}, supportConfigTestSchema: {}, bugReportSchema: {}, bugTriageSchema: {}, BUG_REPORT_SOURCE: 'bug-report',
 }));
 vi.mock('../services/operational-query.js', () => ({
   answerOperationalQuery: vi.fn(),
@@ -439,5 +439,67 @@ describe('anonymous support chat abuse limits', async () => {
       expect.objectContaining({ max: 10, windowMs: hour }),
       expect.objectContaining({ max: 3, windowMs: hour }),
     ]));
+  });
+});
+
+describe('bug-report AI triage (#18)', () => {
+  const admin = { id: 'admin-1', email: 'a@example.test', role: 'admin', firstName: 'A', lastName: 'Dmin' };
+  const tickets = [
+    { id: 'ticket-1', subject: 'PDF empty', lastUserMessage: 'What happened: no names', page: '/divisions', priority: 'normal', createdAt: new Date() },
+    { id: 'ticket-2', subject: 'PDF blank', lastUserMessage: 'What happened: blank', page: null, priority: 'low', createdAt: new Date() },
+  ];
+  const prismaWith = () => ({
+    organizationMember: { findMany: vi.fn().mockResolvedValue([]) },
+    supportTicket: { findMany: vi.fn().mockResolvedValue(tickets), update: vi.fn(), updateMany: vi.fn() },
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('refuses with 409 and calls no provider when no AI key is configured', async () => {
+    vi.stubEnv('OPENAI_API_KEY', '');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const prisma: any = prismaWith();
+    const res = response();
+
+    await handler('post', '/bug-reports/triage')({ user: admin, body: {}, app: { locals: { prisma } } }, res);
+
+    expect(res.statusCode).toBe(409);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(prisma.supportTicket.findMany).not.toHaveBeenCalled();
+  });
+
+  it('groups open bug reports from a mocked provider reply and stores nothing', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'platform-key');
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({
+          groups: [{ title: 'Bracket PDF has no names', severity: 'high', category: 'display', summary: 'PDF export is blank.', reports: ['R1', 'R2'] }],
+        }) } }],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const { assertSafeSupportProviderUrl } = await import('../services/support-provider.js');
+    vi.mocked(assertSafeSupportProviderUrl).mockResolvedValueOnce(new URL('https://api.openai.com/v1') as never);
+    const prisma: any = prismaWith();
+    const res = response();
+
+    await handler('post', '/bug-reports/triage')({ user: admin, body: {}, app: { locals: { prisma } } }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma.supportTicket.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { source: 'bug-report', status: 'open' },
+    }));
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(res.body.groups).toEqual([
+      { title: 'Bracket PDF has no names', severity: 'high', category: 'display', summary: 'PDF export is blank.', ticketIds: ['ticket-1', 'ticket-2'] },
+    ]);
+    expect(res.body.tickets.map((t: { id: string }) => t.id)).toEqual(['ticket-1', 'ticket-2']);
+    expect(prisma.supportTicket.update).not.toHaveBeenCalled();
+    expect(prisma.supportTicket.updateMany).not.toHaveBeenCalled();
   });
 });

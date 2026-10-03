@@ -137,6 +137,8 @@ nodemon+ts-node in parallel. Build: `prisma generate && vite build
 │   │   ├── components/
 │   │   │   ├── ui/                       # Skeleton, EmptyState, ConfirmDialog, Spinner, Toast
 │   │   │   ├── MatchTimer.tsx
+│   │   │   ├── NotificationBell.tsx      # top-bar bell (GET /api/notifications)
+│   │   │   ├── SpecialNeedsNote.tsx      # director-only special-needs line (Divisions, bracket editor, check-in)
 │   │   │   └── TournamentRulesEditor.tsx
 │   │   └── utils/
 │   │       ├── csv-export.ts
@@ -588,6 +590,23 @@ one person are reported as double-bookings (warned, not blocked).
 | GET | `/api/staffing/mine` | The caller's active lines across open, accessible tournaments. |
 
 Changes are audited in `TournamentOperationAudit` (`staff_assignment_*`).
+
+### `/api/notifications` (`src/server/routes/notifications.ts`)
+
+The top-bar bell (`src/client/components/NotificationBell.tsx`). Read-only,
+computed per request by `buildNotifications` in
+`src/server/services/notifications.ts`; nothing is stored. Unread state is the
+newest seen item time in localStorage (`bowin_notifications_seen_v1:<userId>`).
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/notifications` | auth. Everyone: own staff jobs for tournaments within yesterday..+2 days. Admin/director (tournaments at director level via `resolveTournamentScope`): new registrations (24h), waitlist, rings without a scorekeeper near the event, open support requests (org-scoped for directors). Admin: pending invites and failed invite emails. Max 20 items. |
+
+### `/api/support` triage (`src/server/routes/support.ts`)
+
+| Method | Path | Notes |
+|--------|------|-------|
+| POST | `/api/support/bug-reports/triage` | admin. Body `{}`. Needs the support AI key (env `OPENAI_API_KEY` or org support settings), else 409. Sends up to 40 open `bug-report` tickets (labelled R1..Rn, never ids) and returns suggested groups (severity, category, one-line summary). Nothing is saved: `SupportTicket` has no metadata field; the page applies a priority via `PATCH /api/support/:id`. Logic and reply parsing: `src/server/services/bug-triage.ts`. |
 
 ### `/api/public` (`src/server/routes/public.ts`)
 

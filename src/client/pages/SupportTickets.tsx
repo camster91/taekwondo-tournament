@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, CheckCircle2, CircleX, RefreshCcw } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, CircleX, RefreshCcw, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getAuthHeaders } from '../context/AuthContext';
+import { getAuthHeaders, useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Card, CardBody, CardHeader, PageHeader, Select } from '../components/ui';
 
@@ -26,9 +26,101 @@ interface SupportTicket {
   updatedAt: string;
 }
 
+type TriageSeverity = 'low' | 'normal' | 'high';
+
+interface TriageGroup {
+  title: string;
+  severity: TriageSeverity;
+  category: string;
+  summary: string;
+  ticketIds: string[];
+}
+
+interface TriageResponse {
+  groups: TriageGroup[];
+  ungroupedTicketIds: string[];
+  tickets: Array<{ id: string; subject: string; priority: SupportTicketPriority }>;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  error: 'Error or crash',
+  wrong_result: 'Wrong result or data',
+  display: 'Looks wrong',
+  slow: 'Slow',
+  sign_in: 'Signing in',
+  email: 'Email',
+  payments: 'Payments',
+  other: 'Other',
+};
+
+const SEVERITY_STYLES: Record<TriageSeverity, string> = {
+  high: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  normal: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  low: 'bg-surface-100 text-surface-700 dark:bg-surface-800 dark:text-surface-300',
+};
+
+const SEVERITY_LABELS: Record<TriageSeverity, string> = { high: 'High', normal: 'Normal', low: 'Low' };
+
 export default function SupportTickets() {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const [triage, setTriage] = useState<TriageResponse | null>(null);
+
+  // The AI sorting button only appears when an AI key is configured (#18).
+  const { data: supportConfig } = useQuery<{ hasOpenAiApiKey: boolean }>({
+    queryKey: ['support-config'],
+    queryFn: async () => {
+      const res = await fetch('/api/support/config', { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to load support settings');
+      return res.json();
+    },
+    enabled: isAdmin,
+  });
+  const canTriage = isAdmin && Boolean(supportConfig?.hasOpenAiApiKey);
+
+  const runTriage = useMutation({
+    mutationFn: async (): Promise<TriageResponse> => {
+      const res = await fetch('/api/support/bug-reports/triage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || 'AI sorting failed. Try again.');
+      return data as TriageResponse;
+    },
+    onSuccess: (data) => setTriage(data),
+    onError: (error: unknown) => {
+      toast.error(error instanceof Error ? error.message : 'AI sorting failed. Try again.');
+    },
+  });
+
+  const applyPriority = useMutation({
+    mutationFn: async ({ ids, priority }: { ids: string[]; priority: SupportTicketPriority }) => {
+      for (const ticketId of ids) {
+        const res = await fetch(`/api/support/${ticketId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({ priority }),
+        });
+        if (!res.ok) throw new Error('Could not update every ticket. Refresh and try again.');
+      }
+      return { ids, priority };
+    },
+    onSuccess: ({ ids, priority }) => {
+      setTriage((current) => current && {
+        ...current,
+        tickets: current.tickets.map((t) => (ids.includes(t.id) ? { ...t, priority } : t)),
+      });
+      queryClient.invalidateQueries({ queryKey: ['support-tickets'] });
+      toast.success(`Priority set to ${SEVERITY_LABELS[priority]} for ${ids.length} ticket${ids.length === 1 ? '' : 's'}`);
+    },
+    onError: (error: unknown) => {
+      toast.error(error instanceof Error ? error.message : 'Unable to update tickets');
+    },
+  });
   const [statusFilter, setStatusFilter] = useState<SupportTicketStatus | ''>('');
   const [typeFilter, setTypeFilter] = useState<'' | 'bug-report'>('');
   const [search, setSearch] = useState('');
@@ -157,6 +249,74 @@ export default function SupportTickets() {
           </label>
         </CardBody>
       </Card>
+
+      {canTriage && (
+        <Card>
+          <CardHeader
+            title="Sort new bug reports"
+            action={
+              <button
+                type="button"
+                onClick={() => runTriage.mutate()}
+                disabled={runTriage.isPending}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-60"
+              >
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
+                {runTriage.isPending ? 'Sorting…' : 'Sort with AI'}
+              </button>
+            }
+          />
+          <CardBody className="space-y-3">
+            <p className="text-sm text-surface-600 dark:text-surface-400">
+              Groups open bug reports that look like the same problem and suggests how urgent each one is.
+              These are suggestions only; nothing changes until you apply a priority.
+            </p>
+            {triage && (triage.groups.length === 0 && triage.ungroupedTicketIds.length === 0 ? (
+              <p className="text-sm text-surface-600 dark:text-surface-400">There are no open bug reports to sort.</p>
+            ) : (
+              <ul className="space-y-3" aria-label="Suggested groups">
+                {triage.groups.map((group, index) => {
+                  const subjects = new Map(triage.tickets.map((t) => [t.id, t]));
+                  const needsChange = group.ticketIds.filter((tid) => subjects.get(tid)?.priority !== group.severity);
+                  return (
+                    <li key={`${group.title}-${index}`} className="rounded-lg border border-surface-200 p-3 dark:border-surface-700">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${SEVERITY_STYLES[group.severity]}`}>
+                          {SEVERITY_LABELS[group.severity]}
+                        </span>
+                        <span className="text-xs text-surface-500 dark:text-surface-400">{CATEGORY_LABELS[group.category] ?? 'Other'}</span>
+                        <span className="text-xs text-surface-500 dark:text-surface-400">· {group.ticketIds.length} report{group.ticketIds.length === 1 ? '' : 's'}</span>
+                      </div>
+                      <p className="mt-1 text-sm font-medium text-surface-900 dark:text-white">{group.title}</p>
+                      {group.summary && <p className="text-sm text-surface-700 dark:text-surface-300">{group.summary}</p>}
+                      <ul className="mt-2 list-disc pl-5 text-xs text-surface-600 dark:text-surface-400">
+                        {group.ticketIds.map((tid) => <li key={tid}>{subjects.get(tid)?.subject ?? tid}</li>)}
+                      </ul>
+                      {needsChange.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => applyPriority.mutate({ ids: needsChange, priority: group.severity })}
+                          disabled={applyPriority.isPending}
+                          className="mt-2 text-xs font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 disabled:opacity-60"
+                        >
+                          Set priority to {SEVERITY_LABELS[group.severity]} ({needsChange.length})
+                        </button>
+                      ) : (
+                        <p className="mt-2 text-xs text-surface-500 dark:text-surface-400">Priority already matches.</p>
+                      )}
+                    </li>
+                  );
+                })}
+                {triage.ungroupedTicketIds.length > 0 && (
+                  <li className="text-xs text-surface-500 dark:text-surface-400">
+                    {triage.ungroupedTicketIds.length} report{triage.ungroupedTicketIds.length === 1 ? ' was' : 's were'} not grouped. Review {triage.ungroupedTicketIds.length === 1 ? 'it' : 'them'} below.
+                  </li>
+                )}
+              </ul>
+            ))}
+          </CardBody>
+        </Card>
+      )}
 
       <Card>
         <CardBody className="p-0">

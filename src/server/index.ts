@@ -33,6 +33,7 @@ import billingRouter, { stripeWebhookHandler } from './routes/billing.js';
 import supportRouter from './routes/support.js';
 import sosAlertsRouter from './routes/sos-alerts.js';
 import staffingRouter from './routes/staffing.js';
+import notificationsRouter from './routes/notifications.js';
 import { isAppError, toApiError } from './utils/errors.js';
 import { mountLargeJsonBodyRoutes } from './middleware/large-json-body.js';
 import { isEmailConfigured, verifyEmailConnection } from './services/email.js';
@@ -287,6 +288,7 @@ app.use('/api/organizations', organizationLogoRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/sos-alerts', sosAlertsRouter);
 app.use('/api/staffing', staffingRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // Serve uploaded organization logos (P1-11)
 // Logos are inert raster images: serve them with a locked-down, sandboxed

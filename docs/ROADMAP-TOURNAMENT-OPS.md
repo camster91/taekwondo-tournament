@@ -68,6 +68,8 @@ edits; bracket corrections with undo; Excel import with column auto-detection.
 | 17 | The bell icon in the top bar does nothing; wire it to real notifications or remove it | S |
 | 18 | Bug reports: an optional AI pass that groups and ranks new "bug-report" support tickets | S–M |
 
+| 16 | Use height as an optional tie-break in sparring splits | S |
+
 ## Done on 2026-10-03: fair divisions (items 2, 3, 4, 5, 7 in part, 16)
 All opt-in under Tournament Settings → Categorization + Brackets; the
 default rules give the same divisions as before.
@@ -119,3 +121,14 @@ first-round matches change; later rounds re-sync. Changing the bracket size
   is used when brackets are made; double stays the default.
 - #14 Schedule → "Print by ring": a ring-by-time grid using the bracket
   sheet names and the folder each sheet is in.
+
+## Done on 2026-10-03 (small items)
+- 15: Special-needs notes show for directors on the Divisions page (per
+  division, expandable), in the bracket editor and on check-in. Not done: a
+  one-click "separate division" option (`Division.isSpecialNeeds` exists but
+  nothing uses it yet).
+- 17: The bell lists real notifications (new registrations, waitlist,
+  staffing gaps near the event, your own staff jobs, open support requests,
+  invite problems) with an unread badge.
+- 18: Admins can sort open bug reports with AI on Support Tickets when an AI
+  key is set; suggestions are not stored, a priority is applied on request.

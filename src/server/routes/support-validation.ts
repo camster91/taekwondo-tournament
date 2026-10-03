@@ -51,6 +51,9 @@ export const bugReportSchema = z.object({
   browser: z.string().trim().max(300).optional().nullable(),
 });
 
+/** POST /api/support/bug-reports/triage — no options yet; rejects stray fields. */
+export const bugTriageSchema = z.object({}).strict();
+
 export const supportTicketQuerySchema = z
   .object({
     status: z.enum(['open', 'in_progress', 'resolved', 'closed']).optional(),
