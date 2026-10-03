@@ -487,6 +487,7 @@ unless noted.
 | DELETE | `/api/divisions/:id/assign/:assignmentId` | scorekeeper+ |
 | POST | `/api/divisions/:id/move` | scorekeeper+ |
 | POST | `/api/divisions/:id/split` | admin/director |
+| POST | `/api/divisions/merge` | director. Body `{ sourceDivisionIds, targetDivisionId, auditReason, confirmOverLimit? }`. If the merged group breaks a fairness limit, 409 `{ code: 'FAIRNESS_LIMIT', message, details }` naming the furthest pair; the page asks "Merge anyway" and resends with `confirmOverLimit: true` (`services/manual-merge-fairness.ts`). |
 | DELETE | `/api/divisions/tournament/:tournamentId/all` | admin/director (gated) |
 | GET | `/api/divisions/tournament/:tournamentId/backup` | |
 | POST | `/api/divisions/tournament/:tournamentId/restore` | admin/director |
@@ -755,7 +756,7 @@ cuts each sparring group by weight into similar-size classes
 black belts their own bands; `rules.fairness` (`FairDivisionRules` in
 `tournament-rules.ts`, stored under the `fairness` settings key) holds
 `splitBySimilarity`, `heightTieBreak`, per-age `limits` (max weight/age gap:
-block merges, bound auto classes and splits, warn naming the furthest pair),
+block automatic merges (manual merges warn first), bound auto classes and splits, warn naming the furthest pair),
 `schoolAliases` and `schoolShareWarningPercent`. School matching for
 fairness goes through `src/shared/utils/school.ts` (`createSchoolResolver`).
 Defaults leave categorization unchanged.

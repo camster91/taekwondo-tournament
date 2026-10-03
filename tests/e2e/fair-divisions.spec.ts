@@ -114,5 +114,27 @@ test.describe('fair divisions settings', () => {
     const limited = await preview();
     expect(limited.divisions).toHaveLength(2);
     expect(limited.warnings.some((w) => w.startsWith('Kept "') && w.includes('E2E Six Fair (6) and E2E Nine Fair (9) are 3 years apart'))).toBe(true);
+
+    // A director merging them by hand is warned, not blocked: the first
+    // try names the pair, "Merge anyway" (confirmOverLimit) goes ahead.
+    const generated = await page.request.post(`/api/divisions/tournament/${tournamentId}/auto-generate`, {
+      headers: { 'X-CSRF-Token': await csrf() },
+      data: {},
+    });
+    expect(generated.ok()).toBe(true);
+    const divisionsResponse = await page.request.get(`/api/divisions/tournament/${tournamentId}`);
+    const divisions = (await divisionsResponse.json()) as Array<{ id: string; ageMin: number }>;
+    expect(divisions).toHaveLength(2);
+    const [younger, older] = [...divisions].sort((a, b) => a.ageMin - b.ageMin);
+    const merge = async (confirmOverLimit?: boolean) => page.request.post('/api/divisions/merge', {
+      headers: { 'X-CSRF-Token': await csrf() },
+      data: { sourceDivisionIds: [older.id], targetDivisionId: younger.id, auditReason: 'E2E merge', confirmOverLimit },
+    });
+    const warned = await merge();
+    expect(warned.status()).toBe(409);
+    const body = await warned.json();
+    expect(body.code).toBe('FAIRNESS_LIMIT');
+    expect(body.message).toBe('This puts 3 years between E2E Six Fair and E2E Nine Fair, above your 2 year limit.');
+    expect((await merge(true)).ok()).toBe(true);
   });
 });

@@ -220,8 +220,9 @@ export interface FairDivisionRules {
   splitBySimilarity: boolean;
   // Use height to order people of the same weight (sparring).
   heightTieBreak: boolean;
-  // Hard weight/age limits per age range. Merges that would break one are
-  // blocked, and divisions that still break one are listed as warnings.
+  // Hard weight/age limits per age range. Automatic merges that would break
+  // one are blocked (a manual merge asks the director to confirm), and
+  // divisions that still break one are listed as warnings.
   limits: FairnessLimit[];
   // Different spellings that are the same school.
   schoolAliases: SchoolAlias[];

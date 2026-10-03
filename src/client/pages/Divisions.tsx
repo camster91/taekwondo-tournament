@@ -107,6 +107,24 @@ interface PreviewResult {
   divisions: PreviewDivision[];
   totalCompetitors: number;
   warnings: string[];
+  weightStrategy?: 'standard' | 'auto' | 'custom';
+}
+
+interface MergeRequest {
+  sourceDivisionIds: string[];
+  targetDivisionId: string;
+  auditReason: string;
+  confirmOverLimit?: boolean;
+}
+
+// The server's 409 when a manual merge breaks a fairness limit; the
+// director can still merge after confirming.
+class FairnessLimitError extends Error {
+  request: MergeRequest;
+  constructor(message: string, request: MergeRequest) {
+    super(message);
+    this.request = request;
+  }
 }
 
 interface DivisionRecommendationRecord {
@@ -245,6 +263,7 @@ export default function Divisions() {
   const [applyRecommendationConfirm, setApplyRecommendationConfirm] = useState(false);
   const [divisionExceptionParams, setDivisionExceptionParams] = useState<DivisionExceptionParams | null>(null);
   const [selectedDivisionsForMerge, setSelectedDivisionsForMerge] = useState<Set<string>>(new Set());
+  const [mergeOverLimit, setMergeOverLimit] = useState<{ message: string; request: MergeRequest } | null>(null);
   const { addToast } = useToast();
 
   // Sync filters to URL when they change
@@ -540,22 +559,17 @@ export default function Divisions() {
   });
 
   const mergeDivisionsMutation = useMutation({
-    mutationFn: async ({
-      sourceDivisionIds,
-      targetDivisionId,
-      auditReason,
-    }: {
-      sourceDivisionIds: string[];
-      targetDivisionId: string;
-      auditReason: string;
-    }) => {
+    mutationFn: async (request: MergeRequest) => {
       const res = await fetch(`/api/divisions/merge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ sourceDivisionIds, targetDivisionId, auditReason }),
+        body: JSON.stringify(request),
       });
       if (!res.ok) {
         const error = await res.json();
+        if (error.code === 'FAIRNESS_LIMIT') {
+          throw new FairnessLimitError(error.message, request);
+        }
         if (error.code === 'ACTIVE_BRACKETS') {
           throw new Error(
             `Cannot merge: ${error.warning}. ${error.suggestion || 'Clear brackets before merging.'}`
@@ -569,9 +583,16 @@ export default function Divisions() {
       queryClient.invalidateQueries({ queryKey: ['divisions', id] });
       setDivisionExceptionParams(null);
       setSelectedDivisionsForMerge(new Set());
+      setMergeOverLimit(null);
       addToast(data.message || 'Divisions merged successfully', 'success');
     },
     onError: (error: Error) => {
+      if (error instanceof FairnessLimitError) {
+        setDivisionExceptionParams(null);
+        setMergeOverLimit({ message: error.message, request: error.request });
+        return;
+      }
+      setMergeOverLimit(null);
       addToast(error.message, 'error');
     },
   });
@@ -1526,6 +1547,11 @@ export default function Divisions() {
             </>
           }
         >
+          {previewData.weightStrategy === 'auto' && (
+            <p className="px-4 py-3 text-sm text-surface-700 dark:text-surface-300 border-b border-surface-200 dark:border-surface-700">
+              Weight classes: Auto. Groups of similar size, made from who registered.
+            </p>
+          )}
           {previewData.warnings.length > 0 && (
             <div className="p-4 bg-warning/50 dark:bg-warning/900/20 border-b border-warning200 dark:border-warning800">
               <div className="flex items-start">
@@ -1620,6 +1646,20 @@ export default function Divisions() {
           </div>
         </Modal>
       )}
+
+      {/* Manual merge over a fairness limit: warn, the director decides */}
+      <ConfirmDialog
+        isOpen={!!mergeOverLimit}
+        onClose={() => { if (!mergeDivisionsMutation.isPending) setMergeOverLimit(null); }}
+        onConfirm={() => mergeOverLimit && mergeDivisionsMutation.mutate({ ...mergeOverLimit.request, confirmOverLimit: true })}
+        title="Over your fairness limit"
+        message={mergeOverLimit?.message ?? ''}
+        confirmText="Merge anyway"
+        cancelText="Cancel"
+        variant="warning"
+        isLoading={mergeDivisionsMutation.isPending}
+        closeDisabled={mergeDivisionsMutation.isPending}
+      />
 
       {/* Delete Division Confirmation */}
       <ConfirmDialog

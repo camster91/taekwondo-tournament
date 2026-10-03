@@ -1720,3 +1720,64 @@ export function mergeKeepsFairnessLimits(
   notes?.push(`Kept "${a.name}" and "${b.name}" apart. ${problems[0]}`);
   return false;
 }
+
+export interface FairnessLimitBreak {
+  kind: 'weight' | 'age';
+  // The two people furthest apart.
+  low: string;
+  high: string;
+  gap: number;
+  limit: number;
+  unit: 'lb' | 'years';
+  // e.g. "This puts 14 lb between Sam Lee and Ana Park, above your 10 lb limit."
+  message: string;
+}
+
+/**
+ * The hard fairness limits a division would break, one entry per limit
+ * (weight for sparring, age), naming the pair furthest apart. Empty
+ * when no limits are configured or all are kept.
+ */
+export function fairnessLimitBreaks(
+  group: Pick<DivisionGroup, 'eventType' | 'ageMin' | 'ageMax' | 'registrations'>,
+  config?: CategorizationConfig,
+): FairnessLimitBreak[] {
+  const breaks: FairnessLimitBreak[] = [];
+  const limit = fairnessLimitFor(group.ageMin, group.ageMax, config);
+
+  if (group.eventType === 'sparring' && limit.maxWeightGapLbs !== undefined) {
+    const over = pairsOverLimit(group.registrations, (r) => weightOf(r) || null, limit.maxWeightGapLbs);
+    if (over) {
+      breaks.push({
+        kind: 'weight',
+        low: fullName(over.low),
+        high: fullName(over.high),
+        gap: over.gap,
+        limit: limit.maxWeightGapLbs,
+        unit: 'lb',
+        message:
+          `This puts ${formatNumber(over.gap)} lb between ${fullName(over.low)} and ${fullName(over.high)}, ` +
+          `above your ${formatNumber(limit.maxWeightGapLbs)} lb limit.`,
+      });
+    }
+  }
+
+  if (limit.maxAgeGapYears !== undefined) {
+    const over = pairsOverLimit(group.registrations, (r) => r.ageAtTournament, limit.maxAgeGapYears);
+    if (over) {
+      breaks.push({
+        kind: 'age',
+        low: fullName(over.low),
+        high: fullName(over.high),
+        gap: over.gap,
+        limit: limit.maxAgeGapYears,
+        unit: 'years',
+        message:
+          `This puts ${years(over.gap)} between ${fullName(over.low)} and ${fullName(over.high)}, ` +
+          `above your ${years(limit.maxAgeGapYears)} limit.`,
+      });
+    }
+  }
+
+  return breaks;
+}
