@@ -984,9 +984,9 @@ export default function TournamentDetail() {
               <div className="md:hidden p-4 space-y-3">
                 {filteredRegistrations.map((reg) => (
                   <div key={reg.id}>
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <div className="font-semibold text-surface-900 dark:text-white">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-surface-900 dark:text-white [overflow-wrap:anywhere]">
                           {reg.competitor.firstName} {reg.competitor.lastName}
                         </div>
                         <span
