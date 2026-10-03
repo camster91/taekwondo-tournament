@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { promotedRegistrationPaymentData } from './public-registration.js';
 import { effectiveBrandColor } from './organizer-branding.js';
+import { canHidePlatformBranding } from './entitlements.js';
 import {
   generateManagementToken,
   getManagementTokenExpiry,
@@ -190,6 +191,8 @@ export interface WaitlistPromotionNotice {
   organizerBrandName: string | null;
   brandPrimaryColor: string | null;
   brandLogoUrl: string | null;
+  /** Organization plan has whiteLabel: the email must not mention bowin. */
+  hidePlatformBranding: boolean;
   /** Entry fee now due (cents), or null when nothing is owed. */
   paymentDueCents: number | null;
 }
@@ -238,7 +241,7 @@ export async function promoteNextWaitlisted(
               brandName: true,
               brandPrimaryColor: true,
               brandLogoUrl: true,
-              organization: { select: { brandName: true, brandPrimaryColor: true, brandLogoUrl: true } },
+              organization: { select: { brandName: true, brandPrimaryColor: true, brandLogoUrl: true, name: true, plan: true } },
             },
           },
         },
@@ -260,6 +263,7 @@ export async function promoteNextWaitlisted(
           },
         });
         promotedRegistrationId = next.id;
+        const hidePlatformBranding = canHidePlatformBranding(next.tournament.organization?.plan);
         promotion = {
           registrationId: next.id,
           managementToken,
@@ -267,9 +271,11 @@ export async function promoteNextWaitlisted(
           competitorName: `${next.competitor.firstName} ${next.competitor.lastName}`,
           tournamentName: next.tournament.name,
           tournamentDate: next.tournament.date,
-          organizerBrandName: next.tournament.brandName || next.tournament.organization?.brandName || null,
+          organizerBrandName: next.tournament.brandName || next.tournament.organization?.brandName
+            || (hidePlatformBranding ? next.tournament.organization?.name || null : null),
           brandPrimaryColor: effectiveBrandColor(next.tournament.brandPrimaryColor, next.tournament.organization?.brandPrimaryColor),
           brandLogoUrl: next.tournament.brandLogoUrl || next.tournament.organization?.brandLogoUrl || null,
+          hidePlatformBranding,
           paymentDueCents: 'paymentAmountCents' in payment
             ? payment.paymentAmountCents
             : next.paymentStatus === 'pending' || next.paymentStatus === 'failed'

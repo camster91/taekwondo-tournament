@@ -8,6 +8,8 @@ export type PlanEntitlements = {
   maxRings: number;
   publicRegistration: boolean;
   eventOperations: boolean;
+  /** Parent-facing pages and emails show only the organizer (no "bowin"). */
+  whiteLabel: boolean;
 };
 
 const PLANS: Record<PlanName, PlanEntitlements> = {
@@ -18,6 +20,7 @@ const PLANS: Record<PlanName, PlanEntitlements> = {
     maxRings: 1,
     publicRegistration: false,
     eventOperations: false,
+    whiteLabel: false,
   },
   pilot: {
     maxTournaments: 5,
@@ -26,6 +29,7 @@ const PLANS: Record<PlanName, PlanEntitlements> = {
     maxRings: 6,
     publicRegistration: true,
     eventOperations: true,
+    whiteLabel: false,
   },
   starter: {
     maxTournaments: 10,
@@ -34,6 +38,7 @@ const PLANS: Record<PlanName, PlanEntitlements> = {
     maxRings: 8,
     publicRegistration: true,
     eventOperations: true,
+    whiteLabel: false,
   },
   pro: {
     maxTournaments: 100,
@@ -42,6 +47,7 @@ const PLANS: Record<PlanName, PlanEntitlements> = {
     maxRings: 32,
     publicRegistration: true,
     eventOperations: true,
+    whiteLabel: true,
   },
 };
 
@@ -61,6 +67,11 @@ export function canCreateTournament(plan: unknown, existingTournamentCount: numb
 
 export function canOpenPublicRegistration(plan: unknown): boolean {
   return getPlanEntitlements(plan).publicRegistration;
+}
+
+/** Whether the plan hides the bowin name from parents (pages and emails). */
+export function canHidePlatformBranding(plan: unknown): boolean {
+  return getPlanEntitlements(plan).whiteLabel;
 }
 
 export function canAddRegistration(plan: unknown, existingCompetitorCount: number): boolean {

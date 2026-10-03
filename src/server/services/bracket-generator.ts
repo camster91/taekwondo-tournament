@@ -13,6 +13,10 @@ export interface CompetitorSeed {
   height?: number;
   region?: string;
   recentOpponents?: string[];
+  // Used by the tournament-rules seeding (bracket-seeding.ts): belt
+  // rank (higher = more senior) and a director-set seed (1 = top).
+  beltRank?: number;
+  manualSeed?: number | null;
 }
 
 export interface MatchData {
@@ -42,9 +46,11 @@ export interface BracketStructure {
     reset: number | null;
   };
   seedingInfo?: {
-    strategy: SeedingStrategy;
+    strategy: SeedingStrategy | 'tournament_rules';
     skillBalance: number;
     schoolDiversity: number;
+    // Set when the bracket was seeded from the tournament rules.
+    sameSchoolFirstRound?: number;
   };
 }
 
@@ -491,6 +497,35 @@ function distributeBySchool(competitors: CompetitorSeed[]): CompetitorSeed[] {
   return result.filter((c): c is CompetitorSeed => c !== null);
 }
 
+/**
+ * Build an elimination bracket from a finished first-round layout.
+ *
+ * `slots` is in bracket-sheet order (length = a power of two, >= 2):
+ * round-1 match k is slots[2k] v slots[2k+1], null is a bye. No match
+ * may hold two byes. The slots are mapped back onto the seed-index
+ * layout the generators use (`standardSeedOrder`), so the produced
+ * structure — match numbers, links and `positions` — is exactly the
+ * one `generateBracket` / `generateSingleElimination` produce for the
+ * same size; only who stands in which round-1 slot differs.
+ */
+export function generateEliminationFromSlots(
+  slots: (CompetitorSeed | null)[],
+  format: 'double_elim' | 'single_elim',
+): BracketStructure {
+  const size = slots.length;
+  if (size < 2 || (size & (size - 1)) !== 0) {
+    throw new RangeError('Bracket slots must be a power of two (at least 2)');
+  }
+  const order = standardSeedOrder(size);
+  const padded: (CompetitorSeed | null)[] = new Array(size).fill(null);
+  for (let i = 0; i < size; i++) padded[order[i]] = slots[i] ?? null;
+  for (let i = 0; i < size; i += 2) {
+    if (!slots[i] && !slots[i + 1]) throw new RangeError('A first-round match cannot hold two byes');
+  }
+  if (format === 'single_elim') return generateSingleEliminationBracket(padded);
+  return size <= 4 ? generateSmallBracket(padded) : generateDoubleEliminationBracket(padded);
+}
+
 function shuffle<T>(array: T[]): T[] {
   const result = [...array];
   for (let i = result.length - 1; i > 0; i--) {
@@ -500,7 +535,7 @@ function shuffle<T>(array: T[]): T[] {
   return result;
 }
 
-function nextPowerOf2(n: number): number {
+export function nextPowerOf2(n: number): number {
   if (n <= 1) return 2;
   let power = 2;
   while (power < n && power < 64) {

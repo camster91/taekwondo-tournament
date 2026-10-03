@@ -2,13 +2,15 @@
  * OrganizerPortal — Public-facing portal landing page for an organization.
  * Shows all published events for the organizer with tenant branding.
  * 
- * Route: /events/:orgSlug
+ * Route: /events/:orgSlug — also the home page (and /register) on the
+ * organizer's own custom domain, where App passes the slug in.
  */
 
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Calendar, MapPin, Users, ExternalLink, ArrowRight } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
+import { useOrganizerPageTitle } from '../hooks/useOrganizerPageTitle';
 
 interface Organization {
   name: string;
@@ -30,10 +32,12 @@ interface Event {
   brandLogoUrl: string | null;
 }
 
-export default function OrganizerPortal() {
-  const { orgSlug } = useParams<{ orgSlug: string }>();
+export default function OrganizerPortal({ orgSlug: hostOrgSlug }: { orgSlug?: string } = {}) {
+  const params = useParams<{ orgSlug: string }>();
+  const orgSlug = hostOrgSlug ?? params.orgSlug;
   const [loading, setLoading] = useState(true);
   const [organization, setOrganization] = useState<Organization | null>(null);
+  const [hidePlatformBranding, setHidePlatformBranding] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +57,7 @@ export default function OrganizerPortal() {
         const data = await response.json();
         setOrganization(data.organization);
         setEvents(data.events || []);
+        setHidePlatformBranding(data.hidePlatformBranding === true);
       } catch (err) {
         console.error('Failed to fetch portal data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load events');
@@ -63,6 +68,8 @@ export default function OrganizerPortal() {
 
     fetchPortalData();
   }, [orgSlug]);
+
+  useOrganizerPageTitle(organization ? `${organization.name} events` : null, hidePlatformBranding);
 
   if (loading) {
     return (

@@ -39,10 +39,9 @@ edits; bracket corrections with undo; Excel import with column auto-detection.
 ### 1. Fair automatic sorting (fewer manual drags)
 | # | What | Size |
 |---|------|------|
-| 1 | Make every rule in the rules editor actually do something (several settings such as "avoid same school in round 1", seeding strategy, bye placement, merge direction, belts per division, target class size are saved but not used), or hide the ones that don't | M |
+| 1 | Make every rule in the rules editor actually do something, or hide the ones that don't. Bracket rules done (opt-in) and weight/split settings done (see below); still unused: merge direction, cross-tier merge, belts per division, belt tiers, single-year age bands and their minimum, event on/off and "group by", per-event overrides | M |
 | 6 | Stripe-level belt grouping and configurable dan groups | M |
 | 7 | Host-school balance: spread a big school across the bracket (school aliases and the "one school fills a division" warning are done, see below) | S |
-| 8 | Show the number of same-school first-round fights per bracket and for the whole tournament | S |
 
 ### 2. Picking competitors and slots
 | # | What | Size |
@@ -86,6 +85,16 @@ default rules give the same divisions as before.
   school when spreading schools, plus an optional "one school is at least N%
   of a division" warning. Shared helper: `src/shared/utils/school.ts`.
 - **16** "Use height when weights are the same" (sparring ordering).
+
+## Done on 2026-10-03: fair brackets (item 1 in part, 8)
+- Bracket rules can now be used when brackets are generated or reseeded,
+  behind an opt-in switch "Use these bracket rules when brackets are made"
+  (off by default; with it off brackets are made exactly as before): seed by
+  (skill rating / years of training / belt rank / random), who gets byes,
+  round 1 pairing, keep team-mates apart in round 1 (part of #1). The unused
+  "Consolation rounds" choice is no longer shown.
+- #8: same-school first-round fights shown per bracket (Divisions page,
+  bracket editor) and for the whole tournament, and in the bracket API.
 
 ## Done on 2026-10-02 (for reference)
 Tour fixed; form labels; restore deleted tournaments; backup panel refresh;
@@ -132,3 +141,9 @@ first-round matches change; later rounds re-sync. Changing the bracket size
   invite problems) with an unread badge.
 - 18: Admins can sort open bug reports with AI on Support Tickets when an AI
   key is set; suggestions are not stored, a priority is applied on request.
+
+## Done on 2026-10-03 (private label)
+Custom-domain home: an organizer's own web address opens on their events
+(`/` and `/register`), sign-in unchanged; share kit on the tournament page
+(sign-up link, QR code, website embed code); "bowin" hidden from parent
+emails and page titles on the pro plan (`whiteLabel`).

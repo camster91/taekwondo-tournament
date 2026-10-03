@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Calendar, MapPin, Users, ExternalLink, Trophy, FileText, DollarSign } from 'lucide-react';
 import Spinner from '../components/ui/Spinner';
+import { useOrganizerPageTitle } from '../hooks/useOrganizerPageTitle';
 
 interface Organization {
   name: string;
@@ -40,6 +41,7 @@ export default function EventPortal() {
   const [loading, setLoading] = useState(true);
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
+  const [hidePlatformBranding, setHidePlatformBranding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,6 +63,7 @@ export default function EventPortal() {
         const data = await response.json();
         setOrganization(data.organization);
         setEvent(data.event);
+        setHidePlatformBranding(data.hidePlatformBranding === true);
       } catch (err) {
         console.error('Failed to fetch event data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load event');
@@ -71,6 +74,8 @@ export default function EventPortal() {
 
     fetchEventData();
   }, [orgSlug, eventSlug]);
+
+  useOrganizerPageTitle(event?.name, hidePlatformBranding);
 
   if (loading) {
     return (

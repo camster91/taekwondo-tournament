@@ -19,6 +19,8 @@ import bracketsRouter from './routes/brackets.js';
 import authRouter from './routes/auth.js';
 import publicRouter from './routes/public.js';
 import publicPortalRouter from './routes/public-portal.js';
+import publicHostRouter from './routes/public-host.js';
+import { allowCrossOriginFraming, isEmbeddableRegisterRequest } from './services/share-links.js';
 import familyPortalRouter from './routes/family-portal.js';
 import customDomainsRouter from './routes/custom-domains.js';
 import analyticsRouter from './routes/analytics.js';
@@ -266,6 +268,7 @@ app.get('/api/setup-status', (_req: Request, res: Response) => {
   res.redirect(307, '/api/auth/setup-status');
 });
 app.use('/api/public/family', familyPortalRouter);
+app.use('/api/public/host', publicHostRouter);
 app.use('/api/public', publicRouter);
 app.use('/api/public/portal', publicPortalRouter);
 app.use('/api/competitors', competitorsRouter);
@@ -357,6 +360,10 @@ if (serveBuiltClient) {
     }
     if (req.path === '/register' || req.path === '/check-registration') {
       res.setHeader('X-Robots-Tag', 'noindex');
+    }
+    // Share kit embed: only /register?embed=1 may sit in another site's iframe.
+    if (isEmbeddableRegisterRequest(req.path, req.query as Record<string, unknown>)) {
+      allowCrossOriginFraming(res);
     }
     res.sendFile(path.join(distPath, 'index.html'));
   });

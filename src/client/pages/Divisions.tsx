@@ -55,6 +55,7 @@ import {
   readDivisionOperationError,
 } from '../utils/division-operation-error';
 import { getSportProfile, getEventTypeLabel } from '../../shared/constants/sport-profiles';
+import { describeSameSchoolFights } from '../../shared/utils/same-school';
 import { Card, CardHeader, CardBody } from '../components/ui';
 import { PageHeader } from '../components/ui';
 import { Button } from '../components/ui';
@@ -284,6 +285,24 @@ export default function Divisions() {
       return res.json();
     },
   });
+
+  // First-round fights between team-mates, per bracket and in total.
+  // Keyed under ['divisions', id] so every divisions refresh (generate,
+  // regenerate, delete) refreshes it too.
+  const hasBrackets = Boolean(divisions?.some((d) => d.bracket));
+  const { data: sameSchool } = useQuery<SameSchoolSummary>({
+    queryKey: ['divisions', id, 'same-school-first-round'],
+    enabled: Boolean(id) && hasBrackets,
+    queryFn: async () => {
+      const res = await fetch(`/api/brackets/tournament/${id}/same-school-first-round`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Failed to load team-mate fights');
+      return res.json();
+    },
+  });
+  const sameSchoolByDivision = useMemo(
+    () => new Map((sameSchool?.divisions ?? []).map((entry) => [entry.divisionId, entry])),
+    [sameSchool],
+  );
 
   const {
     data: recommendations,
@@ -1379,6 +1398,15 @@ export default function Divisions() {
           />
         </div>
       )}
+      {hasBrackets && sameSchool && (
+        <p
+          data-testid="same-school-total"
+          className={`-mt-3 mb-6 text-sm ${sameSchool.total > 0 ? 'text-warning700 dark:text-warning300' : 'text-surface-600 dark:text-surface-400'}`}
+        >
+          {describeSameSchoolFights(sameSchool.total)} across all brackets.
+          {sameSchool.total > 0 && ' Open a bracket to see which ones.'}
+        </p>
+      )}
 
       {/* Divisions */}
       {isLoading ? (
@@ -1423,6 +1451,7 @@ export default function Divisions() {
                         div={div}
                         tournamentId={id || ''}
                         specialNeeds={specialNeedsMap.get(div.id)}
+                        sameSchool={sameSchoolByDivision.get(div.id)}
                         onManageCompetitors={() => setAssignTarget(div)}
                         onSplit={() => setSplitTarget(div)}
                         onDelete={() => setDeleteTarget(div)}
@@ -1965,10 +1994,16 @@ function BackupRestoreCard({ tournamentId, hasDivisions }: { tournamentId: strin
 // @dnd-kit's useSortable so it can be dragged to reorder. The drag handle
 // is the leftmost GripVertical icon (keyboard users can Tab to the row and
 // press Space to grab, then arrows to move).
+interface SameSchoolSummary {
+  total: number;
+  divisions: Array<{ divisionId: string; count: number; fights: number; unavoidable: number }>;
+}
+
 function SortableDivisionRow({
   div,
   tournamentId,
   specialNeeds,
+  sameSchool,
   onManageCompetitors,
   onSplit,
   onDelete,
@@ -1980,6 +2015,7 @@ function SortableDivisionRow({
   tournamentId: string;
   /** Competitors in this division with a special-needs note (directors only). */
   specialNeeds?: SpecialNeedsEntry[];
+  sameSchool?: SameSchoolSummary['divisions'][number];
   onManageCompetitors: () => void;
   onSplit: () => void;
   onDelete: () => void;
@@ -2072,6 +2108,14 @@ function SortableDivisionRow({
         <span className={`badge ${div.bracket ? 'badge-green' : 'badge-gray'}`}>
           {div.bracket ? 'Ready' : 'No Bracket'}
         </span>
+        {div.bracket && sameSchool && sameSchool.count > 0 && (
+          <span
+            className="badge bg-warning/100 dark:bg-warning/900/30 text-warning800 dark:text-warning300"
+            title={sameSchool.count <= sameSchool.unavoidable ? 'One school has too many people here to keep them all apart.' : 'Reseed the bracket to keep team-mates apart.'}
+          >
+            {describeSameSchoolFights(sameSchool.count)}
+          </span>
+        )}
         <button
           onClick={onManageCompetitors}
           className="text-surface-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"

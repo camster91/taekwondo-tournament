@@ -1,8 +1,15 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express-serve-static-core';
 import { PrismaClient } from '@prisma/client';
-import { generateBracket, generateSingleElimination, type BracketStructure } from '../services/bracket-generator.js';
+import type { BracketStructure } from '../services/bracket-generator.js';
 import { generateRoundRobin, bracketFormatError, POOL_PLAY_UNAVAILABLE, tournamentDefaultBracketFormat } from '../services/bracket-formats.js';
+import {
+  bracketRulesEnabled,
+  generateEliminationBracket,
+  loadRuleSeeding,
+  usesTournamentRules,
+} from '../services/bracket-seeding.js';
+import { countSameSchoolFirstRound } from '../../shared/utils/same-school.js';
 import {
   handleByeMatches,
   getBracketPlacements,
@@ -48,6 +55,36 @@ import { decideMatchResultWrite, matchResultSchema, type MatchResultRequest } fr
 import { planSlotEdit, parseBracketStructure, type SlotEdit } from '../services/bracket-slots.js';
 
 const router = Router();
+
+type MatchSlot = { id: string; competitor: { schoolDojang: string | null } } | null;
+
+/**
+ * Add `sameSchoolFirstRound` (first-round fights between team-mates; null
+ * for round robin) to a bracket loaded with its matches' competitors.
+ */
+function withSameSchoolFirstRound<B extends {
+  format: string;
+  matches: Array<{
+    matchNumber: number;
+    roundNumber: number;
+    bracketType: string;
+    competitor1Id: string | null;
+    competitor2Id: string | null;
+    competitor1: MatchSlot;
+    competitor2: MatchSlot;
+  }>;
+}>(bracket: B) {
+  const schoolOf = new Map<string, string | null>();
+  for (const match of bracket.matches) {
+    for (const slot of [match.competitor1, match.competitor2]) {
+      if (slot) schoolOf.set(slot.id, slot.competitor.schoolDojang);
+    }
+  }
+  return {
+    ...bracket,
+    sameSchoolFirstRound: countSameSchoolFirstRound(bracket.format, bracket.matches, (id) => schoolOf.get(id)),
+  };
+}
 
 // Per-user caps on the bracket write path; mounted after `authenticate`
 // on each write route so they key on the user, not the venue IP.
@@ -225,11 +262,19 @@ router.post('/division/:divisionId/generate', authenticate, bracketRebuildLimite
   let bracketStructure: BracketStructure;
   if (format === 'round_robin') {
     bracketStructure = generateRoundRobin(competitors, { seedingStrategy });
-  } else if (format === 'single_elim') {
-    bracketStructure = generateSingleElimination(competitors, seedingStrategy);
   } else {
-    // double_elim (default)
-    bracketStructure = generateBracket(competitors, seedingStrategy);
+    // With the bracket-rules switch on (settings.brackets.applySeedingRules)
+    // the rules decide seeding, byes, round-1 pairing and keeping
+    // team-mates apart; otherwise the long-standing generator runs unchanged.
+    const seeding = usesTournamentRules(seedingStrategy) && bracketRulesEnabled(divisionMeta.tournament?.settings)
+      ? await loadRuleSeeding(prisma, division.id)
+      : null;
+    bracketStructure = generateEliminationBracket(
+      competitors,
+      format === 'single_elim' ? 'single_elim' : 'double_elim',
+      seedingStrategy,
+      seeding,
+    );
   }
 
   // Initial generation never deletes. The unique divisionId constraint
@@ -299,7 +344,7 @@ router.post('/division/:divisionId/generate', authenticate, bracketRebuildLimite
   // (closes P2-7: real-time bracket collaboration)
   broadcastBracketRegenerated(divisionId);
 
-  res.json(completeBracket);
+  res.json(completeBracket ? withSameSchoolFirstRound(completeBracket) : completeBracket);
 });
 
 // Get bracket for division (requires authentication)
@@ -343,7 +388,52 @@ router.get('/division/:divisionId', authenticate, async (req: Request, res: Resp
     return res.status(404).json({ error: 'Bracket not found' });
   }
 
-  res.json(bracket);
+  res.json(withSameSchoolFirstRound(bracket));
+});
+
+// Same-school ("team-mates") first-round fights per bracket and for the
+// whole tournament, for the Divisions page. No names, only counts.
+router.get('/tournament/:tournamentId/same-school-first-round', authenticate, requireTournamentAccess('viewer'), async (req: Request, res: Response) => {
+  const prisma: PrismaClient = req.app.locals.prisma;
+  const divisions = await prisma.division.findMany({
+    where: { tournamentId: getParam(req.params.tournamentId), deletedAt: null, bracket: { isNot: null } },
+    select: {
+      id: true,
+      bracket: {
+        select: {
+          format: true,
+          matches: {
+            where: { roundNumber: 1 },
+            select: { matchNumber: true, roundNumber: true, bracketType: true, competitor1Id: true, competitor2Id: true },
+          },
+        },
+      },
+    },
+  });
+  const registrationIds = new Set<string>();
+  for (const division of divisions) {
+    for (const match of division.bracket?.matches ?? []) {
+      if (match.competitor1Id) registrationIds.add(match.competitor1Id);
+      if (match.competitor2Id) registrationIds.add(match.competitor2Id);
+    }
+  }
+  const registrations = registrationIds.size > 0
+    ? await prisma.registration.findMany({
+      where: { id: { in: [...registrationIds] } },
+      select: { id: true, competitor: { select: { schoolDojang: true } } },
+    })
+    : [];
+  const schoolOf = new Map(registrations.map((r) => [r.id, r.competitor.schoolDojang]));
+  let total = 0;
+  const perDivision: Array<{ divisionId: string; count: number; fights: number; unavoidable: number }> = [];
+  for (const division of divisions) {
+    if (!division.bracket) continue;
+    const summary = countSameSchoolFirstRound(division.bracket.format, division.bracket.matches, (id) => schoolOf.get(id));
+    if (!summary) continue;
+    total += summary.count;
+    perDivision.push({ divisionId: division.id, count: summary.count, fights: summary.fights, unavoidable: summary.unavoidable });
+  }
+  res.json({ total, divisions: perDivision });
 });
 
 // Update match result (requires authentication + admin/director/scorekeeper role)
@@ -1053,6 +1143,9 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, bracketRebui
     format: defaultFormat = tournamentDefaultBracketFormat(tournamentSettings?.settings),
     formats = {},
   } = req.body;
+  // Bracket rules apply only with the switch on (checked once here, so a
+  // tournament with it off makes no extra queries per division).
+  const rulesOn = usesTournamentRules(seedingStrategy) && bracketRulesEnabled(tournamentSettings?.settings);
 
   const divisions = await prisma.division.findMany({
     // Soft-deleted divisions must not get brackets (or block generation).
@@ -1104,12 +1197,16 @@ router.post('/tournament/:tournamentId/generate-all', authenticate, bracketRebui
 
     const format = formats[division.id] || defaultFormat;
     let bracketStructure: BracketStructure;
-    if (format === 'single_elim') {
-      bracketStructure = generateSingleElimination(competitors, seedingStrategy);
-    } else if (format === 'round_robin') {
+    if (format === 'round_robin') {
       bracketStructure = generateRoundRobin(competitors, { seedingStrategy });
     } else {
-      bracketStructure = generateBracket(competitors, seedingStrategy);
+      const seeding = rulesOn ? await loadRuleSeeding(prisma, division.id) : null;
+      bracketStructure = generateEliminationBracket(
+        competitors,
+        format === 'single_elim' ? 'single_elim' : 'double_elim',
+        seedingStrategy,
+        seeding,
+      );
     }
 
     const allMatches = [
