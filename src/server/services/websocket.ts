@@ -351,6 +351,26 @@ export function initializeWebSocket(
   return wss;
 }
 
+const BROADCAST_MATCH_FIELDS = [
+  'id', 'matchNumber', 'bracketType', 'round', 'status',
+  'competitor1Id', 'competitor2Id', 'winnerId', 'score1', 'score2',
+  'ringNumber', 'scheduledTime',
+] as const;
+
+/**
+ * Only the match's own state goes out. Every viewer of the division receives
+ * this, so registration and competitor rows (parent contact details,
+ * special-needs notes) must never ride along; clients refetch for names.
+ */
+export function broadcastMatchPayload(matchData: unknown): Record<string, unknown> {
+  const source = (matchData && typeof matchData === 'object' ? matchData : {}) as Record<string, unknown>;
+  const payload: Record<string, unknown> = {};
+  for (const field of BROADCAST_MATCH_FIELDS) {
+    if (field in source) payload[field] = source[field];
+  }
+  return payload;
+}
+
 /**
  * Broadcast a match update to all clients subscribed to the division.
  */
@@ -362,7 +382,7 @@ export function broadcastMatchUpdate(divisionId: string, matchId: string, matchD
     type: 'match_updated',
     divisionId,
     matchId,
-    data: matchData,
+    data: broadcastMatchPayload(matchData),
   });
 
   subs.forEach((client) => {
