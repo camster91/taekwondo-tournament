@@ -553,6 +553,123 @@ export default function TournamentDetail() {
         }
       />
 
+      {statusNotice && (
+        <OperationStatus
+          state={statusNotice.state}
+          message={statusNotice.message}
+          actionLabel={statusNotice.actionLabel ?? (statusNotice.state === 'pending' ? undefined : 'Dismiss')}
+          onAction={statusNotice.onAction ?? (statusNotice.state === 'pending' ? undefined : () => setStatusNotice(null))}
+        />
+      )}
+
+      {/* Tournament Status Controls — first thing under the header: opening
+          registration and sharing the link is what organizers do first. */}
+      {tournament.status === 'registration' ? (
+        <div className="p-4 bg-success/10 dark:bg-success/20 border border-success/30 dark:border-success rounded-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-2 text-success dark:text-success/30 flex-1 min-w-0">
+              <Globe className="h-5 w-5 flex-shrink-0" />
+              <span className="font-medium whitespace-nowrap">Open for Registration</span>
+              <a
+                href={registrationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={registrationUrl}
+                className="hidden sm:inline-flex text-sm font-mono text-success/80 dark:text-success/30/80 hover:text-success dark:hover:text-success/10 hover:underline truncate min-w-0"
+              >
+                {registrationUrl}
+              </a>
+            </div>
+            <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
+              <Button variant="secondary" size="sm" onClick={copyRegistrationLink}>
+                <Copy className="h-3.5 w-3.5" />
+                {copiedLink ? 'Copied!' : 'Copy Link'}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setCloseStatusError(null);
+                  setShowCloseRegistrationConfirm(true);
+                }}
+                loading={updateStatusMutation.isPending}
+                className="text-danger hover:bg-danger/10 dark:hover:bg-danger/20"
+              >
+                <Lock className="h-3.5 w-3.5" />
+                Close Registration
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  if (confirm('Mark this tournament as completed? Parents will no longer be able to register and the public scoreboard will show final results.')) {
+                    submitStatusUpdate('completed', 'Marking tournament completed');
+                  }
+                }}
+                loading={updateStatusMutation.isPending}
+              >
+                <Flag className="h-3.5 w-3.5 mr-1" /> Mark Completed
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : tournament.status === 'active' || tournament.status === 'in_progress' || tournament.status === 'brackets' ? (
+        <div className="p-4 bg-warning/10 dark:bg-warning/20 border border-warning/30 dark:border-warning rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+          <p className="text-sm text-warning dark:text-warning/30 flex-1">
+            Tournament is active. Mark as completed when all divisions are finished.
+          </p>
+          <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => submitStatusUpdate('registration', 'Opening public registration')}
+              loading={updateStatusMutation.isPending}
+            >
+              <Globe className="h-3.5 w-3.5 mr-1" />
+              Reopen Registration
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => submitStatusUpdate('completed', 'Marking tournament completed')}
+              loading={updateStatusMutation.isPending}
+            >
+              <Flag className="h-3.5 w-3.5 mr-1" />
+              Mark Completed
+            </Button>
+          </div>
+        </div>
+      ) : tournament.status === 'completed' ? (
+        <div className="p-4 bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+          <p className="text-sm text-surface-600 dark:text-surface-400 flex-1">
+            This tournament is completed.
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => submitStatusUpdate('active', 'Reopening tournament')}
+            loading={updateStatusMutation.isPending}
+          >
+            Reopen Tournament
+          </Button>
+        </div>
+      ) : (
+        <div className="p-4 bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
+          <p className="text-sm text-surface-600 dark:text-surface-400 flex-1">
+            Open this tournament for public self-registration to share a signup link with competitors.
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => submitStatusUpdate('registration', 'Opening public registration')}
+            loading={updateStatusMutation.isPending}
+          >
+            <Globe className="h-3.5 w-3.5 mr-1" />
+            Open for Registration
+          </Button>
+        </div>
+      )}
+
       {/* Tournament Day Actions — 3-col grid with vertical icon-above-text cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link
@@ -767,122 +884,6 @@ export default function TournamentDetail() {
       {/* Day-Of Operations Panel — live stats for the running tournament */}
       {tournament.status !== 'draft' && (
         <DayOfPanel tournamentId={tournament.id} />
-      )}
-
-      {statusNotice && (
-        <OperationStatus
-          state={statusNotice.state}
-          message={statusNotice.message}
-          actionLabel={statusNotice.actionLabel ?? (statusNotice.state === 'pending' ? undefined : 'Dismiss')}
-          onAction={statusNotice.onAction ?? (statusNotice.state === 'pending' ? undefined : () => setStatusNotice(null))}
-        />
-      )}
-
-      {/* Tournament Status Controls */}
-      {tournament.status === 'registration' ? (
-        <div className="p-4 bg-success/10 dark:bg-success/20 border border-success/30 dark:border-success rounded-lg">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex items-center gap-2 text-success dark:text-success/30 flex-1 min-w-0">
-              <Globe className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium whitespace-nowrap">Open for Registration</span>
-              <a
-                href={registrationUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={registrationUrl}
-                className="hidden sm:inline-flex text-sm font-mono text-success/80 dark:text-success/30/80 hover:text-success dark:hover:text-success/10 hover:underline truncate min-w-0"
-              >
-                {registrationUrl}
-              </a>
-            </div>
-            <div className="flex gap-2 flex-shrink-0">
-              <Button variant="secondary" size="sm" onClick={copyRegistrationLink}>
-                <Copy className="h-3.5 w-3.5" />
-                {copiedLink ? 'Copied!' : 'Copy Link'}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setCloseStatusError(null);
-                  setShowCloseRegistrationConfirm(true);
-                }}
-                loading={updateStatusMutation.isPending}
-                className="text-danger hover:bg-danger/10 dark:hover:bg-danger/20"
-              >
-                <Lock className="h-3.5 w-3.5" />
-                Close Registration
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => {
-                  if (confirm('Mark this tournament as completed? Parents will no longer be able to register and the public scoreboard will show final results.')) {
-                    submitStatusUpdate('completed', 'Marking tournament completed');
-                  }
-                }}
-                loading={updateStatusMutation.isPending}
-              >
-                <Flag className="h-3.5 w-3.5 mr-1" /> Mark Completed
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : tournament.status === 'active' || tournament.status === 'in_progress' || tournament.status === 'brackets' ? (
-        <div className="p-4 bg-warning/10 dark:bg-warning/20 border border-warning/30 dark:border-warning rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
-          <p className="text-sm text-warning dark:text-warning/30 flex-1">
-            Tournament is active. Mark as completed when all divisions are finished.
-          </p>
-          <div className="flex gap-2 flex-shrink-0">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => submitStatusUpdate('registration', 'Opening public registration')}
-              loading={updateStatusMutation.isPending}
-            >
-              <Globe className="h-3.5 w-3.5 mr-1" />
-              Reopen Registration
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => submitStatusUpdate('completed', 'Marking tournament completed')}
-              loading={updateStatusMutation.isPending}
-            >
-              <Flag className="h-3.5 w-3.5 mr-1" />
-              Mark Completed
-            </Button>
-          </div>
-        </div>
-      ) : tournament.status === 'completed' ? (
-        <div className="p-4 bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
-          <p className="text-sm text-surface-600 dark:text-surface-400 flex-1">
-            This tournament is completed.
-          </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => submitStatusUpdate('active', 'Reopening tournament')}
-            loading={updateStatusMutation.isPending}
-          >
-            Reopen Tournament
-          </Button>
-        </div>
-      ) : (
-        <div className="p-4 bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-lg flex flex-col sm:flex-row sm:items-center gap-3">
-          <p className="text-sm text-surface-600 dark:text-surface-400 flex-1">
-            Open this tournament for public self-registration to share a signup link with competitors.
-          </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => submitStatusUpdate('registration', 'Opening public registration')}
-            loading={updateStatusMutation.isPending}
-          >
-            <Globe className="h-3.5 w-3.5 mr-1" />
-            Open for Registration
-          </Button>
-        </div>
       )}
 
       {registrationNotice && (
