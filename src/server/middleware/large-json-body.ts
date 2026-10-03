@@ -17,7 +17,11 @@ import express from 'express';
 import { authenticate, requireRole } from './auth.js';
 import { createRateLimiter } from './rate-limit.js';
 
-export const LARGE_JSON_BODY_ROUTES = ['/api/competitors/auto-map', '/api/competitors/import'] as const;
+export const LARGE_JSON_BODY_ROUTES = [
+  '/api/competitors/auto-map',
+  '/api/competitors/import',
+  '/api/tournaments/:id/import',
+] as const;
 export const LARGE_JSON_BODY_LIMIT = '40mb';
 
 /**

@@ -20,7 +20,8 @@ export type AuditAction =
   | 'legal_hold_placed'
   | 'legal_hold_released'
   | 'email_settings_saved'
-  | 'email_settings_cleared';
+  | 'email_settings_cleared'
+  | 'tournament_spreadsheet_import';
 
 export interface AuditLogOptions {
   userId: string;

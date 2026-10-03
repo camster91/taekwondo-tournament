@@ -55,6 +55,9 @@ edits; bracket corrections with undo; Excel import with column auto-detection.
 | 10 | ~~Move people between bracket slots across matches, and add/remove a bye slot, without clearing the bracket~~ Done (see below) | M–L |
 | 11 | Import straight into a tournament: rows marked Y for Patterns/Sparring become registrations for those events | M |
 
+| 10 | Move people between bracket slots across matches, and add/remove a bye slot, without clearing the bracket | M–L |
+| 11 | ~~Import straight into a tournament: rows marked Y for Patterns/Sparring become registrations for those events~~ Done (see below) | M |
+
 ### 3. Paper that matches what people know
 | # | What | Size |
 |---|------|------|
@@ -87,3 +90,9 @@ swap people across matches; "Take out (make a bye)" empties a spot and
 "Place" puts someone without a spot into an empty one. Only unplayed
 first-round matches change; later rounds re-sync. Changing the bracket size
 (e.g. 8 to 16 spots) still needs Reseed.
+
+- #11 Import straight into a tournament: "Import from spreadsheet" on the
+  tournament page. Y/Yes/X/1 in an event column (found by the sport's event
+  names, e.g. Kata/Kumite) registers that event; a preview shows new and
+  matched competitors, registrations, waiting list and skipped rows before
+  anything is saved. Existing competitors are reused, never changed.
