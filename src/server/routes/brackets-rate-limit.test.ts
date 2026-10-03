@@ -46,6 +46,7 @@ describe('bracket write routes are rate limited after authentication', () => {
     ['post', '/match/:matchId/undo'],
     ['patch', '/match/:matchId/video'],
     ['post', '/division/:divisionId/correction/preview'],
+    ['post', '/division/:divisionId/slots'],
   ];
   const rebuilds: Array<[string, string]> = [
     ['post', '/division/:divisionId/generate'],

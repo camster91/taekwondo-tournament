@@ -52,7 +52,7 @@ edits; bracket corrections with undo; Excel import with column auto-detection.
 | # | What | Size |
 |---|------|------|
 | 9 | Full-screen "add competitors" panel: filter by gender, age range, belt range, weight range, school; sortable columns; "select all filtered"; per-person Patterns/Sparring choice (mirrors the old macro form) | S–M |
-| 10 | Move people between bracket slots across matches, and add/remove a bye slot, without clearing the bracket | M–L |
+| 10 | ~~Move people between bracket slots across matches, and add/remove a bye slot, without clearing the bracket~~ Done (see below) | M–L |
 | 11 | Import straight into a tournament: rows marked Y for Patterns/Sparring become registrations for those events | M |
 
 ### 3. Paper that matches what people know
@@ -80,3 +80,10 @@ polish; "Report a bug" button.
 Organizer branding (logo, name, colour) on the family portal, manage
 registration, registration lookup and parent scoreboard pages; the
 organization's colour now shows when a tournament has not picked its own.
+
+Item 10 (2026-10-03): in the bracket editor a director taps Move next to a
+first-round name and then taps another spot (or drags on a desktop) to move or
+swap people across matches; "Take out (make a bye)" empties a spot and
+"Place" puts someone without a spot into an empty one. Only unplayed
+first-round matches change; later rounds re-sync. Changing the bracket size
+(e.g. 8 to 16 spots) still needs Reseed.

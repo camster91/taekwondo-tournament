@@ -12,6 +12,7 @@ import {
   Plus,
   X,
   ArrowLeftRight,
+  Move,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -40,6 +41,33 @@ interface Registration {
 
 import type { ApiMatch } from '../../shared/contracts';
 import { downloadBlob } from '../utils/authenticated-export';
+import { entryMatchNumbers, isSlotEditableMatch, type SlotStructure } from '../../shared/utils/bracket-slots';
+
+type SlotNumber = 1 | 2;
+interface SlotRef { matchId: string; slot: SlotNumber }
+
+/** The person a director is moving (from a spot) or placing (from outside the bracket). */
+interface MovingPerson {
+  registrationId: string;
+  name: string;
+  from: SlotRef | null;
+}
+
+type SlotEditRequest =
+  | { action: 'move'; registrationId: string; from: SlotRef; to: SlotRef }
+  | { action: 'remove'; registrationId: string; from: SlotRef }
+  | { action: 'place'; registrationId: string; to: SlotRef };
+
+/** What the first-round slot controls need from the page. */
+interface SlotControls {
+  canEdit: (match: Match) => boolean;
+  moving: MovingPerson | null;
+  busy: boolean;
+  onStartMove: (person: MovingPerson) => void;
+  onTarget: (match: Match, slot: SlotNumber, person?: MovingPerson) => void;
+}
+
+const DRAG_TYPE = 'application/x-bowin-bracket-person';
 
 // BracketEditor extends ApiMatch with legacy competitor*Id fields
 interface Match extends Omit<ApiMatch, 'competitor1' | 'competitor2' | 'winner'> {
@@ -412,7 +440,7 @@ export default function BracketEditor() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
       queryClient.invalidateQueries({ queryKey: ['unassigned-registrations', tournamentId, divisionId] });
-      addToast?.('Competitor added to division. Regenerate bracket to include them.', 'success');
+      addToast?.(division?.bracket ? 'Added to the division. Use Place under the bracket to give them an empty spot.' : 'Competitor added to division.', 'success');
     },
     onError: (error: Error) => {
       addToast(error.message || 'Add failed', 'error');
@@ -442,6 +470,50 @@ export default function BracketEditor() {
       addToast(error.message || 'Remove failed', 'error');
     },
   });
+
+  // Hand edits to first-round spots (move, take out, place) without
+  // clearing the bracket. Tap "Move" on a person, then tap a spot; or
+  // drag a name onto a spot on a desktop.
+  const [moving, setMoving] = useState<MovingPerson | null>(null);
+  const [slotAnnounce, setSlotAnnounce] = useState('');
+  const slotMutation = useMutation({
+    mutationFn: async ({ change }: { change: SlotEditRequest; name: string }) => {
+      const res = await fetch(`/api/brackets/division/${divisionId}/slots`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(change),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || 'Could not change the bracket. Refresh and try again.');
+      }
+      return res.json();
+    },
+    onSuccess: (_data, { change, name }) => {
+      const message = change.action === 'remove'
+        ? `${name} is out of the bracket. Their opponent gets a bye. Use Place to put them back.`
+        : change.action === 'place'
+          ? `${name} is in the bracket.`
+          : `${name} moved.`;
+      setMoving(null);
+      addToast(message, 'success');
+      setSlotAnnounce(message);
+      queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
+    },
+    onError: (error: Error) => {
+      setMoving(null);
+      addToast(error.message, 'error');
+      setSlotAnnounce(error.message);
+      queryClient.invalidateQueries({ queryKey: ['division', divisionId] });
+    },
+  });
+  // Escape cancels a move in progress.
+  useEffect(() => {
+    if (!moving) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMoving(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [moving]);
 
   const exportPDF = async () => {
     if (!division) return;
@@ -625,6 +697,45 @@ export default function BracketEditor() {
 
   const winnersRounds = [...new Set(winnersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
   const losersRounds = [...new Set(losersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
+
+  // First-round spots a director can still change (see bracket-slots).
+  let slotStructure: SlotStructure | null = null;
+  try {
+    slotStructure = division.bracket?.structure ? JSON.parse(division.bracket.structure) as SlotStructure : null;
+  } catch {
+    slotStructure = null;
+  }
+  const entryNumbers = entryMatchNumbers(slotStructure);
+  const allMatches = division.bracket?.matches ?? [];
+  const canEditSlots = (m: Match) => entryNumbers.has(m.matchNumber) && isSlotEditableMatch(m);
+  const placedIds = new Set(allMatches.flatMap((m) => [m.competitor1Id, m.competitor2Id]).filter((id): id is string => !!id));
+  const notInBracket = entryNumbers.size > 0
+    ? division.assignments.filter((a) => !placedIds.has(a.registration.id))
+    : [];
+  const hasEmptySpot = allMatches.some((m) => canEditSlots(m) && (!m.competitor1Id || !m.competitor2Id));
+  const personName = (c: Competitor) => `${c.firstName} ${c.lastName}`;
+
+  const handleSlotTarget = (match: Match, slot: SlotNumber, person: MovingPerson | undefined = moving ?? undefined) => {
+    if (!person || slotMutation.isPending) return;
+    const to = { matchId: match.id, slot };
+    if (person.from && person.from.matchId === match.id && person.from.slot === slot) {
+      setMoving(null);
+      return;
+    }
+    if (person.from) {
+      slotMutation.mutate({ change: { action: 'move', registrationId: person.registrationId, from: person.from, to }, name: person.name });
+    } else {
+      slotMutation.mutate({ change: { action: 'place', registrationId: person.registrationId, to }, name: person.name });
+    }
+  };
+
+  const slotControls: SlotControls | undefined = entryNumbers.size > 0 ? {
+    canEdit: canEditSlots,
+    moving,
+    busy: slotMutation.isPending,
+    onStartMove: (person) => setMoving(person),
+    onTarget: handleSlotTarget,
+  } : undefined;
 
   const handleSelectWinner = (matchId: string, winnerId: string, match: Match) => {
     const comp = match.competitor1Id === winnerId ? match.competitor1 : match.competitor2;
@@ -813,6 +924,92 @@ export default function BracketEditor() {
             action={<Trophy className="h-5 w-5 text-primary-600 dark:text-primary-400" aria-hidden="true" />}
           />
           <CardBody className="overflow-x-auto">
+            {slotControls && (
+              <div className="mb-4 space-y-3 print:hidden">
+                {moving ? (
+                  <div
+                    className="sticky left-0 top-0 z-10 rounded-lg border border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/40 p-3 text-sm text-primary-900 dark:text-primary-100"
+                    data-testid="bracket-move-banner"
+                  >
+                    <p className="font-medium">
+                      {moving.from ? `Moving ${moving.name}` : `Placing ${moving.name}`}
+                    </p>
+                    <p className="mt-1 text-primary-800 dark:text-primary-200">
+                      {moving.from
+                        ? 'Tap an empty spot (BYE) to move them there, or tap someone in the first round to swap places.'
+                        : 'Tap an empty spot (BYE) in the first round.'}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {moving.from && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          loading={slotMutation.isPending && slotMutation.variables?.change.action === 'remove'}
+                          onClick={() => {
+                            if (!moving.from || slotMutation.isPending) return;
+                            slotMutation.mutate({
+                              change: { action: 'remove', registrationId: moving.registrationId, from: moving.from },
+                              name: moving.name,
+                            });
+                          }}
+                          aria-label={`Take ${moving.name} out of the bracket. Their opponent gets a bye.`}
+                        >
+                          Take out (make a bye)
+                        </Button>
+                      )}
+                      <Button size="sm" variant="secondary" onClick={() => setMoving(null)} disabled={slotMutation.isPending}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-surface-600 dark:text-surface-400">
+                    To change the draw, tap <Move className="inline h-3 w-3" aria-hidden="true" /> next to a first-round name, then tap where they should go. Results stay as they are.
+                  </p>
+                )}
+                {notInBracket.length > 0 && (
+                  <div className="rounded-lg border border-warning300 dark:border-warning700 bg-warning/50 dark:bg-warning/900/30 p-3">
+                    <h4 className="text-sm font-semibold text-surface-900 dark:text-surface-100">
+                      Not in the bracket ({notInBracket.length})
+                    </h4>
+                    <p className="mt-1 text-xs text-surface-700 dark:text-surface-300">
+                      {hasEmptySpot
+                        ? 'These people are in this division but have no spot. Tap Place, then tap an empty spot.'
+                        : 'These people are in this division but have no spot, and every first-round spot is full. Take someone out first, or use Reseed to redraw.'}
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {notInBracket.map((a) => {
+                        const name = personName(a.registration.competitor);
+                        const isPlacing = moving?.registrationId === a.registration.id;
+                        return (
+                          <li
+                            key={a.id}
+                            draggable={hasEmptySpot && !slotMutation.isPending}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ registrationId: a.registration.id, name, from: null }));
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            className="inline-flex items-center gap-2 rounded-full bg-white dark:bg-surface-800 pl-3 pr-1 py-1 text-sm text-surface-900 dark:text-surface-100 border border-surface-200 dark:border-surface-700"
+                          >
+                            {name}
+                            <Button
+                              size="sm"
+                              variant={isPlacing ? 'primary' : 'secondary'}
+                              disabled={!hasEmptySpot || slotMutation.isPending}
+                              onClick={() => setMoving(isPlacing ? null : { registrationId: a.registration.id, name, from: null })}
+                              aria-label={isPlacing ? `Stop placing ${name}` : `Place ${name} in an empty spot`}
+                              aria-pressed={isPlacing}
+                            >
+                              Place
+                            </Button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
             <div
               ref={bracketGridRef}
               role="grid"
@@ -839,6 +1036,7 @@ export default function BracketEditor() {
                   swapMutation.mutate(matchId);
                 }
               }}
+             slotControls={slotControls}
             />
 
             {losersRounds.length > 0 && (
@@ -875,6 +1073,7 @@ export default function BracketEditor() {
                 }}
                 showMatchLabels
                 matchLabelPrefix="Match"
+                slotControls={slotControls}
               />
             )}
             </div>
@@ -996,6 +1195,9 @@ export default function BracketEditor() {
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
         {bracketAnnounce}
       </div>
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {slotAnnounce}
+      </div>
     </div>
   );
 }
@@ -1018,6 +1220,7 @@ function BracketSection({
   onSwap,
   showMatchLabels = false,
   matchLabelPrefix = 'Match',
+  slotControls,
 }: {
   ariaLabel: string;
   title: string;
@@ -1030,6 +1233,7 @@ function BracketSection({
   onSwap?: (matchId: string) => void;
   showMatchLabels?: boolean;
   matchLabelPrefix?: string;
+  slotControls?: SlotControls;
 }) {
   // Group matches by round so each column gets its own list. For Grand
   // Finals (rounds=[0]) we just dump every match into a single column.
@@ -1082,6 +1286,7 @@ function BracketSection({
                     onSelectWinner(match.id, winnerId, match)
                   }
                   onSwap={onSwap ? () => onSwap(match.id) : undefined}
+                  slotControls={slotControls}
                 />
               ))}
             </div>
@@ -1098,28 +1303,117 @@ function MatchCard({
   onSelectWinner,
   onSwap,
   label,
+  slotControls,
 }: {
   match: Match;
   bracketCol: number;
   onSelectWinner: (winnerId: string) => void;
   onSwap?: () => void;
   label: string;
+  slotControls?: SlotControls;
 }) {
-  const name1 = match.competitor1
-    ? `${match.competitor1.competitor.firstName} ${match.competitor1.competitor.lastName}`
-    : match.competitor1Id
-    ? 'TBD'
-    : 'BYE';
-
-  const name2 = match.competitor2
-    ? `${match.competitor2.competitor.firstName} ${match.competitor2.competitor.lastName}`
-    : match.competitor2Id
-    ? 'TBD'
-    : 'BYE';
-
   const isReady = match.competitor1Id && match.competitor2Id && !match.winnerId;
   const isComplete = !!match.winnerId;
   const cardStatus = isComplete ? 'complete' : isReady ? 'ready' : match.status;
+  const editable = !!slotControls && slotControls.canEdit(match);
+  const moving = slotControls?.moving ?? null;
+
+  const renderSlot = (slot: SlotNumber) => {
+    const id = slot === 1 ? match.competitor1Id : match.competitor2Id;
+    const reg = slot === 1 ? match.competitor1 : match.competitor2;
+    const name = reg ? `${reg.competitor.firstName} ${reg.competitor.lastName}` : id ? 'TBD' : 'BYE';
+    const isWinner = !!id && match.winnerId === id;
+    const isSource = !!moving?.from && moving.from.matchId === match.id && moving.from.slot === slot;
+    // While moving, a spot is a target when it is an editable first-round
+    // spot; placing someone new needs an empty one.
+    const isTarget = !!moving && editable && !isSource && (!!moving.from || !id);
+    const spotLabel = `match ${label}, ${slot === 1 ? 'top' : 'bottom'} spot`;
+
+    let ariaLabel = `Match ${label}, ${name}` + (isWinner ? ' (winner)' : '') + (isReady ? ' — press Enter to record as winner' : '');
+    if (moving) {
+      if (isSource) ariaLabel = `${name} is being moved — press to cancel`;
+      else if (isTarget) ariaLabel = id ? `Swap ${moving.name} with ${name} (${spotLabel})` : `Put ${moving.name} in the empty ${spotLabel}`;
+      else ariaLabel = `Match ${label}, ${name}`;
+    }
+
+    const person: MovingPerson | null = editable && id && reg
+      ? { registrationId: id, name, from: { matchId: match.id, slot } }
+      : null;
+
+    return (
+      <div
+        className="flex items-stretch"
+        onDragOver={(e) => {
+          if (editable && e.dataTransfer.types.includes(DRAG_TYPE)) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          if (!editable || !slotControls) return;
+          const raw = e.dataTransfer.getData(DRAG_TYPE);
+          if (!raw) return;
+          e.preventDefault();
+          try {
+            const dragged = JSON.parse(raw) as MovingPerson;
+            if (!dragged.from && id) return; // placing needs an empty spot
+            slotControls.onTarget(match, slot, dragged);
+          } catch {
+            // Not one of ours; ignore.
+          }
+        }}
+      >
+        <button
+          onClick={() => {
+            if (moving) {
+              if ((isSource || isTarget) && slotControls) slotControls.onTarget(match, slot);
+              return;
+            }
+            if (isReady && id) onSelectWinner(id);
+          }}
+          disabled={moving ? !(isSource || isTarget) || slotControls?.busy : !isReady}
+          draggable={!!person && !moving}
+          onDragStart={(e) => {
+            if (!person) return;
+            e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(person));
+            e.dataTransfer.effectAllowed = 'move';
+          }}
+          data-bracket-cell="true"
+          data-col={bracketCol}
+          data-row={slot - 1}
+          aria-pressed={moving ? undefined : isWinner}
+          aria-label={ariaLabel}
+          className={`flex-1 min-w-0 px-3 py-2 text-left text-sm truncate text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+            isSource
+              ? 'bg-primary-100 dark:bg-primary-800/50 font-semibold'
+              : isTarget
+              ? 'bg-primary-50 dark:bg-primary-900/30 ring-1 ring-inset ring-primary-400 hover:bg-primary-100 dark:hover:bg-primary-800/40'
+              : isWinner
+              ? 'bg-success/100 dark:bg-success/800/50 font-semibold'
+              : isReady && !moving
+              ? 'hover:bg-surface-50 dark:hover:bg-surface-700'
+              : ''
+          }`}
+        >
+          {name}
+          {reg?.competitor.schoolDojang && (
+            <span className="text-xs text-surface-600 dark:text-surface-500 ml-1">
+              ({reg.competitor.schoolDojang.substring(0, 20)})
+            </span>
+          )}
+        </button>
+        {person && !moving && slotControls && (
+          <button
+            type="button"
+            onClick={() => slotControls.onStartMove(person)}
+            disabled={slotControls.busy}
+            aria-label={`Move ${name}`}
+            title="Move to another spot"
+            className="shrink-0 w-9 flex items-center justify-center text-surface-500 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-surface-50 dark:hover:bg-surface-700 border-l border-surface-200 dark:border-surface-700 focus:outline-none focus:ring-2 focus:ring-primary-500 print:hidden"
+          >
+            <Move className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -1136,66 +1430,10 @@ function MatchCard({
         <span className="capitalize" aria-label={`Status: ${cardStatus}`}>{cardStatus}</span>
       </div>
       <div className="divide-y divide-surface-200 dark:divide-surface-700">
-        <button
-          onClick={() =>
-            isReady && match.competitor1Id && onSelectWinner(match.competitor1Id)
-          }
-          disabled={!isReady}
-          data-bracket-cell="true"
-          data-col={bracketCol}
-          data-row={0}
-          aria-pressed={match.winnerId === match.competitor1Id}
-          aria-label={
-            `Match ${label}, ${name1}` +
-            (match.winnerId === match.competitor1Id ? ' (winner)' : '') +
-            (isReady ? ' — press Enter to record as winner' : '')
-          }
-          className={`w-full px-3 py-2 text-left text-sm truncate text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-            match.winnerId === match.competitor1Id
-              ? 'bg-success/100 dark:bg-success/800/50 font-semibold'
-              : isReady
-              ? 'hover:bg-surface-50 dark:hover:bg-surface-700'
-              : ''
-          }`}
-        >
-          {name1}
-          {match.competitor1?.competitor.schoolDojang && (
-            <span className="text-xs text-surface-600 dark:text-surface-500 ml-1">
-              ({match.competitor1.competitor.schoolDojang.substring(0, 20)})
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() =>
-            isReady && match.competitor2Id && onSelectWinner(match.competitor2Id)
-          }
-          disabled={!isReady}
-          data-bracket-cell="true"
-          data-col={bracketCol}
-          data-row={1}
-          aria-pressed={match.winnerId === match.competitor2Id}
-          aria-label={
-            `Match ${label}, ${name2}` +
-            (match.winnerId === match.competitor2Id ? ' (winner)' : '') +
-            (isReady ? ' — press Enter to record as winner' : '')
-          }
-          className={`w-full px-3 py-2 text-left text-sm truncate text-surface-900 dark:text-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-            match.winnerId === match.competitor2Id
-              ? 'bg-success/100 dark:bg-success/800/50 font-semibold'
-              : isReady
-              ? 'hover:bg-surface-50 dark:hover:bg-surface-700'
-              : ''
-          }`}
-        >
-          {name2}
-          {match.competitor2?.competitor.schoolDojang && (
-            <span className="text-xs text-surface-600 dark:text-surface-500 ml-1">
-              ({match.competitor2.competitor.schoolDojang.substring(0, 20)})
-            </span>
-          )}
-        </button>
+        {renderSlot(1)}
+        {renderSlot(2)}
       </div>
-      {onSwap && match.competitor1Id && match.competitor2Id && (
+      {onSwap && match.competitor1Id && match.competitor2Id && !moving && (
         <button
           onClick={onSwap}
           aria-label={`Swap competitors in match ${label}`}
