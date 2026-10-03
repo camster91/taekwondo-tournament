@@ -110,6 +110,7 @@ nodemon+ts-node in parallel. Build: `prisma generate && vite build
 │   │   ├── services/
 │   │   │   ├── bracket-formats.ts
 │   │   │   ├── bracket-generator.ts     # DE bracket + size-aware positions
+│   │   │   ├── bracket-seeding.ts       # seeding from the tournament's bracket rules
 │   │   │   ├── bracket-generator.test.ts
 │   │   │   ├── bracket-positions.test.ts
 │   │   │   ├── bracket-formats.test.ts
@@ -498,7 +499,7 @@ Mutations are scorekeeper+ (or admin/director for generate/reset).
 | Method | Path | Role |
 |--------|------|------|
 | POST | `/api/brackets/division/:divisionId/generate` | admin/director |
-| GET | `/api/brackets/division/:divisionId` | any |
+| GET | `/api/brackets/division/:divisionId` | any (includes `sameSchoolFirstRound`: `{ count, fights, unavoidable, matches }`, null for round robin) |
 | GET | `/api/brackets/division/:divisionId/placements` | any |
 | PUT | `/api/brackets/match/:matchId` | scorekeeper+ (zod `matchResultSchema`) |
 | POST | `/api/brackets/match/:matchId/swap` | scorekeeper+ |
@@ -513,6 +514,7 @@ Mutations are scorekeeper+ (or admin/director for generate/reset).
 | GET | `/api/brackets/division/:divisionId/certificate/:place` | viewer+ |
 | GET | `/api/brackets/tournament/:tournamentId/certificates` | viewer+ |
 | GET | `/api/brackets/tournament/:tournamentId/school-report` | viewer+ |
+| GET | `/api/brackets/tournament/:tournamentId/same-school-first-round` | viewer+ (`{ total, divisions: [{ divisionId, count, fights, unavoidable }] }`, counts only) |
 | GET | `/api/brackets/division/:divisionId/classic-pdf` | viewer+ (paper bracket like the old sheets: legal landscape, single-elim 2/4/8/16/32 tree, belt/dan footer; draft seed order before brackets exist) |
 | GET | `/api/brackets/tournament/:tournamentId/classic-zip` | viewer+ (every non-empty division's paper bracket, folders like `CB Females Sparring/`; ZIP written with `src/server/utils/zip.ts`, no dependency) |
 
@@ -695,6 +697,25 @@ works.
 
 The 24-case regression test in `src/server/services/bracket-positions.test.ts`
 pins every size.
+
+**Seeding from the rules.** `generate`, `generate-all` and the reseed
+(correction preview/apply) follow the tournament's bracket rules only when
+the director switched on "Use these bracket rules when brackets are made"
+(`settings.brackets.applySeedingRules === true`, see `bracketRulesEnabled`;
+default off, also for rules saved before the switch and for templates) and
+the request asks for `school_spread` or no strategy (what the app sends).
+Otherwise the old `school_spread` generator runs unchanged (pinned
+byte-for-byte in `bracket-seeding.test.ts`).
+With them, `src/server/services/bracket-seeding.ts`
+ranks competitors (registration `seeding` first, then skill rating / years of
+training / belt rank / random), gives byes per `byePlacement`, pairs round 1
+per `round1Pairing`, and swaps people to keep team-mates apart
+(`avoidSameSchoolRound1`, reaches the fewest possible). Ties and random draws
+hash the division id, so output is deterministic. It hands a round-1 layout
+to `generateEliminationFromSlots`, so match numbers, links and `positions`
+are unchanged. Other strategies (`manual`, `skill_based`, ...) keep the old
+path. Same-school first-round fights are counted by
+`src/shared/utils/same-school.ts` (Divisions page, bracket editor, API).
 
 Advancement (`match-advancement.ts`) is driven by a pure
 `computeBracketSync`: every downstream slot is derived from one fixed

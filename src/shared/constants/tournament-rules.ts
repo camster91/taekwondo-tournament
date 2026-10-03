@@ -135,6 +135,10 @@ export const DEFAULT_DIVISION_RULES: DivisionRules = {
 
 // ─── Bracket rules ──────────────────────────────────────────────────────
 export interface BracketRules {
+  // Opt-in switch: only when true do the choices below change how
+  // brackets are made. Off (the default, also for tournaments that saved
+  // these rules before the switch existed) keeps the original seeding.
+  applySeedingRules: boolean;
   // Avoid same-school matchups in round 1 where possible
   // (only feasible for divisions with 8+ competitors)
   avoidSameSchoolRound1: boolean;
@@ -155,6 +159,7 @@ export interface BracketRules {
 }
 
 export const DEFAULT_BRACKET_RULES: BracketRules = {
+  applySeedingRules: false,
   avoidSameSchoolRound1: true,
   seedingStrategy: 'rating',
   consolationRounds: 1,

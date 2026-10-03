@@ -13,7 +13,7 @@
  *   - Colored belt patterns is grouped 3 belts per division
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useId } from 'react';
 import {
   DEFAULT_TOURNAMENT_RULES,
   type TournamentRules,
@@ -110,7 +110,7 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
         <Badge color="green">{stats.bands} age band{stats.bands !== 1 ? 's' : ''}</Badge>
         <Badge color="purple">{local.weights.strategy} weight strategy</Badge>
         <Badge color="amber">min division size {local.divisions.minDivisionSize}</Badge>
-        {local.brackets.avoidSameSchoolRound1 && <Badge color="pink">no same-school R1</Badge>}
+        {local.brackets.applySeedingRules && local.brackets.avoidSameSchoolRound1 && <Badge color="pink">team-mates apart in round 1</Badge>}
         <button
           type="button"
           onClick={() => { onReset(); setSavedAt(new Date()); }}
@@ -420,56 +420,76 @@ export default function TournamentRulesEditor({ rules, onChange, onReset }: Rule
         </div>
       </Section>
 
-      {/* Bracket rules */}
-      <Section title="Bracket Generation" subtitle="How competitors are seeded and paired in brackets.">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Bracket rules: all four choices are used when a bracket is
+          generated or reseeded (src/server/services/bracket-seeding.ts).
+          "Consolation rounds" is not offered: the bracket shapes are
+          fixed (double elimination has one losers bracket), so the
+          stored value would do nothing. */}
+      <Section title="Bracket Generation" subtitle="How competitors are placed when a bracket is generated or reseeded.">
+        <label className="flex items-start gap-3 mb-4 p-3 border border-gray-200 rounded-lg">
+          <input
+            type="checkbox"
+            role="switch"
+            aria-checked={local.brackets.applySeedingRules === true}
+            checked={local.brackets.applySeedingRules === true}
+            onChange={(e) => update('brackets', { ...local.brackets, applySeedingRules: e.target.checked })}
+            className="mt-1"
+          />
+          <div>
+            <div className="text-sm font-medium text-gray-900">Use these bracket rules when brackets are made</div>
+            <div className="text-xs text-gray-600">
+              Off: brackets are made the usual way (people from the same school spread out). On: the choices below are used.
+            </div>
+          </div>
+        </label>
+        {!local.brackets.applySeedingRules && (
+          <p className="text-xs text-gray-600 mb-3" data-testid="bracket-rules-off-hint">
+            These choices are not used until you switch on the bracket rules above.
+          </p>
+        )}
+        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${local.brackets.applySeedingRules ? '' : 'opacity-60'}`}>
           <Checkbox
-            label="Avoid same-school matchups in Round 1"
-            help="Where bracket size allows. Skipped for divisions with <4 competitors."
+            label="Keep team-mates apart in round 1"
+            help="Swaps people between first-round matches so two people from the same school don't fight first. When one school fills most of a division, some may still meet."
             checked={local.brackets.avoidSameSchoolRound1}
+            disabled={!local.brackets.applySeedingRules}
             onChange={(v) => update('brackets', { ...local.brackets, avoidSameSchoolRound1: v })}
           />
           <SelectField
             label="Seed competitors by"
+            help="Decides who counts as stronger. A seed number set on a registration always comes first; ties are a fixed draw."
             value={local.brackets.seedingStrategy}
+            disabled={!local.brackets.applySeedingRules}
             options={[
-              { value: 'rating', label: 'ELO rating (skill)' },
-              { value: 'experience', label: 'Years of training' },
+              { value: 'rating', label: 'Skill rating from past results (belt rank if none)' },
+              { value: 'experience', label: 'Years of training (belt rank if unknown)' },
               { value: 'belt', label: 'Belt rank' },
-              { value: 'random', label: 'Random (no seeding)' },
+              { value: 'random', label: 'Random draw' },
             ]}
             onChange={(v) => update('brackets', { ...local.brackets, seedingStrategy: v as BracketRules['seedingStrategy'] })}
           />
           <SelectField
             label="Round 1 pairing"
-            help="adjacent=strong vs strong early; balanced=strong vs weak early; split=alternate"
+            help="Who meets whom first. Seeds 1 and 2 are always in opposite halves."
             value={local.brackets.round1Pairing}
+            disabled={!local.brackets.applySeedingRules}
             options={[
-              { value: 'split', label: 'Split (recommended)' },
-              { value: 'balanced', label: 'Balanced (top vs bottom)' },
-              { value: 'adjacent', label: 'Adjacent (1v2, 3v4...)' },
+              { value: 'split', label: 'Strongest v weakest: 1 v 8, 2 v 7 (recommended)' },
+              { value: 'balanced', label: 'Top half v bottom half: 1 v 5, 2 v 6' },
+              { value: 'adjacent', label: 'Similar strength: 1 v 2, 3 v 4' },
             ]}
             onChange={(v) => update('brackets', { ...local.brackets, round1Pairing: v as BracketRules['round1Pairing'] })}
           />
           <SelectField
-            label="Bye placement (when bracket isn't power-of-2)"
+            label="Who gets a bye (a free pass when the numbers are uneven)"
             value={local.brackets.byePlacement}
+            disabled={!local.brackets.applySeedingRules}
             options={[
-              { value: 'rating', label: 'Top seeds get byes' },
-              { value: 'top', label: 'First slots get byes' },
-              { value: 'random', label: 'Random' },
+              { value: 'rating', label: 'Top seeds' },
+              { value: 'top', label: 'Top seeds, placed at the top of the sheet' },
+              { value: 'random', label: 'A random draw' },
             ]}
             onChange={(v) => update('brackets', { ...local.brackets, byePlacement: v as BracketRules['byePlacement'] })}
-          />
-          <SelectField
-            label="Consolation rounds"
-            value={String(local.brackets.consolationRounds)}
-            options={[
-              { value: '1', label: '1 round (standard)' },
-              { value: '2', label: '2 rounds (more play for losers)' },
-              { value: '3', label: '3 rounds (full consolation)' },
-            ]}
-            onChange={(v) => update('brackets', { ...local.brackets, consolationRounds: parseInt(v) as 1 | 2 | 3 })}
           />
         </div>
       </Section>
@@ -526,10 +546,10 @@ function Radio({ label, sub, checked, onChange }: { label: string; sub: string; 
   );
 }
 
-function Checkbox({ label, help, checked, onChange }: { label: string; help: string; checked: boolean; onChange: (v: boolean) => void }) {
+function Checkbox({ label, help, checked, onChange, disabled }: { label: string; help: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <label className="flex items-start gap-3">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="mt-1" />
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="mt-1" />
       <div>
         <div className="text-sm font-medium text-gray-900">{label}</div>
         <div className="text-xs text-gray-600">{help}</div>
@@ -555,12 +575,15 @@ function NumberField({ label, help, value, min, max, onChange }: { label: string
   );
 }
 
-function SelectField({ label, help, value, options, onChange }: { label: string; help?: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
+function SelectField({ label, help, value, options, onChange, disabled }: { label: string; help?: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void; disabled?: boolean }) {
+  const id = useId();
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-900 mb-1">{label}</label>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-900 mb-1">{label}</label>
       <select
+        id={id}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white"
       >

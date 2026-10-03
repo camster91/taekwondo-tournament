@@ -46,6 +46,7 @@ interface Registration {
 
 import type { ApiMatch } from '../../shared/contracts';
 import { downloadBlob } from '../utils/authenticated-export';
+import { countSameSchoolFirstRound, describeSameSchoolFights } from '../../shared/utils/same-school';
 import { entryMatchNumbers, isSlotEditableMatch, type SlotStructure } from '../../shared/utils/bracket-slots';
 
 type SlotNumber = 1 | 2;
@@ -704,6 +705,22 @@ export default function BracketEditor() {
     matchLabelById.get(match.id) ?? `M${match.matchNumber}`;
 
   const winnersRounds = [...new Set(winnersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
+
+  // First-round fights between team-mates (null for round robin).
+  const schoolByRegistration = new Map<string, string | null>();
+  for (const match of division.bracket?.matches ?? []) {
+    if (match.competitor1Id && match.competitor1) schoolByRegistration.set(match.competitor1Id, match.competitor1.competitor.schoolDojang);
+    if (match.competitor2Id && match.competitor2) schoolByRegistration.set(match.competitor2Id, match.competitor2.competitor.schoolDojang);
+  }
+  const sameSchool = division.bracket
+    ? countSameSchoolFirstRound(division.bracket.format, division.bracket.matches ?? [], (registrationId) => schoolByRegistration.get(registrationId))
+    : null;
+  const sameSchoolMatchLabels = sameSchool
+    ? sameSchool.matches.map((entry) => {
+      const match = division.bracket?.matches.find((m) => m.matchNumber === entry.matchNumber && m.roundNumber === 1);
+      return match ? getMatchLabel(match) : `M${entry.matchNumber}`;
+    })
+    : [];
   const losersRounds = [...new Set(losersMatches.map(m => m.roundNumber))].sort((a, b) => a - b);
 
   // First-round spots a director can still change (see bracket-slots).
@@ -947,6 +964,18 @@ export default function BracketEditor() {
           })()}
         </CardBody>
       </Card>
+
+      {sameSchool && (
+        <p
+          data-testid="same-school-bracket"
+          className={`text-sm ${sameSchool.count > 0 ? 'text-warning700 dark:text-warning300' : 'text-surface-600 dark:text-surface-400'}`}
+        >
+          {describeSameSchoolFights(sameSchool.count)}
+          {sameSchool.count > 0 && ` (${sameSchoolMatchLabels.join(', ')})`}.
+          {sameSchool.count > sameSchool.unavoidable && ' Reseed to keep team-mates apart.'}
+          {sameSchool.count > 0 && sameSchool.count <= sameSchool.unavoidable && ' One school has too many people here to keep them all apart.'}
+        </p>
+      )}
 
       {/* Bracket Visualization */}
       {division.bracket ? (

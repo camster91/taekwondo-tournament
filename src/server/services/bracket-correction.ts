@@ -1,8 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { PrismaClient, Prisma } from '@prisma/client';
-import { generateBracket, generateSingleElimination, type BracketStructure, type SeedingStrategy } from './bracket-generator.js';
+import type { BracketStructure, SeedingStrategy } from './bracket-generator.js';
 import { bracketFormatError, generatePoolPlay, generateRoundRobin } from './bracket-formats.js';
 import { handleByeMatches } from './match-advancement.js';
+import {
+  generateEliminationBracket,
+  loadRuleSeeding,
+  type RuleSeedingInput,
+} from './bracket-seeding.js';
 
 export interface BracketCorrectionAssignment {
   registrationId: string;
@@ -106,9 +111,16 @@ export function bracketCorrectionVersion(snapshot: BracketCorrectionSnapshot): s
   return createHash('sha256').update(JSON.stringify(stableSnapshot(snapshot))).digest('hex');
 }
 
+/**
+ * `seeding` (the tournament's saved bracket rules and seeding facts) makes
+ * an elimination reseed follow the same rules as the first generation; the
+ * app's 'school_spread' request means "use the rules". Without saved rules
+ * the named strategy is used exactly as before.
+ */
 export function buildProposedBracketCorrection(
   snapshot: BracketCorrectionSnapshot,
   config: BracketCorrectionConfig,
+  seeding?: RuleSeedingInput | null,
 ): ProposedBracketCorrection {
   assertDeterministicCorrectionConfig(config);
   const competitors = snapshot.assignments.map((assignment) => ({
@@ -118,14 +130,13 @@ export function buildProposedBracketCorrection(
     seedPosition: assignment.seedPosition,
   }));
   let structure: BracketStructure;
-  if (config.format === 'single_elim') structure = generateSingleElimination(competitors, config.seedingStrategy);
-  else if (config.format === 'round_robin') structure = generateRoundRobin(competitors, { seedingStrategy: config.seedingStrategy });
+  if (config.format === 'round_robin') structure = generateRoundRobin(competitors, { seedingStrategy: config.seedingStrategy });
   else if (config.format === 'pool_play') structure = generatePoolPlay(competitors, {
     seedingStrategy: config.seedingStrategy,
     poolCount: config.poolCount,
     advancePerPool: config.advancePerPool,
   });
-  else structure = generateBracket(competitors, config.seedingStrategy);
+  else structure = generateEliminationBracket(competitors, config.format === 'single_elim' ? 'single_elim' : 'double_elim', config.seedingStrategy, seeding);
   const matches = [
     ...structure.winners.map((match) => ({ ...match, bracketType: 'winners' })),
     ...structure.losers.map((match) => ({ ...match, bracketType: 'losers' })),
@@ -215,6 +226,17 @@ type BracketCorrectionDb = PrismaClient | Prisma.TransactionClient;
 interface BracketCorrectionDependencies {
   loadSnapshot: (tx: BracketCorrectionDb, divisionId: string) => Promise<BracketCorrectionSnapshot>;
   initializeByes: (tx: BracketCorrectionDb, bracketId: string) => Promise<number>;
+  loadSeeding: (tx: BracketCorrectionDb, divisionId: string) => Promise<RuleSeedingInput | null>;
+}
+
+/**
+ * Default seeding loader. Callers that inject a fake database (unit
+ * tests) without division access get the legacy strategy behaviour.
+ */
+async function defaultLoadSeeding(tx: BracketCorrectionDb, divisionId: string): Promise<RuleSeedingInput | null> {
+  const db = tx as Partial<BracketCorrectionDb>;
+  if (typeof db.division?.findUnique !== 'function' || typeof db.competitorRating?.findMany !== 'function') return null;
+  return loadRuleSeeding(tx, divisionId);
 }
 
 export async function previewBracketCorrection(
@@ -222,12 +244,13 @@ export async function previewBracketCorrection(
   divisionId: string,
   config: BracketCorrectionConfig,
   operationKey: string,
-  dependencies: Pick<Partial<BracketCorrectionDependencies>, 'loadSnapshot'> = {},
+  dependencies: Pick<Partial<BracketCorrectionDependencies>, 'loadSnapshot' | 'loadSeeding'> = {},
 ) {
   const loadSnapshot = dependencies.loadSnapshot ?? loadBracketCorrectionSnapshot;
+  const loadSeeding = dependencies.loadSeeding ?? defaultLoadSeeding;
   return prisma.$transaction(async (tx) => {
     const snapshot = await loadSnapshot(tx, divisionId);
-    const proposed = buildProposedBracketCorrection(snapshot, config);
+    const proposed = buildProposedBracketCorrection(snapshot, config, await loadSeeding(tx, divisionId));
     return {
       tournamentId: snapshot.tournamentId,
       divisionId,
@@ -381,6 +404,7 @@ export async function applyBracketCorrection(
 ): Promise<{ auditId: string; alreadyApplied: boolean; impact: BracketCorrectionImpact }> {
   const loadSnapshot = dependencies.loadSnapshot ?? loadBracketCorrectionSnapshot;
   const initializeByes = dependencies.initializeByes ?? ((tx, bracketId) => handleByeMatches(tx as PrismaClient, bracketId));
+  const loadSeeding = dependencies.loadSeeding ?? defaultLoadSeeding;
   return prisma.$transaction(async (tx) => {
     const existing = await tx.tournamentOperationAudit.findUnique({ where: { operationKey: input.operationKey } });
     const evidence = {
@@ -402,7 +426,7 @@ export async function applyBracketCorrection(
     if (snapshot.tournamentId !== input.tournamentId || snapshot.divisionId !== input.divisionId || bracketCorrectionVersion(snapshot) !== input.expectedInputVersion) {
       throw new Error('Bracket preview is stale');
     }
-    const proposed = buildProposedBracketCorrection(snapshot, input.config);
+    const proposed = buildProposedBracketCorrection(snapshot, input.config, await loadSeeding(tx, input.divisionId));
     const impact = buildBracketCorrectionImpact(snapshot, proposed);
     if (impact.inProgressMatchesBlocked > 0) throw new Error('Bracket cannot be reseeded while a match is in progress');
     if (proposedBracketVersion(proposed) !== input.expectedResultVersion) {
