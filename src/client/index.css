@@ -574,9 +574,11 @@ a:focus:not(:focus-visible) {
   .no-print { display: none !important; }
   body { background: white; }
 
-  /* Staffing roster: black on white regardless of theme. */
+  /* Staffing roster and ring schedule: black on white regardless of theme. */
   .staffing-print-root,
-  .staffing-print-root * {
+  .staffing-print-root *,
+  .schedule-print-root,
+  .schedule-print-root * {
     background: white !important;
     color: #111 !important;
     box-shadow: none !important;

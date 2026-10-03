@@ -246,7 +246,7 @@ export function standardSeedOrder(size: number): number[] {
  * Round-1 pairings for a padded (power-of-2) seed list, in match
  * order. Each entry is [seedIndexA, seedIndexB].
  */
-function firstRoundSeedPairs(bracketSize: number): [number, number][] {
+export function firstRoundSeedPairs(bracketSize: number): [number, number][] {
   const order = standardSeedOrder(bracketSize);
   const pairs: [number, number][] = [];
   for (let i = 0; i < order.length; i += 2) {

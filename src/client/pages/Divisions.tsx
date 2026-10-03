@@ -40,6 +40,7 @@ import {
   ArrowRight,
   Plus,
   Merge,
+  Printer,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -857,6 +858,36 @@ export default function Divisions() {
     exportLockRef.current = false;
   };
 
+  // Paper bracket sheets laid out like the old event's printed brackets.
+  // One division → its PDF; the whole tournament → a ZIP with folders
+  // such as "CB Females Sparring/".
+  const downloadPaperBrackets = async (division?: Division) => {
+    if (exportLockRef.current || !id) return;
+    exportLockRef.current = true;
+    setExportingAll(true);
+    setExportStatus({
+      state: 'pending',
+      message: division ? `Preparing the paper bracket for ${division.name}.` : 'Preparing paper brackets for every division.',
+    });
+    try {
+      if (division) {
+        const blob = await fetchAuthenticatedBlob(fetch, `/api/brackets/division/${division.id}/classic-pdf`, 'application/pdf', getAuthHeaders());
+        downloadBlob(blob, `${division.name.replace(/[/\\]/g, '_').replace(/[^a-zA-Z0-9 _()-]/g, '')}.pdf`);
+      } else {
+        const blob = await fetchAuthenticatedBlob(fetch, `/api/brackets/tournament/${id}/classic-zip`, 'application/zip', getAuthHeaders());
+        downloadBlob(blob, `${tournament?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'Tournament'}_Paper_Brackets.zip`);
+      }
+      setExportStatus({ state: 'resolved', message: 'Paper bracket download started.' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not make the paper brackets. Please try again.';
+      addToast(message, 'error');
+      setExportStatus({ state: 'rejected', message });
+    } finally {
+      setExportingAll(false);
+      exportLockRef.current = false;
+    }
+  };
+
   return (
     <DndContext
       sensors={sensors}
@@ -908,6 +939,16 @@ export default function Divisions() {
             >
               {exportingAll ? <Spinner size="sm" className="mr-2" /> : <Download className="h-4 w-4 mr-2" />}
               <span className="sr-only sm:not-sr-only">{exportingAll ? 'Exporting...' : 'Export PDFs'}</span>
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => void downloadPaperBrackets()}
+              disabled={exportingAll || !divisions?.some((d) => (d._count?.assignments ?? 0) > 0)}
+              aria-label="Download paper brackets for every division (ZIP)"
+              title="Printable sheets like the old paper brackets, one per division, in folders"
+            >
+              <Printer className="h-4 w-4 mr-2" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">Paper brackets</span>
             </Button>
           </div>
         }
@@ -1363,6 +1404,7 @@ export default function Divisions() {
                         onManageCompetitors={() => setAssignTarget(div)}
                         onSplit={() => setSplitTarget(div)}
                         onDelete={() => setDeleteTarget(div)}
+                        onPaperBracket={() => void downloadPaperBrackets(div)}
                         isSelected={selectedDivisionsForMerge.has(div.id)}
                         onToggleSelect={(divisionId) => {
                           const newSelection = new Set(selectedDivisionsForMerge);
@@ -1903,6 +1945,7 @@ function SortableDivisionRow({
   onManageCompetitors,
   onSplit,
   onDelete,
+  onPaperBracket,
   isSelected,
   onToggleSelect,
 }: {
@@ -1911,6 +1954,7 @@ function SortableDivisionRow({
   onManageCompetitors: () => void;
   onSplit: () => void;
   onDelete: () => void;
+  onPaperBracket: () => void;
   isSelected?: boolean;
   onToggleSelect?: (divisionId: string) => void;
 }) {
@@ -1994,6 +2038,17 @@ function SortableDivisionRow({
         >
           <UserPlus className="h-4 w-4" />
         </button>
+        {(div._count?.assignments ?? 0) > 0 && (
+          <button
+            type="button"
+            onClick={onPaperBracket}
+            className="text-surface-600 hover:text-primary-600 dark:hover:text-primary-400 touch-target"
+            title="Paper bracket (PDF)"
+            aria-label={`Download paper bracket for ${div.name}`}
+          >
+            <Printer className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
         {(div._count?.assignments ?? 0) > 8 && (
           <button
             onClick={onSplit}

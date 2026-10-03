@@ -7,6 +7,7 @@ import { calculateAge } from '../../shared/constants/age-groups.js';
 import { recomputeRegistrationAges } from '../services/registration-age.js';
 import { sameEventAssignmentWhere } from '../services/division-assignment-rules.js';
 import { generateSchedule, validateScheduleConfig, DEFAULT_CONFIG, type ScheduleConfig } from '../services/schedule-generator.js';
+import { TOURNAMENT_DEFAULT_BRACKET_FORMATS } from '../services/bracket-formats.js';
 import { validateRequest } from '../middleware/validate.js';
 import { authenticate, requireRole, requireTournamentAccess, buildTournamentAccessFilter, buildCompetitorAccessFilter, findOrgMembershipAtLevel, checkTournamentAccess, type TournamentRole, type AuthenticatedRequest } from '../middleware/auth.js';
 import { generatePublicSlug, applySlugWithRetry, sanitizeBroadcastSubject } from './tournament-helpers.js';
@@ -167,7 +168,11 @@ const weightClassesSchema = z.object({
 });
 
 const atomicTournamentSettingsSchema = z.object({
-  settings: z.record(z.string(), z.unknown()),
+  settings: z.record(z.string(), z.unknown()).refine(
+    (settings) => settings.defaultBracketFormat === undefined
+      || (TOURNAMENT_DEFAULT_BRACKET_FORMATS as readonly unknown[]).includes(settings.defaultBracketFormat),
+    { message: 'Default bracket format must be single or double elimination' },
+  ),
   weightClasses: weightClassesSchema.shape.weightClasses,
 });
 

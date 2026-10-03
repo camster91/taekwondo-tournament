@@ -12,6 +12,7 @@ import {
   ChevronDown,
   BarChart3,
   FileDown,
+  Printer,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import { getAuthHeaders } from '../context/AuthContext';
@@ -227,6 +228,27 @@ export default function Results() {
     }
   };
 
+  // Paper bracket sheets (like the old printed brackets), winners filled
+  // in for single elimination, zipped in folders such as "CB Females Sparring/".
+  const exportPaperBrackets = async () => {
+    if (exportLockRef.current || !tournamentId) return;
+    exportLockRef.current = true;
+    setShowExportMenu(false);
+    setExporting(true);
+    setExportStatus({ state: 'pending', message: 'Preparing paper brackets.' });
+    try {
+      const blob = await fetchAuthenticatedBlob(fetch, `/api/brackets/tournament/${tournamentId}/classic-zip`, 'application/zip', getAuthHeaders());
+      const safeName = (tournament?.name || 'Tournament').replace(/[^a-zA-Z0-9]/g, '_');
+      downloadBlob(blob, `${safeName}_Paper_Brackets.zip`);
+      setExportStatus({ state: 'resolved', message: 'Paper brackets download started.' });
+    } catch (error) {
+      setExportStatus({ state: 'rejected', message: error instanceof Error ? error.message : 'Paper brackets export failed.' });
+    } finally {
+      setExporting(false);
+      exportLockRef.current = false;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-surface-100 dark:bg-surface-900">
       {/* Header */}
@@ -271,6 +293,15 @@ export default function Results() {
                       >
                         <Download className="h-4 w-4 mr-3 text-danger500 dark:text-danger400" />
                         Results PDF
+                      </button>
+                      <button
+                        type="button"
+                        disabled={exporting}
+                        className="flex items-center px-4 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700"
+                        onClick={() => void exportPaperBrackets()}
+                      >
+                        <Printer className="h-4 w-4 mr-3 text-danger500 dark:text-danger400" aria-hidden="true" />
+                        Paper brackets (ZIP)
                       </button>
 
                       <div className="border-t border-surface-200 dark:border-surface-700 my-1" />

@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Monitor,
   AlertCircle,
+  Printer,
 } from 'lucide-react';
 import { CardSkeleton } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
@@ -633,6 +634,15 @@ export default function Schedule() {
             >
               <AlertCircle className="h-4 w-4 mr-2" aria-hidden="true" />
               <span className="hidden sm:inline">Record Delay</span>
+            </Button>
+            <Button
+              as={Link}
+              to={`/tournaments/${id}/schedule/print`}
+              variant="secondary"
+              aria-label="Printable ring schedule"
+            >
+              <Printer className="h-4 w-4 mr-2" aria-hidden="true" />
+              <span className="hidden sm:inline">Print by ring</span>
             </Button>
             <Button
               variant="primary"

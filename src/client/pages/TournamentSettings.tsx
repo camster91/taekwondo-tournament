@@ -83,6 +83,9 @@ interface TournamentSettings {
   // alongside the legacy free-text `registrationFee` field for back-compat.
   tournamentFeeCents?: number;
   feeNotes?: string;
+  // Format used when brackets are made without choosing one per
+  // division. Missing means double elimination (the long-standing default).
+  defaultBracketFormat?: 'double_elim' | 'single_elim';
 }
 
 const DEFAULT_AGE_GROUPS: AgeGroup[] = [
@@ -697,6 +700,23 @@ export default function TournamentSettings() {
               />
               <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
                 Divisions with more competitors will be split (e.g., DIV1, DIV2)
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="default-bracket-format">Bracket type</Label>
+              <Select
+                id="default-bracket-format"
+                value={settings.defaultBracketFormat ?? 'double_elim'}
+                onChange={(e) =>
+                  updateSettings({ defaultBracketFormat: e.target.value === 'single_elim' ? 'single_elim' : 'double_elim' })
+                }
+                className="w-full sm:w-72"
+              >
+                <option value="double_elim">Double elimination (lose twice to be out)</option>
+                <option value="single_elim">Single elimination (lose once to be out)</option>
+              </Select>
+              <p className="mt-1 text-sm text-surface-600 dark:text-surface-400">
+                Used when you make brackets. Brackets already made keep their type.
               </p>
             </div>
             <div>

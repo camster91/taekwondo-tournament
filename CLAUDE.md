@@ -198,6 +198,7 @@ this file is wrong.
 | `Divisions.tsx` | `/tournaments/:id/divisions` | Auto-categorize + manage + PDF export |
 | `BracketEditor.tsx` | `/tournaments/:id/divisions/:divId/bracket` | Visual editor |
 | `Schedule.tsx` | `/tournaments/:id/schedule` | Ring/time schedule |
+| `SchedulePrint.tsx` | `/tournaments/:id/schedule/print` | Printable ring-by-time grid; names each division's paper-bracket folder |
 | `CheckIn.tsx` | `/tournaments/:id/checkin` | Day-of competitor check-in |
 | `Scorekeeper.tsx` | `/tournaments/:id/scorekeeper` | Real-time match scoring |
 | `Results.tsx` | `/tournaments/:id/results` | Placements + CSV/Excel/PDF export |
@@ -509,6 +510,13 @@ Mutations are scorekeeper+ (or admin/director for generate/reset).
 | GET | `/api/brackets/division/:divisionId/certificate/:place` | viewer+ |
 | GET | `/api/brackets/tournament/:tournamentId/certificates` | viewer+ |
 | GET | `/api/brackets/tournament/:tournamentId/school-report` | viewer+ |
+| GET | `/api/brackets/division/:divisionId/classic-pdf` | viewer+ (paper bracket like the old sheets: legal landscape, single-elim 2/4/8/16/32 tree, belt/dan footer; draft seed order before brackets exist) |
+| GET | `/api/brackets/tournament/:tournamentId/classic-zip` | viewer+ (every non-empty division's paper bracket, folders like `CB Females Sparring/`; ZIP written with `src/server/utils/zip.ts`, no dependency) |
+
+Bracket format: `generate` / `generate-all` use the body's `format`, else
+the tournament default `defaultBracketFormat` (`double_elim` | `single_elim`)
+in `Tournament.settings` (Tournament Settings → "Bracket type"), else
+`double_elim`. See `tournamentDefaultBracketFormat` in `bracket-formats.ts`.
 
 ### `/api/competitors` (`src/server/routes/competitors.ts`)
 

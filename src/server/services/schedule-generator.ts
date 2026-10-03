@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { tournamentDefaultBracketFormat } from './bracket-formats.js';
 
 export interface ScheduleConfig {
   startTime: string; // HH:MM format
@@ -302,7 +303,8 @@ export async function generateSchedule(
 
   // Function to schedule a division on the least busy ring
   const scheduleDivision = (div: typeof divisions[0]) => {
-    const bracketFormat = div.bracket?.format;
+    // No bracket yet: estimate with the tournament's default format.
+    const bracketFormat = div.bracket?.format ?? tournamentDefaultBracketFormat(tournament.settings);
     const duration = estimateDivisionDuration(
       div._count.assignments,
       div.eventType,
