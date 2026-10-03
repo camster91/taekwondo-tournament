@@ -134,7 +134,7 @@ test.describe('fair divisions settings', () => {
     expect(warned.status()).toBe(409);
     const body = await warned.json();
     expect(body.code).toBe('FAIRNESS_LIMIT');
-    expect(body.message).toBe('This puts 3 years between E2E Six Fair and E2E Nine Fair, above your 2 year limit.');
+    expect(body.message).toBe('This puts 3 years between E2E Six Fair and E2E Nine Fair, above your 2-year limit.');
     expect((await merge(true)).ok()).toBe(true);
   });
 });

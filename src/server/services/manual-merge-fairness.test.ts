@@ -73,7 +73,7 @@ describe('manualMergeLimitBreaks', () => {
     expect(manualMergeLimitBreaks(patterns(10, 11), [], group, rules)).toEqual([]);
     const breaks = manualMergeLimitBreaks(patterns(10, 11), [patterns(12, 12)], group, rules);
     expect(breaks.map((b) => b.message)).toEqual([
-      'This puts 2 years between Sam Lee and Ana Park, above your 1 year limit.',
+      'This puts 2 years between Sam Lee and Ana Park, above your 1-year limit.',
     ]);
   });
 

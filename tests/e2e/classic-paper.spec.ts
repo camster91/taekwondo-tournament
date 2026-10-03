@@ -43,6 +43,12 @@ test.describe('classic paper', () => {
 
   test.afterAll(async () => {
     try {
+      // The DE test makes a bracket; its matches must go before the tournament.
+      const matchIds = (await prisma.match.findMany({ where: { bracket: { division: { tournamentId } } }, select: { id: true } })).map((m) => m.id);
+      await prisma.matchAuditLog.deleteMany({ where: { matchId: { in: matchIds } } });
+      await prisma.matchupHistory.deleteMany({ where: { tournamentId } });
+      await prisma.match.deleteMany({ where: { id: { in: matchIds } } });
+      await prisma.bracket.deleteMany({ where: { division: { tournamentId } } });
       await prisma.tournament.deleteMany({ where: { id: tournamentId } });
       await prisma.competitor.deleteMany({ where: { id: { in: competitorIds } } });
       await prisma.user.deleteMany({ where: { id: userId } });

@@ -1774,7 +1774,7 @@ export function fairnessLimitBreaks(
         unit: 'years',
         message:
           `This puts ${years(over.gap)} between ${fullName(over.low)} and ${fullName(over.high)}, ` +
-          `above your ${years(limit.maxAgeGapYears)} limit.`,
+          `above your ${formatNumber(limit.maxAgeGapYears)}-year limit.`,
       });
     }
   }
